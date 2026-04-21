@@ -513,20 +513,10 @@ export default function EWScannerPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <section>
-        <div className="flex items-center gap-3">
-          <Activity className="h-8 w-8 text-[#5ba3e6]" />
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              EW Scanner
-            </h1>
-            <p className="mt-1 text-[#a0a0a0]">
-              Elliott Wave scanner with mechanical scoring, Fibonacci analysis, and AI wave labeling.
-            </p>
-          </div>
-        </div>
-      </section>
+      {/* Subtitle */}
+      <p className="text-[#a0a0a0]">
+        Algorithmic wave counting, Fibonacci analysis, and AI-powered deep analysis across 180+ stocks.
+      </p>
 
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* ── Left Panel ── */}
@@ -903,11 +893,33 @@ export default function EWScannerPage() {
 
           {/* Empty state */}
           {results.length === 0 && !scanning && (
-            <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-16 text-center">
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-12 text-center">
               <Activity className="mx-auto h-12 w-12 text-[#333]" />
-              <p className="mt-4 text-[#a0a0a0]">
-                Select a scanner mode, universe, and filters, then click Scan to find Elliott Wave candidates.
+              <h2 className="mt-4 text-lg font-semibold text-white">
+                Ready to Scan
+              </h2>
+              <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
+                Choose a scanner mode, pick a universe, adjust your filters, then hit Scan. Results will show
+                scored candidates with Fibonacci analysis, wave counts, and AI labels.
               </p>
+              <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
+                <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                  <p className="text-2xl font-bold text-[#5ba3e6]">4</p>
+                  <p className="text-[10px] text-[#666]">Scanner Modes</p>
+                </div>
+                <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                  <p className="text-2xl font-bold text-[#5ba3e6]">180+</p>
+                  <p className="text-[10px] text-[#666]">Stocks</p>
+                </div>
+                <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                  <p className="text-2xl font-bold text-[#5ba3e6]">20pt</p>
+                  <p className="text-[10px] text-[#666]">Scoring</p>
+                </div>
+                <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                  <p className="text-2xl font-bold text-[#5ba3e6]">AI</p>
+                  <p className="text-[10px] text-[#666]">Wave Labels</p>
+                </div>
+              </div>
             </div>
           )}
 
