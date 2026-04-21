@@ -18,6 +18,7 @@ import {
   Trash2,
   ArrowUpDown,
   Layers,
+  AlertTriangle,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
@@ -157,6 +158,7 @@ export default function EWScannerPage() {
   const [showSaved, setShowSaved] = useState(false);
   const [showUniverseBuilder, setShowUniverseBuilder] = useState(false);
   const [customUniverseKeys, setCustomUniverseKeys] = useState<string[]>([]);
+  const [apiKeyMissing, setApiKeyMissing] = useState(false);
 
   // Load saved scans and custom universes on mount
   useEffect(() => {
@@ -359,7 +361,11 @@ export default function EWScannerPage() {
         });
 
         const labelData = await labelRes.json();
-        setLabels(labelData.labels ?? {});
+        if (labelData.error?.includes("ANTHROPIC_API_KEY")) {
+          setApiKeyMissing(true);
+        } else {
+          setLabels(labelData.labels ?? {});
+        }
       } catch {
         // Labels are non-critical
       }
@@ -513,6 +519,22 @@ export default function EWScannerPage() {
 
   return (
     <div className="space-y-6">
+      {/* API key warning */}
+      {apiKeyMissing && (
+        <div className="flex items-center gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-yellow-400" />
+          <div className="text-sm">
+            <p className="font-medium text-yellow-400">ANTHROPIC_API_KEY not configured</p>
+            <p className="text-yellow-400/70">
+              AI wave labeling and deep analysis are disabled. Scanning and scoring still work.
+            </p>
+          </div>
+          <button onClick={() => setApiKeyMissing(false)} className="ml-auto shrink-0 p-1 text-yellow-400/50 hover:text-yellow-400">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Subtitle */}
       <p className="text-[#a0a0a0]">
         Algorithmic wave counting, Fibonacci analysis, and AI-powered deep analysis across 180+ stocks.
@@ -1496,7 +1518,19 @@ function groupCandidates(
     map.set(key, arr);
   }
 
-  return Array.from(map.entries())
-    .map(([groupLabel, items]) => ({ groupLabel, items }))
-    .sort((a, b) => b.items.length - a.items.length);
+  const groups = Array.from(map.entries()).map(([groupLabel, items]) => ({
+    groupLabel,
+    items,
+  }));
+
+  // Confidence groups: fixed semantic order (high → probable → speculative)
+  if (groupKey === "confidence") {
+    const order: Record<string, number> = { high: 0, probable: 1, speculative: 2 };
+    groups.sort((a, b) => (order[a.groupLabel] ?? 99) - (order[b.groupLabel] ?? 99));
+  } else {
+    // Other groups: sort by item count (most first)
+    groups.sort((a, b) => b.items.length - a.items.length);
+  }
+
+  return groups;
 }
