@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0f0f0f;
+  --foreground: #e6e6e6;
+  --card: #1a1a1a;
+  --card-foreground: #e6e6e6;
+  --border: #2a2a2a;
+  --muted: #262626;
+  --muted-foreground: #a0a0a0;
+  --accent: #185FA5;
+  --accent-foreground: #ffffff;
+  --destructive: #791F1F;
+  --ring: #185FA5;
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans, Arial, Helvetica, sans-serif);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}
+
+/* EW Scanner card entrance animation */
+@keyframes ew-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ew-card-in {
+  animation: ew-card-enter 0.35s ease-out both;
+}
+
+/* EW Scanner range sliders */
+.ew-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: #262626;
+  outline: none;
+}
+.ew-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #185FA5;
+  cursor: pointer;
+  border: 2px solid #0f0f0f;
+}
+.ew-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #185FA5;
+  cursor: pointer;
+  border: 2px solid #0f0f0f;
+}
+.ew-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+}
+.ew-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #262626;
+}
