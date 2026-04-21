@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import Link from "next/link";
 import {
   BookOpen,
   ChevronDown,
   ChevronUp,
-  ArrowLeft,
   AlertTriangle,
   Target,
   Layers,
@@ -453,7 +451,7 @@ function ModuleShell({
    MAIN CONTENT COMPONENT
    ═══════════════════════════════════════════════════════ */
 
-export function EWLearnContent({ standalone = false }: { standalone?: boolean }) {
+export function EWLearnContent() {
   const [open, setOpen] = useState<Record<number, boolean>>({ 1: true });
 
   const toggle = useCallback((n: number) => {
@@ -474,15 +472,6 @@ export function EWLearnContent({ standalone = false }: { standalone?: boolean })
     <div className="space-y-6">
       {/* Header */}
       <section>
-        {!standalone && (
-          <Link
-            href="/"
-            className="mb-4 inline-flex items-center gap-1.5 text-sm text-[#a0a0a0] transition-colors hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Scanner
-          </Link>
-        )}
         <div className="flex items-center gap-3">
           <BookOpen className="h-8 w-8 text-[#5ba3e6]" />
           <div>

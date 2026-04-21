@@ -1,20 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { Activity, ArrowLeft, Target, TrendingUp, AlertTriangle, Zap, Search, BarChart3 } from "lucide-react";
+import { Activity, Target, TrendingUp, AlertTriangle, Zap, Search, BarChart3 } from "lucide-react";
 
 export default function EWScannerGuidePage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8 pb-16">
       {/* Header */}
       <section>
-        <Link
-          href="/"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-[#a0a0a0] hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Scanner
-        </Link>
         <div className="flex items-center gap-3">
           <Activity className="h-8 w-8 text-[#5ba3e6]" />
           <div>

@@ -13,14 +13,12 @@ import {
   TrendingUp,
   Clock,
   BarChart3,
-  BookOpen,
   Save,
   FolderOpen,
   Trash2,
   ArrowUpDown,
   Layers,
 } from "lucide-react";
-import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
 import * as Select from "@radix-ui/react-select";
@@ -517,35 +515,15 @@ export default function EWScannerPage() {
     <div className="space-y-6">
       {/* Header */}
       <section>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Activity className="h-8 w-8 text-[#5ba3e6]" />
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                EW Scanner
-              </h1>
-              <p className="mt-1 text-[#a0a0a0]">
-                Elliott Wave scanner with mechanical scoring, Fibonacci analysis, and AI wave labeling.
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              href="/guide"
-              className="flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-2 text-sm text-[#a0a0a0] transition-colors hover:border-[#3a3a3a] hover:text-white"
-            >
-              <Search className="h-4 w-4" />
-              <span className="hidden sm:inline">How to Use</span>
-              <span className="sm:hidden">Guide</span>
-            </Link>
-            <Link
-              href="/learn"
-              className="flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-2 text-sm text-[#a0a0a0] transition-colors hover:border-[#3a3a3a] hover:text-white"
-            >
-              <BookOpen className="h-4 w-4" />
-              <span className="hidden sm:inline">Learn EW Theory</span>
-              <span className="sm:hidden">Learn</span>
-            </Link>
+        <div className="flex items-center gap-3">
+          <Activity className="h-8 w-8 text-[#5ba3e6]" />
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              EW Scanner
+            </h1>
+            <p className="mt-1 text-[#a0a0a0]">
+              Elliott Wave scanner with mechanical scoring, Fibonacci analysis, and AI wave labeling.
+            </p>
           </div>
         </div>
       </section>
