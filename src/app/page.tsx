@@ -1390,6 +1390,7 @@ function EWScannerPage() {
                   <X className="h-5 w-5" />
                 </Dialog.Close>
               </div>
+              <p className="mb-3 text-[11px] text-[#666]">Timeframes: {htf} / {ltf}</p>
 
               {/* Tab switcher */}
               <div className="mb-4 flex gap-2 border-b border-[#2a2a2a] pb-2">
@@ -1470,6 +1471,24 @@ function EWScannerPage() {
                           Violations: {deepCandidate.waveCount.violations.join(", ")}
                         </p>
                       )}
+                      {/* Wave price table */}
+                      <div className="mt-2 space-y-0.5">
+                        {deepCandidate.waveCount.waves.map((w) => {
+                          const ts = w.timestamp ?? deepCandidate.series?.timestamps[w.index];
+                          const dateStr = ts
+                            ? new Date(ts * 1000).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+                            : "—";
+                          const isHigh = w.type === "high";
+                          return (
+                            <div key={w.label} className="flex items-center gap-3 text-xs">
+                              <span className="w-7 font-mono font-bold text-purple-300">W{w.label}</span>
+                              <span className="w-20 text-right font-mono text-[#e6e6e6]">${w.price.toFixed(2)}</span>
+                              <span className="w-24 font-mono text-[#888]">{dateStr}</span>
+                              <span className={isHigh ? "text-green-400" : "text-red-400"}>{w.type}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
 
