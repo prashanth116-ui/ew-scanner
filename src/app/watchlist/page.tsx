@@ -1,0 +1,367 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import {
+  Plus,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  RefreshCw,
+  X,
+  Pencil,
+  Check,
+} from "lucide-react";
+import {
+  loadWatchlists,
+  saveWatchlist,
+  deleteWatchlist,
+  renameWatchlist,
+  removeFromWatchlist,
+} from "@/lib/ew-watchlists";
+import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-scoring";
+import { applyModeFilters } from "@/lib/ew-scanner-modes";
+import type { Watchlist, WatchlistItem, ScannerMode, ConfidenceTier } from "@/lib/ew-types";
+
+const CONFIDENCE_COLORS: Record<ConfidenceTier, string> = {
+  high: "text-green-400",
+  probable: "text-yellow-400",
+  speculative: "text-gray-400",
+};
+
+const BATCH_SIZE = 10;
+const BATCH_DELAY = 300;
+
+interface QuickScanResult {
+  ticker: string;
+  name: string;
+  oldScore: number;
+  newScore: number;
+  delta: number;
+  newConfidence: ConfidenceTier;
+}
+
+export default function WatchlistPage() {
+  const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [newName, setNewName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [scanning, setScanning] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState("");
+  const [scanResults, setScanResults] = useState<Record<string, QuickScanResult[]>>({});
+
+  useEffect(() => {
+    setWatchlists(loadWatchlists());
+  }, []);
+
+  const refresh = useCallback(() => setWatchlists(loadWatchlists()), []);
+
+  const handleCreate = useCallback(() => {
+    if (!newName.trim()) return;
+    saveWatchlist(newName.trim());
+    setNewName("");
+    refresh();
+  }, [newName, refresh]);
+
+  const handleDelete = useCallback((id: string) => {
+    deleteWatchlist(id);
+    refresh();
+  }, [refresh]);
+
+  const handleRename = useCallback((id: string) => {
+    if (!editName.trim()) return;
+    renameWatchlist(id, editName.trim());
+    setEditingId(null);
+    refresh();
+  }, [editName, refresh]);
+
+  const handleRemoveItem = useCallback((wlId: string, ticker: string) => {
+    removeFromWatchlist(wlId, ticker);
+    refresh();
+  }, [refresh]);
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id); else s.add(id);
+      return s;
+    });
+  }, []);
+
+  const runQuickScan = useCallback(async (wl: Watchlist) => {
+    setScanning(wl.id);
+    setScanProgress("Fetching quotes...");
+
+    const tickers = wl.items.map((i) => i.ticker);
+    const quotes: EnrichedQuoteInput[] = [];
+
+    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+      const batch = tickers.slice(i, i + BATCH_SIZE);
+      setScanProgress(`Fetching ${Math.min(i + BATCH_SIZE, tickers.length)}/${tickers.length}...`);
+
+      const settled = await Promise.allSettled(
+        batch.map(async (ticker) => {
+          const res = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}&detail=1`);
+          if (!res.ok) return null;
+          const data = await res.json();
+          if (data.error) return null;
+          const item = wl.items.find((wi) => wi.ticker === ticker);
+          return {
+            ticker,
+            name: item?.name ?? ticker,
+            sector: item?.sector,
+            ath: data.ath,
+            low: data.low,
+            current: data.current,
+            athYear: data.athYear,
+            lowYear: data.lowYear,
+            series: data.series,
+            athIdx: data.athIdx,
+            lowIdx: data.lowIdx,
+          } as EnrichedQuoteInput;
+        })
+      );
+
+      for (const r of settled) {
+        if (r.status === "fulfilled" && r.value) quotes.push(r.value);
+      }
+
+      if (i + BATCH_SIZE < tickers.length) {
+        await new Promise((r) => setTimeout(r, BATCH_DELAY));
+      }
+    }
+
+    if (quotes.length === 0) {
+      setScanProgress("No data returned.");
+      setScanning(null);
+      return;
+    }
+
+    setScanProgress("Scoring...");
+    // Use the mode of the first item as the scan mode
+    const mode: ScannerMode = wl.items[0]?.mode ?? "wave2";
+    const scored = scoreBatchEnhanced(quotes, {
+      minDecline: 5,
+      minDuration: 1,
+      minRecovery: 1,
+      mode,
+    });
+
+    const results: QuickScanResult[] = wl.items.map((item) => {
+      const fresh = scored.find((s) => s.ticker === item.ticker);
+      return {
+        ticker: item.ticker,
+        name: item.name,
+        oldScore: item.scoreAtAdd,
+        newScore: fresh?.enhancedNormalized ?? 0,
+        delta: (fresh?.enhancedNormalized ?? 0) - item.scoreAtAdd,
+        newConfidence: fresh?.confidenceTier ?? "speculative",
+      };
+    });
+
+    results.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+
+    setScanResults((prev) => ({ ...prev, [wl.id]: results }));
+    setScanProgress("");
+    setScanning(null);
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-bold text-white">Watchlists</h1>
+        <p className="text-sm text-[#a0a0a0]">Track stocks and compare scores over time</p>
+      </div>
+
+      {/* Create new */}
+      <div className="flex gap-2">
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+          className="flex-1 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-white placeholder-[#555]"
+          placeholder="New watchlist name..."
+        />
+        <button
+          onClick={handleCreate}
+          disabled={!newName.trim()}
+          className="flex items-center gap-1.5 rounded-md bg-[#185FA5] px-4 py-2 text-sm font-medium text-white hover:bg-[#1a6dba] disabled:opacity-50"
+        >
+          <Plus className="h-4 w-4" /> Create
+        </button>
+      </div>
+
+      {watchlists.length === 0 ? (
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-12 text-center">
+          <p className="text-sm text-[#a0a0a0]">
+            No watchlists yet. Create one above, then add stocks from scan results using the list icon on each card.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {watchlists.map((wl) => (
+            <div key={wl.id} className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <button
+                  onClick={() => toggleExpand(wl.id)}
+                  className="flex items-center gap-2 text-left"
+                >
+                  {expanded.has(wl.id) ? (
+                    <ChevronDown className="h-4 w-4 text-[#666]" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-[#666]" />
+                  )}
+                  {editingId === wl.id ? (
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleRename(wl.id)}
+                        className="w-40 rounded border border-[#2a2a2a] bg-[#262626] px-2 py-0.5 text-sm text-white"
+                        autoFocus
+                      />
+                      <button onClick={() => handleRename(wl.id)} className="p-0.5 text-green-400">
+                        <Check className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => setEditingId(null)} className="p-0.5 text-[#666]">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="font-medium text-white">{wl.name}</span>
+                  )}
+                  <span className="text-xs text-[#666]">
+                    {wl.items.length} stock{wl.items.length !== 1 ? "s" : ""}
+                  </span>
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => runQuickScan(wl)}
+                    disabled={scanning === wl.id || wl.items.length === 0}
+                    className="flex items-center gap-1 rounded-md border border-[#2a2a2a] bg-[#262626] px-2.5 py-1 text-xs text-[#a0a0a0] hover:text-white disabled:opacity-50"
+                  >
+                    {scanning === wl.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3 w-3" />
+                    )}
+                    Quick Scan
+                  </button>
+                  <button
+                    onClick={() => { setEditingId(wl.id); setEditName(wl.name); }}
+                    className="rounded p-1 text-[#666] hover:text-white"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(wl.id)}
+                    className="rounded p-1 text-[#666] hover:text-red-400"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {scanning === wl.id && scanProgress && (
+                <div className="border-t border-[#2a2a2a] px-4 py-2">
+                  <p className="text-xs text-[#a0a0a0]">{scanProgress}</p>
+                </div>
+              )}
+
+              {/* Expanded items */}
+              {expanded.has(wl.id) && wl.items.length > 0 && (
+                <div className="border-t border-[#2a2a2a]">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-[#2a2a2a] bg-[#0f0f0f]">
+                        <th className="px-4 py-2 font-medium text-[#666]">Ticker</th>
+                        <th className="px-4 py-2 font-medium text-[#666]">Name</th>
+                        <th className="px-4 py-2 font-medium text-[#666]">Sector</th>
+                        <th className="px-4 py-2 font-medium text-[#666]">Score at Add</th>
+                        <th className="px-4 py-2 font-medium text-[#666]">Confidence</th>
+                        <th className="px-4 py-2 font-medium text-[#666]">Added</th>
+                        <th className="px-4 py-2 font-medium text-[#666]"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#2a2a2a]">
+                      {wl.items.map((item) => (
+                        <tr key={item.ticker} className="hover:bg-[#262626]">
+                          <td className="px-4 py-2 font-medium text-white">{item.ticker}</td>
+                          <td className="px-4 py-2 text-[#a0a0a0]">{item.name}</td>
+                          <td className="px-4 py-2 text-[#666]">{item.sector ?? "-"}</td>
+                          <td className="px-4 py-2 font-mono text-[#a0a0a0]">
+                            {Math.round(item.scoreAtAdd * 100)}%
+                          </td>
+                          <td className={`px-4 py-2 ${CONFIDENCE_COLORS[item.confidenceAtAdd]}`}>
+                            {item.confidenceAtAdd}
+                          </td>
+                          <td className="px-4 py-2 text-[#666]">
+                            {new Date(item.addedAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-2">
+                            <button
+                              onClick={() => handleRemoveItem(wl.id, item.ticker)}
+                              className="rounded p-1 text-[#666] hover:text-red-400"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {expanded.has(wl.id) && wl.items.length === 0 && (
+                <div className="border-t border-[#2a2a2a] px-4 py-6 text-center text-xs text-[#555]">
+                  Empty watchlist. Add stocks from scan results.
+                </div>
+              )}
+
+              {/* Quick scan results */}
+              {scanResults[wl.id] && (
+                <div className="border-t border-[#2a2a2a] px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-xs font-medium text-[#a0a0a0]">Quick Scan Results</h4>
+                    <button
+                      onClick={() => setScanResults((prev) => { const n = { ...prev }; delete n[wl.id]; return n; })}
+                      className="p-0.5 text-[#666] hover:text-white"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    {scanResults[wl.id].map((r) => (
+                      <div key={r.ticker} className="flex items-center justify-between rounded px-2 py-1 text-xs hover:bg-[#262626]">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-white">{r.ticker}</span>
+                          <span className="text-[#666]">{r.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[#a0a0a0]">{Math.round(r.oldScore * 100)}%</span>
+                          <span className="text-[#666]">&rarr;</span>
+                          <span className="text-[#a0a0a0]">{Math.round(r.newScore * 100)}%</span>
+                          <span className={`font-mono font-medium ${
+                            r.delta > 0.01 ? "text-green-400" : r.delta < -0.01 ? "text-red-400" : "text-[#666]"
+                          }`}>
+                            {r.delta > 0 ? "+" : ""}{Math.round(r.delta * 100)}
+                          </span>
+                          <span className={CONFIDENCE_COLORS[r.newConfidence]}>
+                            {r.newConfidence}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

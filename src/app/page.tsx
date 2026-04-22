@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Activity,
   Search,
@@ -19,6 +20,9 @@ import {
   ArrowUpDown,
   Layers,
   AlertTriangle,
+  ListPlus,
+  Bell,
+  Check,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
@@ -38,12 +42,14 @@ import type {
 } from "@/lib/ew-types";
 import { SCANNER_MODES, getModeConfig, applyModeFilters } from "@/lib/ew-scanner-modes";
 import { saveScan, loadScans, deleteScan, loadCustomUniverses } from "@/lib/ew-watchlist";
+import { loadWatchlists, addToWatchlist } from "@/lib/ew-watchlists";
 import { confirmMultiTimeframe } from "@/lib/ew-wave-counter";
 import { EWSparkline } from "@/components/ew-sparkline";
 import { EWFibBar } from "@/components/ew-fib-bar";
 import { EWSectorHeatmap } from "@/components/ew-sector-heatmap";
 import { EWDeepChart } from "@/components/ew-deep-chart";
 import { EWUniverseBuilder } from "@/components/ew-universe-builder";
+import { EWAlertConfig } from "@/components/ew-alert-config";
 
 const HTF_OPTIONS = ["Monthly", "Weekly"] as const;
 const LTF_OPTIONS = ["Daily", "4H", "1H"] as const;
@@ -126,7 +132,17 @@ const PRESETS: Preset[] = [
   },
 ];
 
-export default function EWScannerPage() {
+export default function EWScannerPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <EWScannerPage />
+    </Suspense>
+  );
+}
+
+function EWScannerPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [htf, setHtf] = useState<string>("Monthly");
   const [ltf, setLtf] = useState<string>("Daily");
   const [universe, setUniverse] = useState<string>("SP500");
@@ -159,12 +175,25 @@ export default function EWScannerPage() {
   const [showUniverseBuilder, setShowUniverseBuilder] = useState(false);
   const [customUniverseKeys, setCustomUniverseKeys] = useState<string[]>([]);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
+  const [showAlertConfig, setShowAlertConfig] = useState(false);
 
   // Load saved scans and custom universes on mount
   useEffect(() => {
     setSavedScans(loadScans());
     setCustomUniverseKeys(loadCustomUniverses().map((u) => `custom:${u.id}`));
   }, []);
+
+  // Load scan from URL param (from history page)
+  useEffect(() => {
+    const scanId = searchParams.get("loadScan");
+    if (!scanId) return;
+    const scan = loadScans().find((s) => s.id === scanId);
+    if (scan) {
+      handleLoadScan(scan);
+    }
+    // Clear param from URL
+    router.replace("/", { scroll: false });
+  }, [searchParams, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update slider defaults when mode changes
   const handleModeChange = useCallback((newMode: ScannerMode) => {
@@ -828,6 +857,14 @@ export default function EWScannerPage() {
                     <FileDown className="h-3.5 w-3.5" />
                     CSV
                   </button>
+                  <button
+                    onClick={() => setShowAlertConfig(true)}
+                    className="flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white"
+                    title="Send Telegram alert"
+                  >
+                    <Bell className="h-3.5 w-3.5" />
+                    Alert
+                  </button>
                 </div>
               </div>
 
@@ -988,6 +1025,7 @@ export default function EWScannerPage() {
                     confidenceBadge={confidenceBadge}
                     fmtYear={fmtYear}
                     runDeep={runDeep}
+                    mode={mode}
                   />
                 ))}
               </div>
@@ -1222,6 +1260,15 @@ export default function EWScannerPage() {
           setCustomUniverseKeys(loadCustomUniverses().map((u) => `custom:${u.id}`));
         }}
       />
+
+      {/* ── Alert Config Modal ── */}
+      <EWAlertConfig
+        open={showAlertConfig}
+        onOpenChange={setShowAlertConfig}
+        defaultMode={mode}
+        defaultUniverse={universe}
+        defaultFilters={{ minDecline, minMonths, minRecovery }}
+      />
     </div>
   );
 }
@@ -1243,6 +1290,7 @@ function CandidateCard({
   confidenceBadge,
   fmtYear,
   runDeep,
+  mode,
 }: {
   c: EnhancedScoredCandidate;
   idx: number;
@@ -1258,7 +1306,11 @@ function CandidateCard({
   confidenceBadge: (tier: string) => string;
   fmtYear: (y: number) => string;
   runDeep: (c: EnhancedScoredCandidate) => void;
+  mode: ScannerMode;
 }) {
+  const [wlOpen, setWlOpen] = useState(false);
+  const [wlAdded, setWlAdded] = useState<string | null>(null);
+  const watchlists = wlOpen ? loadWatchlists() : [];
   const pct = Math.round(c.enhancedNormalized * 100);
   const isHigh = c.enhancedNormalized >= 0.7;
   const declineDot = getDot(c.declinePct, minDecline);
@@ -1437,13 +1489,46 @@ function CandidateCard({
             {c.recoveryPct.toFixed(1)}%
           </span>
         </div>
-        <button
-          onClick={() => runDeep(c)}
-          className="flex items-center gap-1 rounded-md border border-[#2a2a2a] bg-[#262626] px-2.5 py-1 text-xs text-[#a0a0a0] transition-colors hover:border-[#3a3a3a] hover:text-white"
-        >
-          Deep Analysis
-          <ChevronRight className="h-3 w-3" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <div className="relative">
+            <button
+              onClick={() => setWlOpen(!wlOpen)}
+              className="flex items-center gap-1 rounded-md border border-[#2a2a2a] bg-[#262626] px-2 py-1 text-xs text-[#a0a0a0] transition-colors hover:border-[#3a3a3a] hover:text-white"
+              title="Add to watchlist"
+            >
+              {wlAdded ? <Check className="h-3 w-3 text-green-400" /> : <ListPlus className="h-3 w-3" />}
+            </button>
+            {wlOpen && (
+              <div className="absolute bottom-full right-0 z-50 mb-1 w-44 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] p-1 shadow-xl">
+                {watchlists.length === 0 ? (
+                  <p className="px-2 py-1.5 text-[10px] text-[#666]">No watchlists. Create one on the Watchlists page.</p>
+                ) : (
+                  watchlists.map((wl) => (
+                    <button
+                      key={wl.id}
+                      onClick={() => {
+                        const ok = addToWatchlist(wl.id, c, mode);
+                        setWlOpen(false);
+                        if (ok) { setWlAdded(wl.id); setTimeout(() => setWlAdded(null), 1500); }
+                      }}
+                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-xs text-[#a0a0a0] hover:bg-[#262626] hover:text-white"
+                    >
+                      <span className="truncate">{wl.name}</span>
+                      <span className="text-[10px] text-[#555]">{wl.items.length}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => runDeep(c)}
+            className="flex items-center gap-1 rounded-md border border-[#2a2a2a] bg-[#262626] px-2.5 py-1 text-xs text-[#a0a0a0] transition-colors hover:border-[#3a3a3a] hover:text-white"
+          >
+            Deep Analysis
+            <ChevronRight className="h-3 w-3" />
+          </button>
+        </div>
       </div>
     </div>
   );

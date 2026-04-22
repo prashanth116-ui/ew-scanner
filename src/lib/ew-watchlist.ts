@@ -20,6 +20,12 @@ export function saveScan(
   // Strip series data to keep storage small
   const stripped = candidates.map(({ series, ...rest }) => rest);
 
+  // Compute top 3 tickers by enhanced score
+  const topTickers = [...candidates]
+    .sort((a, b) => b.enhancedNormalized - a.enhancedNormalized)
+    .slice(0, 3)
+    .map((c) => c.ticker);
+
   const scan: SavedScan = {
     id: `scan_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     name,
@@ -30,12 +36,13 @@ export function saveScan(
     candidateCount: candidates.length,
     candidates: stripped,
     labels,
+    topTickers,
   };
 
   const existing = loadScans();
   existing.unshift(scan);
-  // Keep max 20 saved scans
-  const trimmed = existing.slice(0, 20);
+  // Keep max 50 saved scans
+  const trimmed = existing.slice(0, 50);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
 
   return scan;
@@ -55,6 +62,20 @@ export function loadScans(): SavedScan[] {
 export function deleteScan(id: string): void {
   if (!isClient()) return;
   const scans = loadScans().filter((s) => s.id !== id);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(scans));
+}
+
+export function updateScan(
+  id: string,
+  updates: { name?: string; notes?: string; tags?: string[] }
+): void {
+  if (!isClient()) return;
+  const scans = loadScans();
+  const idx = scans.findIndex((s) => s.id === id);
+  if (idx === -1) return;
+  if (updates.name !== undefined) scans[idx].name = updates.name;
+  if (updates.notes !== undefined) scans[idx].notes = updates.notes;
+  if (updates.tags !== undefined) scans[idx].tags = updates.tags;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(scans));
 }
 

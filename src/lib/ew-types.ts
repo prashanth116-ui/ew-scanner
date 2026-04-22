@@ -172,4 +172,44 @@ export interface SavedScan {
   candidateCount: number;
   candidates: Omit<EnhancedScoredCandidate, "series">[];
   labels: Record<string, string>;
+  notes?: string;
+  tags?: string[];
+  topTickers?: string[];
+}
+
+export interface WatchlistItem {
+  ticker: string;
+  name: string;
+  sector?: string;
+  addedAt: string;
+  scoreAtAdd: number;
+  confidenceAtAdd: ConfidenceTier;
+  mode: ScannerMode;
+}
+
+export interface Watchlist {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  items: WatchlistItem[];
+}
+
+export interface ScanComparison {
+  scanA: SavedScan;
+  scanB: SavedScan;
+  newTickers: string[];
+  droppedTickers: string[];
+  scoreChanges: { ticker: string; name: string; scoreA: number; scoreB: number; delta: number }[];
+}
+
+export interface AlertConfig {
+  mode: ScannerMode;
+  universe: string;
+  minConfidence: ConfidenceTier;
+  filters: {
+    minDecline: number;
+    minMonths: number;
+    minRecovery: number;
+  };
 }
