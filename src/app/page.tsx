@@ -211,6 +211,7 @@ function EWScannerPage() {
   const [tickerSearching, setTickerSearching] = useState(false);
   const [tickerResult, setTickerResult] = useState<EnhancedScoredCandidate | null>(null);
   const [tickerLabel, setTickerLabel] = useState<string | null>(null);
+  const [tickerError, setTickerError] = useState<string | null>(null);
   const tickerAbort = useRef<AbortController | null>(null);
 
   // Load saved scans and custom universes on mount
@@ -263,7 +264,7 @@ function EWScannerPage() {
   }, [passed, mode, debouncedDecline, debouncedMonths, debouncedRecovery]);
 
   // Sort
-  const sorted = [...modeFiltered].sort((a, b) => {
+  const sorted = useMemo(() => [...modeFiltered].sort((a, b) => {
     switch (sortBy) {
       case "score": return b.enhancedNormalized - a.enhancedNormalized;
       case "decline": return b.declinePct - a.declinePct;
@@ -275,10 +276,10 @@ function EWScannerPage() {
       }
       default: return 0;
     }
-  });
+  }), [modeFiltered, sortBy]);
 
   // Group
-  const grouped = groupCandidates(sorted, groupBy);
+  const grouped = useMemo(() => groupCandidates(sorted, groupBy), [sorted, groupBy]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -300,6 +301,7 @@ function EWScannerPage() {
     setTickerSearching(true);
     setTickerResult(null);
     setTickerLabel(null);
+    setTickerError(null);
 
     try {
       // Fetch quote
@@ -308,12 +310,18 @@ function EWScannerPage() {
         { signal }
       );
       if (!res.ok) {
-        setTickerSearching(false);
+        if (!signal.aborted) {
+          setTickerError(res.status === 404 ? `Ticker "${ticker}" not found` : `Failed to fetch data for "${ticker}"`);
+          setTickerSearching(false);
+        }
         return;
       }
       const data = await res.json();
       if (data.error || !data.ath) {
-        setTickerSearching(false);
+        if (!signal.aborted) {
+          setTickerError(data.error ?? `No price data available for "${ticker}"`);
+          setTickerSearching(false);
+        }
         return;
       }
 
@@ -376,9 +384,13 @@ function EWScannerPage() {
         } catch {
           // Label is non-critical
         }
+      } else {
+        setTickerError(`Could not score "${ticker}"`);
       }
-    } catch {
-      // Aborted or failed
+    } catch (err) {
+      if (!signal.aborted) {
+        setTickerError(`Failed to analyze "${ticker}"`);
+      }
     }
     if (!signal.aborted) setTickerSearching(false);
   }, [tickerSearch, mode, htf, ltf]);
@@ -1043,6 +1055,19 @@ function EWScannerPage() {
             </button>
           </div>
 
+          {/* Ticker search error */}
+          {tickerError && !tickerResult && (
+            <div className="flex items-center justify-between rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
+              <p className="text-sm text-red-400">{tickerError}</p>
+              <button
+                onClick={() => setTickerError(null)}
+                className="shrink-0 rounded p-1 text-red-400/50 hover:text-red-400"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
           {/* Ticker search result */}
           {tickerResult && (
             <div className="space-y-2">
@@ -1051,7 +1076,7 @@ function EWScannerPage() {
                   Ticker Lookup: {tickerResult.ticker}
                 </h3>
                 <button
-                  onClick={() => { setTickerResult(null); setTickerLabel(null); setTickerSearch(""); }}
+                  onClick={() => { setTickerResult(null); setTickerLabel(null); setTickerError(null); setTickerSearch(""); }}
                   className="rounded p-1 text-[#666] hover:text-white"
                 >
                   <X className="h-4 w-4" />

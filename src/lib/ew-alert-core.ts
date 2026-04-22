@@ -1,20 +1,20 @@
 /**
  * Shared alert logic used by both /api/alert (manual) and /api/alert/cron (scheduled).
  * Extracts the common fetch → score → filter → send pipeline.
+ *
+ * SERVER-ONLY: This module uses Node.js APIs (fs). Never import from client components.
  */
+
+import "server-only";
 
 import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-scoring";
 import { applyModeFilters } from "@/lib/ew-scanner-modes";
 import { formatAlertMessage, sendTelegramMessage } from "@/lib/ew-telegram";
 import { UNIVERSES, type UniverseKey } from "@/data/ew-universes";
 import type { AlertConfig, ConfidenceTier, ScannerMode, EnhancedScoredCandidate } from "@/lib/ew-types";
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
 import { logError } from "./error-logger";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
-const LAST_ALERT_PATH = join(tmpdir(), "ew-last-alert.json");
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 300;
 
@@ -23,6 +23,24 @@ const CONFIDENCE_ORDER: Record<ConfidenceTier, number> = {
   probable: 1,
   speculative: 2,
 };
+
+// In-memory cache for alert diff tracking (survives within a warm serverless instance)
+let lastAlertTickers: string[] = [];
+let lastAlertTimestamp = 0;
+const ALERT_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function loadPreviousAlertTickers(): string[] {
+  // If in-memory cache is fresh (within 24h), use it
+  if (lastAlertTimestamp > 0 && Date.now() - lastAlertTimestamp < ALERT_CACHE_TTL) {
+    return lastAlertTickers;
+  }
+  return [];
+}
+
+function savePreviousAlertTickers(tickers: string[]): void {
+  lastAlertTickers = tickers;
+  lastAlertTimestamp = Date.now();
+}
 
 export async function fetchQuote(ticker: string): Promise<EnrichedQuoteInput | null> {
   try {
@@ -171,16 +189,8 @@ export async function runAlertPipeline(config: AlertConfig): Promise<{
     (c) => CONFIDENCE_ORDER[c.confidenceTier] <= minConf
   );
 
-  // Load previous alert for diff
-  let previousTickers: string[] = [];
-  try {
-    if (existsSync(LAST_ALERT_PATH)) {
-      const prev = JSON.parse(readFileSync(LAST_ALERT_PATH, "utf-8"));
-      previousTickers = prev.tickers ?? [];
-    }
-  } catch {
-    // ignore
-  }
+  // Load previous alert tickers for diff (in-memory cache)
+  const previousTickers = loadPreviousAlertTickers();
 
   const currentTickers = filtered.map((c) => c.ticker);
   const prevSet = new Set(previousTickers);
@@ -190,15 +200,8 @@ export async function runAlertPipeline(config: AlertConfig): Promise<{
   const message = formatAlertMessage(filtered, mode as ScannerMode, universe, newTickers, {});
   const tgResult = await sendTelegramMessage(botToken, chatId, message);
 
-  // Save current for next diff
-  try {
-    writeFileSync(
-      LAST_ALERT_PATH,
-      JSON.stringify({ tickers: currentTickers, timestamp: new Date().toISOString() })
-    );
-  } catch {
-    // ignore -- /tmp may not persist on serverless
-  }
+  // Save current tickers for next diff
+  savePreviousAlertTickers(currentTickers);
 
   return {
     sent: tgResult.ok,

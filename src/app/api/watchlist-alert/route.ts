@@ -67,28 +67,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No quotes fetched" }, { status: 502 });
     }
 
-    // Score with zero filters to ensure all watchlist items get scored
-    const mode: ScannerMode = watchlist.items[0]?.mode ?? "wave2";
-    const scored = scoreBatchEnhanced(quotes, {
-      minDecline: 0,
-      minDuration: 0,
-      minRecovery: 0,
-      mode,
-    });
+    // Group items by mode so each item is scored with its original scan mode
+    const modeGroups = new Map<ScannerMode, typeof watchlist.items>();
+    for (const item of watchlist.items) {
+      const m = item.mode ?? "wave2";
+      if (!modeGroups.has(m)) modeGroups.set(m, []);
+      modeGroups.get(m)!.push(item);
+    }
+
+    // Score each mode group separately, collect results
+    const scoreMap = new Map<string, number>(); // ticker → enhancedNormalized
+    for (const [groupMode, items] of modeGroups) {
+      const groupQuotes = quotes.filter((q) =>
+        items.some((it) => it.ticker === q.ticker)
+      );
+      if (groupQuotes.length === 0) continue;
+      const scored = scoreBatchEnhanced(groupQuotes, {
+        minDecline: 0,
+        minDuration: 0,
+        minRecovery: 0,
+        mode: groupMode,
+      });
+      for (const s of scored) {
+        scoreMap.set(s.ticker, s.enhancedNormalized);
+      }
+    }
 
     // Compare scores
     const triggered: { ticker: string; name: string; oldScore: number; newScore: number; delta: number }[] = [];
 
     for (const item of watchlist.items) {
-      const fresh = scored.find((s) => s.ticker === item.ticker);
-      if (!fresh) continue;
-      const delta = fresh.enhancedNormalized - item.scoreAtAdd;
+      const newScore = scoreMap.get(item.ticker);
+      if (newScore === undefined) continue;
+      const delta = newScore - item.scoreAtAdd;
       if (Math.abs(delta) >= threshold) {
         triggered.push({
           ticker: item.ticker,
           name: item.name,
           oldScore: item.scoreAtAdd,
-          newScore: fresh.enhancedNormalized,
+          newScore,
           delta,
         });
       }
