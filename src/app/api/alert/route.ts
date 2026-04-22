@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
 
   // Format and send
   const message = formatAlertMessage(filtered, mode as ScannerMode, universe, newTickers, {});
-  const sent = await sendTelegramMessage(botToken, chatId, message);
+  const tgResult = await sendTelegramMessage(botToken, chatId, message);
 
   // Save current for next diff
   try {
@@ -195,12 +195,13 @@ export async function POST(request: NextRequest) {
       JSON.stringify({ tickers: currentTickers, timestamp: new Date().toISOString() })
     );
   } catch {
-    // ignore
+    // ignore — /tmp may not persist on serverless
   }
 
   return NextResponse.json({
-    sent,
+    sent: tgResult.ok,
     candidateCount: filtered.length,
     newCount: newTickers.length,
+    ...(tgResult.error ? { error: tgResult.error } : {}),
   });
 }

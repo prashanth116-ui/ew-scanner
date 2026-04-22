@@ -69,7 +69,7 @@ export async function sendTelegramMessage(
   botToken: string,
   chatId: string,
   message: string
-): Promise<boolean> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
     const res = await fetch(url, {
@@ -83,8 +83,9 @@ export async function sendTelegramMessage(
       }),
     });
     const data = await res.json();
-    return data.ok === true;
-  } catch {
-    return false;
+    if (data.ok === true) return { ok: true };
+    return { ok: false, error: data.description ?? `Telegram API error ${res.status}` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
   }
 }

@@ -30,7 +30,7 @@ export function EWAlertConfig({
   const [minMonths, setMinMonths] = useState(defaultFilters.minMonths);
   const [minRecovery, setMinRecovery] = useState(defaultFilters.minRecovery);
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<{ sent: boolean; candidateCount: number; newCount: number } | null>(null);
+  const [result, setResult] = useState<{ sent: boolean; candidateCount: number; newCount: number; error?: string } | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -209,7 +209,7 @@ export function EWAlertConfig({
               }`}>
                 {result.sent
                   ? `Sent! ${result.candidateCount} candidates, ${result.newCount} new.`
-                  : "Failed to send. Check bot token and chat ID."}
+                  : `Failed: ${result.error ?? "Check bot token and chat ID."}`}
               </div>
             )}
 
