@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     const origin = request.headers.get("origin") ?? "";
     const host = request.headers.get("host") ?? "";
-    const isSameOrigin = origin && host && origin.includes(host);
+    const isSameOrigin = origin && host && (origin === `https://${host}` || origin === `http://${host}`);
     const cronSecret = process.env.CRON_SECRET;
     const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
 

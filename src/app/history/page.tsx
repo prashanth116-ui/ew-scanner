@@ -15,7 +15,7 @@ import {
   Filter,
   ExternalLink,
 } from "lucide-react";
-import { loadScans, deleteScan, updateScan, findPreviousScan } from "@/lib/ew-watchlist";
+import { loadScans, deleteScan, updateScan } from "@/lib/ew-watchlist";
 import { compareScansPair } from "@/lib/ew-scan-compare";
 import type { SavedScan, ScanComparison, ScannerMode } from "@/lib/ew-types";
 
@@ -142,10 +142,19 @@ export default function HistoryPage() {
   };
 
   // Auto-compare: compute diff badge for each scan vs its previous same-mode+universe scan
+  // Uses the already-loaded scans array to avoid N*loadScans() redundant localStorage reads
   const autoCompareMap = useMemo(() => {
     const map: Record<string, { newCount: number; droppedCount: number; prevId: string } | null> = {};
     for (const scan of scans) {
-      const prev = findPreviousScan(scan.mode, scan.universe, scan.savedAt);
+      // Find most recent scan matching mode+universe before this scan's date (inline)
+      const before = new Date(scan.savedAt).getTime();
+      const prev = scans.find(
+        (s) =>
+          s.id !== scan.id &&
+          s.mode === scan.mode &&
+          s.universe === scan.universe &&
+          new Date(s.savedAt).getTime() < before
+      );
       if (!prev) {
         map[scan.id] = null;
       } else {

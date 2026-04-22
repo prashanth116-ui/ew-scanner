@@ -67,12 +67,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No quotes fetched" }, { status: 502 });
     }
 
-    // Score with loose filters to get all items
+    // Score with zero filters to ensure all watchlist items get scored
     const mode: ScannerMode = watchlist.items[0]?.mode ?? "wave2";
     const scored = scoreBatchEnhanced(quotes, {
-      minDecline: 5,
-      minDuration: 1,
-      minRecovery: 1,
+      minDecline: 0,
+      minDuration: 0,
+      minRecovery: 0,
       mode,
     });
 

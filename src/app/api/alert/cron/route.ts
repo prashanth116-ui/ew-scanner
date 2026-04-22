@@ -4,10 +4,13 @@ import { logError } from "@/lib/error-logger";
 import type { AlertConfig } from "@/lib/ew-types";
 
 export async function GET(request: NextRequest) {
-  // Verify Vercel Cron secret
-  const authHeader = request.headers.get("authorization");
+  // Verify Vercel Cron secret (required — reject if not configured)
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
+  }
+  const authHeader = request.headers.get("authorization");
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
