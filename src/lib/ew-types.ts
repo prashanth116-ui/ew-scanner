@@ -193,6 +193,8 @@ export interface Watchlist {
   createdAt: string;
   updatedAt: string;
   items: WatchlistItem[];
+  alertEnabled?: boolean;
+  scoreThreshold?: number;
 }
 
 export interface ScanComparison {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Trash2,
@@ -15,7 +15,7 @@ import {
   Filter,
   ExternalLink,
 } from "lucide-react";
-import { loadScans, deleteScan, updateScan } from "@/lib/ew-watchlist";
+import { loadScans, deleteScan, updateScan, findPreviousScan } from "@/lib/ew-watchlist";
 import { compareScansPair } from "@/lib/ew-scan-compare";
 import type { SavedScan, ScanComparison, ScannerMode } from "@/lib/ew-types";
 
@@ -140,6 +140,33 @@ export default function HistoryPage() {
     if (sortField === field) setSortAsc(!sortAsc);
     else { setSortField(field); setSortAsc(false); }
   };
+
+  // Auto-compare: compute diff badge for each scan vs its previous same-mode+universe scan
+  const autoCompareMap = useMemo(() => {
+    const map: Record<string, { newCount: number; droppedCount: number; prevId: string } | null> = {};
+    for (const scan of scans) {
+      const prev = findPreviousScan(scan.mode, scan.universe, scan.savedAt);
+      if (!prev) {
+        map[scan.id] = null;
+      } else {
+        const tickersA = new Set(prev.candidates.map((c) => c.ticker));
+        const tickersB = new Set(scan.candidates.map((c) => c.ticker));
+        const newCount = scan.candidates.filter((c) => !tickersA.has(c.ticker)).length;
+        const droppedCount = prev.candidates.filter((c) => !tickersB.has(c.ticker)).length;
+        map[scan.id] = { newCount, droppedCount, prevId: prev.id };
+      }
+    }
+    return map;
+  }, [scans]);
+
+  const handleAutoCompare = useCallback((scanId: string) => {
+    const info = autoCompareMap[scanId];
+    if (!info) return;
+    const a = scans.find((s) => s.id === info.prevId);
+    const b = scans.find((s) => s.id === scanId);
+    if (!a || !b) return;
+    setComparison(compareScansPair(a, b));
+  }, [autoCompareMap, scans]);
 
   // ── Compare view ──
   if (comparison) {
@@ -292,7 +319,172 @@ export default function HistoryPage() {
           <p className="text-sm text-[#a0a0a0]">No saved scans yet. Run a scan and hit Save to get started.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
+        <>
+        {/* Mobile cards */}
+        <div className="space-y-3 sm:hidden">
+          {sorted.map((scan) => (
+            <div key={scan.id} className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="accent-[#185FA5]"
+                      checked={selected.has(scan.id)}
+                      onChange={() => toggleSelect(scan.id)}
+                    />
+                    <button
+                      onClick={() => handleLoad(scan.id)}
+                      className="truncate text-sm font-medium text-[#e6e6e6] hover:text-[#5ba3e6]"
+                    >
+                      {scan.name}
+                    </button>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${MODE_COLORS[scan.mode]}`}>
+                      {MODE_LABELS[scan.mode]}
+                    </span>
+                    <span className="text-[10px] text-[#666]">{scan.universe}</span>
+                    <span className="text-[10px] text-[#a0a0a0]">
+                      {new Date(scan.savedAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 text-xs text-[#a0a0a0]">
+                  <span>{scan.candidateCount}</span>
+                  {autoCompareMap[scan.id] ? (
+                    <button
+                      onClick={() => handleAutoCompare(scan.id)}
+                      className="inline-flex items-center gap-0.5 rounded bg-[#262626] px-1 py-0.5 text-[9px] hover:bg-[#333]"
+                    >
+                      {autoCompareMap[scan.id]!.newCount > 0 && (
+                        <span className="text-green-400">+{autoCompareMap[scan.id]!.newCount}</span>
+                      )}
+                      {autoCompareMap[scan.id]!.droppedCount > 0 && (
+                        <span className="text-red-400">-{autoCompareMap[scan.id]!.droppedCount}</span>
+                      )}
+                      {autoCompareMap[scan.id]!.newCount === 0 && autoCompareMap[scan.id]!.droppedCount === 0 && (
+                        <span className="text-[#666]">=</span>
+                      )}
+                    </button>
+                  ) : (
+                    <span className="text-[9px] text-[#555]">First</span>
+                  )}
+                </div>
+              </div>
+              {/* Top 3 chips */}
+              <div className="mt-2 flex gap-1">
+                {(scan.topTickers ?? scan.candidates.slice(0, 3).map((c) => c.ticker)).map((t) => (
+                  <span key={t} className="rounded bg-[#262626] px-1.5 py-0.5 text-[10px] text-[#a0a0a0]">
+                    {t}
+                  </span>
+                ))}
+              </div>
+              {scan.notes && (
+                <p className="mt-1 truncate text-[10px] text-[#555]">{scan.notes}</p>
+              )}
+              {/* Tags */}
+              {scan.tags && scan.tags.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {scan.tags.map((tag) => (
+                    <span key={tag} className="rounded bg-[#185FA5]/20 px-1.5 py-0.5 text-[10px] text-[#5ba3e6]">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* Actions */}
+              <div className="mt-2 flex items-center gap-1 border-t border-[#2a2a2a] pt-2">
+                <button
+                  onClick={() => { setEditingId(scan.id); setEditName(scan.name); }}
+                  className="rounded p-1 text-[#666] hover:text-white"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (noteId === scan.id) { setNoteId(null); }
+                    else { setNoteId(scan.id); setNoteText(scan.notes ?? ""); }
+                  }}
+                  className="rounded p-1 text-[#666] hover:text-white"
+                >
+                  <StickyNote className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => { setTagId(tagId === scan.id ? null : scan.id); setTagInput(""); }}
+                  className="rounded p-1 text-[#666] hover:text-white"
+                >
+                  <Tag className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => handleDelete(scan.id)}
+                  className="rounded p-1 text-[#666] hover:text-red-400"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+              {/* Inline note editor */}
+              {noteId === scan.id && (
+                <div className="mt-2 flex gap-1">
+                  <textarea
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    className="h-16 flex-1 rounded border border-[#2a2a2a] bg-[#262626] px-2 py-1 text-xs text-white"
+                    placeholder="Add a note..."
+                  />
+                  <div className="flex flex-col gap-0.5">
+                    <button onClick={() => handleSaveNote(scan.id)} className="rounded p-1 text-green-400">
+                      <Check className="h-3 w-3" />
+                    </button>
+                    <button onClick={() => setNoteId(null)} className="rounded p-1 text-[#666]">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/* Inline tag editor */}
+              {tagId === scan.id && (
+                <div className="mt-1 flex items-center gap-0.5">
+                  <input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddTag(scan.id)}
+                    className="w-24 rounded border border-[#2a2a2a] bg-[#262626] px-1 py-0.5 text-[10px] text-white"
+                    placeholder="tag"
+                    autoFocus
+                  />
+                  <button onClick={() => handleAddTag(scan.id)} className="p-0.5 text-green-400">
+                    <Check className="h-2.5 w-2.5" />
+                  </button>
+                  <button onClick={() => setTagId(null)} className="p-0.5 text-[#666]">
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              )}
+              {/* Inline rename */}
+              {editingId === scan.id && (
+                <div className="mt-1 flex items-center gap-1">
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleRename(scan.id)}
+                    className="flex-1 rounded border border-[#2a2a2a] bg-[#262626] px-2 py-0.5 text-xs text-white"
+                    autoFocus
+                  />
+                  <button onClick={() => handleRename(scan.id)} className="p-0.5 text-green-400">
+                    <Check className="h-3 w-3" />
+                  </button>
+                  <button onClick={() => setEditingId(null)} className="p-0.5 text-[#666]">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden overflow-x-auto rounded-lg border border-[#2a2a2a] sm:block">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-[#2a2a2a] bg-[#1a1a1a]">
               <tr>
@@ -389,7 +581,31 @@ export default function HistoryPage() {
                     </span>
                   </td>
                   <td className="px-3 py-2 text-[#a0a0a0]">{scan.universe}</td>
-                  <td className="px-3 py-2 text-[#a0a0a0]">{scan.candidateCount}</td>
+                  <td className="px-3 py-2">
+                    <span className="text-[#a0a0a0]">{scan.candidateCount}</span>
+                    {autoCompareMap[scan.id] ? (
+                      <button
+                        onClick={() => handleAutoCompare(scan.id)}
+                        className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-[#262626] px-1 py-0.5 text-[9px] hover:bg-[#333]"
+                        title="Compare vs last same-mode scan"
+                      >
+                        {autoCompareMap[scan.id]!.newCount > 0 && (
+                          <span className="text-green-400">+{autoCompareMap[scan.id]!.newCount}</span>
+                        )}
+                        {autoCompareMap[scan.id]!.newCount > 0 && autoCompareMap[scan.id]!.droppedCount > 0 && (
+                          <span className="text-[#555]">/</span>
+                        )}
+                        {autoCompareMap[scan.id]!.droppedCount > 0 && (
+                          <span className="text-red-400">-{autoCompareMap[scan.id]!.droppedCount}</span>
+                        )}
+                        {autoCompareMap[scan.id]!.newCount === 0 && autoCompareMap[scan.id]!.droppedCount === 0 && (
+                          <span className="text-[#666]">=</span>
+                        )}
+                      </button>
+                    ) : (
+                      <span className="ml-1.5 text-[9px] text-[#555]">First</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
                       {(scan.topTickers ?? scan.candidates.slice(0, 3).map((c) => c.ticker)).map((t) => (
@@ -493,6 +709,7 @@ export default function HistoryPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

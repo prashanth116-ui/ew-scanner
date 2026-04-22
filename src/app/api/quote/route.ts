@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, getClientKey } from "@/lib/rate-limit";
+import { logError } from "@/lib/error-logger";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
 
 export async function GET(request: NextRequest) {
+  // Rate limit: 200 req/min per IP
+  const rl = rateLimit(`quote:${getClientKey(request)}`, 200, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
+
   const ticker = request.nextUrl.searchParams.get("ticker");
   if (!ticker) {
     return NextResponse.json({ error: "ticker param required" }, { status: 400 });
@@ -174,6 +185,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(baseResponse);
   } catch (err) {
+    logError("api/quote", err, { ticker });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Fetch failed" },
       { status: 502 }

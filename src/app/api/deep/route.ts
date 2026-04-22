@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { rateLimit, getClientKey } from "@/lib/rate-limit";
+import { logError } from "@/lib/error-logger";
 
 interface DeepInput {
   ticker: string;
@@ -39,6 +41,15 @@ interface DeepInput {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit: 20 req/min per IP
+  const rl = rateLimit(`deep:${getClientKey(request)}`, 20, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
+
   const data = (await request.json()) as DeepInput;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -173,6 +184,7 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
       });
     }
   } catch (err) {
+    logError("api/deep", err, { ticker: data.ticker });
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ analysis: `Error: ${message}` });
   }

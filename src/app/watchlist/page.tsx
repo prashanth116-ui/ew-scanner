@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus,
   Trash2,
@@ -11,6 +11,7 @@ import {
   X,
   Pencil,
   Check,
+  Bell,
 } from "lucide-react";
 import {
   loadWatchlists,
@@ -50,9 +51,13 @@ export default function WatchlistPage() {
   const [scanning, setScanning] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState("");
   const [scanResults, setScanResults] = useState<Record<string, QuickScanResult[]>>({});
+  const [alertingId, setAlertingId] = useState<string | null>(null);
+  const [alertResult, setAlertResult] = useState<Record<string, { sent: boolean; triggered: number; error?: string }>>({});
+  const scanAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setWatchlists(loadWatchlists());
+    return () => { scanAbortRef.current?.abort(); };
   }, []);
 
   const refresh = useCallback(() => setWatchlists(loadWatchlists()), []);
@@ -90,6 +95,11 @@ export default function WatchlistPage() {
   }, []);
 
   const runQuickScan = useCallback(async (wl: Watchlist) => {
+    scanAbortRef.current?.abort();
+    const controller = new AbortController();
+    scanAbortRef.current = controller;
+    const signal = controller.signal;
+
     setScanning(wl.id);
     setScanProgress("Fetching quotes...");
 
@@ -102,7 +112,7 @@ export default function WatchlistPage() {
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
-          const res = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}&detail=1`);
+          const res = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}&detail=1`, { signal });
           if (!res.ok) return null;
           const data = await res.json();
           if (data.error) return null;
@@ -165,6 +175,35 @@ export default function WatchlistPage() {
     setScanResults((prev) => ({ ...prev, [wl.id]: results }));
     setScanProgress("");
     setScanning(null);
+  }, []);
+
+  const runCheckAlert = useCallback(async (wl: Watchlist) => {
+    setAlertingId(wl.id);
+    try {
+      const res = await fetch("/api/watchlist-alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          watchlist: wl,
+          threshold: wl.scoreThreshold ?? 0.15,
+        }),
+      });
+      const data = await res.json();
+      setAlertResult((prev) => ({
+        ...prev,
+        [wl.id]: {
+          sent: data.sent ?? false,
+          triggered: data.triggered?.length ?? 0,
+          error: data.error,
+        },
+      }));
+    } catch (err) {
+      setAlertResult((prev) => ({
+        ...prev,
+        [wl.id]: { sent: false, triggered: 0, error: String(err) },
+      }));
+    }
+    setAlertingId(null);
   }, []);
 
   return (
@@ -248,6 +287,19 @@ export default function WatchlistPage() {
                       <RefreshCw className="h-3 w-3" />
                     )}
                     Quick Scan
+                  </button>
+                  <button
+                    onClick={() => runCheckAlert(wl)}
+                    disabled={alertingId === wl.id || wl.items.length === 0}
+                    className="flex items-center gap-1 rounded-md border border-[#2a2a2a] bg-[#262626] px-2.5 py-1 text-xs text-[#a0a0a0] hover:text-white disabled:opacity-50"
+                    title="Check scores and send Telegram alert if delta > threshold"
+                  >
+                    {alertingId === wl.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Bell className="h-3 w-3" />
+                    )}
+                    Check &amp; Alert
                   </button>
                   <button
                     onClick={() => { setEditingId(wl.id); setEditName(wl.name); }}
@@ -355,6 +407,33 @@ export default function WatchlistPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Alert result */}
+              {alertResult[wl.id] && (
+                <div className="border-t border-[#2a2a2a] px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs">
+                      {alertResult[wl.id].sent ? (
+                        <span className="text-green-400">
+                          Alert sent ({alertResult[wl.id].triggered} ticker{alertResult[wl.id].triggered !== 1 ? "s" : ""} triggered)
+                        </span>
+                      ) : alertResult[wl.id].triggered === 0 ? (
+                        <span className="text-[#a0a0a0]">No tickers exceeded threshold</span>
+                      ) : (
+                        <span className="text-red-400">
+                          Failed: {alertResult[wl.id].error ?? "Unknown error"}
+                        </span>
+                      )}
+                    </p>
+                    <button
+                      onClick={() => setAlertResult((prev) => { const n = { ...prev }; delete n[wl.id]; return n; })}
+                      className="p-0.5 text-[#666] hover:text-white"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   </div>
                 </div>
               )}

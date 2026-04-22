@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, Suspense } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Activity,
@@ -50,6 +50,7 @@ import { EWSectorHeatmap } from "@/components/ew-sector-heatmap";
 import { EWDeepChart } from "@/components/ew-deep-chart";
 import { EWUniverseBuilder } from "@/components/ew-universe-builder";
 import { EWAlertConfig } from "@/components/ew-alert-config";
+import { useDebounce } from "@/lib/use-debounce";
 
 const HTF_OPTIONS = ["Monthly", "Weekly"] as const;
 const LTF_OPTIONS = ["Daily", "4H", "1H"] as const;
@@ -160,6 +161,24 @@ function EWScannerPage() {
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [labeling, setLabeling] = useState(false);
 
+  // AbortController refs for cancelling in-flight requests
+  const scanAbort = useRef<AbortController | null>(null);
+  const deepAbort = useRef<AbortController | null>(null);
+
+  // Debounced slider values for expensive recomputation
+  const debouncedDecline = useDebounce(minDecline, 300);
+  const debouncedMonths = useDebounce(minMonths, 300);
+  const debouncedRecovery = useDebounce(minRecovery, 300);
+
+  // Abort all in-flight on unmount
+  useEffect(() => {
+    return () => {
+      scanAbort.current?.abort();
+      deepAbort.current?.abort();
+      tickerAbort.current?.abort();
+    };
+  }, []);
+
   const [deepTicker, setDeepTicker] = useState<string | null>(null);
   const [deepCandidate, setDeepCandidate] = useState<EnhancedScoredCandidate | null>(null);
   const [deepAnalysis, setDeepAnalysis] = useState<string>("");
@@ -176,6 +195,23 @@ function EWScannerPage() {
   const [customUniverseKeys, setCustomUniverseKeys] = useState<string[]>([]);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
   const [showAlertConfig, setShowAlertConfig] = useState(false);
+
+  // Collapsible left panel sections (stores collapsed section keys)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleSection = useCallback((key: string) => {
+    setCollapsed((prev) => {
+      const s = new Set(prev);
+      if (s.has(key)) s.delete(key); else s.add(key);
+      return s;
+    });
+  }, []);
+
+  // Single-ticker search
+  const [tickerSearch, setTickerSearch] = useState("");
+  const [tickerSearching, setTickerSearching] = useState(false);
+  const [tickerResult, setTickerResult] = useState<EnhancedScoredCandidate | null>(null);
+  const [tickerLabel, setTickerLabel] = useState<string | null>(null);
+  const tickerAbort = useRef<AbortController | null>(null);
 
   // Load saved scans and custom universes on mount
   useEffect(() => {
@@ -215,8 +251,16 @@ function EWScannerPage() {
   }, []);
 
   const passed = useMemo(() => results.filter((r) => r.passed), [results]);
-  // Apply mode filters to passing candidates
-  const modeFiltered = useMemo(() => applyModeFilters(passed, mode), [passed, mode]);
+  // Apply mode filters to passing candidates (uses debounced slider values)
+  const modeFiltered = useMemo(() => {
+    const mf = applyModeFilters(passed, mode);
+    return mf.filter(
+      (c) =>
+        c.declinePct >= debouncedDecline &&
+        c.monthsDecline >= debouncedMonths &&
+        c.recoveryPct >= debouncedRecovery
+    );
+  }, [passed, mode, debouncedDecline, debouncedMonths, debouncedRecovery]);
 
   // Sort
   const sorted = [...modeFiltered].sort((a, b) => {
@@ -236,8 +280,117 @@ function EWScannerPage() {
   // Group
   const grouped = groupCandidates(sorted, groupBy);
 
+  const cancelScan = useCallback(() => {
+    scanAbort.current?.abort();
+    scanAbort.current = null;
+    setScanning(false);
+    setProgress("");
+  }, []);
+
+  // --- Single Ticker Search ---
+  const runTickerSearch = useCallback(async () => {
+    const ticker = tickerSearch.trim().toUpperCase();
+    if (!ticker) return;
+
+    tickerAbort.current?.abort();
+    const controller = new AbortController();
+    tickerAbort.current = controller;
+    const signal = controller.signal;
+
+    setTickerSearching(true);
+    setTickerResult(null);
+    setTickerLabel(null);
+
+    try {
+      // Fetch quote
+      const res = await fetch(
+        `/api/quote?ticker=${encodeURIComponent(ticker)}&detail=1`,
+        { signal }
+      );
+      if (!res.ok) {
+        setTickerSearching(false);
+        return;
+      }
+      const data = await res.json();
+      if (data.error || !data.ath) {
+        setTickerSearching(false);
+        return;
+      }
+
+      // Score it
+      const quote: EnrichedQuoteInput = {
+        ticker,
+        name: ticker,
+        ath: data.ath,
+        low: data.low,
+        current: data.current,
+        athYear: data.athYear,
+        lowYear: data.lowYear,
+        series: data.series,
+        athIdx: data.athIdx,
+        lowIdx: data.lowIdx,
+      };
+
+      const scored = scoreBatchEnhanced([quote], {
+        minDecline: 0,
+        minDuration: 0,
+        minRecovery: 0,
+        mode,
+      });
+
+      if (scored.length > 0) {
+        // Force passed=true so the card renders regardless of filters
+        const candidate = { ...scored[0], passed: true };
+        setTickerResult(candidate);
+
+        // Try to get a label
+        if (signal.aborted) return;
+        try {
+          const labelRes = await fetch("/api/label", {
+            method: "POST",
+            signal,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              candidates: [{
+                ticker: candidate.ticker,
+                ath: candidate.ath,
+                low: candidate.low,
+                current: candidate.current,
+                declinePct: candidate.declinePct,
+                monthsDecline: candidate.monthsDecline,
+                recoveryPct: candidate.recoveryPct,
+                fibZone: candidate.fibAnalysis?.depthLabel,
+                volumeTrend: candidate.volumeAnalysis?.volumeTrend,
+                swingCount: candidate.structureAnalysis?.swingCount,
+                structure: candidate.structureAnalysis?.classification,
+                scannerMode: mode,
+              }],
+              htf,
+              ltf,
+            }),
+          });
+          const labelData = await labelRes.json();
+          if (labelData.labels?.[ticker]) {
+            setTickerLabel(labelData.labels[ticker]);
+          }
+        } catch {
+          // Label is non-critical
+        }
+      }
+    } catch {
+      // Aborted or failed
+    }
+    if (!signal.aborted) setTickerSearching(false);
+  }, [tickerSearch, mode, htf, ltf]);
+
   // --- Scan ---
   const runScan = useCallback(async () => {
+    // Abort any previous scan
+    scanAbort.current?.abort();
+    const controller = new AbortController();
+    scanAbort.current = controller;
+    const signal = controller.signal;
+
     setScanning(true);
     setResults([]);
     setLabels({});
@@ -267,7 +420,8 @@ function EWScannerPage() {
       const settled = await Promise.allSettled(
         batch.map(async (t) => {
           const res = await fetch(
-            `/api/quote?ticker=${encodeURIComponent(t.symbol)}&detail=1`
+            `/api/quote?ticker=${encodeURIComponent(t.symbol)}&detail=1`,
+            { signal }
           );
           if (!res.ok) return null;
           const data = await res.json();
@@ -327,7 +481,8 @@ function EWScannerPage() {
       for (const c of topForMtf) {
         try {
           const mtfRes = await fetch(
-            `/api/quote?ticker=${encodeURIComponent(c.ticker)}&detail=1&mtf=1`
+            `/api/quote?ticker=${encodeURIComponent(c.ticker)}&detail=1&mtf=1`,
+            { signal }
           );
           if (mtfRes.ok) {
             const mtfData = await mtfRes.json();
@@ -368,6 +523,7 @@ function EWScannerPage() {
       try {
         const labelRes = await fetch("/api/label", {
           method: "POST",
+          signal,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             candidates: labelCandidates.map((c) => ({
@@ -401,6 +557,7 @@ function EWScannerPage() {
       setLabeling(false);
     }
 
+    if (signal.aborted) return;
     setProgress("");
     setScanning(false);
   }, [universe, htf, ltf, minDecline, minMonths, minRecovery, mode]);
@@ -408,6 +565,10 @@ function EWScannerPage() {
   // --- Deep Analysis ---
   const runDeep = useCallback(
     async (candidate: EnhancedScoredCandidate) => {
+      deepAbort.current?.abort();
+      const controller = new AbortController();
+      deepAbort.current = controller;
+
       setDeepTicker(candidate.ticker);
       setDeepCandidate(candidate);
       setDeepAnalysis("");
@@ -418,6 +579,7 @@ function EWScannerPage() {
       try {
         const res = await fetch("/api/deep", {
           method: "POST",
+          signal: controller.signal,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ticker: candidate.ticker,
@@ -571,102 +733,129 @@ function EWScannerPage() {
 
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* ── Left Panel ── */}
-        <aside className="w-full shrink-0 space-y-5 lg:w-72">
+        <aside className="w-full shrink-0 space-y-3 lg:w-72">
           {/* Scanner Mode Tabs */}
-          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
-            <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[#a0a0a0]">
-              Scanner Mode
-            </label>
-            <Tabs.Root value={mode} onValueChange={(v) => handleModeChange(v as ScannerMode)}>
-              <Tabs.List className="grid grid-cols-2 gap-2">
-                {SCANNER_MODES.map((m) => (
-                  <Tabs.Trigger
-                    key={m.key}
-                    value={m.key}
-                    className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-                      mode === m.key
-                        ? "bg-[#185FA5]/30 text-[#5ba3e6] ring-1 ring-[#185FA5]"
-                        : "bg-[#262626] text-[#a0a0a0] hover:text-white"
-                    }`}
-                  >
-                    {m.shortLabel}
-                  </Tabs.Trigger>
-                ))}
-              </Tabs.List>
-            </Tabs.Root>
-            <p className="mt-2 text-[10px] leading-tight text-[#666]">
-              {modeConfig.description}
-            </p>
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
+            <button
+              onClick={() => toggleSection("mode")}
+              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
+            >
+              <span>Scanner Mode</span>
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("mode") ? "" : "rotate-90"}`} />
+            </button>
+            {!collapsed.has("mode") && (
+              <div className="border-t border-[#2a2a2a] px-4 pb-4 pt-3">
+                <Tabs.Root value={mode} onValueChange={(v) => handleModeChange(v as ScannerMode)}>
+                  <Tabs.List className="grid grid-cols-2 gap-2">
+                    {SCANNER_MODES.map((m) => (
+                      <Tabs.Trigger
+                        key={m.key}
+                        value={m.key}
+                        className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                          mode === m.key
+                            ? "bg-[#185FA5]/30 text-[#5ba3e6] ring-1 ring-[#185FA5]"
+                            : "bg-[#262626] text-[#a0a0a0] hover:text-white"
+                        }`}
+                      >
+                        {m.shortLabel}
+                      </Tabs.Trigger>
+                    ))}
+                  </Tabs.List>
+                </Tabs.Root>
+                <p className="mt-2 text-[10px] leading-tight text-[#666]">
+                  {modeConfig.description}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Presets */}
-          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
-            <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[#a0a0a0]">
-              Quick Presets
-            </label>
-            <div className="space-y-1.5">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.name}
-                  onClick={() => applyPreset(p)}
-                  className="group flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-[#262626]"
-                >
-                  <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-[#555] transition-colors group-hover:text-[#5ba3e6]" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-[#e6e6e6] group-hover:text-[#5ba3e6]">
-                      {p.shortName}
-                    </p>
-                    <p className="text-[10px] leading-tight text-[#555] group-hover:text-[#888]">
-                      {p.description}
-                    </p>
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
+            <button
+              onClick={() => toggleSection("presets")}
+              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
+            >
+              <span>Quick Presets</span>
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("presets") ? "" : "rotate-90"}`} />
+            </button>
+            {!collapsed.has("presets") && (
+              <div className="border-t border-[#2a2a2a] px-4 pb-3 pt-2">
+                <div className="space-y-1.5">
+                  {PRESETS.map((p) => (
+                    <button
+                      key={p.name}
+                      onClick={() => applyPreset(p)}
+                      className="group flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-[#262626]"
+                    >
+                      <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-[#555] transition-colors group-hover:text-[#5ba3e6]" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-[#e6e6e6] group-hover:text-[#5ba3e6]">
+                          {p.shortName}
+                        </p>
+                        <p className="text-[10px] leading-tight text-[#555] group-hover:text-[#888]">
+                          {p.description}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* HTF + LTF (combined) */}
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
+            <button
+              onClick={() => toggleSection("timeframes")}
+              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
+            >
+              <span>Timeframes <span className="normal-case text-[#666]">({htf}/{ltf})</span></span>
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("timeframes") ? "" : "rotate-90"}`} />
+            </button>
+            {!collapsed.has("timeframes") && (
+              <div className="space-y-4 border-t border-[#2a2a2a] px-4 pb-4 pt-3">
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-[#666]">
+                    HTF (Primary)
+                  </label>
+                  <div className="flex gap-2">
+                    {HTF_OPTIONS.map((o) => (
+                      <button
+                        key={o}
+                        onClick={() => setHtf(o)}
+                        className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                          htf === o
+                            ? "bg-[#185FA5]/30 text-[#5ba3e6] ring-1 ring-[#185FA5]"
+                            : "bg-[#262626] text-[#a0a0a0] hover:text-white"
+                        }`}
+                      >
+                        {o}
+                      </button>
+                    ))}
                   </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* HTF */}
-          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
-            <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[#a0a0a0]">
-              HTF (Primary)
-            </label>
-            <div className="flex gap-2">
-              {HTF_OPTIONS.map((o) => (
-                <button
-                  key={o}
-                  onClick={() => setHtf(o)}
-                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    htf === o
-                      ? "bg-[#185FA5]/30 text-[#5ba3e6] ring-1 ring-[#185FA5]"
-                      : "bg-[#262626] text-[#a0a0a0] hover:text-white"
-                  }`}
-                >
-                  {o}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* LTF */}
-          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
-            <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[#a0a0a0]">
-              LTF (Sub-wave)
-            </label>
-            <div className="flex gap-2">
-              {LTF_OPTIONS.map((o) => (
-                <button
-                  key={o}
-                  onClick={() => setLtf(o)}
-                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    ltf === o
-                      ? "bg-[#185FA5]/30 text-[#5ba3e6] ring-1 ring-[#185FA5]"
-                      : "bg-[#262626] text-[#a0a0a0] hover:text-white"
-                  }`}
-                >
-                  {o}
-                </button>
-              ))}
-            </div>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-[#666]">
+                    LTF (Sub-wave)
+                  </label>
+                  <div className="flex gap-2">
+                    {LTF_OPTIONS.map((o) => (
+                      <button
+                        key={o}
+                        onClick={() => setLtf(o)}
+                        className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                          ltf === o
+                            ? "bg-[#185FA5]/30 text-[#5ba3e6] ring-1 ring-[#185FA5]"
+                            : "bg-[#262626] text-[#a0a0a0] hover:text-white"
+                        }`}
+                      >
+                        {o}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Universe */}
@@ -699,71 +888,83 @@ function EWScannerPage() {
             </select>
           </div>
 
-          {/* Sliders */}
-          <div className="space-y-4 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
-            <label className="block text-xs font-medium uppercase tracking-wider text-[#a0a0a0]">
-              Filters
-            </label>
+          {/* Sliders / Filters */}
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
+            <button
+              onClick={() => toggleSection("filters")}
+              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
+            >
+              <span>Filters <span className="normal-case text-[#666]">({minDecline}%/{minMonths}mo/{minRecovery}%)</span></span>
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("filters") ? "" : "rotate-90"}`} />
+            </button>
+            {!collapsed.has("filters") && (
+              <div className="space-y-4 border-t border-[#2a2a2a] px-4 pb-4 pt-3">
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="text-[#a0a0a0]">Min Decline %</span>
+                    <span className="font-mono text-[#5ba3e6]">{minDecline}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={5}
+                    max={80}
+                    value={minDecline}
+                    onChange={(e) => setMinDecline(Number(e.target.value))}
+                    className="ew-slider w-full"
+                  />
+                </div>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between text-sm">
-                <span className="text-[#a0a0a0]">Min Decline %</span>
-                <span className="font-mono text-[#5ba3e6]">{minDecline}%</span>
-              </div>
-              <input
-                type="range"
-                min={5}
-                max={80}
-                value={minDecline}
-                onChange={(e) => setMinDecline(Number(e.target.value))}
-                className="ew-slider w-full"
-              />
-            </div>
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="text-[#a0a0a0]">Min Duration</span>
+                    <span className="font-mono text-[#5ba3e6]">{minMonths}mo</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={36}
+                    value={minMonths}
+                    onChange={(e) => setMinMonths(Number(e.target.value))}
+                    className="ew-slider w-full"
+                  />
+                </div>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between text-sm">
-                <span className="text-[#a0a0a0]">Min Duration</span>
-                <span className="font-mono text-[#5ba3e6]">{minMonths}mo</span>
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="text-[#a0a0a0]">Min Recovery %</span>
+                    <span className="font-mono text-[#5ba3e6]">{minRecovery}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={5}
+                    max={200}
+                    value={minRecovery}
+                    onChange={(e) => setMinRecovery(Number(e.target.value))}
+                    className="ew-slider w-full"
+                  />
+                </div>
               </div>
-              <input
-                type="range"
-                min={1}
-                max={36}
-                value={minMonths}
-                onChange={(e) => setMinMonths(Number(e.target.value))}
-                className="ew-slider w-full"
-              />
-            </div>
-
-            <div>
-              <div className="mb-1 flex items-center justify-between text-sm">
-                <span className="text-[#a0a0a0]">Min Recovery %</span>
-                <span className="font-mono text-[#5ba3e6]">{minRecovery}%</span>
-              </div>
-              <input
-                type="range"
-                min={5}
-                max={200}
-                value={minRecovery}
-                onChange={(e) => setMinRecovery(Number(e.target.value))}
-                className="ew-slider w-full"
-              />
-            </div>
+            )}
           </div>
 
           {/* Scan Button */}
-          <button
-            onClick={runScan}
-            disabled={scanning}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#185FA5] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1a6dba] disabled:opacity-50"
-          >
-            {scanning ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
+          {scanning ? (
+            <button
+              onClick={cancelScan}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+            >
+              <X className="h-4 w-4" />
+              Cancel
+            </button>
+          ) : (
+            <button
+              onClick={runScan}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#185FA5] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1a6dba]"
+            >
               <Search className="h-4 w-4" />
-            )}
-            {scanning ? "Scanning..." : "Scan"}
-          </button>
+              Scan
+            </button>
+          )}
 
           {progress && (
             <p className="text-center text-xs text-[#a0a0a0]">{progress}</p>
@@ -816,6 +1017,68 @@ function EWScannerPage() {
 
         {/* ── Right Panel ── */}
         <div className="flex-1 space-y-4">
+          {/* Ticker Search */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#555]" />
+              <input
+                value={tickerSearch}
+                onChange={(e) => setTickerSearch(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === "Enter" && runTickerSearch()}
+                placeholder="Search any ticker (e.g. AAPL, TSLA)..."
+                className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] py-2.5 pl-10 pr-3 text-sm text-white placeholder-[#555] transition-colors focus:border-[#185FA5] focus:outline-none"
+              />
+            </div>
+            <button
+              onClick={runTickerSearch}
+              disabled={tickerSearching || !tickerSearch.trim()}
+              className="flex items-center gap-1.5 rounded-lg bg-[#185FA5] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1a6dba] disabled:opacity-50"
+            >
+              {tickerSearching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+              Analyze
+            </button>
+          </div>
+
+          {/* Ticker search result */}
+          {tickerResult && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">
+                  Ticker Lookup: {tickerResult.ticker}
+                </h3>
+                <button
+                  onClick={() => { setTickerResult(null); setTickerLabel(null); setTickerSearch(""); }}
+                  className="rounded p-1 text-[#666] hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <CandidateCard
+                  c={tickerResult}
+                  idx={0}
+                  labels={tickerLabel ? { [tickerResult.ticker]: tickerLabel } : {}}
+                  labeling={tickerSearching}
+                  minDecline={minDecline}
+                  minMonths={minMonths}
+                  minRecovery={minRecovery}
+                  getDot={getDot}
+                  dotCss={dotCss}
+                  scoreTextColor={scoreTextColor}
+                  scoreBgColor={scoreBgColor}
+                  confidenceBadge={confidenceBadge}
+                  fmtYear={fmtYear}
+                  runDeep={runDeep}
+                  mode={mode}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Export + Stats + Sort/Group bar */}
           {results.length > 0 && (
             <>

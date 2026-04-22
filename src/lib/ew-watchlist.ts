@@ -79,6 +79,26 @@ export function updateScan(
   localStorage.setItem(STORAGE_KEY, JSON.stringify(scans));
 }
 
+/** Find the most recent scan matching mode+universe before the given date. */
+export function findPreviousScan(
+  mode: ScannerMode,
+  universe: string,
+  beforeDate: string
+): SavedScan | null {
+  const scans = loadScans();
+  const before = new Date(beforeDate).getTime();
+  for (const scan of scans) {
+    if (
+      scan.mode === mode &&
+      scan.universe === universe &&
+      new Date(scan.savedAt).getTime() < before
+    ) {
+      return scan;
+    }
+  }
+  return null;
+}
+
 // ── V3: Custom Universes ──
 
 export interface CustomUniverse {

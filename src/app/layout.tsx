@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Nav } from "@/components/nav";
+import { ErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,7 +35,7 @@ export default function RootLayout({
       >
         <Nav />
         <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
-          {children}
+          <ErrorBoundary>{children}</ErrorBoundary>
         </main>
         <footer className="border-t border-[#2a2a2a] bg-[#0f0f0f]">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 text-xs text-[#555]">

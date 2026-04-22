@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { rateLimit, getClientKey } from "@/lib/rate-limit";
+import { logError } from "@/lib/error-logger";
 
 interface CandidateInput {
   ticker: string;
@@ -17,6 +19,15 @@ interface CandidateInput {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit: 10 req/min per IP
+  const rl = rateLimit(`label:${getClientKey(request)}`, 10, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
+
   const { candidates, htf, ltf } = (await request.json()) as {
     candidates: CandidateInput[];
     htf: string;
@@ -45,8 +56,14 @@ export async function POST(request: NextRequest) {
 
     // Chunk into batches of 25 to stay within token limits
     const CHUNK_SIZE = 25;
+    const CONCURRENCY = 2;
+
+    const chunks: CandidateInput[][] = [];
     for (let i = 0; i < candidates.length; i += CHUNK_SIZE) {
-      const chunk = candidates.slice(i, i + CHUNK_SIZE);
+      chunks.push(candidates.slice(i, i + CHUNK_SIZE));
+    }
+
+    const processChunk = async (chunk: CandidateInput[]) => {
       const chunkLines = chunk
         .map((c) => {
           let line = `${c.ticker}: ATH=$${c.ath.toFixed(2)}, Low=$${c.low.toFixed(2)}, Now=$${c.current.toFixed(2)}, Decline=${c.declinePct.toFixed(1)}%, ${c.monthsDecline.toFixed(0)}mo, Recovery=${c.recoveryPct.toFixed(1)}%`;
@@ -74,6 +91,8 @@ ${chunkLines}`;
       const text =
         msg.content[0].type === "text" ? msg.content[0].text : "";
 
+      const labels: Record<string, string> = {};
+
       // Try JSON parse first
       let parsed = false;
       try {
@@ -81,9 +100,9 @@ ${chunkLines}`;
         if (json.labels) {
           for (const [ticker, val] of Object.entries(json.labels)) {
             if (typeof val === "object" && val !== null && "label" in val) {
-              allLabels[ticker] = (val as { label: string }).label.slice(0, 55);
+              labels[ticker] = (val as { label: string }).label.slice(0, 55);
             } else if (typeof val === "string") {
-              allLabels[ticker] = val.slice(0, 55);
+              labels[ticker] = val.slice(0, 55);
             }
           }
           parsed = true;
@@ -96,14 +115,26 @@ ${chunkLines}`;
         for (const line of text.split("\n")) {
           const match = line.match(/^([A-Z0-9.]+):\s*(.+)$/);
           if (match) {
-            allLabels[match[1]] = match[2].trim().slice(0, 55);
+            labels[match[1]] = match[2].trim().slice(0, 55);
           }
         }
+      }
+
+      return labels;
+    };
+
+    // Process chunks with concurrency of 2
+    for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+      const batch = chunks.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(batch.map(processChunk));
+      for (const labels of results) {
+        Object.assign(allLabels, labels);
       }
     }
 
     return NextResponse.json({ labels: allLabels });
   } catch (err) {
+    logError("api/label", err);
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ labels: {}, error: message });
   }
