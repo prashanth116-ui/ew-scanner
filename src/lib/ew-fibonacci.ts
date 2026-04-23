@@ -193,9 +193,14 @@ export function analyzeFibonacciEnhanced(
     const w2Label = waves.find((w) => w.label === "2");
 
     if (w1Label && w2Label) {
-      // For impulse: Wave 1 start is before Wave 1 end
-      // Use ATH or low as Wave 1 start depending on direction
-      const w1Start = w1Label.price > w2Label.price ? low : ath;
+      // Use waveStart (p0) if available for accurate Wave 1 start,
+      // otherwise fall back to ath/low approximation
+      let w1Start: number;
+      if (waveCount.waveStart) {
+        w1Start = waveCount.waveStart.price;
+      } else {
+        w1Start = w1Label.price > w2Label.price ? low : ath;
+      }
       extensions = calculateFibExtensions(w1Start, w1Label.price, w2Label.price);
       confluenceZones = findFibConfluence(extensions, base.levels);
     }

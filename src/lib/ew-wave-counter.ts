@@ -31,9 +31,11 @@ export function countWaves(
   const declineImpulse = countImpulseWaves(declineSwings, series.close, "down", degree);
   const recoveryImpulse = countImpulseWaves(recoverySwings, series.close, "up", degree);
   const correction = countCorrectiveWaves(recoverySwings, series.close, "up", degree);
+  // Also try corrective pattern on the decline (A-B-C correction of prior uptrend)
+  const declineCorrection = countCorrectiveWaves(declineSwings, series.close, "up", degree);
 
   // Pick best overall interpretation
-  const candidates = [declineImpulse, recoveryImpulse, correction].filter(
+  const candidates = [declineImpulse, recoveryImpulse, correction, declineCorrection].filter(
     (c): c is WaveCount => c !== null
   );
 
@@ -80,6 +82,7 @@ export function countImpulseWaves(
 
   let bestCount: WaveCount | null = null;
   let bestScore = -1;
+  let bestIsValid = false;
 
   // Try all valid 6-point subsequences (W0=start, W1-end, W2-end, W3-end, W4-end, W5-end)
   const limit = Math.min(alternating.length, 20); // Cap to avoid combinatorial explosion
@@ -97,8 +100,12 @@ export function countImpulseWaves(
       const { isValid, violations } = validateImpulse(p0, p1, p2, p3, p4, p5, direction);
       const score = scoreImpulse(p0, p1, p2, p3, p4, p5, direction);
 
-      if (score > bestScore) {
+      // Prefer valid counts: valid always beats invalid, then highest score
+      const dominated = bestIsValid && !isValid;
+      const dominates = isValid && !bestIsValid;
+      if (dominates || (!dominated && score > bestScore)) {
         bestScore = score;
+        bestIsValid = isValid;
         const labels: WaveLabel[] = ["1", "2", "3", "4", "5"];
         const waves: WavePoint[] = [p1, p2, p3, p4, p5].map((p, idx) => ({
           ...p,
@@ -109,6 +116,7 @@ export function countImpulseWaves(
 
         bestCount = {
           waves,
+          waveStart: p0,
           degree,
           isValid,
           violations,
@@ -172,10 +180,15 @@ export function countCorrectiveWaves(
         if (lastPrice < pC.price) position = "Beyond Wave C — correction may be extending";
         else if (lastPrice < pB.price) position = "In Wave C decline";
         else position = "A-B-C correction may be complete";
+      } else {
+        if (lastPrice > pC.price) position = "Beyond Wave C — correction may be extending";
+        else if (lastPrice > pB.price) position = "In Wave C rally";
+        else position = "A-B-C correction may be complete";
       }
 
       bestCount = {
         waves,
+        waveStart: p0,
         degree,
         isValid,
         violations,
@@ -215,6 +228,9 @@ function validateImpulse(
     if (p1.price <= p0.price) violations.push("Wave 1 doesn't move up");
     if (p3.price <= p1.price) violations.push("Wave 3 doesn't exceed Wave 1");
     if (p5.price <= p3.price) violations.push("Wave 5 doesn't exceed Wave 3");
+    // Retrace direction: corrections must move against impulse
+    if (p2.price >= p1.price) violations.push("Wave 2 doesn't retrace down");
+    if (p4.price >= p3.price) violations.push("Wave 4 doesn't retrace down");
   } else {
     // Bearish impulse — inverted rules
     if (p2.price >= p0.price) violations.push("Wave 2 retraces beyond Wave 1 start");
@@ -226,6 +242,9 @@ function validateImpulse(
     if (p1.price >= p0.price) violations.push("Wave 1 doesn't move down");
     if (p3.price >= p1.price) violations.push("Wave 3 doesn't exceed Wave 1");
     if (p5.price >= p3.price) violations.push("Wave 5 doesn't exceed Wave 3");
+    // Retrace direction: corrections must move against impulse
+    if (p2.price <= p1.price) violations.push("Wave 2 doesn't retrace up");
+    if (p4.price <= p3.price) violations.push("Wave 4 doesn't retrace up");
   }
 
   return { isValid: violations.length === 0, violations };
@@ -370,7 +389,9 @@ function fibProximityScore(actual: number, targets: number[]): number {
 
 // ── Helpers ──
 
-/** Build alternating high-low sequence starting with given type. */
+/** Build alternating high-low sequence starting with given type.
+ *  Ensures strictly increasing bar indices (handles dual pivots at same bar).
+ */
 function buildAlternatingSequence(swings: SwingPoint[], startType: "high" | "low"): SwingPoint[] {
   const result: SwingPoint[] = [];
   let expectType = startType;
@@ -385,6 +406,11 @@ function buildAlternatingSequence(swings: SwingPoint[], startType: "high" | "low
         } else if (expectType === "low" && s.price < prev.price) {
           result[result.length - 1] = s;
         }
+        continue;
+      }
+      // Skip if same bar index as previous point (dual pivot — one bar can't be
+      // both a wave high and wave low in separate wave positions)
+      if (result.length > 0 && s.index === result[result.length - 1].index) {
         continue;
       }
       result.push(s);
