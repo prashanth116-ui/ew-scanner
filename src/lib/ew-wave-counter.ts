@@ -90,6 +90,10 @@ export function countImpulseWaves(
       if (!pts) continue;
 
       const [p0, p1, p2, p3, p4, p5] = pts;
+
+      // Enforce correct swing types — bullish impulse needs L,H,L,H,L,H
+      if (p0.type !== startType) continue;
+
       const { isValid, violations } = validateImpulse(p0, p1, p2, p3, p4, p5, direction);
       const score = scoreImpulse(p0, p1, p2, p3, p4, p5, direction);
 
@@ -141,6 +145,10 @@ export function countCorrectiveWaves(
   const limit = Math.min(alternating.length, 15);
   for (let i = 0; i <= limit - 4; i++) {
     const p0 = alternating[i]; // Start of correction
+
+    // Enforce correct swing type
+    if (p0.type !== startType) continue;
+
     const pA = alternating[i + 1];
     const pB = alternating[i + 2];
     const pC = alternating[i + 3];
@@ -387,7 +395,11 @@ function buildAlternatingSequence(swings: SwingPoint[], startType: "high" | "low
   return result;
 }
 
-/** Pick 6 points from alternating sequence for impulse wave fitting. */
+/** Pick 6 points from alternating sequence for impulse wave fitting.
+ *  Maintains alternation parity: even offsets from start keep startType,
+ *  odd offsets keep endType. The old evenly-spaced approach broke this
+ *  when step was even (e.g., 11 points → step=2 → all even indices → all same type).
+ */
 function pickSixPoints(
   seq: SwingPoint[],
   start: number,
@@ -395,20 +407,36 @@ function pickSixPoints(
 ): [SwingPoint, SwingPoint, SwingPoint, SwingPoint, SwingPoint, SwingPoint] | null {
   if (end - start < 5) return null;
 
-  // If exactly 6 points, take them all
+  // If exactly 6 points, take them all (always properly alternating)
   if (end - start === 5) {
     return [seq[start], seq[start + 1], seq[start + 2], seq[start + 3], seq[start + 4], seq[start + 5]];
   }
 
-  // Otherwise use evenly-spaced indices
-  const step = (end - start) / 5;
-  const indices = [0, 1, 2, 3, 4, 5].map((i) => start + Math.round(i * step));
+  // For wider spans, pick 6 evenly-spaced points preserving alternation.
+  // Position k must have the same parity offset as k (even positions = startType).
+  const idealStep = (end - start) / 5;
+  const indices: number[] = [];
 
-  // Ensure unique and in range
-  const unique = [...new Set(indices)];
-  if (unique.length < 6) return null;
+  for (let k = 0; k < 6; k++) {
+    let idx = start + Math.round(k * idealStep);
 
-  return [seq[unique[0]], seq[unique[1]], seq[unique[2]], seq[unique[3]], seq[unique[4]], seq[unique[5]]];
+    // Snap to correct parity: offset from start must match k%2
+    if ((idx - start) % 2 !== k % 2) {
+      if (idx + 1 <= end) idx += 1;
+      else if (idx - 1 >= start) idx -= 1;
+      else return null;
+    }
+
+    // Ensure strictly after previous index (step by 2 to maintain parity)
+    while (indices.length > 0 && idx <= indices[indices.length - 1]) {
+      idx += 2;
+    }
+
+    if (idx > end) return null;
+    indices.push(idx);
+  }
+
+  return [seq[indices[0]], seq[indices[1]], seq[indices[2]], seq[indices[3]], seq[indices[4]], seq[indices[5]]];
 }
 
 /** Determine current wave position based on price relative to wave points. */
