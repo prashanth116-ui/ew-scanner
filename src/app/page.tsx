@@ -1438,6 +1438,8 @@ function EWScannerPage() {
                     fibLevels={deepCandidate.fibAnalysis?.levels}
                     fibExtensions={deepCandidate.fibAnalysis?.extensions}
                     keyLevels={deepStructured?.keyLevels}
+                    nextTarget={deepStructured?.nextTarget}
+                    invalidation={deepStructured?.invalidation}
                     width={600}
                     height={360}
                   />

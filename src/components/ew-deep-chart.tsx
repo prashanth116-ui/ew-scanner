@@ -9,6 +9,8 @@ interface DeepChartProps {
   fibLevels?: FibLevel[];
   fibExtensions?: FibExtension[];
   keyLevels?: DeepAnalysisResult["keyLevels"];
+  nextTarget?: number | null;
+  invalidation?: number | null;
   width?: number;
   height?: number;
 }
@@ -19,6 +21,8 @@ export function EWDeepChart({
   fibLevels,
   fibExtensions,
   keyLevels,
+  nextTarget,
+  invalidation,
   width = 560,
   height = 360,
 }: DeepChartProps) {
@@ -181,6 +185,40 @@ export function EWDeepChart({
         }
       }
 
+      // Next target line (prominent green)
+      if (nextTarget != null) {
+        const targetLine = chart.addSeries(LineSeries, {
+          color: "rgba(34, 197, 94, 0.8)",
+          lineWidth: 2,
+          lineStyle: 2, // dashed
+          priceLineVisible: false,
+          lastValueVisible: true,
+          crosshairMarkerVisible: false,
+          title: "Target",
+        });
+        targetLine.setData([
+          { time: series.timestamps[0] as import("lightweight-charts").UTCTimestamp, value: nextTarget },
+          { time: series.timestamps[series.timestamps.length - 1] as import("lightweight-charts").UTCTimestamp, value: nextTarget },
+        ]);
+      }
+
+      // Invalidation line (prominent red)
+      if (invalidation != null) {
+        const invalLine = chart.addSeries(LineSeries, {
+          color: "rgba(239, 68, 68, 0.8)",
+          lineWidth: 2,
+          lineStyle: 2, // dashed
+          priceLineVisible: false,
+          lastValueVisible: true,
+          crosshairMarkerVisible: false,
+          title: "Invalidation",
+        });
+        invalLine.setData([
+          { time: series.timestamps[0] as import("lightweight-charts").UTCTimestamp, value: invalidation },
+          { time: series.timestamps[series.timestamps.length - 1] as import("lightweight-charts").UTCTimestamp, value: invalidation },
+        ]);
+      }
+
       chart.timeScale().fitContent();
     };
 
@@ -193,7 +231,7 @@ export function EWDeepChart({
         chartRef.current = null;
       }
     };
-  }, [series, waveLabels, fibLevels, fibExtensions, keyLevels, width, height]);
+  }, [series, waveLabels, fibLevels, fibExtensions, keyLevels, nextTarget, invalidation, width, height]);
 
   return <div ref={containerRef} className="rounded-lg overflow-hidden" />;
 }
