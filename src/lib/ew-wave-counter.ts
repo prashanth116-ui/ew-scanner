@@ -67,6 +67,20 @@ export function countWaves(
     const alternates = [...recoveryCandidates.slice(1), ...declineCandidates];
     alternates.sort(sortByQuality);
     if (alternates.length > 0) best.alternateCount = alternates[0];
+  } else if (isRecovering) {
+    // Recovering but no recovery candidates — exclude developingDecline
+    // (bearish developing with downside targets is misleading for a bouncing stock)
+    const completedDecline = [declineImpulse, declineCorrection].filter(
+      (c): c is WaveCount => c !== null
+    );
+    if (completedDecline.length > 0) {
+      completedDecline.sort(sortByQuality);
+      best = completedDecline[0];
+      if (completedDecline.length > 1) best.alternateCount = completedDecline[1];
+    } else {
+      // Nothing useful — return null rather than a misleading bearish developing count
+      return null;
+    }
   } else {
     allCandidates.sort(sortByQuality);
     best = allCandidates[0];
