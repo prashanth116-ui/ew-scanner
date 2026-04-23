@@ -7,10 +7,10 @@ import type {
 } from "./ew-types";
 
 export const DEFAULT_SQUEEZE_FILTERS: SqueezeFilters = {
-  minSiPercent: 15,
-  minDaysToCover: 2,
-  maxFloat: 100, // millions
-  minVolumeRatio: 1,
+  minSiPercent: 5,
+  minDaysToCover: 1,
+  maxFloat: 0, // 0 = no limit
+  minVolumeRatio: 0,
   requireEwAlignment: false,
 };
 
