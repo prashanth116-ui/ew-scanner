@@ -7,7 +7,7 @@ const IMPULSE_W2_RATIOS = [0.382, 0.5, 0.618]; // Ideal Wave 2 retracement of Wa
 const DEVELOPING_W2_RATIOS = [0.382, 0.5, 0.618, 0.786]; // Broader for developing counts (deep retraces valid)
 const IMPULSE_W3_EXTENSIONS = [1.618, 2.0, 2.618]; // Wave 3 extension of Wave 1
 const IMPULSE_W4_RATIOS = [0.236, 0.382, 0.5]; // Wave 4 retracement of Wave 3
-const CORRECTION_B_RATIOS = [0.382, 0.5, 0.618]; // Wave B retracement of Wave A
+const CORRECTION_B_RATIOS = [0.382, 0.5, 0.618, 0.786]; // Wave B retracement of Wave A
 
 /**
  * Main entry: count waves from price series data.
@@ -185,50 +185,96 @@ export function countCorrectiveWaves(
   let bestScore = -1;
 
   const limit = Math.min(alternating.length, 15);
+
+  // Helper to build a WaveCount from A-B-C points
+  const buildResult = (p0: SwingPoint, pA: SwingPoint, pB: SwingPoint, pC: SwingPoint, score: number): void => {
+    if (score <= bestScore) return;
+    bestScore = score;
+    const { isValid, violations } = validateCorrection(p0, pA, pB, pC, direction);
+    const labels: WaveLabel[] = ["A", "B", "C"];
+    const waves: WavePoint[] = [pA, pB, pC].map((p, idx) => ({
+      ...p,
+      label: labels[idx],
+      degree,
+      confidence: isValid ? Math.min(score / 100, 1) : Math.min(score / 100, 0.5),
+    }));
+
+    const lastPrice = closes[closes.length - 1];
+    let position = "Corrective structure";
+    if (direction === "up") {
+      if (lastPrice < pC.price) position = "Beyond Wave C — correction may be extending";
+      else if (lastPrice < pB.price) position = "In Wave C decline";
+      else position = "A-B-C correction may be complete";
+    } else {
+      if (lastPrice > pC.price) position = "Beyond Wave C — correction may be extending";
+      else if (lastPrice > pB.price) position = "In Wave C rally";
+      else position = "A-B-C correction may be complete";
+    }
+
+    bestCount = { waves, waveStart: p0, degree, isValid, violations, score, position };
+  };
+
+  // Pass 1: Consecutive 4-point windows (fast, finds local patterns)
   for (let i = 0; i <= limit - 4; i++) {
-    const p0 = alternating[i]; // Start of correction
-
-    // Enforce correct swing type
+    const p0 = alternating[i];
     if (p0.type !== startType) continue;
-
     const pA = alternating[i + 1];
     const pB = alternating[i + 2];
     const pC = alternating[i + 3];
-
-    const { isValid, violations } = validateCorrection(p0, pA, pB, pC, direction);
     const score = scoreCorrection(p0, pA, pB, pC, direction);
+    buildResult(p0, pA, pB, pC, score);
+  }
 
-    if (score > bestScore) {
-      bestScore = score;
-      const labels: WaveLabel[] = ["A", "B", "C"];
-      const waves: WavePoint[] = [pA, pB, pC].map((p, idx) => ({
-        ...p,
-        label: labels[idx],
-        degree,
-        confidence: isValid ? Math.min(score / 100, 1) : Math.min(score / 100, 0.5),
-      }));
+  // Pass 2: Wide search — find structural A-B-C using extreme points.
+  // For each starting point and each Wave A candidate, find the most extreme
+  // B (highest bounce for uptrend correction) and most extreme C after B.
+  // This catches wider patterns the consecutive search misses (e.g., META:
+  // ATH→$581→$744→$520 spans non-consecutive alternating points).
+  for (let i = 0; i < limit; i++) {
+    const p0 = alternating[i];
+    if (p0.type !== startType) continue;
 
-      const lastPrice = closes[closes.length - 1];
-      let position = "Corrective structure";
-      if (direction === "up") {
-        if (lastPrice < pC.price) position = "Beyond Wave C — correction may be extending";
-        else if (lastPrice < pB.price) position = "In Wave C decline";
-        else position = "A-B-C correction may be complete";
-      } else {
-        if (lastPrice > pC.price) position = "Beyond Wave C — correction may be extending";
-        else if (lastPrice > pB.price) position = "In Wave C rally";
-        else position = "A-B-C correction may be complete";
+    for (let a = i + 1; a < limit; a++) {
+      const pA = alternating[a];
+      if (pA.type === startType) continue; // A must be opposite type
+
+      // Find most extreme B after A
+      let bestBPoint: SwingPoint | null = null;
+      let bestBIdx = -1;
+      for (let b = a + 1; b < limit; b++) {
+        if (alternating[b].type !== startType) continue;
+        if (
+          !bestBPoint ||
+          (direction === "up" && alternating[b].price > bestBPoint.price) ||
+          (direction === "down" && alternating[b].price < bestBPoint.price)
+        ) {
+          bestBPoint = alternating[b];
+          bestBIdx = b;
+        }
       }
+      if (!bestBPoint || bestBIdx < 0) continue;
 
-      bestCount = {
-        waves,
-        waveStart: p0,
-        degree,
-        isValid,
-        violations,
-        score,
-        position,
-      };
+      // Find most extreme C after B
+      let bestCPoint: SwingPoint | null = null;
+      for (let c = bestBIdx + 1; c < limit; c++) {
+        if (alternating[c].type === startType) continue;
+        if (
+          !bestCPoint ||
+          (direction === "up" && alternating[c].price < bestCPoint.price) ||
+          (direction === "down" && alternating[c].price > bestCPoint.price)
+        ) {
+          bestCPoint = alternating[c];
+        }
+      }
+      if (!bestCPoint) continue;
+
+      let score = scoreCorrection(p0, pA, bestBPoint, bestCPoint, direction);
+
+      // Structural preference: +3 for patterns starting from the first swing
+      // (the actual ATH or major trough — the primary wave starting point)
+      if (i === 0) score = Math.min(100, score + 3);
+
+      buildResult(p0, pA, bestBPoint, bestCPoint, score);
     }
   }
 
@@ -466,7 +512,7 @@ function validateCorrection(
   // Check retracement depth of correction (38.2-78.6% is ideal)
   if (impulseRange > 0) {
     const correctionDepth = Math.abs(pC.price - p0.price) / impulseRange;
-    if (correctionDepth > 1.0) violations.push("Correction exceeds 100% of prior move");
+    if (correctionDepth > 1.618) violations.push("Correction exceeds 161.8% of prior move");
   }
 
   return { isValid: violations.length === 0, violations };
@@ -556,6 +602,14 @@ function scoreCorrection(
     const totalRetrace = Math.abs(pC.price - p0.price) / priorRange;
     if (totalRetrace >= 0.382 && totalRetrace <= 0.786) score += 20;
     else if (totalRetrace >= 0.236 && totalRetrace <= 0.886) score += 10;
+    else if (totalRetrace > 0.886 && totalRetrace <= 1.618) score += 5;
+  }
+
+  // C/A wave ratio: zigzag C ≈ A (1.0), flat C < A, expanded C ≈ 1.618×A (10 pts)
+  const wCLen = Math.abs(pC.price - pB.price);
+  if (wALen > 0) {
+    const caRatio = wCLen / wALen;
+    score += fibProximityScore(caRatio, [0.618, 1.0, 1.618]) * 10;
   }
 
   // Rule adherence (30 pts)
