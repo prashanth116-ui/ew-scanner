@@ -13,6 +13,7 @@ import { formatAlertMessage, sendTelegramMessage } from "@/lib/ew-telegram";
 import { UNIVERSES, type UniverseKey } from "@/data/ew-universes";
 import type { AlertConfig, ConfidenceTier, ScannerMode, EnhancedScoredCandidate } from "@/lib/ew-types";
 import { logError } from "./error-logger";
+import { findStructuralReferences } from "./ew-structural";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
 const BATCH_SIZE = 10;
@@ -79,6 +80,10 @@ export async function fetchQuote(ticker: string): Promise<EnrichedQuoteInput | n
 
     const toYear = (ts: number) => new Date(ts * 1000).getFullYear();
 
+    // Structural fallback for stocks at/near ATH
+    let trueAth: number | undefined;
+    let trueAthYear: number | undefined;
+
     // Build clean series
     const cleanOpen: number[] = [], cleanHigh: number[] = [], cleanLow: number[] = [];
     const cleanClose: number[] = [], cleanVolume: number[] = [], cleanTs: number[] = [];
@@ -103,14 +108,28 @@ export async function fetchQuote(ticker: string): Promise<EnrichedQuoteInput | n
       cleanLowIdx = Math.min(cleanAthIdx + 1, cleanClose.length - 1);
     }
 
+    // Structural fallback: detect stocks at/near ATH
+    const structural = findStructuralReferences(
+      cleanHigh, cleanLow, cleanAthIdx, cleanLowIdx, athValue, lowValue,
+    );
+    if (structural) {
+      trueAth = Math.round(athValue * 100) / 100;
+      trueAthYear = toYear(timestamps[athIdx]);
+      // Replace with structural references (already in clean-array space)
+      athValue = structural.peakPrice;
+      lowValue = structural.troughPrice;
+      cleanAthIdx = structural.peakIdx;
+      cleanLowIdx = structural.troughIdx;
+    }
+
     return {
       ticker,
       name: ticker,
       ath: Math.round(athValue * 100) / 100,
       low: Math.round(lowValue * 100) / 100,
       current: Math.round(current * 100) / 100,
-      athYear: toYear(timestamps[athIdx]),
-      lowYear: toYear(timestamps[lowIdx]),
+      athYear: toYear(cleanTs[cleanAthIdx] ?? timestamps[athIdx]),
+      lowYear: toYear(cleanTs[cleanLowIdx] ?? timestamps[lowIdx]),
       series: {
         timestamps: cleanTs,
         open: cleanOpen,
@@ -121,6 +140,8 @@ export async function fetchQuote(ticker: string): Promise<EnrichedQuoteInput | n
       },
       athIdx: cleanAthIdx,
       lowIdx: cleanLowIdx,
+      trueAth,
+      trueAthYear,
     };
   } catch (err) {
     logError("fetchQuote", err, { ticker });

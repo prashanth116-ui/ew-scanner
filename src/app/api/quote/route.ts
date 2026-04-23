@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
+import { findStructuralReferences } from "@/lib/ew-structural";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
 
@@ -81,6 +82,42 @@ export async function GET(request: NextRequest) {
 
     const toYear = (ts: number) => new Date(ts * 1000).getFullYear();
 
+    // Structural fallback for stocks at/near ATH
+    let trueAth: number | undefined;
+    let trueAthYear: number | undefined;
+
+    // Build clean highs/lows for structural detection (need non-null arrays)
+    const cleanHighsForStruct: number[] = [];
+    const cleanLowsForStruct: number[] = [];
+    const structCleanToRaw: number[] = [];
+    const rawToStructClean = new Map<number, number>();
+    for (let i = 0; i < timestamps.length; i++) {
+      if (closes[i] == null) continue;
+      rawToStructClean.set(i, cleanHighsForStruct.length);
+      structCleanToRaw.push(i);
+      cleanHighsForStruct.push(highs[i] ?? closes[i]!);
+      cleanLowsForStruct.push(lows[i] ?? closes[i]!);
+    }
+    const structAthIdx = rawToStructClean.get(athIdx) ?? 0;
+    let structLowIdx = rawToStructClean.get(lowIdx) ?? structAthIdx;
+    if (structLowIdx <= structAthIdx && cleanHighsForStruct.length > 0) {
+      structLowIdx = Math.min(structAthIdx + 1, cleanHighsForStruct.length - 1);
+    }
+
+    const structural = findStructuralReferences(
+      cleanHighsForStruct, cleanLowsForStruct,
+      structAthIdx, structLowIdx, athValue, lowValue,
+    );
+    if (structural) {
+      trueAth = Math.round(athValue * 100) / 100;
+      trueAthYear = toYear(timestamps[athIdx]);
+      // Replace with structural references, mapping clean indices back to raw
+      athValue = structural.peakPrice;
+      athIdx = structCleanToRaw[structural.peakIdx];
+      lowValue = structural.troughPrice;
+      lowIdx = structCleanToRaw[structural.troughIdx];
+    }
+
     const baseResponse: Record<string, unknown> = {
       ath: Math.round(athValue * 100) / 100,
       low: Math.round(lowValue * 100) / 100,
@@ -88,6 +125,10 @@ export async function GET(request: NextRequest) {
       athYear: toYear(timestamps[athIdx]),
       lowYear: toYear(timestamps[lowIdx]),
     };
+    if (trueAth != null) {
+      baseResponse.trueAth = trueAth;
+      baseResponse.trueAthYear = trueAthYear;
+    }
 
     if (detail) {
       // Build clean arrays, skipping null bars.

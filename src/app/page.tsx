@@ -337,6 +337,8 @@ function EWScannerPage() {
         series: data.series,
         athIdx: data.athIdx,
         lowIdx: data.lowIdx,
+        trueAth: data.trueAth,
+        trueAthYear: data.trueAthYear,
       };
 
       const scored = scoreBatchEnhanced([quote], {
@@ -450,6 +452,8 @@ function EWScannerPage() {
             series: data.series as PriceSeries | undefined,
             athIdx: data.athIdx as number | undefined,
             lowIdx: data.lowIdx as number | undefined,
+            trueAth: data.trueAth as number | undefined,
+            trueAthYear: data.trueAthYear as number | undefined,
           } as EnrichedQuoteInput;
         })
       );
@@ -619,6 +623,9 @@ function EWScannerPage() {
             swingCount: candidate.structureAnalysis?.swingCount,
             momentumScore: candidate.momentumAnalysis?.score,
             scannerMode: mode,
+            // Structural fallback for stocks at/near ATH
+            trueAth: candidate.trueAth,
+            trueAthDate: candidate.trueAthYear ? String(candidate.trueAthYear) : undefined,
             // V3 wave count data — send actual prices and dates
             waveCountValid: candidate.waveCount?.isValid,
             waveCountScore: candidate.waveCount?.score,
@@ -1383,6 +1390,11 @@ function EWScannerPage() {
                       }`}
                     >
                       Risk: {deepStructured.riskLevel}
+                    </span>
+                  )}
+                  {deepCandidate?.trueAth != null && (
+                    <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-400 border border-amber-500/30">
+                      New ATH: ${deepCandidate.trueAth.toFixed(2)}
                     </span>
                   )}
                 </div>

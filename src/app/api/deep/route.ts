@@ -28,6 +28,9 @@ interface DeepInput {
   swingCount?: number;
   momentumScore?: number;
   scannerMode?: string;
+  // Structural fallback: true ATH when analysis uses prior correction
+  trueAth?: number;
+  trueAthDate?: string;
   // V3 wave count fields
   waveCountValid?: boolean;
   waveCountScore?: number;
@@ -114,6 +117,12 @@ export async function POST(request: NextRequest) {
 
   const hasWavePoints = data.wavePoints && data.wavePoints.length > 0;
 
+  // Structural fallback context for stocks at/near ATH
+  let structuralContext = "";
+  if (data.trueAth != null) {
+    structuralContext = `\nIMPORTANT: This stock recently reached a new all-time high of $${data.trueAth.toFixed(2)}${data.trueAthDate ? ` (${data.trueAthDate})` : ""}, surpassing its prior structural peak of $${data.ath.toFixed(2)}. The analysis uses the previous structural correction ($${data.ath.toFixed(0)} to $${data.low.toFixed(0)}) as the wave reference frame. Current price at $${data.current.toFixed(2)} is above the prior peak, indicating extended impulse or new wave cycle.\n`;
+  }
+
   const prompt = `You are an expert Elliott Wave analyst. Provide a deep analysis for ${data.ticker} (${data.name}).
 
 Price data:
@@ -123,7 +132,7 @@ Price data:
 - Decline: ${data.declinePct.toFixed(1)}% over ${data.durationMonths.toFixed(0)} months
 - Recovery: ${data.recoveryPct.toFixed(1)}% from low
 - Mechanical score: ${data.score}/25
-${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${waveCountContext}${extensionContext}
+${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${waveCountContext}${extensionContext}${structuralContext}
 
 Timeframes: ${data.htf} (primary) / ${data.ltf} (sub-waves)
 ${hasWavePoints ? `

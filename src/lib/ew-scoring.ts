@@ -118,6 +118,8 @@ export interface EnrichedQuoteInput {
   series?: PriceSeries;
   athIdx?: number;
   lowIdx?: number;
+  trueAth?: number;
+  trueAthYear?: number;
 }
 
 interface EnhancedScoringParams extends ScoringParams {
@@ -190,6 +192,8 @@ export function scoreEnhanced(
       series: q.series,
       athIdx: q.athIdx,
       lowIdx: q.lowIdx,
+      trueAth: q.trueAth,
+      trueAthYear: q.trueAthYear,
     };
   }
 
@@ -266,6 +270,8 @@ export function scoreEnhanced(
     series: q.series,
     athIdx: q.athIdx,
     lowIdx: q.lowIdx,
+    trueAth: q.trueAth,
+    trueAthYear: q.trueAthYear,
   };
 }
 

@@ -156,6 +156,9 @@ export interface EnhancedScoredCandidate {
   series?: PriceSeries;
   athIdx?: number;
   lowIdx?: number;
+  // Structural fallback: true ATH when analysis uses prior correction
+  trueAth?: number;
+  trueAthYear?: number;
 }
 
 export interface SavedScan {
