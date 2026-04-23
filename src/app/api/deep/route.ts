@@ -31,6 +31,9 @@ interface DeepInput {
   // Structural fallback: true ATH when analysis uses prior correction
   trueAth?: number;
   trueAthDate?: string;
+  // Pre-ATH impulse start for Fibonacci context
+  preAthLow?: number;
+  preAthLowYear?: string;
   // V3 wave count fields
   waveCountValid?: boolean;
   waveCountScore?: number;
@@ -117,6 +120,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Pre-ATH impulse context: gives LLM exact Fibonacci retracement of the prior impulse
+  let impulseContext = "";
+  if (data.preAthLow != null && data.preAthLow < data.ath) {
+    const impulseRange = data.ath - data.preAthLow;
+    const declineRetrace = (data.ath - data.low) / impulseRange;
+    const r382 = data.ath - impulseRange * 0.382;
+    const r500 = data.ath - impulseRange * 0.500;
+    const r618 = data.ath - impulseRange * 0.618;
+
+    impulseContext = `\nPrior impulse: $${data.preAthLow.toFixed(2)} (${data.preAthLowYear ?? "unknown"}) → $${data.ath.toFixed(2)} ATH
+- The post-ATH decline to $${data.low.toFixed(2)} retraces ${(declineRetrace * 100).toFixed(1)}% of this impulse
+- Impulse Fibonacci retracements: 38.2% = $${r382.toFixed(2)}, 50% = $${r500.toFixed(2)}, 61.8% = $${r618.toFixed(2)}`;
+  }
+
   const hasWavePoints = data.wavePoints && data.wavePoints.length > 0;
 
   // Forward-looking directive for completed patterns
@@ -146,11 +163,12 @@ Price data:
 - Decline: ${data.declinePct.toFixed(1)}% over ${data.durationMonths.toFixed(0)} months
 - Recovery: ${data.recoveryPct.toFixed(1)}% from low
 - Mechanical score: ${data.score}/25
-${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${waveCountContext}${extensionContext}${structuralContext}${forwardContext}
+${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${impulseContext}${waveCountContext}${extensionContext}${structuralContext}${forwardContext}
 
 Timeframes: ${data.htf} (primary) / ${data.ltf} (sub-waves)
 ${hasWavePoints ? `
-CRITICAL: The wave points above are from algorithmic swing detection on actual price data. You MUST reference these exact prices in your analysis. Do NOT invent different wave prices. Your job is to INTERPRET the algorithmic wave count — explain what it means, assess confidence, provide targets and invalidation — not to re-count the waves with made-up prices.` : ""}
+CRITICAL: The wave points above are from algorithmic swing detection on actual price data. You MUST reference these exact prices in your analysis. Do NOT invent different wave prices. Your job is to INTERPRET the algorithmic wave count — explain what it means, assess confidence, provide targets and invalidation — not to re-count the waves with made-up prices.
+IMPORTANT: Use ONLY the prices and Fibonacci levels provided above. Do NOT calculate or estimate prices that aren't given. If the prior impulse start price is provided, use that exact value — do NOT invent a different starting price.` : ""}
 
 Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
 {

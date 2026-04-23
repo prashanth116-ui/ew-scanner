@@ -120,6 +120,8 @@ export interface EnrichedQuoteInput {
   lowIdx?: number;
   trueAth?: number;
   trueAthYear?: number;
+  preAthLow?: number;
+  preAthLowYear?: number;
 }
 
 interface EnhancedScoringParams extends ScoringParams {
@@ -194,6 +196,8 @@ export function scoreEnhanced(
       lowIdx: q.lowIdx,
       trueAth: q.trueAth,
       trueAthYear: q.trueAthYear,
+      preAthLow: q.preAthLow,
+      preAthLowYear: q.preAthLowYear,
     };
   }
 
@@ -272,6 +276,8 @@ export function scoreEnhanced(
     lowIdx: q.lowIdx,
     trueAth: q.trueAth,
     trueAthYear: q.trueAthYear,
+    preAthLow: q.preAthLow,
+    preAthLowYear: q.preAthLowYear,
   };
 }
 

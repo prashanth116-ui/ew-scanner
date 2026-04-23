@@ -339,6 +339,8 @@ function EWScannerPage() {
         lowIdx: data.lowIdx,
         trueAth: data.trueAth,
         trueAthYear: data.trueAthYear,
+        preAthLow: data.preAthLow,
+        preAthLowYear: data.preAthLowYear,
       };
 
       const scored = scoreBatchEnhanced([quote], {
@@ -454,6 +456,8 @@ function EWScannerPage() {
             lowIdx: data.lowIdx as number | undefined,
             trueAth: data.trueAth as number | undefined,
             trueAthYear: data.trueAthYear as number | undefined,
+            preAthLow: data.preAthLow as number | undefined,
+            preAthLowYear: data.preAthLowYear as number | undefined,
           } as EnrichedQuoteInput;
         })
       );
@@ -626,6 +630,9 @@ function EWScannerPage() {
             // Structural fallback for stocks at/near ATH
             trueAth: candidate.trueAth,
             trueAthDate: candidate.trueAthYear ? String(candidate.trueAthYear) : undefined,
+            // Pre-ATH impulse start for Fibonacci context
+            preAthLow: candidate.preAthLow,
+            preAthLowYear: candidate.preAthLowYear ? String(candidate.preAthLowYear) : undefined,
             // V3 wave count data — send actual prices and dates
             waveCountValid: candidate.waveCount?.isValid,
             waveCountScore: candidate.waveCount?.score,

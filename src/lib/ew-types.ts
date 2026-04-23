@@ -160,6 +160,9 @@ export interface EnhancedScoredCandidate {
   // Structural fallback: true ATH when analysis uses prior correction
   trueAth?: number;
   trueAthYear?: number;
+  // Pre-ATH impulse start for Fibonacci analysis
+  preAthLow?: number;
+  preAthLowYear?: number;
 }
 
 export interface SavedScan {

@@ -68,6 +68,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Find lowest low BEFORE ATH (impulse start for Fibonacci)
+    let preAthLowIdx = 0;
+    let preAthLowValue = Infinity;
+    for (let i = 0; i < athIdx; i++) {
+      if (lows[i] != null && lows[i]! < preAthLowValue) {
+        preAthLowValue = lows[i]!;
+        preAthLowIdx = i;
+      }
+    }
+
     // Find lowest low AFTER ATH
     let lowIdx = athIdx;
     let lowValue = Infinity;
@@ -128,6 +138,10 @@ export async function GET(request: NextRequest) {
     if (trueAth != null) {
       baseResponse.trueAth = trueAth;
       baseResponse.trueAthYear = trueAthYear;
+    }
+    if (preAthLowValue < Infinity) {
+      baseResponse.preAthLow = Math.round(preAthLowValue * 100) / 100;
+      baseResponse.preAthLowYear = toYear(timestamps[preAthLowIdx]);
     }
 
     if (detail) {
