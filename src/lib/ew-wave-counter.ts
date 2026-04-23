@@ -188,6 +188,9 @@ export function countCorrectiveWaves(
 
   // Helper to build a WaveCount from A-B-C points
   const buildResult = (p0: SwingPoint, pA: SwingPoint, pB: SwingPoint, pC: SwingPoint, score: number): void => {
+    // Structural preference: patterns starting from the first swing (ATH or major pivot)
+    // are more analytically meaningful than small sub-corrections from intermediate swings
+    if (p0 === alternating[0]) score = Math.min(100, score + 5);
     if (score <= bestScore) return;
     bestScore = score;
     const { isValid, violations } = validateCorrection(p0, pA, pB, pC, direction);
@@ -268,12 +271,7 @@ export function countCorrectiveWaves(
       }
       if (!bestCPoint) continue;
 
-      let score = scoreCorrection(p0, pA, bestBPoint, bestCPoint, direction);
-
-      // Structural preference: +3 for patterns starting from the first swing
-      // (the actual ATH or major trough — the primary wave starting point)
-      if (i === 0) score = Math.min(100, score + 3);
-
+      const score = scoreCorrection(p0, pA, bestBPoint, bestCPoint, direction);
       buildResult(p0, pA, bestBPoint, bestCPoint, score);
     }
   }
