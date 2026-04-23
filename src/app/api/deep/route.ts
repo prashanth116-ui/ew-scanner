@@ -125,13 +125,22 @@ export async function POST(request: NextRequest) {
   if (data.preAthLow != null && data.preAthLow < data.ath) {
     const impulseRange = data.ath - data.preAthLow;
     const declineRetrace = (data.ath - data.low) / impulseRange;
-    const r382 = data.ath - impulseRange * 0.382;
-    const r500 = data.ath - impulseRange * 0.500;
-    const r618 = data.ath - impulseRange * 0.618;
 
-    impulseContext = `\nPrior impulse: $${data.preAthLow.toFixed(2)} (${data.preAthLowYear ?? "unknown"}) → $${data.ath.toFixed(2)} ATH
+    if (declineRetrace <= 1.0) {
+      // Good data: decline stays within the visible impulse — Fibonacci levels are meaningful
+      const r382 = data.ath - impulseRange * 0.382;
+      const r500 = data.ath - impulseRange * 0.500;
+      const r618 = data.ath - impulseRange * 0.618;
+
+      impulseContext = `\nPrior impulse: $${data.preAthLow.toFixed(2)} (${data.preAthLowYear ?? "unknown"}) → $${data.ath.toFixed(2)} ATH
 - The post-ATH decline to $${data.low.toFixed(2)} retraces ${(declineRetrace * 100).toFixed(1)}% of this impulse
 - Impulse Fibonacci retracements: 38.2% = $${r382.toFixed(2)}, 50% = $${r500.toFixed(2)}, 61.8% = $${r618.toFixed(2)}`;
+    } else {
+      // Insufficient data: decline exceeds the visible impulse start — Fibonacci levels are unreliable
+      impulseContext = `\nPrior impulse (partial): $${data.preAthLow.toFixed(2)} (${data.preAthLowYear ?? "unknown"}) → $${data.ath.toFixed(2)} ATH
+- The post-ATH decline to $${data.low.toFixed(2)} exceeded this impulse start (${(declineRetrace * 100).toFixed(1)}% retracement), meaning the 5-year data window does not capture the full prior impulse. The true impulse likely started from a much lower price.
+- Do NOT reference impulse Fibonacci retracement zones (38.2%, 50%, 61.8%) — they are unreliable with incomplete impulse data. Focus your analysis on the actual price levels and recovery from the low.`;
+    }
   }
 
   const hasWavePoints = data.wavePoints && data.wavePoints.length > 0;
