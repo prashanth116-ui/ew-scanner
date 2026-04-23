@@ -4,6 +4,7 @@ import type { PriceSeries } from "./ew-types";
 
 // Fibonacci ratios for scoring wave proportions
 const IMPULSE_W2_RATIOS = [0.382, 0.5, 0.618]; // Ideal Wave 2 retracement of Wave 1
+const DEVELOPING_W2_RATIOS = [0.382, 0.5, 0.618, 0.786]; // Broader for developing counts (deep retraces valid)
 const IMPULSE_W3_EXTENSIONS = [1.618, 2.0, 2.618]; // Wave 3 extension of Wave 1
 const IMPULSE_W4_RATIOS = [0.236, 0.382, 0.5]; // Wave 4 retracement of Wave 3
 const CORRECTION_B_RATIOS = [0.382, 0.5, 0.618]; // Wave B retracement of Wave A
@@ -33,24 +34,43 @@ export function countWaves(
   const correction = countCorrectiveWaves(recoverySwings, series.close, "up", degree);
   // Also try corrective pattern on the decline (A-B-C correction of prior uptrend)
   const declineCorrection = countCorrectiveWaves(declineSwings, series.close, "up", degree);
+  // Try developing wave counts (3-5 alternating points, not enough for full impulse)
+  const developingRecovery = countDevelopingWaves(recoverySwings, series.close, "up", degree);
+  const developingDecline = countDevelopingWaves(declineSwings, series.close, "down", degree);
 
-  // Pick best overall interpretation
-  const candidates = [declineImpulse, recoveryImpulse, correction, declineCorrection].filter(
+  // Partition candidates into recovery-based (forward-looking) and decline-based (historical)
+  const recoveryCandidates = [recoveryImpulse, correction, developingRecovery].filter(
+    (c): c is WaveCount => c !== null
+  );
+  const declineCandidates = [declineImpulse, declineCorrection, developingDecline].filter(
     (c): c is WaveCount => c !== null
   );
 
-  if (candidates.length === 0) return null;
+  const allCandidates = [...recoveryCandidates, ...declineCandidates];
+  if (allCandidates.length === 0) return null;
 
-  // Sort by score, prefer valid counts
-  candidates.sort((a, b) => {
+  const sortByQuality = (a: WaveCount, b: WaveCount) => {
     if (a.isValid !== b.isValid) return a.isValid ? -1 : 1;
     return b.score - a.score;
-  });
+  };
 
-  const best = candidates[0];
-  // Attach alternate if available
-  if (candidates.length > 1) {
-    best.alternateCount = candidates[1];
+  // When stock is in active recovery (>10% above low), prefer recovery-based counts.
+  // Recovery counts describe where we're going; decline counts describe where we've been.
+  const lastPrice = series.close[series.close.length - 1];
+  const lowPrice = series.low[lowIdx];
+  const isRecovering = lastPrice > lowPrice * 1.1 && lowIdx > athIdx;
+
+  let best: WaveCount;
+  if (isRecovering && recoveryCandidates.length > 0) {
+    recoveryCandidates.sort(sortByQuality);
+    best = recoveryCandidates[0];
+    const alternates = [...recoveryCandidates.slice(1), ...declineCandidates];
+    alternates.sort(sortByQuality);
+    if (alternates.length > 0) best.alternateCount = alternates[0];
+  } else {
+    allCandidates.sort(sortByQuality);
+    best = allCandidates[0];
+    if (allCandidates.length > 1) best.alternateCount = allCandidates[1];
   }
 
   return best;
@@ -199,6 +219,161 @@ export function countCorrectiveWaves(
   }
 
   return bestCount;
+}
+
+/**
+ * Count developing impulse waves from incomplete patterns (3-5 alternating points).
+ * Handles early-stage patterns where W3/W4/W5 haven't completed yet.
+ * For example: ENPH recovery has W1 ($25→$53) and W2 ($31) but W3 is still forming.
+ * Returns null if 6+ alternating points exist (full impulse handles those).
+ */
+export function countDevelopingWaves(
+  swings: SwingPoint[],
+  closes: number[],
+  direction: "up" | "down",
+  degree: WaveDegree
+): WaveCount | null {
+  const startType = direction === "up" ? "low" : "high";
+  const alternating = buildAlternatingSequence(swings, startType);
+
+  // Need 3-5 points. Fewer = insufficient, 6+ = full impulse handles it
+  if (alternating.length < 3 || alternating.length >= 6) return null;
+
+  const lastPrice = closes[closes.length - 1];
+  const sign = direction === "up" ? 1 : -1;
+
+  const p0 = alternating[0];
+  const p1 = alternating[1];
+  const p2 = alternating[2];
+  const p3 = alternating.length >= 4 ? alternating[3] : null;
+  const p4 = alternating.length >= 5 ? alternating[4] : null;
+
+  // ── Validation ──
+  const violations: string[] = [];
+
+  if (direction === "up") {
+    if (p1.price <= p0.price) violations.push("Wave 1 doesn't move up");
+    if (p2.price >= p1.price) violations.push("Wave 2 doesn't retrace down");
+    if (p2.price <= p0.price) violations.push("Wave 2 retraces beyond Wave 1 start");
+  } else {
+    if (p1.price >= p0.price) violations.push("Wave 1 doesn't move down");
+    if (p2.price <= p1.price) violations.push("Wave 2 doesn't retrace up");
+    if (p2.price >= p0.price) violations.push("Wave 2 retraces beyond Wave 1 start");
+  }
+
+  if (p3) {
+    if (direction === "up") {
+      if (p3.price <= p2.price) violations.push("Wave 3 doesn't advance");
+      if (p3.price <= p1.price) violations.push("Wave 3 doesn't exceed Wave 1");
+    } else {
+      if (p3.price >= p2.price) violations.push("Wave 3 doesn't advance");
+      if (p3.price >= p1.price) violations.push("Wave 3 doesn't exceed Wave 1");
+    }
+  }
+
+  if (p3 && p4) {
+    if (direction === "up") {
+      if (p4.price >= p3.price) violations.push("Wave 4 doesn't retrace down");
+      if (p4.price <= p1.price) violations.push("Wave 4 overlaps Wave 1 territory");
+    } else {
+      if (p4.price <= p3.price) violations.push("Wave 4 doesn't retrace up");
+      if (p4.price >= p1.price) violations.push("Wave 4 overlaps Wave 1 territory");
+    }
+  }
+
+  const isValid = violations.length === 0;
+
+  // ── Scoring ──
+  let score = 0;
+  const w1Len = (p1.price - p0.price) * sign;
+
+  // W1 direction correct (10 pts)
+  if (w1Len > 0) score += 10;
+
+  // W2 Fibonacci retracement quality (20 pts) — uses broader ratios including 78.6%
+  if (w1Len > 0) {
+    const w2Retrace = Math.abs(p2.price - p1.price) / w1Len;
+    score += fibProximityScore(w2Retrace, DEVELOPING_W2_RATIOS) * 20;
+  }
+
+  // W3 progress if available (15 pts)
+  if (p3 && w1Len > 0) {
+    const w3Len = (p3.price - p2.price) * sign;
+    if (w3Len > 0) {
+      score += 5;
+      score += fibProximityScore(w3Len / w1Len, IMPULSE_W3_EXTENSIONS) * 10;
+    }
+  }
+
+  // W4 retracement if available (10 pts)
+  if (p3 && p4) {
+    const w3Len = (p3.price - p2.price) * sign;
+    if (w3Len > 0) {
+      const w4Retrace = Math.abs(p4.price - p3.price) / w3Len;
+      score += fibProximityScore(w4Retrace, IMPULSE_W4_RATIOS) * 10;
+    }
+  }
+
+  // Rule adherence (15 pts)
+  score += Math.max(0, 15 - violations.length * 5);
+
+  // Active development bonus — price progressing past Wave 2 (up to 25 pts)
+  // This makes developing counts competitive with completed patterns when
+  // the stock is actively in a new wave cycle
+  const pastW2 = direction === "up" ? lastPrice > p2.price : lastPrice < p2.price;
+  if (pastW2) {
+    score += 10;
+    const w1Range = Math.abs(p1.price - p0.price);
+    if (w1Range > 0) {
+      const progressBeyondW2 = direction === "up"
+        ? (lastPrice - p2.price) / w1Range
+        : (p2.price - lastPrice) / w1Range;
+      if (progressBeyondW2 > 0.25) score += 7;
+      if (progressBeyondW2 > 0.75) score += 8;
+    }
+  }
+
+  score = Math.max(0, Math.min(90, Math.round(score)));
+
+  // ── Position label ──
+  let position: string;
+
+  if (alternating.length === 3) {
+    if (pastW2) {
+      const pastW1Peak = direction === "up" ? lastPrice > p1.price : lastPrice < p1.price;
+      if (pastW1Peak) position = "Developing Wave 3 — price beyond Wave 1 peak";
+      else position = "Developing Wave 3 — advancing from Wave 2";
+    } else {
+      position = "Wave 2 may still be forming";
+    }
+  } else if (alternating.length === 4) {
+    const w3Past = direction === "up" ? lastPrice < p3!.price : lastPrice > p3!.price;
+    if (w3Past) position = "Developing Wave 4 correction";
+    else position = "In developing Wave 3 — may still be extending";
+  } else {
+    const w4Past = direction === "up" ? lastPrice > p4!.price : lastPrice < p4!.price;
+    if (w4Past) position = "Developing Wave 5 — final impulse forming";
+    else position = "Wave 4 correction may still be forming";
+  }
+
+  // ── Build wave points ──
+  const waves: WavePoint[] = [];
+  const conf = isValid ? Math.min(score / 100, 0.8) : Math.min(score / 100, 0.4);
+
+  waves.push({ ...p1, label: "1", degree, confidence: conf });
+  waves.push({ ...p2, label: "2", degree, confidence: conf });
+  if (p3) waves.push({ ...p3, label: "3", degree, confidence: conf * 0.8 });
+  if (p4) waves.push({ ...p4, label: "4", degree, confidence: conf * 0.6 });
+
+  return {
+    waves,
+    waveStart: p0,
+    degree,
+    isValid,
+    violations,
+    score,
+    position,
+  };
 }
 
 // ── Validation ──
