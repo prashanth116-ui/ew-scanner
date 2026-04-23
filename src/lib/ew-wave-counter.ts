@@ -658,6 +658,17 @@ function buildAlternatingSequence(swings: SwingPoint[], startType: "high" | "low
       }
       result.push(s);
       expectType = expectType === "high" ? "low" : "high";
+    } else if (result.length > 0 && s.type === result[result.length - 1].type) {
+      // Same type as last accepted point, but we're now expecting the opposite type.
+      // Replace if this swing is more extreme (higher high or lower low).
+      // This handles cases like UNH where two swing highs occur without an
+      // intervening swing low — we want the actual peak, not the first one found.
+      const prev = result[result.length - 1];
+      if (s.type === "high" && s.price > prev.price) {
+        result[result.length - 1] = s;
+      } else if (s.type === "low" && s.price < prev.price) {
+        result[result.length - 1] = s;
+      }
     }
   }
 
