@@ -16,7 +16,6 @@ import {
   PanelLeft,
 } from "lucide-react";
 import { UNIVERSES, UNIVERSE_KEYS } from "@/data/ew-universes";
-import { loadCustomUniverses } from "@/lib/ew-watchlist";
 import {
   scoreSqueezeBatch,
   computeSqueezeScore,
@@ -176,11 +175,22 @@ export default function SqueezePageWrapper() {
   );
 }
 
-function SqueezePage() {
-  // Universe
-  const [universe, setUniverse] = useState<string>("SP500");
-  const [customUniverseKeys, setCustomUniverseKeys] = useState<string[]>([]);
+// Build deduplicated combined ticker list from all universes
+const ALL_TICKERS = (() => {
+  const seen = new Set<string>();
+  const result: { symbol: string; name: string }[] = [];
+  for (const key of UNIVERSE_KEYS) {
+    for (const t of UNIVERSES[key]) {
+      if (!seen.has(t.symbol)) {
+        seen.add(t.symbol);
+        result.push({ symbol: t.symbol, name: t.name });
+      }
+    }
+  }
+  return result;
+})();
 
+function SqueezePage() {
   // Filters
   const [minSiPercent, setMinSiPercent] = useState(DEFAULT_SQUEEZE_FILTERS.minSiPercent);
   const [minDtc, setMinDtc] = useState(DEFAULT_SQUEEZE_FILTERS.minDaysToCover);
@@ -228,10 +238,9 @@ function SqueezePage() {
   const [savedScans, setSavedScans] = useState<SavedSqueezeScan[]>([]);
   const [saveName, setSaveName] = useState("");
 
-  // Load saved scans + custom universes on mount
+  // Load saved scans on mount
   useEffect(() => {
     setSavedScans(loadSqueezeScans());
-    setCustomUniverseKeys(loadCustomUniverses().map((u) => `custom:${u.id}`));
   }, []);
 
   // Cleanup abort on unmount
@@ -323,21 +332,7 @@ function SqueezePage() {
     setScannedCount(0);
     setExpandedTicker(null);
 
-    // Resolve tickers
-    let tickers: { symbol: string; name: string }[];
-    if (universe.startsWith("custom:")) {
-      const customId = universe.replace("custom:", "");
-      const custom = loadCustomUniverses().find((u) => u.id === customId);
-      tickers = custom
-        ? custom.tickers.map((t) => ({ symbol: t, name: t }))
-        : [];
-    } else {
-      tickers = (UNIVERSES[universe] ?? []).map((t) => ({
-        symbol: t.symbol,
-        name: t.name,
-      }));
-    }
-
+    const tickers = ALL_TICKERS;
     setTotalCount(tickers.length);
     const results: SqueezeData[] = [];
 
@@ -377,7 +372,7 @@ function SqueezePage() {
 
     setScanning(false);
     setProgress("");
-  }, [universe]);
+  }, []);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -481,10 +476,10 @@ function SqueezePage() {
   // ── Save / Load / Delete ──
   const handleSave = useCallback(() => {
     const name = saveName.trim() || `Squeeze ${new Date().toLocaleDateString()}`;
-    saveSqueezeScan(name, universe, filters, scored);
+    saveSqueezeScan(name, "All", filters, scored);
     setSavedScans(loadSqueezeScans());
     setSaveName("");
-  }, [saveName, universe, filters, scored]);
+  }, [saveName, filters, scored]);
 
   const handleDelete = useCallback((id: string) => {
     deleteSqueezeScan(id);
@@ -492,13 +487,11 @@ function SqueezePage() {
   }, []);
 
   const handleLoadScan = useCallback((scan: SavedSqueezeScan) => {
-    setUniverse(scan.universe);
     setMinSiPercent(scan.filters.minSiPercent);
     setMinDtc(scan.filters.minDaysToCover);
     setMaxFloat(scan.filters.maxFloat);
     setMinVolRatio(scan.filters.minVolumeRatio);
     setRequireEw(scan.filters.requireEwAlignment);
-    // Rebuild rawResults from saved candidates (they already contain SqueezeData fields)
     setRawResults(scan.candidates);
   }, []);
 
@@ -544,25 +537,6 @@ function SqueezePage() {
         )}
       </span>
     </th>
-  );
-
-  // All universe options
-  const allUniverseKeys = useMemo(() => {
-    const keys: string[] = [...UNIVERSE_KEYS];
-    for (const k of customUniverseKeys) keys.push(k);
-    return keys;
-  }, [customUniverseKeys]);
-
-  const universeLabel = useCallback(
-    (key: string) => {
-      if (key.startsWith("custom:")) {
-        const id = key.replace("custom:", "");
-        const custom = loadCustomUniverses().find((u) => u.id === id);
-        return custom?.name ?? "Custom";
-      }
-      return key;
-    },
-    []
   );
 
   return (
@@ -629,25 +603,6 @@ function SqueezePage() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Universe */}
-        <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
-          <h3 className="text-sm font-semibold text-white mb-3">Universe</h3>
-          <select
-            value={universe}
-            onChange={(e) => setUniverse(e.target.value)}
-            className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-white focus:border-[#5ba3e6] focus:outline-none"
-          >
-            {allUniverseKeys.map((k) => (
-              <option key={k} value={k}>
-                {universeLabel(k)}{" "}
-                {!k.startsWith("custom:") && UNIVERSES[k]
-                  ? `(${UNIVERSES[k].length})`
-                  : ""}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* Filters */}
@@ -964,7 +919,7 @@ function SqueezePage() {
             <Zap className="h-12 w-12 mb-3 opacity-30" />
             <p className="text-sm font-medium">Short Squeeze Screener</p>
             <p className="text-xs mt-1 max-w-md text-center">
-              Select a universe and click Scan to screen for short squeeze
+              Click Scan to screen {ALL_TICKERS.length} stocks for short squeeze
               candidates. Combines SI%, days to cover, float size, volume
               surge, and optional EW wave alignment.
             </p>
