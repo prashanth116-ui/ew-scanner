@@ -9,6 +9,7 @@ const navItems = [
   { href: "/", label: "Scanner" },
   { href: "/history", label: "History" },
   { href: "/watchlist", label: "Watchlists" },
+  { href: "/squeeze", label: "Squeeze" },
   { href: "/guide", label: "Guide" },
   { href: "/learn", label: "Learn EW" },
 ];

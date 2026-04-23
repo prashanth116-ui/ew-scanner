@@ -222,3 +222,58 @@ export interface AlertConfig {
     minRecovery: number;
   };
 }
+
+// ── Short Squeeze Screener Types ──
+
+export interface SqueezeData {
+  ticker: string;
+  name: string;
+  shortPercentOfFloat: number | null;
+  shortRatio: number | null; // days to cover
+  sharesShort: number | null;
+  floatShares: number | null;
+  sharesOutstanding: number | null;
+  dateShortInterest: number | null; // unix timestamp
+  currentVolume: number | null;
+  avgVolume3Month: number | null;
+  currentPrice: number | null;
+  marketCap: number | null;
+  // Optional EW enrichment
+  ewPosition?: string;
+  ewConfidence?: string;
+}
+
+export interface SqueezeComponentScores {
+  siPercent: number; // 0-30
+  daysTocover: number; // 0-20
+  floatSize: number; // 0-15
+  volumeSurge: number; // 0-20
+  ewAlignment: number; // 0-15
+}
+
+export type SqueezeTier = "high" | "medium" | "low";
+
+export interface ScoredSqueezeCandidate extends SqueezeData {
+  squeezeScore: number; // 0-100
+  components: SqueezeComponentScores;
+  tier: SqueezeTier;
+  volumeRatio: number | null;
+}
+
+export interface SqueezeFilters {
+  minSiPercent: number;
+  minDaysToCover: number;
+  maxFloat: number; // in millions
+  minVolumeRatio: number;
+  requireEwAlignment: boolean;
+}
+
+export interface SavedSqueezeScan {
+  id: string;
+  name: string;
+  savedAt: string;
+  universe: string;
+  filters: SqueezeFilters;
+  candidateCount: number;
+  candidates: ScoredSqueezeCandidate[];
+}
