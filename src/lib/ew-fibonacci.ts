@@ -110,11 +110,13 @@ export function calculateFibExtensions(
   const wave1Range = wave1End - wave1Start;
   if (Math.abs(wave1Range) < 0.01) return [];
 
-  return FIB_EXTENSION_RATIOS.map(({ ratio, label }) => ({
-    ratio,
-    price: Math.round((wave2End + wave1Range * ratio) * 100) / 100,
-    label,
-  }));
+  return FIB_EXTENSION_RATIOS
+    .map(({ ratio, label }) => ({
+      ratio,
+      price: Math.round((wave2End + wave1Range * ratio) * 100) / 100,
+      label,
+    }))
+    .filter((ext) => ext.price > 0); // Filter out impossible negative prices
 }
 
 /**

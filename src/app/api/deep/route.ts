@@ -102,9 +102,11 @@ export async function POST(request: NextRequest) {
   }
 
   let extensionContext = "";
-  if (data.fibExtensions?.length) {
+  // Filter out negative/zero extensions (impossible prices from bearish impulse projections)
+  const validExtensions = (data.fibExtensions ?? []).filter((ext) => ext.price > 0);
+  if (validExtensions.length) {
     extensionContext += `\nFibonacci extensions (Wave 3/5 targets):`;
-    for (const ext of data.fibExtensions) {
+    for (const ext of validExtensions) {
       extensionContext += `\n- ${ext.label}: $${ext.price.toFixed(2)}`;
     }
   }
@@ -116,6 +118,18 @@ export async function POST(request: NextRequest) {
   }
 
   const hasWavePoints = data.wavePoints && data.wavePoints.length > 0;
+
+  // Forward-looking directive for completed patterns
+  let forwardContext = "";
+  const pos = (data.waveCountPosition ?? "").toLowerCase();
+  if (pos.includes("beyond wave 5") || pos.includes("post-wave 5") || pos.includes("correction may be complete")) {
+    forwardContext = `\nIMPORTANT: The algorithmic wave count shows a COMPLETED pattern (${data.waveCountPosition}). Your analysis must focus on what comes NEXT — not rehash what already happened. Specifically:
+- What is the likely next wave structure (new impulse cycle, corrective bounce, etc.)?
+- What are realistic UPSIDE targets for the recovery, using Fibonacci retracement levels of the prior decline?
+- What key support must hold for the bullish case?
+- The "nextTarget" MUST be an upside target above the current price, not a downside extension.
+- Keep the completed wave description brief (1-2 sentences) and spend most of the analysis on the forward outlook.\n`;
+  }
 
   // Structural fallback context for stocks at/near ATH
   let structuralContext = "";
@@ -132,7 +146,7 @@ Price data:
 - Decline: ${data.declinePct.toFixed(1)}% over ${data.durationMonths.toFixed(0)} months
 - Recovery: ${data.recoveryPct.toFixed(1)}% from low
 - Mechanical score: ${data.score}/25
-${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${waveCountContext}${extensionContext}${structuralContext}
+${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${waveCountContext}${extensionContext}${structuralContext}${forwardContext}
 
 Timeframes: ${data.htf} (primary) / ${data.ltf} (sub-waves)
 ${hasWavePoints ? `
