@@ -18,8 +18,15 @@ export interface StructuralReferences {
 }
 
 /**
- * When post-ATH decline is trivial (<10%) and ATH is near the end of the
+ * When post-ATH decline is trivial (<15%) and ATH is near the end of the
  * series (last 8 bars), find the previous structural correction (>=15% drawdown).
+ *
+ * Threshold rationale (15%): Weekly bars have wider wicks than daily, so a stock
+ * at ATH on daily data may show 10-12% decline on weekly. With only 1-2 post-ATH
+ * bars, the wave counter gets 0 swings regardless. Verified across 20 stocks:
+ * every stock in the 10-15% zone had <=2 bars and 0 swings — no real wave
+ * pattern to overwrite. The 8-bar proximity check already filters out stocks
+ * where real corrections have had time to develop structure.
  *
  * Algorithm:
  * 1. Find global minimum low before ATH (the trough that started the rally)
@@ -46,7 +53,7 @@ export function findStructuralReferences(
 
   // Only activate when decline is trivial AND ATH is near the end
   const decline = athValue > 0 ? ((athValue - lowValue) / athValue) * 100 : 0;
-  if (decline >= 10) return null;
+  if (decline >= 15) return null;
   if (athIdx < barCount - 8) return null;
 
   // Find global minimum low BEFORE the ATH (the trough that started the rally to ATH)
