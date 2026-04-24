@@ -193,6 +193,7 @@ function SqueezePage() {
   const [tickerSearch, setTickerSearch] = useState("");
   const [tickerSearching, setTickerSearching] = useState(false);
   const [tickerError, setTickerError] = useState<string | null>(null);
+  const [searchedTickers, setSearchedTickers] = useState<Set<string>>(new Set());
 
   // EW enrichment
   const [enriching, setEnriching] = useState(false);
@@ -253,11 +254,17 @@ function SqueezePage() {
     [debouncedSi, debouncedDtc, debouncedFloat, debouncedVol, debouncedMktCap, debouncedNearLow, debouncedScore, requireEw]
   );
 
-  // Score + filter + sort
-  const scored = useMemo(
-    () => scoreSqueezeBatch(rawResults, filters),
-    [rawResults, filters]
-  );
+  // Score + filter + sort (exempt manually-searched tickers from filters)
+  const scored = useMemo(() => {
+    const filtered = scoreSqueezeBatch(rawResults, filters);
+    if (searchedTickers.size === 0) return filtered;
+    // Score searched tickers that got filtered out
+    const filteredSet = new Set(filtered.map((c) => c.ticker));
+    const missing = rawResults
+      .filter((r) => searchedTickers.has(r.ticker) && !filteredSet.has(r.ticker))
+      .map(computeSqueezeScore);
+    return [...missing, ...filtered];
+  }, [rawResults, filters, searchedTickers]);
 
   const sorted = useMemo(() => {
     const arr = [...scored];
@@ -404,6 +411,7 @@ function SqueezePage() {
         return;
       }
       setRawResults((prev) => [data as SqueezeData, ...prev]);
+      setSearchedTickers((prev) => new Set(prev).add(ticker));
       setExpandedTicker(ticker);
       setTickerSearch("");
     } catch {
