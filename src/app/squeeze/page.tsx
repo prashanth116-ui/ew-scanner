@@ -14,6 +14,7 @@ import {
   TrendingUp,
   PanelLeftClose,
   PanelLeft,
+  AlertTriangle,
   BookOpen,
   ListPlus,
   Check,
@@ -306,7 +307,7 @@ function SqueezePage() {
 
   // Stats
   const stats = useMemo(() => {
-    if (scored.length === 0) return { avgSi: 0, avgDtc: 0, highCount: 0 };
+    if (scored.length === 0) return { avgSi: 0, avgDtc: 0, highCount: 0, finraDate: null as number | null };
     const siVals = scored
       .map((c) => c.shortPercentOfFloat)
       .filter((v): v is number => v != null)
@@ -314,10 +315,15 @@ function SqueezePage() {
     const dtcVals = scored
       .map((c) => c.shortRatio)
       .filter((v): v is number => v != null);
+    const dates = scored
+      .map((c) => c.dateShortInterest)
+      .filter((v): v is number => v != null);
+    const finraDate = dates.length > 0 ? Math.max(...dates) : null;
     return {
       avgSi: siVals.length > 0 ? siVals.reduce((s, v) => s + v, 0) / siVals.length : 0,
       avgDtc: dtcVals.length > 0 ? dtcVals.reduce((s, v) => s + v, 0) / dtcVals.length : 0,
       highCount: scored.filter((c) => c.tier === "high").length,
+      finraDate,
     };
   }, [scored]);
 
@@ -1005,6 +1011,16 @@ function SqueezePage() {
                 }}
               />
             </div>
+          </div>
+        )}
+
+        {/* FINRA date notice */}
+        {rawResults.length > 0 && stats.finraDate && (
+          <div className="flex items-center gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-4 py-2 mb-4 text-xs text-yellow-400/80">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Short interest data as of <strong className="text-yellow-400">{formatDate(stats.finraDate)}</strong> (FINRA reporting date). Updated twice monthly.
+            </span>
           </div>
         )}
 
