@@ -154,6 +154,8 @@ export interface EnhancedScoredCandidate {
   // V3: Wave counting
   waveCount?: WaveCount;
   mtfConfirmation?: MTFConfirmation;
+  dailyWaveCount?: WaveCount;    // Daily intermediate-degree wave count
+  dailySeries?: PriceSeries;     // 1-year daily bars (for wave date lookups)
   // Series for sparkline
   series?: PriceSeries;
   athIdx?: number;

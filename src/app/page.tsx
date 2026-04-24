@@ -43,7 +43,7 @@ import type {
 import { SCANNER_MODES, getModeConfig, applyModeFilters } from "@/lib/ew-scanner-modes";
 import { saveScan, loadScans, deleteScan, loadCustomUniverses } from "@/lib/ew-watchlist";
 import { loadWatchlists, addToWatchlist } from "@/lib/ew-watchlists";
-import { confirmMultiTimeframe, getWaveStatusInfo } from "@/lib/ew-wave-counter";
+import { confirmMultiTimeframe, getWaveStatusInfo, countWaves } from "@/lib/ew-wave-counter";
 import { EWSparkline } from "@/components/ew-sparkline";
 import { EWFibBar } from "@/components/ew-fib-bar";
 import { EWSectorHeatmap } from "@/components/ew-sector-heatmap";
@@ -518,6 +518,11 @@ function EWScannerPage() {
                 if (dailySeries.low[i] < dMin) { dMin = dailySeries.low[i]; dLowIdx = i; }
               }
               c.mtfConfirmation = confirmMultiTimeframe(c.waveCount, dailySeries, dAthIdx, dLowIdx);
+              const dailyCount = countWaves(dailySeries, dAthIdx, dLowIdx, "intermediate");
+              if (dailyCount) {
+                c.dailyWaveCount = dailyCount;
+                c.dailySeries = dailySeries;
+              }
             }
           }
         } catch {
@@ -1641,6 +1646,87 @@ function EWScannerPage() {
                             return (
                             <div key={i} className="flex justify-between text-xs">
                               <span className="text-purple-200/50">{t.label}</span>
+                              <span className={`font-mono ${isHit ? "text-green-400" : isApproaching ? "text-yellow-400" : "text-[#e6e6e6]"}`}>
+                                ${t.price.toFixed(2)}{isHit ? " ✓" : ""}
+                              </span>
+                            </div>
+                            );
+                          })}
+                        </div>
+                        );
+                      })()}
+                    </div>
+                    );
+                  })()}
+
+                  {/* Daily Wave Count Card (Micro) */}
+                  {deepCandidate?.dailyWaveCount && (() => {
+                    const dwc = deepCandidate.dailyWaveCount;
+                    const dailyStatus = getWaveStatusInfo(dwc, deepCandidate.current);
+                    return (
+                    <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-[#666]">Daily Wave Count (Micro)</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-cyan-300">
+                          {dwc.waves.map((w) => w.label).join("-")}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          dwc.isValid
+                            ? "bg-green-500/15 text-green-400/80"
+                            : "bg-yellow-500/15 text-yellow-400/80"
+                        }`}>
+                          {dwc.isValid ? "Valid" : "Partial"} ({dwc.score}/100)
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          dailyStatus.status === "completed"
+                            ? "bg-green-500/15 text-green-400/80"
+                            : dailyStatus.status === "in_progress"
+                            ? "bg-yellow-500/15 text-yellow-400/80"
+                            : "bg-blue-500/15 text-blue-400/80"
+                        }`}>
+                          {dailyStatus.statusLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-sm font-medium text-cyan-200">{dailyStatus.currentWave}</p>
+                      {dwc.violations.length > 0 && (
+                        <p className="mt-1 text-[10px] text-red-400/70">
+                          Violations: {dwc.violations.join(", ")}
+                        </p>
+                      )}
+                      {/* Daily wave price table */}
+                      <div className="mt-2 space-y-0.5">
+                        {dwc.waves.map((w) => {
+                          const ts = w.timestamp ?? deepCandidate.dailySeries?.timestamps[w.index];
+                          const dateStr = ts
+                            ? new Date(ts * 1000).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+                            : "—";
+                          const isHigh = w.type === "high";
+                          return (
+                            <div key={w.label} className="flex items-center gap-3 text-xs">
+                              <span className="w-7 font-mono font-bold text-cyan-300">W{w.label}</span>
+                              <span className="w-20 text-right font-mono text-[#e6e6e6]/80">${w.price.toFixed(2)}</span>
+                              <span className="w-24 font-mono text-[#888]">{dateStr}</span>
+                              <span className={isHigh ? "text-green-400/70" : "text-red-400/70"}>{w.type}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {dailyStatus.targets.length > 0 && (() => {
+                        const aboveCount = dailyStatus.targets.filter(t => t.price > deepCandidate.current).length;
+                        const targetArrow = aboveCount > dailyStatus.targets.length / 2 ? "↑" : "↓";
+                        return (
+                        <div className="mt-2 border-t border-cyan-500/10 pt-2">
+                          <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
+                            Wave Targets{" "}
+                            <span className={targetArrow === "↑" ? "text-green-400" : "text-red-400"}>{targetArrow}</span>
+                          </p>
+                          {dailyStatus.targets.map((t, i) => {
+                            const pctAway = Math.abs(t.price - deepCandidate.current) / deepCandidate.current;
+                            const isHit = targetArrow === "↑" ? deepCandidate.current >= t.price : deepCandidate.current <= t.price;
+                            const isApproaching = !isHit && pctAway <= 0.02;
+                            return (
+                            <div key={i} className="flex justify-between text-xs">
+                              <span className="text-cyan-200/50">{t.label}</span>
                               <span className={`font-mono ${isHit ? "text-green-400" : isApproaching ? "text-yellow-400" : "text-[#e6e6e6]"}`}>
                                 ${t.price.toFixed(2)}{isHit ? " ✓" : ""}
                               </span>
