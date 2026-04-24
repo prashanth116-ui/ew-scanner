@@ -518,7 +518,16 @@ function EWScannerPage() {
                 if (dailySeries.low[i] < dMin) { dMin = dailySeries.low[i]; dLowIdx = i; }
               }
               c.mtfConfirmation = confirmMultiTimeframe(c.waveCount, dailySeries, dAthIdx, dLowIdx);
-              const dailyCount = countWaves(dailySeries, dAthIdx, dLowIdx, "intermediate");
+              // For daily wave count: use global low (not just post-ATH low)
+              // so stocks at/near ATH get a full impulse count from the year's low
+              let dMicroLowIdx = dLowIdx;
+              if (dAthIdx >= dailySeries.high.length * 0.85) {
+                let gMin = Infinity;
+                for (let i = 0; i < dailySeries.low.length; i++) {
+                  if (dailySeries.low[i] < gMin) { gMin = dailySeries.low[i]; dMicroLowIdx = i; }
+                }
+              }
+              const dailyCount = countWaves(dailySeries, dAthIdx, dMicroLowIdx, "intermediate");
               if (dailyCount) {
                 c.dailyWaveCount = dailyCount;
                 c.dailySeries = dailySeries;
