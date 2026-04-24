@@ -78,6 +78,7 @@ export interface WavePoint extends SwingPoint {
 export interface WaveCount {
   waves: WavePoint[];
   waveStart?: SwingPoint; // p0: start of Wave 1 (for Fibonacci extensions)
+  direction?: "up" | "down";
   degree: WaveDegree;
   isValid: boolean;
   violations: string[];

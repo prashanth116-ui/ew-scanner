@@ -43,7 +43,7 @@ import type {
 import { SCANNER_MODES, getModeConfig, applyModeFilters } from "@/lib/ew-scanner-modes";
 import { saveScan, loadScans, deleteScan, loadCustomUniverses } from "@/lib/ew-watchlist";
 import { loadWatchlists, addToWatchlist } from "@/lib/ew-watchlists";
-import { confirmMultiTimeframe } from "@/lib/ew-wave-counter";
+import { confirmMultiTimeframe, getWaveStatusInfo } from "@/lib/ew-wave-counter";
 import { EWSparkline } from "@/components/ew-sparkline";
 import { EWFibBar } from "@/components/ew-fib-bar";
 import { EWSectorHeatmap } from "@/components/ew-sector-heatmap";
@@ -1495,10 +1495,12 @@ function EWScannerPage() {
                   </div>
 
                   {/* Wave Count Quality (V3) */}
-                  {deepCandidate?.waveCount && (
+                  {deepCandidate?.waveCount && (() => {
+                    const statusInfo = getWaveStatusInfo(deepCandidate.waveCount, deepCandidate.current);
+                    return (
                     <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3">
                       <p className="text-[10px] uppercase tracking-wider text-[#666]">Algorithmic Wave Count</p>
-                      <div className="mt-1 flex items-center gap-3">
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
                         <span className="text-sm font-bold text-purple-300">
                           {deepCandidate.waveCount.waves.map((w) => w.label).join("-")}
                         </span>
@@ -1509,8 +1511,17 @@ function EWScannerPage() {
                         }`}>
                           {deepCandidate.waveCount.isValid ? "Valid" : "Partial"} ({deepCandidate.waveCount.score}/100)
                         </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          statusInfo.status === "completed"
+                            ? "bg-green-500/20 text-green-400"
+                            : statusInfo.status === "in_progress"
+                            ? "bg-yellow-500/20 text-yellow-400"
+                            : "bg-blue-500/20 text-blue-400"
+                        }`}>
+                          {statusInfo.statusLabel}
+                        </span>
                       </div>
-                      <p className="mt-1 text-xs text-purple-200/70">{deepCandidate.waveCount.position}</p>
+                      <p className="mt-1.5 text-sm font-medium text-purple-200">{statusInfo.currentWave}</p>
                       {deepCandidate.waveCount.violations.length > 0 && (
                         <p className="mt-1 text-[10px] text-red-400/70">
                           Violations: {deepCandidate.waveCount.violations.join(", ")}
@@ -1534,8 +1545,23 @@ function EWScannerPage() {
                           );
                         })}
                       </div>
+                      {/* Wave Price Targets */}
+                      {statusInfo.targets.length > 0 && (
+                        <div className="mt-2 border-t border-purple-500/10 pt-2">
+                          <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
+                            Wave Targets
+                          </p>
+                          {statusInfo.targets.map((t, i) => (
+                            <div key={i} className="flex justify-between text-xs">
+                              <span className="text-purple-200/70">{t.label}</span>
+                              <span className="font-mono text-[#e6e6e6]">${t.price.toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Target & Invalidation */}
                   <div className="grid grid-cols-2 gap-3">

@@ -151,6 +151,7 @@ export function countImpulseWaves(
         bestCount = {
           waves,
           waveStart: p0,
+          direction,
           degree,
           isValid,
           violations,
@@ -214,7 +215,7 @@ export function countCorrectiveWaves(
       else position = "A-B-C correction may be complete";
     }
 
-    bestCount = { waves, waveStart: p0, degree, isValid, violations, score, position };
+    bestCount = { waves, waveStart: p0, direction, degree, isValid, violations, score, position };
   };
 
   // Pass 1: Consecutive 4-point windows (fast, finds local patterns)
@@ -426,6 +427,7 @@ export function countDevelopingWaves(
   return {
     waves,
     waveStart: p0,
+    direction,
     degree,
     isValid,
     violations,
@@ -746,6 +748,170 @@ function getImpulsePosition(
     if (lastPrice > p5.price) return "Post-Wave 5 — recovery underway";
     return "Beyond Wave 5 — possible extension";
   }
+}
+
+// ── Wave Status Info ──
+
+export interface WaveStatusInfo {
+  status: "completed" | "in_progress" | "developing";
+  statusLabel: string;
+  currentWave: string;
+  targets: { label: string; price: number }[];
+}
+
+/**
+ * Derive wave status, current position label, and Fibonacci price targets
+ * from a WaveCount and the current price.
+ */
+export function getWaveStatusInfo(wc: WaveCount, currentPrice: number): WaveStatusInfo {
+  const waves = wc.waves;
+  const pos = wc.position.toLowerCase();
+  const labels = waves.map((w) => w.label);
+  const hasAllFive = labels.includes("1") && labels.includes("2") && labels.includes("3") && labels.includes("4") && labels.includes("5");
+  const isABC = labels.includes("A");
+
+  // Infer direction: use stored direction, or compare waveStart vs W1
+  let dir = wc.direction;
+  if (!dir && wc.waveStart && waves.length > 0) {
+    dir = waves[0].price > wc.waveStart.price ? "up" : "down";
+  }
+
+  // Helper: get wave point by label
+  const wp = (label: string) => waves.find((w) => w.label === label);
+
+  // p0 is the start of the impulse
+  const p0Price = wc.waveStart?.price;
+
+  // ── Determine status ──
+  let status: WaveStatusInfo["status"];
+  let statusLabel: string;
+  let currentWave: string = wc.position;
+
+  if (pos.includes("developing") || pos.includes("may still be forming")) {
+    status = "developing";
+    statusLabel = "Developing";
+  } else if (hasAllFive && (pos.includes("post-wave 5") || pos.includes("beyond wave 5"))) {
+    status = "completed";
+    statusLabel = "Impulse Complete";
+    if (pos.includes("correction")) {
+      currentWave = "Post-Wave 5 — correction underway";
+    } else if (pos.includes("recovery")) {
+      currentWave = "Post-Wave 5 — recovery underway";
+    } else if (pos.includes("extension")) {
+      currentWave = "Beyond Wave 5 — possible extension";
+    }
+  } else if (hasAllFive || isABC) {
+    status = "in_progress";
+    // Extract which wave from position
+    if (pos.includes("wave 3")) statusLabel = "Wave 3 In Progress";
+    else if (pos.includes("wave 5")) statusLabel = "Wave 5 In Progress";
+    else if (pos.includes("wave 4")) statusLabel = "Wave 4 Correction";
+    else if (pos.includes("wave 2")) statusLabel = "Wave 2 Correction";
+    else if (pos.includes("wave 1")) statusLabel = "Wave 1 In Progress";
+    else if (pos.includes("wave c")) statusLabel = "Wave C In Progress";
+    else statusLabel = "In Progress";
+  } else {
+    status = "developing";
+    statusLabel = "Developing";
+  }
+
+  // ── Compute targets ──
+  const targets: { label: string; price: number }[] = [];
+  const fibs = [0.382, 0.5, 0.618];
+  const fibLabels = ["38.2%", "50%", "61.8%"];
+  const extRatios = [1.0, 1.272, 1.618];
+  const extLabels = ["100%", "127.2%", "161.8%"];
+
+  if (hasAllFive && p0Price != null) {
+    const p5 = wp("5");
+    const p1 = wp("1");
+    const p2 = wp("2");
+    const p3 = wp("3");
+    const p4 = wp("4");
+
+    if (pos.includes("post-wave 5") || pos.includes("beyond wave 5")) {
+      // Correction/recovery targets: retracement of full impulse (p0 → p5)
+      if (p5) {
+        const impulseRange = p5.price - p0Price;
+        for (let i = 0; i < fibs.length; i++) {
+          // Retracement goes against the impulse direction
+          const price = p5.price - impulseRange * fibs[i];
+          targets.push({ label: `${fibLabels[i]} retrace`, price });
+        }
+      }
+    } else if (pos.includes("wave 3") && p1 && p2) {
+      // Wave 3 extension targets from W1 length applied to W2 end
+      const w1Len = p1.price - (p0Price ?? p1.price);
+      for (let i = 0; i < extRatios.length; i++) {
+        const price = p2.price + w1Len * extRatios[i];
+        targets.push({ label: `W3 ${extLabels[i]} ext`, price });
+      }
+    } else if (pos.includes("wave 5") && p3 && p4 && p1) {
+      // Wave 5 targets: extension of W1-W3 range applied from W4
+      const w1to3Range = p3.price - (p0Price ?? p1.price);
+      const w5Ratios = [0.618, 1.0, 1.272];
+      const w5Labels = ["61.8%", "100%", "127.2%"];
+      for (let i = 0; i < w5Ratios.length; i++) {
+        const price = p4.price + w1to3Range * w5Ratios[i];
+        targets.push({ label: `W5 ${w5Labels[i]} ext`, price });
+      }
+    } else if (pos.includes("wave 2") && p1) {
+      // Wave 2 retracement of Wave 1
+      const w1Range = p1.price - p0Price;
+      for (let i = 0; i < fibs.length; i++) {
+        const price = p1.price - w1Range * fibs[i];
+        targets.push({ label: `W2 ${fibLabels[i]} retrace`, price });
+      }
+    } else if (pos.includes("wave 4") && p2 && p3) {
+      // Wave 4 retracement of Wave 3
+      const w3Range = p3.price - p2.price;
+      for (let i = 0; i < fibs.length; i++) {
+        const price = p3.price - w3Range * fibs[i];
+        targets.push({ label: `W4 ${fibLabels[i]} retrace`, price });
+      }
+    }
+  } else if (isABC) {
+    // A-B-C correction targets
+    const pA = wp("A");
+    const pB = wp("B");
+    const pC = wp("C");
+    if (pA && pB && p0Price != null) {
+      if (pos.includes("wave c") && pB) {
+        // Wave C target: extension of Wave A applied from B
+        const wALen = Math.abs(pA.price - p0Price);
+        for (let i = 0; i < extRatios.length; i++) {
+          const price = dir === "up"
+            ? pB.price - wALen * extRatios[i]
+            : pB.price + wALen * extRatios[i];
+          targets.push({ label: `C ${extLabels[i]} ext`, price });
+        }
+      } else if (pos.includes("complete") || pos.includes("beyond")) {
+        // Correction may be complete — show retracement levels of prior move
+        if (pC) {
+          const corrRange = Math.abs(pC.price - p0Price);
+          for (let i = 0; i < fibs.length; i++) {
+            const price = dir === "up"
+              ? pC.price + corrRange * fibs[i]
+              : pC.price - corrRange * fibs[i];
+            targets.push({ label: `${fibLabels[i]} recovery`, price });
+          }
+        }
+      }
+    }
+  } else if (status === "developing" && wc.waveStart) {
+    // Developing count — show extension targets for the wave being formed
+    const p1 = wp("1");
+    const p2 = wp("2");
+    if (p1 && p2 && pos.includes("wave 3")) {
+      const w1Len = p1.price - wc.waveStart.price;
+      for (let i = 0; i < extRatios.length; i++) {
+        const price = p2.price + w1Len * extRatios[i];
+        targets.push({ label: `W3 ${extLabels[i]} ext`, price });
+      }
+    }
+  }
+
+  return { status, statusLabel, currentWave, targets };
 }
 
 // ── Multi-Timeframe Confirmation ──
