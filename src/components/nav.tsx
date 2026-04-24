@@ -15,8 +15,6 @@ const ewItems = [
 
 const squeezeItems = [
   { href: "/squeeze", label: "Squeeze" },
-  { href: "/squeeze/watchlist", label: "Watchlist" },
-  { href: "/squeeze/guide", label: "Guide" },
 ];
 
 export function Nav() {

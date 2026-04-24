@@ -915,6 +915,20 @@ function SqueezePage() {
             )}
             Lookup
           </button>
+          <Link
+            href="/squeeze/watchlist"
+            className="flex items-center gap-1 rounded-lg border border-[#2a2a2a] px-3 py-2.5 text-sm text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors shrink-0"
+          >
+            <ListPlus className="h-4 w-4" />
+            <span className="hidden md:inline">Watchlist</span>
+          </Link>
+          <Link
+            href="/squeeze/guide"
+            className="flex items-center gap-1 rounded-lg border border-[#2a2a2a] px-3 py-2.5 text-sm text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors shrink-0"
+          >
+            <BookOpen className="h-4 w-4" />
+            <span className="hidden md:inline">Guide</span>
+          </Link>
         </div>
 
         {/* Ticker search error */}
