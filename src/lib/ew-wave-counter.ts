@@ -756,6 +756,7 @@ export interface WaveStatusInfo {
   status: "completed" | "in_progress" | "developing";
   statusLabel: string;
   currentWave: string;
+  direction: "up" | "down";
   targets: { label: string; price: number }[];
 }
 
@@ -911,7 +912,7 @@ export function getWaveStatusInfo(wc: WaveCount, currentPrice: number): WaveStat
     }
   }
 
-  return { status, statusLabel, currentWave, targets };
+  return { status, statusLabel, currentWave, direction: dir ?? "up", targets };
 }
 
 // ── Multi-Timeframe Confirmation ──

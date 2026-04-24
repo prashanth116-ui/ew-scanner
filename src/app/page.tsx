@@ -1546,19 +1546,89 @@ function EWScannerPage() {
                         })}
                       </div>
                       {/* Wave Price Targets */}
-                      {statusInfo.targets.length > 0 && (
+                      {statusInfo.targets.length > 0 && (() => {
+                        const avgTarget = statusInfo.targets.reduce((s, t) => s + t.price, 0) / statusInfo.targets.length;
+                        const targetArrow = avgTarget > deepCandidate.current ? "↑" : "↓";
+                        return (
                         <div className="mt-2 border-t border-purple-500/10 pt-2">
                           <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
-                            Wave Targets
+                            Wave Targets{" "}
+                            <span className={targetArrow === "↑" ? "text-green-400" : "text-red-400"}>{targetArrow}</span>
                           </p>
-                          {statusInfo.targets.map((t, i) => (
+                          {statusInfo.targets.map((t, i) => {
+                            const pctAway = Math.abs(t.price - deepCandidate.current) / deepCandidate.current;
+                            const isHit = targetArrow === "↑" ? deepCandidate.current >= t.price : deepCandidate.current <= t.price;
+                            const isApproaching = !isHit && pctAway <= 0.02;
+                            return (
                             <div key={i} className="flex justify-between text-xs">
                               <span className="text-purple-200/70">{t.label}</span>
-                              <span className="font-mono text-[#e6e6e6]">${t.price.toFixed(2)}</span>
+                              <span className={`font-mono ${isHit ? "text-green-400" : isApproaching ? "text-yellow-400" : "text-[#e6e6e6]"}`}>
+                                ${t.price.toFixed(2)}{isHit ? " ✓" : ""}
+                              </span>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
-                      )}
+                        );
+                      })()}
+                    </div>
+                    );
+                  })()}
+
+                  {/* Alternate Wave Count Card */}
+                  {deepCandidate?.waveCount?.alternateCount && (() => {
+                    const altWc = deepCandidate.waveCount.alternateCount;
+                    const altStatus = getWaveStatusInfo(altWc, deepCandidate.current);
+                    return (
+                    <div className="rounded-lg border border-purple-500/10 bg-purple-500/[0.02] p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-[#666]">Alternate Wave Count</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-purple-300/70">
+                          {altWc.waves.map((w) => w.label).join("-")}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          altWc.isValid
+                            ? "bg-green-500/15 text-green-400/80"
+                            : "bg-yellow-500/15 text-yellow-400/80"
+                        }`}>
+                          {altWc.isValid ? "Valid" : "Partial"} ({altWc.score}/100)
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          altStatus.status === "completed"
+                            ? "bg-green-500/15 text-green-400/80"
+                            : altStatus.status === "in_progress"
+                            ? "bg-yellow-500/15 text-yellow-400/80"
+                            : "bg-blue-500/15 text-blue-400/80"
+                        }`}>
+                          {altStatus.statusLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-sm font-medium text-purple-200/70">{altStatus.currentWave}</p>
+                      {altStatus.targets.length > 0 && (() => {
+                        const avgTarget = altStatus.targets.reduce((s, t) => s + t.price, 0) / altStatus.targets.length;
+                        const targetArrow = avgTarget > deepCandidate.current ? "↑" : "↓";
+                        return (
+                        <div className="mt-2 border-t border-purple-500/10 pt-2">
+                          <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
+                            Wave Targets{" "}
+                            <span className={targetArrow === "↑" ? "text-green-400" : "text-red-400"}>{targetArrow}</span>
+                          </p>
+                          {altStatus.targets.map((t, i) => {
+                            const pctAway = Math.abs(t.price - deepCandidate.current) / deepCandidate.current;
+                            const isHit = targetArrow === "↑" ? deepCandidate.current >= t.price : deepCandidate.current <= t.price;
+                            const isApproaching = !isHit && pctAway <= 0.02;
+                            return (
+                            <div key={i} className="flex justify-between text-xs">
+                              <span className="text-purple-200/50">{t.label}</span>
+                              <span className={`font-mono ${isHit ? "text-green-400" : isApproaching ? "text-yellow-400" : "text-[#e6e6e6]"}`}>
+                                ${t.price.toFixed(2)}{isHit ? " ✓" : ""}
+                              </span>
+                            </div>
+                            );
+                          })}
+                        </div>
+                        );
+                      })()}
                     </div>
                     );
                   })()}
