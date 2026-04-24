@@ -977,6 +977,17 @@ function EWScannerPage() {
                     className="ew-slider w-full"
                   />
                 </div>
+                <button
+                  onClick={() => {
+                    const defaults = getModeConfig(mode).defaults;
+                    setMinDecline(defaults.minDecline);
+                    setMinMonths(defaults.minMonths);
+                    setMinRecovery(defaults.minRecovery);
+                  }}
+                  className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
+                >
+                  Reset Filters
+                </button>
               </div>
             )}
           </div>
