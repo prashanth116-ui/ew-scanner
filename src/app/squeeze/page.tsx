@@ -181,6 +181,11 @@ function SqueezePage() {
   const [rawResults, setRawResults] = useState<SqueezeData[]>([]);
   const scanAbort = useRef<AbortController | null>(null);
 
+  // Ticker search
+  const [tickerSearch, setTickerSearch] = useState("");
+  const [tickerSearching, setTickerSearching] = useState(false);
+  const [tickerError, setTickerError] = useState<string | null>(null);
+
   // EW enrichment
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState("");
@@ -356,6 +361,43 @@ function SqueezePage() {
     setScanning(false);
     setProgress("");
   }, []);
+
+  // ── Ticker Search ──
+  const lookupTicker = useCallback(async () => {
+    const ticker = tickerSearch.trim().toUpperCase();
+    if (!ticker) return;
+
+    // Skip if already in results
+    if (rawResults.some((r) => r.ticker === ticker)) {
+      setExpandedTicker(ticker);
+      setTickerSearch("");
+      return;
+    }
+
+    setTickerSearching(true);
+    setTickerError(null);
+
+    try {
+      const res = await fetch(`/api/squeeze?ticker=${encodeURIComponent(ticker)}`);
+      if (!res.ok) {
+        setTickerError(`Could not find "${ticker}"`);
+        setTickerSearching(false);
+        return;
+      }
+      const data = await res.json();
+      if (data.error) {
+        setTickerError(data.error);
+        setTickerSearching(false);
+        return;
+      }
+      setRawResults((prev) => [data as SqueezeData, ...prev]);
+      setExpandedTicker(ticker);
+      setTickerSearch("");
+    } catch {
+      setTickerError("Network error");
+    }
+    setTickerSearching(false);
+  }, [tickerSearch, rawResults]);
 
   // ── Enrich with EW ──
   const enrichWithEW = useCallback(async () => {
@@ -822,6 +864,45 @@ function SqueezePage() {
 
       {/* ── Main Content ── */}
       <main className="flex-1 min-w-0">
+        {/* Ticker Search */}
+        <div className="flex items-center gap-2 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#555]" />
+            <input
+              value={tickerSearch}
+              onChange={(e) => setTickerSearch(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && lookupTicker()}
+              placeholder="Search any ticker (e.g. GME, CVNA, AMC)..."
+              className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] py-2.5 pl-10 pr-3 text-sm text-white placeholder-[#555] transition-colors focus:border-[#5ba3e6] focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={lookupTicker}
+            disabled={tickerSearching || !tickerSearch.trim()}
+            className="flex items-center gap-1.5 rounded-lg bg-[#5ba3e6] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#4a8fd4] disabled:opacity-50"
+          >
+            {tickerSearching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            Lookup
+          </button>
+        </div>
+
+        {/* Ticker search error */}
+        {tickerError && (
+          <div className="flex items-center justify-between rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 mb-4">
+            <p className="text-sm text-red-400">{tickerError}</p>
+            <button
+              onClick={() => setTickerError(null)}
+              className="shrink-0 rounded p-1 text-red-400/50 hover:text-red-400"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {/* Progress */}
         {scanning && (
           <div className="mb-4">
