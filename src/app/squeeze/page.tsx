@@ -14,7 +14,9 @@ import {
   TrendingUp,
   PanelLeftClose,
   PanelLeft,
+  BookOpen,
 } from "lucide-react";
+import Link from "next/link";
 import { SQUEEZE_UNIVERSE } from "@/data/squeeze-universe";
 import {
   scoreSqueezeBatch,
@@ -1042,6 +1044,13 @@ function SqueezePage() {
               candidates. Combines SI%, days to cover, float size, volume
               surge, and optional EW wave alignment.
             </p>
+            <Link
+              href="/squeeze/guide"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#a0a0a0] transition-colors hover:text-[#5ba3e6] hover:border-[#5ba3e6]/30"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Squeeze Guide &mdash; Case studies &amp; patterns
+            </Link>
           </div>
         ) : null}
       </main>
