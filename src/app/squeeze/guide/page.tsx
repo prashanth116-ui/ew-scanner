@@ -394,6 +394,38 @@ export default function SqueezeGuidePage() {
             </p>
           </CaseStudy>
 
+          {/* CAR */}
+          <CaseStudy
+            ticker="CAR"
+            name="Avis Budget Group"
+            period="November 2021"
+            move="$170 → $545 (3.2x in 2 days)"
+            verdict="Earnings surprise + low float squeeze"
+          >
+            <CaseStudyTable
+              rows={[
+                ["SI% of Float", "~24%"],
+                ["Days to Cover", "~3-4"],
+                ["Float", "~37M shares"],
+                ["Market Cap (pre)", "~$12B"],
+                ["Catalyst", "Record Q3 earnings — $10.74 EPS vs $7.24 expected + EV fleet announcement"],
+              ]}
+            />
+            <p className="mt-3">
+              Avis reported blowout Q3 2021 earnings, beating estimates by 48%, and announced plans to
+              electrify its rental fleet. The stock surged from $170 to $545 in two trading sessions on
+              Nov 1-2, with volume hitting 50x normal. Circuit breakers halted trading multiple times on
+              Nov 2. The tiny 37M share float amplified the move &mdash; with 24% short, there simply
+              weren&rsquo;t enough shares for shorts to cover without driving the price parabolic.
+            </p>
+            <p className="mt-2">
+              <strong className="text-white">Key lesson:</strong> Earnings surprises are the most common
+              institutional squeeze catalyst. A small float (37M) combined with moderate SI (24%) can be
+              just as explosive as higher SI with a larger float. The stock settled back to ~$300 within a
+              week &mdash; the initial spike overshoots, then finds a new equilibrium.
+            </p>
+          </CaseStudy>
+
           {/* BBBY */}
           <CaseStudy
             ticker="BBBY"
