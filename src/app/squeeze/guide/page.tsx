@@ -10,6 +10,7 @@ import {
   BarChart3,
   Shield,
   BookOpen,
+  ArrowLeft,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -71,16 +72,25 @@ export default function SqueezeGuidePage() {
       <div className="min-w-0 flex-1 space-y-8 pb-16">
         {/* Header */}
         <section>
-          <div className="flex items-center gap-3">
-            <BookOpen className="h-8 w-8 text-red-400" />
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-white">
-                Short Squeeze Guide
-              </h1>
-              <p className="mt-1 text-[#a0a0a0]">
-                Mechanics, real-world case studies, and how to use the screener effectively.
-              </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <BookOpen className="h-8 w-8 text-red-400" />
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-white">
+                  Short Squeeze Guide
+                </h1>
+                <p className="mt-1 text-[#a0a0a0]">
+                  Mechanics, real-world case studies, and how to use the screener effectively.
+                </p>
+              </div>
             </div>
+            <Link
+              href="/squeeze"
+              className="flex items-center gap-1.5 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-sm text-[#a0a0a0] transition-colors hover:text-white hover:border-[#444] shrink-0"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Screener
+            </Link>
           </div>
         </section>
 

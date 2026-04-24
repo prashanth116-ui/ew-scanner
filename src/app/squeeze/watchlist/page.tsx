@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import {
   Plus,
   Trash2,
@@ -12,6 +13,7 @@ import {
   Pencil,
   Check,
   Bell,
+  ArrowLeft,
 } from "lucide-react";
 import {
   loadSqueezeWatchlists,
@@ -184,9 +186,18 @@ export default function SqueezeWatchlistPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-white">Squeeze Watchlists</h1>
-        <p className="text-sm text-[#a0a0a0]">Track squeeze candidates and monitor score changes over time</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-white">Squeeze Watchlists</h1>
+          <p className="text-sm text-[#a0a0a0]">Track squeeze candidates and monitor score changes over time</p>
+        </div>
+        <Link
+          href="/squeeze"
+          className="flex items-center gap-1.5 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-sm text-[#a0a0a0] transition-colors hover:text-white hover:border-[#444]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Screener
+        </Link>
       </div>
 
       {/* Create new */}
