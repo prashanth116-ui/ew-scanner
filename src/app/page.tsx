@@ -1499,243 +1499,129 @@ function EWScannerPage() {
                     </div>
                   </div>
 
-                  {/* Wave Count Quality (V3) */}
+                  {/* Wave Counts: Macro (Weekly) & Micro (Daily) side-by-side */}
                   {deepCandidate?.waveCount && (() => {
-                    const statusInfo = getWaveStatusInfo(deepCandidate.waveCount, deepCandidate.current);
-                    return (
-                    <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-[#666]">Algorithmic Wave Count</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-bold text-purple-300">
-                          {deepCandidate.waveCount.waves.map((w) => w.label).join("-")}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          deepCandidate.waveCount.isValid
-                            ? "bg-green-500/20 text-green-400"
-                            : "bg-yellow-500/20 text-yellow-400"
-                        }`}>
-                          {deepCandidate.waveCount.isValid ? "Valid" : "Partial"} ({deepCandidate.waveCount.score}/100)
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          statusInfo.status === "completed"
-                            ? "bg-green-500/20 text-green-400"
-                            : statusInfo.status === "in_progress"
-                            ? "bg-yellow-500/20 text-yellow-400"
-                            : "bg-blue-500/20 text-blue-400"
-                        }`}>
-                          {statusInfo.statusLabel}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-sm font-medium text-purple-200">{statusInfo.currentWave}</p>
-                      {deepCandidate.waveCount.violations.length > 0 && (
-                        <p className="mt-1 text-[10px] text-red-400/70">
-                          Violations: {deepCandidate.waveCount.violations.join(", ")}
-                        </p>
-                      )}
-                      {/* Wave price table */}
-                      <div className="mt-2 space-y-0.5">
-                        {deepCandidate.waveCount.waves.map((w) => {
-                          const ts = w.timestamp ?? deepCandidate.series?.timestamps[w.index];
-                          const dateStr = ts
-                            ? new Date(ts * 1000).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-                            : "—";
-                          const isHigh = w.type === "high";
-                          return (
-                            <div key={w.label} className="flex items-center gap-3 text-xs">
-                              <span className="w-7 font-mono font-bold text-purple-300">W{w.label}</span>
-                              <span className="w-20 text-right font-mono text-[#e6e6e6]">${w.price.toFixed(2)}</span>
-                              <span className="w-24 font-mono text-[#888]">{dateStr}</span>
-                              <span className={isHigh ? "text-green-400" : "text-red-400"}>{w.type}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {/* Wave Price Targets */}
-                      {statusInfo.targets.length > 0 && (() => {
-                        // Determine target direction from first target vs current price
-                        // Use majority vote: if most targets are above current, direction is ↑
-                        const aboveCount = statusInfo.targets.filter(t => t.price > deepCandidate.current).length;
-                        const targetArrow = aboveCount > statusInfo.targets.length / 2 ? "↑" : "↓";
-                        return (
-                        <div className="mt-2 border-t border-purple-500/10 pt-2">
-                          <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
-                            Wave Targets{" "}
-                            <span className={targetArrow === "↑" ? "text-green-400" : "text-red-400"}>{targetArrow}</span>
-                          </p>
-                          {statusInfo.targets.map((t, i) => {
-                            const pctAway = Math.abs(t.price - deepCandidate.current) / deepCandidate.current;
-                            // Hit = price has already passed this target level
-                            const isHit = targetArrow === "↑" ? deepCandidate.current >= t.price : deepCandidate.current <= t.price;
-                            const isApproaching = !isHit && pctAway <= 0.02;
-                            return (
-                            <div key={i} className="flex justify-between text-xs">
-                              <span className="text-purple-200/70">{t.label}</span>
-                              <span className={`font-mono ${isHit ? "text-green-400" : isApproaching ? "text-yellow-400" : "text-[#e6e6e6]"}`}>
-                                ${t.price.toFixed(2)}{isHit ? " ✓" : ""}
-                              </span>
-                            </div>
-                            );
-                          })}
-                        </div>
-                        );
-                      })()}
-                    </div>
-                    );
-                  })()}
+                    const macroWc = deepCandidate.waveCount;
+                    const macroStatus = getWaveStatusInfo(macroWc, deepCandidate.current);
+                    const microWc = deepCandidate.dailyWaveCount;
+                    const microStatus = microWc ? getWaveStatusInfo(microWc, deepCandidate.current) : null;
+                    const altWc = macroWc.alternateCount;
+                    const altStatus = altWc ? getWaveStatusInfo(altWc, deepCandidate.current) : null;
 
-                  {/* Alternate Wave Count Card */}
-                  {deepCandidate?.waveCount?.alternateCount && (() => {
-                    const altWc = deepCandidate.waveCount.alternateCount;
-                    const altStatus = getWaveStatusInfo(altWc, deepCandidate.current);
-                    return (
-                    <div className="rounded-lg border border-purple-500/10 bg-purple-500/[0.02] p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-[#666]">Alternate Wave Count</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-bold text-purple-300/70">
-                          {altWc.waves.map((w) => w.label).join("-")}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          altWc.isValid
-                            ? "bg-green-500/15 text-green-400/80"
-                            : "bg-yellow-500/15 text-yellow-400/80"
-                        }`}>
-                          {altWc.isValid ? "Valid" : "Partial"} ({altWc.score}/100)
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          altStatus.status === "completed"
-                            ? "bg-green-500/15 text-green-400/80"
-                            : altStatus.status === "in_progress"
-                            ? "bg-yellow-500/15 text-yellow-400/80"
-                            : "bg-blue-500/15 text-blue-400/80"
-                        }`}>
-                          {altStatus.statusLabel}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-sm font-medium text-purple-200/70">{altStatus.currentWave}</p>
-                      {/* Alternate wave price table */}
-                      <div className="mt-2 space-y-0.5">
-                        {altWc.waves.map((w) => {
-                          const ts = w.timestamp ?? deepCandidate.series?.timestamps[w.index];
-                          const dateStr = ts
-                            ? new Date(ts * 1000).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-                            : "—";
-                          const isHigh = w.type === "high";
-                          return (
-                            <div key={w.label} className="flex items-center gap-3 text-xs">
-                              <span className="w-7 font-mono font-bold text-purple-300/70">W{w.label}</span>
-                              <span className="w-20 text-right font-mono text-[#e6e6e6]/80">${w.price.toFixed(2)}</span>
-                              <span className="w-24 font-mono text-[#888]">{dateStr}</span>
-                              <span className={isHigh ? "text-green-400/70" : "text-red-400/70"}>{w.type}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {altStatus.targets.length > 0 && (() => {
-                        const aboveCount = altStatus.targets.filter(t => t.price > deepCandidate.current).length;
-                        const targetArrow = aboveCount > altStatus.targets.length / 2 ? "↑" : "↓";
-                        return (
-                        <div className="mt-2 border-t border-purple-500/10 pt-2">
-                          <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
-                            Wave Targets{" "}
-                            <span className={targetArrow === "↑" ? "text-green-400" : "text-red-400"}>{targetArrow}</span>
-                          </p>
-                          {altStatus.targets.map((t, i) => {
-                            const pctAway = Math.abs(t.price - deepCandidate.current) / deepCandidate.current;
-                            const isHit = targetArrow === "↑" ? deepCandidate.current >= t.price : deepCandidate.current <= t.price;
-                            const isApproaching = !isHit && pctAway <= 0.02;
+                    const renderWaveColumn = (
+                      wc: typeof macroWc,
+                      status: typeof macroStatus,
+                      label: string,
+                      color: "purple" | "cyan",
+                      series?: typeof deepCandidate.series,
+                    ) => {
+                      const c1 = color === "purple" ? "text-purple-300" : "text-cyan-300";
+                      const c2 = color === "purple" ? "text-purple-200" : "text-cyan-200";
+                      const borderC = color === "purple" ? "border-purple-500/10" : "border-cyan-500/10";
+                      const tgtC = color === "purple" ? "text-purple-200/70" : "text-cyan-200/50";
+                      return (
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1.5">{label}</p>
+                          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                            <span className={`text-sm font-bold ${c1}`}>
+                              {wc.waves.map((w) => w.label).join("-")}
+                            </span>
+                            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${
+                              wc.isValid ? "bg-green-500/15 text-green-400/80" : "bg-yellow-500/15 text-yellow-400/80"
+                            }`}>
+                              {wc.isValid ? "Valid" : "Partial"} ({wc.score})
+                            </span>
+                            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${
+                              status.status === "completed" ? "bg-green-500/15 text-green-400/80"
+                              : status.status === "in_progress" ? "bg-yellow-500/15 text-yellow-400/80"
+                              : "bg-blue-500/15 text-blue-400/80"
+                            }`}>
+                              {status.statusLabel}
+                            </span>
+                          </div>
+                          <p className={`text-xs font-medium ${c2} mb-1.5`}>{status.currentWave}</p>
+                          {wc.violations.length > 0 && (
+                            <p className="text-[9px] text-red-400/70 mb-1.5">
+                              {wc.violations.join(", ")}
+                            </p>
+                          )}
+                          {/* Wave table */}
+                          <table className="w-full text-[11px]">
+                            <thead>
+                              <tr className="text-[9px] uppercase text-[#555]">
+                                <th className="text-left font-medium pb-0.5 w-8">Wave</th>
+                                <th className="text-right font-medium pb-0.5">Price</th>
+                                <th className="text-left font-medium pb-0.5 pl-2">Date</th>
+                                <th className="text-left font-medium pb-0.5 pl-1">Type</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {wc.waves.map((w) => {
+                                const ts = w.timestamp ?? series?.timestamps[w.index];
+                                const dateStr = ts
+                                  ? new Date(ts * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })
+                                  : "—";
+                                return (
+                                  <tr key={w.label}>
+                                    <td className={`font-mono font-bold ${c1} py-px`}>W{w.label}</td>
+                                    <td className="text-right font-mono text-[#e6e6e6]/80 py-px">${w.price.toFixed(2)}</td>
+                                    <td className="font-mono text-[#888] pl-2 py-px">{dateStr}</td>
+                                    <td className={`pl-1 py-px ${w.type === "high" ? "text-green-400/70" : "text-red-400/70"}`}>{w.type}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          {/* Targets */}
+                          {status.targets.length > 0 && (() => {
+                            const aboveCount = status.targets.filter(t => t.price > deepCandidate.current).length;
+                            const targetArrow = aboveCount > status.targets.length / 2 ? "↑" : "↓";
                             return (
-                            <div key={i} className="flex justify-between text-xs">
-                              <span className="text-purple-200/50">{t.label}</span>
-                              <span className={`font-mono ${isHit ? "text-green-400" : isApproaching ? "text-yellow-400" : "text-[#e6e6e6]"}`}>
-                                ${t.price.toFixed(2)}{isHit ? " ✓" : ""}
-                              </span>
-                            </div>
+                              <div className={`mt-2 border-t ${borderC} pt-1.5`}>
+                                <p className="text-[9px] uppercase tracking-wider text-[#555] mb-0.5">
+                                  Targets{" "}
+                                  <span className={targetArrow === "↑" ? "text-green-400" : "text-red-400"}>{targetArrow}</span>
+                                </p>
+                                {status.targets.map((t, i) => {
+                                  const pctAway = Math.abs(t.price - deepCandidate.current) / deepCandidate.current;
+                                  const isHit = targetArrow === "↑" ? deepCandidate.current >= t.price : deepCandidate.current <= t.price;
+                                  const isApproaching = !isHit && pctAway <= 0.02;
+                                  return (
+                                    <div key={i} className="flex justify-between text-[11px]">
+                                      <span className={tgtC}>{t.label}</span>
+                                      <span className={`font-mono ${isHit ? "text-green-400" : isApproaching ? "text-yellow-400" : "text-[#e6e6e6]"}`}>
+                                        ${t.price.toFixed(2)}{isHit ? " ✓" : ""}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             );
-                          })}
+                          })()}
                         </div>
-                        );
-                      })()}
-                    </div>
-                    );
-                  })()}
+                      );
+                    };
 
-                  {/* Daily Wave Count Card (Micro) */}
-                  {deepCandidate?.dailyWaveCount && (() => {
-                    const dwc = deepCandidate.dailyWaveCount;
-                    const dailyStatus = getWaveStatusInfo(dwc, deepCandidate.current);
                     return (
-                    <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-[#666]">Daily Wave Count (Micro)</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-bold text-cyan-300">
-                          {dwc.waves.map((w) => w.label).join("-")}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          dwc.isValid
-                            ? "bg-green-500/15 text-green-400/80"
-                            : "bg-yellow-500/15 text-yellow-400/80"
-                        }`}>
-                          {dwc.isValid ? "Valid" : "Partial"} ({dwc.score}/100)
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          dailyStatus.status === "completed"
-                            ? "bg-green-500/15 text-green-400/80"
-                            : dailyStatus.status === "in_progress"
-                            ? "bg-yellow-500/15 text-yellow-400/80"
-                            : "bg-blue-500/15 text-blue-400/80"
-                        }`}>
-                          {dailyStatus.statusLabel}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-sm font-medium text-cyan-200">{dailyStatus.currentWave}</p>
-                      {dwc.violations.length > 0 && (
-                        <p className="mt-1 text-[10px] text-red-400/70">
-                          Violations: {dwc.violations.join(", ")}
-                        </p>
-                      )}
-                      {/* Daily wave price table */}
-                      <div className="mt-2 space-y-0.5">
-                        {dwc.waves.map((w) => {
-                          const ts = w.timestamp ?? deepCandidate.dailySeries?.timestamps[w.index];
-                          const dateStr = ts
-                            ? new Date(ts * 1000).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-                            : "—";
-                          const isHigh = w.type === "high";
-                          return (
-                            <div key={w.label} className="flex items-center gap-3 text-xs">
-                              <span className="w-7 font-mono font-bold text-cyan-300">W{w.label}</span>
-                              <span className="w-20 text-right font-mono text-[#e6e6e6]/80">${w.price.toFixed(2)}</span>
-                              <span className="w-24 font-mono text-[#888]">{dateStr}</span>
-                              <span className={isHigh ? "text-green-400/70" : "text-red-400/70"}>{w.type}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {dailyStatus.targets.length > 0 && (() => {
-                        const aboveCount = dailyStatus.targets.filter(t => t.price > deepCandidate.current).length;
-                        const targetArrow = aboveCount > dailyStatus.targets.length / 2 ? "↑" : "↓";
-                        return (
-                        <div className="mt-2 border-t border-cyan-500/10 pt-2">
-                          <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
-                            Wave Targets{" "}
-                            <span className={targetArrow === "↑" ? "text-green-400" : "text-red-400"}>{targetArrow}</span>
-                          </p>
-                          {dailyStatus.targets.map((t, i) => {
-                            const pctAway = Math.abs(t.price - deepCandidate.current) / deepCandidate.current;
-                            const isHit = targetArrow === "↑" ? deepCandidate.current >= t.price : deepCandidate.current <= t.price;
-                            const isApproaching = !isHit && pctAway <= 0.02;
-                            return (
-                            <div key={i} className="flex justify-between text-xs">
-                              <span className="text-cyan-200/50">{t.label}</span>
-                              <span className={`font-mono ${isHit ? "text-green-400" : isApproaching ? "text-yellow-400" : "text-[#e6e6e6]"}`}>
-                                ${t.price.toFixed(2)}{isHit ? " ✓" : ""}
-                              </span>
-                            </div>
-                            );
-                          })}
+                    <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
+                      <div className={`grid gap-4 ${microWc ? "grid-cols-2" : "grid-cols-1"}`}>
+                        {/* Macro (Weekly) column */}
+                        <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-2.5">
+                          {renderWaveColumn(macroWc, macroStatus, "Macro (Weekly)", "purple", deepCandidate.series)}
                         </div>
-                        );
-                      })()}
+                        {/* Micro (Daily) column */}
+                        {microWc && microStatus && (
+                          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-2.5">
+                            {renderWaveColumn(microWc, microStatus, "Micro (Daily)", "cyan", deepCandidate.dailySeries)}
+                          </div>
+                        )}
+                      </div>
+                      {/* Alternate count row below */}
+                      {altWc && altStatus && (
+                        <div className="mt-3 rounded-lg border border-purple-500/10 bg-purple-500/[0.02] p-2.5">
+                          {renderWaveColumn(altWc, altStatus, "Alternate Count", "purple", deepCandidate.series)}
+                        </div>
+                      )}
                     </div>
                     );
                   })()}
