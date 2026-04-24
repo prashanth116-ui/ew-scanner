@@ -15,7 +15,7 @@ import {
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
-import { UNIVERSES, UNIVERSE_KEYS } from "@/data/ew-universes";
+import { SQUEEZE_UNIVERSE } from "@/data/squeeze-universe";
 import {
   scoreSqueezeBatch,
   computeSqueezeScore,
@@ -175,20 +175,7 @@ export default function SqueezePageWrapper() {
   );
 }
 
-// Build deduplicated combined ticker list from all universes
-const ALL_TICKERS = (() => {
-  const seen = new Set<string>();
-  const result: { symbol: string; name: string }[] = [];
-  for (const key of UNIVERSE_KEYS) {
-    for (const t of UNIVERSES[key]) {
-      if (!seen.has(t.symbol)) {
-        seen.add(t.symbol);
-        result.push({ symbol: t.symbol, name: t.name });
-      }
-    }
-  }
-  return result;
-})();
+const ALL_TICKERS = SQUEEZE_UNIVERSE;
 
 function SqueezePage() {
   // Filters
