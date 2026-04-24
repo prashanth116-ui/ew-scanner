@@ -73,6 +73,7 @@ export default function SqueezeWatchlistPage() {
   }, [newName, refresh]);
 
   const handleDelete = useCallback((id: string) => {
+    if (!confirm("Delete this watchlist and all its items?")) return;
     deleteSqueezeWatchlist(id);
     refresh();
   }, [refresh]);
@@ -357,7 +358,7 @@ export default function SqueezeWatchlistPage() {
               )}
 
               {expanded.has(wl.id) && wl.items.length === 0 && (
-                <div className="border-t border-[#2a2a2a] px-4 py-6 text-center text-xs text-[#555]">
+                <div className="border-t border-[#2a2a2a] px-4 py-6 text-center text-xs text-[#666]">
                   Empty watchlist. Add stocks from the Squeeze screener.
                 </div>
               )}
@@ -393,7 +394,7 @@ export default function SqueezeWatchlistPage() {
                           <span className={TIER_COLORS[r.newTier]}>
                             {r.newTier}
                           </span>
-                          <span className="text-[#555]">
+                          <span className="text-[#666]">
                             SI: {r.newSi.toFixed(1)}%
                           </span>
                         </div>

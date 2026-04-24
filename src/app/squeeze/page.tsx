@@ -521,6 +521,7 @@ function SqueezePage() {
   }, [saveName, filters, scored]);
 
   const handleDelete = useCallback((id: string) => {
+    if (!confirm("Delete this saved scan?")) return;
     deleteSqueezeScan(id);
     setSavedScans(loadSqueezeScans());
   }, []);
@@ -612,15 +613,24 @@ function SqueezePage() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
-      {/* ── Sidebar Toggle (visible when collapsed on lg) ── */}
+      {/* ── Sidebar Toggle (visible when collapsed) ── */}
       {!sidebarOpen && (
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="hidden lg:flex items-center justify-center w-8 h-8 rounded-md border border-[#2a2a2a] bg-[#141414] text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors shrink-0 self-start sticky top-20"
-          title="Show sidebar"
-        >
-          <PanelLeft className="h-4 w-4" />
-        </button>
+        <>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-md border border-[#2a2a2a] bg-[#141414] text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors shrink-0 self-start sticky top-20"
+            title="Show sidebar"
+          >
+            <PanelLeft className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="lg:hidden flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#141414] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors self-start"
+          >
+            <PanelLeft className="h-3.5 w-3.5" />
+            Filters
+          </button>
+        </>
       )}
 
       {/* ── Left Sidebar ── */}
@@ -630,7 +640,7 @@ function SqueezePage() {
           <h2 className="text-sm font-semibold text-[#a0a0a0] uppercase tracking-wider">Controls</h2>
           <button
             onClick={() => setSidebarOpen(false)}
-            className="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-[#666] hover:text-white hover:bg-[#1a1a1a] transition-colors"
+            className="flex items-center justify-center w-7 h-7 rounded-md text-[#666] hover:text-white hover:bg-[#1a1a1a] transition-colors"
             title="Hide sidebar"
           >
             <PanelLeftClose className="h-4 w-4" />
@@ -665,7 +675,7 @@ function SqueezePage() {
                           </span>
                         )}
                       </p>
-                      <p className="text-[10px] leading-tight text-[#555] group-hover:text-[#888]">
+                      <p className="text-[10px] leading-tight text-[#555] group-hover:text-[#a0a0a0]">
                         {p.description}
                       </p>
                     </div>
@@ -817,6 +827,21 @@ function SqueezePage() {
                 />
                 Require EW Alignment
               </label>
+              <button
+                onClick={() => {
+                  setMinSiPercent(DEFAULT_SQUEEZE_FILTERS.minSiPercent);
+                  setMinDtc(DEFAULT_SQUEEZE_FILTERS.minDaysToCover);
+                  setMaxFloat(DEFAULT_SQUEEZE_FILTERS.maxFloat);
+                  setMinVolRatio(DEFAULT_SQUEEZE_FILTERS.minVolumeRatio);
+                  setMaxMktCap(DEFAULT_SQUEEZE_FILTERS.maxMarketCap);
+                  setMaxNearLow(DEFAULT_SQUEEZE_FILTERS.maxNearLowPct);
+                  setMinScore(DEFAULT_SQUEEZE_FILTERS.minScore);
+                  setRequireEw(DEFAULT_SQUEEZE_FILTERS.requireEwAlignment);
+                }}
+                className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
+              >
+                Reset Filters
+              </button>
             </div>
           )}
         </div>

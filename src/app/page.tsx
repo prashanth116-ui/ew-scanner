@@ -195,6 +195,7 @@ function EWScannerPage() {
   const [customUniverseKeys, setCustomUniverseKeys] = useState<string[]>([]);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
   const [showAlertConfig, setShowAlertConfig] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   // Collapsible left panel sections (stores collapsed section keys)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -669,11 +670,17 @@ function EWScannerPage() {
   );
 
   // --- Save Scan ---
+  const showFeedback = useCallback((msg: string) => {
+    setActionFeedback(msg);
+    setTimeout(() => setActionFeedback(null), 2000);
+  }, []);
+
   const handleSave = useCallback(() => {
     const name = `${getModeConfig(mode).shortLabel} - ${universe} - ${new Date().toLocaleDateString()}`;
     saveScan(name, mode, universe, { minDecline, minMonths, minRecovery }, modeFiltered, labels);
     setSavedScans(loadScans());
-  }, [mode, universe, minDecline, minMonths, minRecovery, modeFiltered, labels]);
+    showFeedback("Scan saved");
+  }, [mode, universe, minDecline, minMonths, minRecovery, modeFiltered, labels, showFeedback]);
 
   const handleLoadScan = useCallback((scan: SavedScan) => {
     setMode(scan.mode);
@@ -692,6 +699,7 @@ function EWScannerPage() {
   }, []);
 
   const handleDeleteScan = useCallback((id: string) => {
+    if (!confirm("Delete this saved scan?")) return;
     deleteScan(id);
     setSavedScans(loadScans());
   }, []);
@@ -1136,7 +1144,7 @@ function EWScannerPage() {
                     </span>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={handleSave}
                     className="flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white"
@@ -1146,14 +1154,14 @@ function EWScannerPage() {
                     Save
                   </button>
                   <button
-                    onClick={() => exportEnhancedToExcel(modeFiltered, labels, mode)}
+                    onClick={() => { exportEnhancedToExcel(modeFiltered, labels, mode); showFeedback("Exported to Excel"); }}
                     className="flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white"
                   >
                     <FileSpreadsheet className="h-3.5 w-3.5" />
                     Excel
                   </button>
                   <button
-                    onClick={() => exportEnhancedToCsv(modeFiltered, labels, mode)}
+                    onClick={() => { exportEnhancedToCsv(modeFiltered, labels, mode); showFeedback("Exported to CSV"); }}
                     className="flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white"
                   >
                     <FileDown className="h-3.5 w-3.5" />
@@ -1167,6 +1175,11 @@ function EWScannerPage() {
                     <Bell className="h-3.5 w-3.5" />
                     Alert
                   </button>
+                  {actionFeedback && (
+                    <span className="text-xs text-green-400 flex items-center gap-1">
+                      <Check className="h-3 w-3" /> {actionFeedback}
+                    </span>
+                  )}
                 </div>
               </div>
 

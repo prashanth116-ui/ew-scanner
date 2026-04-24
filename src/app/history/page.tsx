@@ -58,6 +58,7 @@ export default function HistoryPage() {
   const refresh = useCallback(() => setScans(loadScans()), []);
 
   const handleDelete = useCallback((id: string) => {
+    if (!confirm("Delete this saved scan?")) return;
     deleteScan(id);
     setSelected((prev) => { const s = new Set(prev); s.delete(id); return s; });
     setScans(loadScans());

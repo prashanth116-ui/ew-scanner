@@ -21,6 +21,19 @@ export const metadata: Metadata = {
   },
   description:
     "Elliott Wave Scanner — Algorithmic wave counting, Fibonacci analysis, and AI-powered deep analysis.",
+  openGraph: {
+    title: "EW Scanner",
+    description:
+      "Elliott Wave Scanner — Algorithmic wave counting, Fibonacci analysis, and AI-powered deep analysis.",
+    siteName: "EW Scanner",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "EW Scanner",
+    description:
+      "Elliott Wave Scanner — Algorithmic wave counting, Fibonacci analysis, and AI-powered deep analysis.",
+  },
 };
 
 export default function RootLayout({
@@ -40,14 +53,7 @@ export default function RootLayout({
         <footer className="border-t border-[#2a2a2a] bg-[#0f0f0f]">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 text-xs text-[#555]">
             <span>Elliott Wave Scanner</span>
-            <a
-              href="https://github.com/prashanth116-ui/ew-scanner"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:text-[#a0a0a0]"
-            >
-              GitHub
-            </a>
+            <span>&copy; 2026</span>
           </div>
         </footer>
       </body>

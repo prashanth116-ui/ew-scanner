@@ -259,7 +259,7 @@ export default function SqueezeGuidePage() {
               <li><strong className="text-white">Near 52-week lows</strong> (complacent shorts, maximum pain potential)</li>
               <li><strong className="text-white">Identifiable catalyst</strong> (earnings, activist, regulatory, retail coordination)</li>
             </ul>
-            <p className="mt-2 text-[#888]">
+            <p className="mt-2 text-[#a0a0a0]">
               Each missing condition reduces the probability and magnitude. GME had all six. AMC had 3-4. BBBY had 4-5 but the catalyst evaporated.
             </p>
           </SubSection>
@@ -274,7 +274,7 @@ export default function SqueezeGuidePage() {
               <li><strong className="text-white">10-50x avg</strong> &mdash; Active squeeze, forced covering in progress</li>
               <li><strong className="text-white">50x+ avg</strong> &mdash; Peak squeeze, maximum buying pressure</li>
             </ul>
-            <p className="mt-2 text-[#888]">
+            <p className="mt-2 text-[#a0a0a0]">
               When volume drops back to normal, the squeeze is ending. This is the single best timing indicator for exits.
             </p>
           </SubSection>
@@ -336,7 +336,7 @@ export default function SqueezeGuidePage() {
               <li><strong className="text-white">Exhaustion (1-3 days)</strong> &mdash; Volume drops, no new shorts to cover, price peaks</li>
               <li><strong className="text-white">Collapse (days-weeks)</strong> &mdash; Price retraces 50-80%+ as momentum buyers exit</li>
             </ul>
-            <p className="mt-2 text-[#888]">
+            <p className="mt-2 text-[#a0a0a0]">
               Exception: Fundamental turnarounds (CVNA, TSLA) can sustain elevated prices because the
               thesis changes. Pure momentum squeezes (AMC, BBBY) almost always give back most gains.
             </p>
@@ -676,7 +676,7 @@ export default function SqueezeGuidePage() {
               <li><strong className="text-white">Wave C completion</strong> &mdash; End of an A-B-C correction, maximum pessimism, shorts most extended</li>
               <li><strong className="text-white">Wave 4 pullback</strong> &mdash; Shallow dip in an uptrend that triggers short entries, then reverses sharply into Wave 5</li>
             </ul>
-            <p className="mt-2 text-[#888]">
+            <p className="mt-2 text-[#a0a0a0]">
               Click &ldquo;Enrich Top 20 with EW Wave Position&rdquo; after scanning to add wave labels. This uses
               the same AI analysis as the main EW Scanner.
             </p>
@@ -858,7 +858,7 @@ function MetricCard({
             <span className="shrink-0 rounded bg-red-500/10 px-1.5 py-0.5 font-mono text-red-400">
               {l.range}
             </span>
-            <span className="text-[#888]">{l.desc}</span>
+            <span className="text-[#a0a0a0]">{l.desc}</span>
           </div>
         ))}
       </div>
@@ -892,7 +892,7 @@ function CaseStudy({
       </div>
       <div className="mb-3 flex flex-wrap gap-3 text-xs">
         <span className="text-green-400">{move}</span>
-        <span className="text-[#888]">&mdash; {verdict}</span>
+        <span className="text-[#a0a0a0]">&mdash; {verdict}</span>
       </div>
       <div className="text-sm text-[#c0c0c0]">{children}</div>
     </div>
@@ -906,7 +906,7 @@ function CaseStudyTable({ rows }: { rows: [string, string][] }) {
         <tbody>
           {rows.map(([label, value]) => (
             <tr key={label} className="border-b border-[#333]">
-              <td className="px-2 py-1.5 text-[#888] w-36">{label}</td>
+              <td className="px-2 py-1.5 text-[#a0a0a0] w-36">{label}</td>
               <td className="px-2 py-1.5 text-white">{value}</td>
             </tr>
           ))}
@@ -929,7 +929,7 @@ function PresetExplainer({
     <div className="rounded border border-[#333] bg-[#1a1a1a] p-2.5">
       <p className="text-xs font-semibold text-white">{name}</p>
       <p className="mt-0.5 font-mono text-[10px] text-[#666]">{filters}</p>
-      <p className="mt-1 text-xs text-[#888]">{desc}</p>
+      <p className="mt-1 text-xs text-[#a0a0a0]">{desc}</p>
     </div>
   );
 }

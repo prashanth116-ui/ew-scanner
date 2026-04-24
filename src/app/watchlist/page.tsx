@@ -70,6 +70,7 @@ export default function WatchlistPage() {
   }, [newName, refresh]);
 
   const handleDelete = useCallback((id: string) => {
+    if (!confirm("Delete this watchlist and all its items?")) return;
     deleteWatchlist(id);
     refresh();
   }, [refresh]);
