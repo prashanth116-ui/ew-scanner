@@ -184,6 +184,7 @@ export function countCorrectiveWaves(
 
   let bestCount: WaveCount | null = null;
   let bestScore = -1;
+  let bestIsValid = false;
 
   const limit = Math.min(alternating.length, 15);
 
@@ -192,9 +193,13 @@ export function countCorrectiveWaves(
     // Structural preference: patterns starting from the first swing (ATH or major pivot)
     // are more analytically meaningful than small sub-corrections from intermediate swings
     if (p0 === alternating[0]) score = Math.min(100, score + 5);
-    if (score <= bestScore) return;
-    bestScore = score;
     const { isValid, violations } = validateCorrection(p0, pA, pB, pC, direction);
+    // Prefer valid counts: valid always beats invalid, then highest score
+    const dominated = bestIsValid && !isValid;
+    const dominates = isValid && !bestIsValid;
+    if (!dominates && (dominated || score <= bestScore)) return;
+    bestScore = score;
+    bestIsValid = isValid;
     const labels: WaveLabel[] = ["A", "B", "C"];
     const waves: WavePoint[] = [pA, pB, pC].map((p, idx) => ({
       ...p,
@@ -615,6 +620,16 @@ function scoreCorrection(
   // Rule adherence (30 pts)
   const { violations } = validateCorrection(p0, pA, pB, pC, direction);
   score += Math.max(0, 30 - violations.length * 10);
+
+  // Penalty for Wave B exceeding start — but allow flat-like proportions (B retrace up to 138% of A)
+  // Expanded flats have B > origin, but B retrace should be <= 1.382 of Wave A length
+  if (direction === "up" && pB.price >= p0.price) {
+    const bRetrace = wALen > 0 ? Math.abs(pB.price - pA.price) / wALen : 0;
+    if (bRetrace > 1.382) score -= 20;
+  } else if (direction === "down" && pB.price <= p0.price) {
+    const bRetrace = wALen > 0 ? Math.abs(pB.price - pA.price) / wALen : 0;
+    if (bRetrace > 1.382) score -= 20;
+  }
 
   return Math.max(0, Math.min(100, Math.round(score)));
 }
