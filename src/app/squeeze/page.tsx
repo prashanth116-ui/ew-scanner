@@ -25,6 +25,7 @@ import {
   computeSqueezeScore,
   DEFAULT_SQUEEZE_FILTERS,
   isSqueezeAlignedWavePosition,
+  normalizeSiPercent,
 } from "@/lib/squeeze-scoring";
 import {
   saveSqueezeScan,
@@ -110,9 +111,7 @@ function formatM(val: number | null): string {
 
 function formatPct(val: number | null): string {
   if (val == null) return "-";
-  // Yahoo may return as decimal (0.15) or percentage (15)
-  const pct = val > 1 ? val : val * 100;
-  return `${pct.toFixed(1)}%`;
+  return `${normalizeSiPercent(val).toFixed(1)}%`;
 }
 
 function formatNum(val: number | null, decimals = 2): string {
@@ -304,7 +303,7 @@ function SqueezePage() {
     const siVals = scored
       .map((c) => c.shortPercentOfFloat)
       .filter((v): v is number => v != null)
-      .map((v) => (v > 1 ? v : v * 100));
+      .map((v) => normalizeSiPercent(v));
     const dtcVals = scored
       .map((c) => c.shortRatio)
       .filter((v): v is number => v != null);
@@ -544,13 +543,25 @@ function SqueezePage() {
   }, []);
 
   // ── Add to Watchlist ──
+  const [addError, setAddError] = useState<string | null>(null);
   const handleAddToWatchlist = useCallback(
     (wlId: string, candidate: ScoredSqueezeCandidate) => {
+      setAddError(null);
+      const lists = loadSqueezeWatchlists();
+      const wl = lists.find((w) => w.id === wlId);
+      if (wl?.items.some((i) => i.ticker === candidate.ticker)) {
+        setAddError(`${candidate.ticker} already in "${wl.name}"`);
+        setTimeout(() => setAddError(null), 2500);
+        return;
+      }
       const ok = addToSqueezeWatchlist(wlId, candidate);
       if (ok) {
         setAddedTicker(candidate.ticker);
         setSqueezeWatchlists(loadSqueezeWatchlists());
         setTimeout(() => setAddedTicker(null), 1500);
+      } else {
+        setAddError("Watchlist full (max 100 items)");
+        setTimeout(() => setAddError(null), 2500);
       }
     },
     []
@@ -1024,6 +1035,12 @@ function SqueezePage() {
           </div>
         )}
 
+        {addError && (
+          <div className="mb-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            {addError}
+          </div>
+        )}
+
         {/* Results table */}
         {sorted.length > 0 ? (
           <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] overflow-hidden">
@@ -1170,7 +1187,7 @@ function TableRow({
           )}
         </td>
         <td className="px-3 py-2.5">
-          <div className="relative">
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
             {justAdded ? (
               <Check className="h-4 w-4 text-green-400" />
             ) : (

@@ -22,7 +22,7 @@ import {
   renameSqueezeWatchlist,
   removeFromSqueezeWatchlist,
 } from "@/lib/squeeze-watchlists";
-import { computeSqueezeScore } from "@/lib/squeeze-scoring";
+import { computeSqueezeScore, normalizeSiPercent } from "@/lib/squeeze-scoring";
 import type { SqueezeWatchlist, SqueezeWatchlistItem, SqueezeData, SqueezeTier } from "@/lib/ew-types";
 
 const TIER_COLORS: Record<SqueezeTier, string> = {
@@ -60,7 +60,7 @@ export default function SqueezeWatchlistPage() {
 
   useEffect(() => {
     setWatchlists(loadSqueezeWatchlists());
-    return () => { scanAbortRef.current?.abort(); };
+    return () => { scanAbortRef.current?.abort(); scanAbortRef.current = null; };
   }, []);
 
   const refresh = useCallback(() => setWatchlists(loadSqueezeWatchlists()), []);
@@ -105,6 +105,7 @@ export default function SqueezeWatchlistPage() {
 
     setScanning(wl.id);
     setScanProgress("Fetching squeeze data...");
+    setScanResults((prev) => { const n = { ...prev }; delete n[wl.id]; return n; });
 
     const tickers = wl.items.map((i) => i.ticker);
     const results: QuickScanResult[] = [];
@@ -130,7 +131,6 @@ export default function SqueezeWatchlistPage() {
           const item = wl.items.find((wi) => wi.ticker === fresh.ticker);
           if (!item) continue;
 
-          const newSi = fresh.shortPercentOfFloat ?? 0;
           results.push({
             ticker: fresh.ticker,
             name: item.name,
@@ -139,7 +139,7 @@ export default function SqueezeWatchlistPage() {
             delta: scored.squeezeScore - item.scoreAtAdd,
             newTier: scored.tier,
             oldSi: item.siPercentAtAdd,
-            newSi: newSi > 1 ? newSi : newSi * 100,
+            newSi: normalizeSiPercent(fresh.shortPercentOfFloat),
           });
         }
       }

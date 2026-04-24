@@ -34,10 +34,16 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
+/** Normalize SI% — Yahoo returns decimal (0.15 = 15%), convert to percentage if needed. */
+export function normalizeSiPercent(val: number | null | undefined): number {
+  if (val == null || val <= 0) return 0;
+  return val > 1 ? val : val * 100;
+}
+
 // SI% of float: 0-25 pts (linear 0% → 0, 40%+ → 25)
 function scoreSiPercent(si: number | null): number {
   if (si == null || si <= 0) return 0;
-  const pct = si > 1 ? si : si * 100;
+  const pct = normalizeSiPercent(si);
   return clamp((pct / 40) * 25, 0, 25);
 }
 
@@ -147,9 +153,7 @@ export function scoreSqueezeBatch(
       // Min score filter
       if (c.squeezeScore < filters.minScore) return false;
 
-      const siPct = c.shortPercentOfFloat != null
-        ? (c.shortPercentOfFloat > 1 ? c.shortPercentOfFloat : c.shortPercentOfFloat * 100)
-        : 0;
+      const siPct = normalizeSiPercent(c.shortPercentOfFloat);
       if (siPct < filters.minSiPercent) return false;
       if ((c.shortRatio ?? 0) < filters.minDaysToCover) return false;
       if (filters.maxFloat > 0 && c.floatShares != null) {

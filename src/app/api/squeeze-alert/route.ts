@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
-import { computeSqueezeScore } from "@/lib/squeeze-scoring";
+import { computeSqueezeScore, normalizeSiPercent } from "@/lib/squeeze-scoring";
 import { fetchSqueezeData } from "@/lib/squeeze-fetch";
 import { sendTelegramMessage } from "@/lib/ew-telegram";
 import { logError } from "@/lib/error-logger";
@@ -87,7 +87,6 @@ export async function POST(request: NextRequest) {
       const delta = scored.squeezeScore - item.scoreAtAdd;
 
       if (Math.abs(delta) >= threshold) {
-        const newSi = fresh.shortPercentOfFloat ?? 0;
         triggered.push({
           ticker: item.ticker,
           name: item.name,
@@ -95,7 +94,7 @@ export async function POST(request: NextRequest) {
           newScore: scored.squeezeScore,
           delta,
           oldSi: item.siPercentAtAdd,
-          newSi: newSi > 1 ? newSi : newSi * 100,
+          newSi: normalizeSiPercent(fresh.shortPercentOfFloat),
         });
       }
     }

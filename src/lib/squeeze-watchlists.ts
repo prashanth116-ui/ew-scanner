@@ -1,4 +1,5 @@
 import type { SqueezeWatchlist, SqueezeWatchlistItem, ScoredSqueezeCandidate } from "./ew-types";
+import { normalizeSiPercent } from "./squeeze-scoring";
 
 const STORAGE_KEY = "ew-scanner-squeeze-watchlists";
 const MAX_WATCHLISTS = 20;
@@ -65,13 +66,12 @@ export function addToSqueezeWatchlist(
   if (wl.items.length >= MAX_ITEMS_PER_LIST) return false;
   if (wl.items.some((i) => i.ticker === candidate.ticker)) return false;
 
-  const siPct = candidate.shortPercentOfFloat ?? 0;
   const item: SqueezeWatchlistItem = {
     ticker: candidate.ticker,
     name: candidate.name,
     addedAt: new Date().toISOString(),
     scoreAtAdd: candidate.squeezeScore,
-    siPercentAtAdd: siPct > 1 ? siPct : siPct * 100,
+    siPercentAtAdd: normalizeSiPercent(candidate.shortPercentOfFloat),
     tierAtAdd: candidate.tier,
   };
   wl.items.push(item);
