@@ -64,9 +64,28 @@ export function countWaves(
   if (isRecovering && recoveryCandidates.length > 0) {
     recoveryCandidates.sort(sortByQuality);
     best = recoveryCandidates[0];
-    const alternates = [...recoveryCandidates.slice(1), ...declineCandidates];
-    alternates.sort(sortByQuality);
-    if (alternates.length > 0) best.alternateCount = alternates[0];
+
+    // If best recovery candidate is invalid, check for valid decline candidates
+    // An invalid recovery count (e.g., Wave B exceeds start) shouldn't beat a valid decline count
+    if (!best.isValid && declineCandidates.length > 0) {
+      const validDecline = declineCandidates.filter((c) => c.isValid);
+      validDecline.sort(sortByQuality);
+      if (validDecline.length > 0) {
+        const invalidRecovery = best;
+        best = validDecline[0];
+        const alternates = [invalidRecovery, ...recoveryCandidates.slice(1), ...declineCandidates.filter((c) => c !== best)];
+        alternates.sort(sortByQuality);
+        if (alternates.length > 0) best.alternateCount = alternates[0];
+      } else {
+        const alternates = [...recoveryCandidates.slice(1), ...declineCandidates];
+        alternates.sort(sortByQuality);
+        if (alternates.length > 0) best.alternateCount = alternates[0];
+      }
+    } else {
+      const alternates = [...recoveryCandidates.slice(1), ...declineCandidates];
+      alternates.sort(sortByQuality);
+      if (alternates.length > 0) best.alternateCount = alternates[0];
+    }
   } else if (isRecovering) {
     // Recovering but no recovery candidates — exclude developingDecline
     // (bearish developing with downside targets is misleading for a bouncing stock)
