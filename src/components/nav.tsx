@@ -6,7 +6,7 @@ import { Activity, Menu, X } from "lucide-react";
 import { useState } from "react";
 
 const ewItems = [
-  { href: "/", label: "EW Scanner" },
+  { href: "/", label: "Scanner" },
   { href: "/history", label: "History" },
   { href: "/watchlist", label: "Watchlists" },
   { href: "/guide", label: "Guide" },
@@ -27,51 +27,58 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-50 border-b border-[#2a2a2a] bg-[#0f0f0f]/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
-        <Link href="/" className="flex items-center gap-2">
-          <Activity className="h-5 w-5 text-[#5ba3e6]" />
-          <span className="text-lg font-bold tracking-tight text-white">
-            EW Scanner
-          </span>
-        </Link>
+        {/* Left: Logo + EW nav */}
+        <div className="flex items-center gap-4">
+          <Link href="/" className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-[#5ba3e6]" />
+            <span className="text-lg font-bold tracking-tight text-white">
+              EW Scanner
+            </span>
+          </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 sm:flex">
-          {ewItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                isActive(item.href)
-                  ? "bg-[#185FA5]/20 text-[#5ba3e6]"
-                  : "text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-          <div className="mx-1 h-4 w-px bg-[#333]" />
-          {squeezeItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                isActive(item.href)
-                  ? "bg-[#185FA5]/20 text-[#5ba3e6]"
-                  : "text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+          <nav className="hidden items-center gap-1 sm:flex">
+            {ewItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  isActive(item.href)
+                    ? "bg-[#185FA5]/20 text-[#5ba3e6]"
+                    : "text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
 
-        {/* Mobile toggle */}
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="rounded-md p-2 text-[#a0a0a0] hover:bg-[#1a1a1a] sm:hidden"
-        >
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        {/* Right: Squeeze nav */}
+        <div className="flex items-center gap-1">
+          <nav className="hidden items-center gap-1 sm:flex">
+            {squeezeItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  isActive(item.href)
+                    ? "bg-[#185FA5]/20 text-[#5ba3e6]"
+                    : "text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* Mobile toggle */}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="rounded-md p-2 text-[#a0a0a0] hover:bg-[#1a1a1a] sm:hidden"
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile nav */}

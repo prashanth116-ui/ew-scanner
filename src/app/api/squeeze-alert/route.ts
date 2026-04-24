@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { computeSqueezeScore } from "@/lib/squeeze-scoring";
+import { fetchSqueezeData } from "@/lib/squeeze-fetch";
 import { sendTelegramMessage } from "@/lib/ew-telegram";
 import { logError } from "@/lib/error-logger";
 import type { SqueezeWatchlist, SqueezeData } from "@/lib/ew-types";
@@ -41,20 +42,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Fetch fresh squeeze data for each ticker
+    // Fetch fresh squeeze data directly from Yahoo (no self-fetch)
     const squeezeMap = new Map<string, SqueezeData>();
 
     for (let i = 0; i < watchlist.items.length; i += BATCH_SIZE) {
       const batch = watchlist.items.slice(i, i + BATCH_SIZE);
       const settled = await Promise.allSettled(
         batch.map(async (item) => {
-          const url = new URL("/api/squeeze", request.url);
-          url.searchParams.set("ticker", item.ticker);
-          const res = await fetch(url.toString());
-          if (!res.ok) return null;
-          const data = await res.json();
-          if (data.error) return null;
-          return data as SqueezeData;
+          return fetchSqueezeData(item.ticker);
         })
       );
 
