@@ -817,15 +817,21 @@ export function getWaveStatusInfo(wc: WaveCount, currentPrice: number): WaveStat
       currentWave = "Beyond Wave 5 — possible extension";
     }
   } else if (hasAllFive || isABC) {
-    status = "in_progress";
-    // Extract which wave from position
-    if (pos.includes("wave 3")) statusLabel = "Wave 3 In Progress";
-    else if (pos.includes("wave 5")) statusLabel = "Wave 5 In Progress";
-    else if (pos.includes("wave 4")) statusLabel = "Wave 4 Correction";
-    else if (pos.includes("wave 2")) statusLabel = "Wave 2 Correction";
-    else if (pos.includes("wave 1")) statusLabel = "Wave 1 In Progress";
-    else if (pos.includes("wave c")) statusLabel = "Wave C In Progress";
-    else statusLabel = "In Progress";
+    // Check for completed correction before defaulting to in_progress
+    if (isABC && (pos.includes("complete") || pos.includes("beyond"))) {
+      status = "completed";
+      statusLabel = "Correction Complete";
+    } else {
+      status = "in_progress";
+      // Extract which wave from position
+      if (pos.includes("wave 3")) statusLabel = "Wave 3 In Progress";
+      else if (pos.includes("wave 5")) statusLabel = "Wave 5 In Progress";
+      else if (pos.includes("wave 4")) statusLabel = "Wave 4 Correction";
+      else if (pos.includes("wave 2")) statusLabel = "Wave 2 Correction";
+      else if (pos.includes("wave 1")) statusLabel = "Wave 1 In Progress";
+      else if (pos.includes("wave c")) statusLabel = "Wave C In Progress";
+      else statusLabel = "In Progress";
+    }
   } else {
     status = "developing";
     statusLabel = "Developing";

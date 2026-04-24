@@ -1547,8 +1547,10 @@ function EWScannerPage() {
                       </div>
                       {/* Wave Price Targets */}
                       {statusInfo.targets.length > 0 && (() => {
-                        const avgTarget = statusInfo.targets.reduce((s, t) => s + t.price, 0) / statusInfo.targets.length;
-                        const targetArrow = avgTarget > deepCandidate.current ? "↑" : "↓";
+                        // Determine target direction from first target vs current price
+                        // Use majority vote: if most targets are above current, direction is ↑
+                        const aboveCount = statusInfo.targets.filter(t => t.price > deepCandidate.current).length;
+                        const targetArrow = aboveCount > statusInfo.targets.length / 2 ? "↑" : "↓";
                         return (
                         <div className="mt-2 border-t border-purple-500/10 pt-2">
                           <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
@@ -1557,6 +1559,7 @@ function EWScannerPage() {
                           </p>
                           {statusInfo.targets.map((t, i) => {
                             const pctAway = Math.abs(t.price - deepCandidate.current) / deepCandidate.current;
+                            // Hit = price has already passed this target level
                             const isHit = targetArrow === "↑" ? deepCandidate.current >= t.price : deepCandidate.current <= t.price;
                             const isApproaching = !isHit && pctAway <= 0.02;
                             return (
@@ -1605,8 +1608,8 @@ function EWScannerPage() {
                       </div>
                       <p className="mt-1.5 text-sm font-medium text-purple-200/70">{altStatus.currentWave}</p>
                       {altStatus.targets.length > 0 && (() => {
-                        const avgTarget = altStatus.targets.reduce((s, t) => s + t.price, 0) / altStatus.targets.length;
-                        const targetArrow = avgTarget > deepCandidate.current ? "↑" : "↓";
+                        const aboveCount = altStatus.targets.filter(t => t.price > deepCandidate.current).length;
+                        const targetArrow = aboveCount > altStatus.targets.length / 2 ? "↑" : "↓";
                         return (
                         <div className="mt-2 border-t border-purple-500/10 pt-2">
                           <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
