@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const url = `${YAHOO_SUMMARY}/${encodeURIComponent(ticker)}?modules=defaultKeyStatistics,price&crumb=${encodeURIComponent(auth.crumb)}`;
+    const url = `${YAHOO_SUMMARY}/${encodeURIComponent(ticker)}?modules=defaultKeyStatistics,price,summaryDetail&crumb=${encodeURIComponent(auth.crumb)}`;
     const res = await fetch(url, {
       headers: {
         "User-Agent": UA,
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const retryUrl = `${YAHOO_SUMMARY}/${encodeURIComponent(ticker)}?modules=defaultKeyStatistics,price&crumb=${encodeURIComponent(retryAuth.crumb)}`;
+      const retryUrl = `${YAHOO_SUMMARY}/${encodeURIComponent(ticker)}?modules=defaultKeyStatistics,price,summaryDetail&crumb=${encodeURIComponent(retryAuth.crumb)}`;
       const retryRes = await fetch(retryUrl, {
         headers: {
           "User-Agent": UA,
@@ -168,6 +168,7 @@ function buildResponse(
 
   const stats = (result.defaultKeyStatistics ?? {}) as Record<string, unknown>;
   const price = (result.price ?? {}) as Record<string, unknown>;
+  const detail = (result.summaryDetail ?? {}) as Record<string, unknown>;
 
   return NextResponse.json({
     ticker: ticker.toUpperCase(),
@@ -185,5 +186,9 @@ function buildResponse(
     avgVolume3Month: extractRaw(price.averageDailyVolume3Month),
     currentPrice: extractRaw(price.regularMarketPrice),
     marketCap: extractRaw(price.marketCap),
+    fiftyTwoWeekLow: extractRaw(detail.fiftyTwoWeekLow),
+    fiftyTwoWeekHigh: extractRaw(detail.fiftyTwoWeekHigh),
+    heldPercentInsiders: extractRaw(stats.heldPercentInsiders),
+    heldPercentInstitutions: extractRaw(stats.heldPercentInstitutions),
   });
 }

@@ -346,7 +346,6 @@ export const SQUEEZE_UNIVERSE: SqueezeTickerInfo[] = [
   { symbol: "IONQ", name: "IonQ" },
   { symbol: "IP", name: "International Paper" },
   { symbol: "IPG", name: "Interpublic Group" },
-  { symbol: "ISPO", name: "Inspirato" },
   { symbol: "IQV", name: "IQVIA" },
   { symbol: "IR", name: "Ingersoll Rand" },
   { symbol: "IRBT", name: "iRobot" },

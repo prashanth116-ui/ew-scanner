@@ -43,65 +43,41 @@ interface SqueezePreset {
   name: string;
   shortName: string;
   description: string;
-  minSiPercent: number;
-  minDaysToCover: number;
-  maxFloat: number;
-  minVolumeRatio: number;
-  requireEwAlignment: boolean;
+  filters: Partial<SqueezeFilters>;
   recommended?: boolean;
 }
 
 const PRESETS: SqueezePreset[] = [
   {
-    name: "High SI Small Float",
-    shortName: "High SI",
-    description: "Classic squeeze setup: high short interest + small float. Highest signal quality.",
-    minSiPercent: 20,
-    minDaysToCover: 3,
-    maxFloat: 50,
-    minVolumeRatio: 1,
-    requireEwAlignment: false,
+    name: "GME-Style Setup",
+    shortName: "GME-Style",
+    description: "Mirrors pre-squeeze GME: high SI, small float, near lows. Best signal quality.",
+    filters: { minSiPercent: 20, minDaysToCover: 3, maxFloat: 150, maxMarketCap: 5, maxNearLowPct: 30, minScore: 40 },
     recommended: true,
   },
   {
-    name: "Volume Surge",
-    shortName: "Vol Surge",
-    description: "Stocks with unusual volume spike and moderate SI. Early squeeze detection.",
-    minSiPercent: 10,
-    minDaysToCover: 2,
-    maxFloat: 100,
-    minVolumeRatio: 2,
-    requireEwAlignment: false,
+    name: "Volume Ignition",
+    shortName: "Vol Ignition",
+    description: "Unusual volume spike + moderate SI. Catches squeezes in early ignition phase.",
+    filters: { minSiPercent: 10, minDaysToCover: 2, minVolumeRatio: 2, minScore: 30 },
   },
   {
-    name: "Micro Float Squeeze",
+    name: "Micro Float Bomb",
     shortName: "Micro Float",
-    description: "Tiny floats under 20M shares. Maximum squeeze potential, higher volatility.",
-    minSiPercent: 15,
-    minDaysToCover: 2,
-    maxFloat: 20,
-    minVolumeRatio: 1,
-    requireEwAlignment: false,
+    description: "Tiny floats under 20M. Maximum squeeze potential, highest volatility.",
+    filters: { minSiPercent: 15, minDaysToCover: 2, maxFloat: 20, minScore: 30 },
+  },
+  {
+    name: "Near 52w Low",
+    shortName: "Near Lows",
+    description: "Heavily shorted stocks near 52-week lows. Complacent shorts, max pain potential.",
+    filters: { minSiPercent: 10, maxNearLowPct: 20, maxMarketCap: 10, minScore: 25 },
   },
   {
     name: "Wide Net",
     shortName: "Wide Net",
     description: "Relaxed filters to catch more candidates. Good for initial screening.",
-    minSiPercent: 5,
-    minDaysToCover: 1,
-    maxFloat: 0,
-    minVolumeRatio: 0,
-    requireEwAlignment: false,
-  },
-  {
-    name: "EW Aligned Squeeze",
-    shortName: "EW Aligned",
-    description: "Only stocks where SI pressure AND wave 2/C/4 bottoms align. Requires EW enrichment.",
-    minSiPercent: 10,
-    minDaysToCover: 2,
-    maxFloat: 100,
-    minVolumeRatio: 1,
-    requireEwAlignment: true,
+    filters: { minSiPercent: 5, minDaysToCover: 1 },
   },
 ];
 
@@ -112,6 +88,7 @@ type SortKey =
   | "float"
   | "volumeRatio"
   | "price"
+  | "nearLow"
   | "ticker";
 type SortDir = "asc" | "desc";
 
@@ -183,12 +160,18 @@ function SqueezePage() {
   const [minDtc, setMinDtc] = useState(DEFAULT_SQUEEZE_FILTERS.minDaysToCover);
   const [maxFloat, setMaxFloat] = useState(DEFAULT_SQUEEZE_FILTERS.maxFloat);
   const [minVolRatio, setMinVolRatio] = useState(DEFAULT_SQUEEZE_FILTERS.minVolumeRatio);
+  const [maxMktCap, setMaxMktCap] = useState(DEFAULT_SQUEEZE_FILTERS.maxMarketCap);
+  const [maxNearLow, setMaxNearLow] = useState(DEFAULT_SQUEEZE_FILTERS.maxNearLowPct);
+  const [minScore, setMinScore] = useState(DEFAULT_SQUEEZE_FILTERS.minScore);
   const [requireEw, setRequireEw] = useState(DEFAULT_SQUEEZE_FILTERS.requireEwAlignment);
 
   const debouncedSi = useDebounce(minSiPercent, 300);
   const debouncedDtc = useDebounce(minDtc, 300);
   const debouncedFloat = useDebounce(maxFloat, 300);
   const debouncedVol = useDebounce(minVolRatio, 300);
+  const debouncedMktCap = useDebounce(maxMktCap, 300);
+  const debouncedNearLow = useDebounce(maxNearLow, 300);
+  const debouncedScore = useDebounce(minScore, 300);
 
   // Scan state
   const [scanning, setScanning] = useState(false);
@@ -244,9 +227,12 @@ function SqueezePage() {
       minDaysToCover: debouncedDtc,
       maxFloat: debouncedFloat,
       minVolumeRatio: debouncedVol,
+      maxMarketCap: debouncedMktCap,
+      maxNearLowPct: debouncedNearLow,
+      minScore: debouncedScore,
       requireEwAlignment: requireEw,
     }),
-    [debouncedSi, debouncedDtc, debouncedFloat, debouncedVol, requireEw]
+    [debouncedSi, debouncedDtc, debouncedFloat, debouncedVol, debouncedMktCap, debouncedNearLow, debouncedScore, requireEw]
   );
 
   // Score + filter + sort
@@ -280,6 +266,9 @@ function SqueezePage() {
           break;
         case "price":
           cmp = (a.currentPrice ?? 0) - (b.currentPrice ?? 0);
+          break;
+        case "nearLow":
+          cmp = (a.nearLowPct ?? 999) - (b.nearLowPct ?? 999);
           break;
         case "ticker":
           cmp = a.ticker.localeCompare(b.ticker);
@@ -478,17 +467,24 @@ function SqueezePage() {
     setMinDtc(scan.filters.minDaysToCover);
     setMaxFloat(scan.filters.maxFloat);
     setMinVolRatio(scan.filters.minVolumeRatio);
+    setMaxMktCap(scan.filters.maxMarketCap ?? 0);
+    setMaxNearLow(scan.filters.maxNearLowPct ?? 0);
+    setMinScore(scan.filters.minScore ?? 0);
     setRequireEw(scan.filters.requireEwAlignment);
     setRawResults(scan.candidates);
   }, []);
 
   // ── Apply Preset ──
   const applyPreset = useCallback((preset: SqueezePreset) => {
-    setMinSiPercent(preset.minSiPercent);
-    setMinDtc(preset.minDaysToCover);
-    setMaxFloat(preset.maxFloat);
-    setMinVolRatio(preset.minVolumeRatio);
-    setRequireEw(preset.requireEwAlignment);
+    const f = { ...DEFAULT_SQUEEZE_FILTERS, ...preset.filters };
+    setMinSiPercent(f.minSiPercent);
+    setMinDtc(f.minDaysToCover);
+    setMaxFloat(f.maxFloat);
+    setMinVolRatio(f.minVolumeRatio);
+    setMaxMktCap(f.maxMarketCap);
+    setMaxNearLow(f.maxNearLowPct);
+    setMinScore(f.minScore);
+    setRequireEw(f.requireEwAlignment);
   }, []);
 
   // ── Sort toggle ──
@@ -598,7 +594,7 @@ function SqueezePage() {
             onClick={() => toggleSection("filters")}
             className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
           >
-            <span>Filters <span className="normal-case text-[#666]">({minSiPercent}% SI, {minDtc} DTC)</span></span>
+            <span>Filters <span className="normal-case text-[#666]">({minSiPercent}% SI, {minDtc} DTC{minScore > 0 ? `, ${minScore}+ score` : ""})</span></span>
             <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("filters") ? "" : "rotate-90"}`} />
           </button>
           {!collapsed.has("filters") && (
@@ -666,6 +662,60 @@ function SqueezePage() {
                   step={0.5}
                   value={minVolRatio}
                   onChange={(e) => setMinVolRatio(Number(e.target.value))}
+                  className="w-full accent-[#5ba3e6]"
+                />
+              </div>
+              {/* Max Market Cap */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Max Market Cap (B)</span>
+                  <span className="text-white">
+                    {maxMktCap === 0 ? "Any" : `$${maxMktCap}B`}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={50}
+                  step={1}
+                  value={maxMktCap}
+                  onChange={(e) => setMaxMktCap(Number(e.target.value))}
+                  className="w-full accent-[#5ba3e6]"
+                />
+              </div>
+              {/* Max Near 52w Low */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Max Near 52w Low %</span>
+                  <span className="text-white">
+                    {maxNearLow === 0 ? "Any" : `${maxNearLow}%`}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={maxNearLow}
+                  onChange={(e) => setMaxNearLow(Number(e.target.value))}
+                  className="w-full accent-[#5ba3e6]"
+                />
+              </div>
+              {/* Min Score */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Min Score</span>
+                  <span className="text-white">
+                    {minScore === 0 ? "Any" : minScore}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={80}
+                  step={5}
+                  value={minScore}
+                  onChange={(e) => setMinScore(Number(e.target.value))}
                   className="w-full accent-[#5ba3e6]"
                 />
               </div>
@@ -868,6 +918,7 @@ function SqueezePage() {
                     <SortHeader label="Float" sortKeyVal="float" />
                     <SortHeader label="Vol Ratio" sortKeyVal="volumeRatio" />
                     <SortHeader label="Price" sortKeyVal="price" />
+                    <SortHeader label="Near Low" sortKeyVal="nearLow" />
                     <SortHeader label="Score" sortKeyVal="score" />
                     <th className="px-3 py-2 text-left text-xs font-medium text-[#a0a0a0]">
                       EW
@@ -957,6 +1008,9 @@ function TableRow({
         <td className="px-3 py-2.5 text-sm text-[#ccc]">
           {c.currentPrice != null ? `$${c.currentPrice.toFixed(2)}` : "-"}
         </td>
+        <td className="px-3 py-2.5 text-sm text-[#ccc]">
+          {c.nearLowPct != null ? `${c.nearLowPct.toFixed(1)}%` : "-"}
+        </td>
         <td className="px-3 py-2.5">
           <span
             className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${tierColor(c.tier)}`}
@@ -978,7 +1032,7 @@ function TableRow({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={9} className="bg-[#0f0f0f] px-4 py-4">
+          <td colSpan={10} className="bg-[#0f0f0f] px-4 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {/* Score breakdown */}
               <div className="space-y-2">
@@ -988,13 +1042,13 @@ function TableRow({
                 <ScoreBar
                   label="SI %"
                   value={c.components.siPercent}
-                  max={30}
+                  max={25}
                   color="bg-red-500"
                 />
                 <ScoreBar
                   label="Days Cover"
                   value={c.components.daysTocover}
-                  max={20}
+                  max={15}
                   color="bg-orange-500"
                 />
                 <ScoreBar
@@ -1006,8 +1060,14 @@ function TableRow({
                 <ScoreBar
                   label="Vol Surge"
                   value={c.components.volumeSurge}
-                  max={20}
+                  max={15}
                   color="bg-blue-500"
+                />
+                <ScoreBar
+                  label="Near Low"
+                  value={c.components.near52wLow}
+                  max={15}
+                  color="bg-purple-500"
                 />
                 <ScoreBar
                   label="EW Align"
@@ -1032,6 +1092,22 @@ function TableRow({
                   </span>
                   <span className="text-[#666]">Market Cap</span>
                   <span className="text-white">{formatM(c.marketCap)}</span>
+                  <span className="text-[#666]">52w Low</span>
+                  <span className="text-white">
+                    {c.fiftyTwoWeekLow != null ? `$${c.fiftyTwoWeekLow.toFixed(2)}` : "-"}
+                  </span>
+                  <span className="text-[#666]">52w High</span>
+                  <span className="text-white">
+                    {c.fiftyTwoWeekHigh != null ? `$${c.fiftyTwoWeekHigh.toFixed(2)}` : "-"}
+                  </span>
+                  <span className="text-[#666]">Near Low</span>
+                  <span className="text-white">
+                    {c.nearLowPct != null ? `${c.nearLowPct.toFixed(1)}% above` : "-"}
+                  </span>
+                  <span className="text-[#666]">Insider Own</span>
+                  <span className="text-white">{formatPct(c.heldPercentInsiders)}</span>
+                  <span className="text-[#666]">Inst. Own</span>
+                  <span className="text-white">{formatPct(c.heldPercentInstitutions)}</span>
                   <span className="text-[#666]">Avg Vol (3mo)</span>
                   <span className="text-white">
                     {formatM(c.avgVolume3Month)}

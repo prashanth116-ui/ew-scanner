@@ -11,6 +11,9 @@ export const DEFAULT_SQUEEZE_FILTERS: SqueezeFilters = {
   minDaysToCover: 1,
   maxFloat: 0, // 0 = no limit
   minVolumeRatio: 0,
+  maxMarketCap: 0, // 0 = no limit
+  maxNearLowPct: 0, // 0 = no limit
+  minScore: 0,
   requireEwAlignment: false,
 };
 
@@ -31,20 +34,20 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
+// SI% of float: 0-25 pts (linear 0% → 0, 40%+ → 25)
 function scoreSiPercent(si: number | null): number {
   if (si == null || si <= 0) return 0;
-  // SI is often 0-1 from Yahoo (e.g. 0.15 = 15%), convert if needed
   const pct = si > 1 ? si : si * 100;
-  // Linear: 0% = 0, 40%+ = 30
-  return clamp((pct / 40) * 30, 0, 30);
+  return clamp((pct / 40) * 25, 0, 25);
 }
 
+// Days to cover: 0-15 pts (linear 0 → 0, 10+ → 15)
 function scoreDaysToCover(dtc: number | null): number {
   if (dtc == null || dtc <= 0) return 0;
-  // Linear: 0 = 0, 10+ = 20
-  return clamp((dtc / 10) * 20, 0, 20);
+  return clamp((dtc / 10) * 15, 0, 15);
 }
 
+// Float size: 0-15 pts (tiered)
 function scoreFloat(floatShares: number | null): number {
   if (floatShares == null || floatShares <= 0) return 0;
   const floatM = floatShares / 1_000_000;
@@ -52,19 +55,38 @@ function scoreFloat(floatShares: number | null): number {
   if (floatM < 20) return 12;
   if (floatM < 50) return 8;
   if (floatM < 100) return 4;
+  if (floatM < 150) return 2;
   return 0;
 }
 
+// Volume surge: 0-15 pts (linear 1x → 0, 5x+ → 15)
 function scoreVolumeSurge(ratio: number | null): number {
   if (ratio == null || ratio <= 1) return 0;
-  // Linear: 1x = 0, 5x+ = 20
-  return clamp(((ratio - 1) / 4) * 20, 0, 20);
+  return clamp(((ratio - 1) / 4) * 15, 0, 15);
 }
 
+// Near 52-week low: 0-15 pts
+// At low = 15, within 10% = 12, within 20% = 8, within 30% = 4, above = 0
+function scoreNear52wLow(
+  price: number | null,
+  low52w: number | null
+): { score: number; nearLowPct: number | null } {
+  if (price == null || low52w == null || low52w <= 0) {
+    return { score: 0, nearLowPct: null };
+  }
+  const pctAbove = ((price - low52w) / low52w) * 100;
+  let score = 0;
+  if (pctAbove <= 5) score = 15;
+  else if (pctAbove <= 10) score = 12;
+  else if (pctAbove <= 20) score = 8;
+  else if (pctAbove <= 30) score = 4;
+  return { score, nearLowPct: Math.round(pctAbove * 10) / 10 };
+}
+
+// EW alignment: 0-15 pts
 function scoreEwAlignment(position: string | undefined): number {
   if (!position) return 0;
   if (isSqueezeAlignedWavePosition(position)) return 15;
-  // Any wave position gets a small bonus
   if (position.toLowerCase().includes("wave")) return 3;
   return 0;
 }
@@ -81,11 +103,17 @@ export function computeSqueezeScore(data: SqueezeData): ScoredSqueezeCandidate {
       ? data.currentVolume / data.avgVolume3Month
       : null;
 
+  const { score: near52wScore, nearLowPct } = scoreNear52wLow(
+    data.currentPrice,
+    data.fiftyTwoWeekLow
+  );
+
   const components: SqueezeComponentScores = {
     siPercent: scoreSiPercent(data.shortPercentOfFloat),
     daysTocover: scoreDaysToCover(data.shortRatio),
     floatSize: scoreFloat(data.floatShares),
     volumeSurge: scoreVolumeSurge(volumeRatio),
+    near52wLow: near52wScore,
     ewAlignment: scoreEwAlignment(data.ewPosition),
   };
 
@@ -94,6 +122,7 @@ export function computeSqueezeScore(data: SqueezeData): ScoredSqueezeCandidate {
     components.daysTocover +
     components.floatSize +
     components.volumeSurge +
+    components.near52wLow +
     components.ewAlignment
   );
 
@@ -103,6 +132,7 @@ export function computeSqueezeScore(data: SqueezeData): ScoredSqueezeCandidate {
     components,
     tier: getTier(squeezeScore),
     volumeRatio,
+    nearLowPct,
   };
 }
 
@@ -114,6 +144,9 @@ export function scoreSqueezeBatch(
 
   return scored
     .filter((c) => {
+      // Min score filter
+      if (c.squeezeScore < filters.minScore) return false;
+
       const siPct = c.shortPercentOfFloat != null
         ? (c.shortPercentOfFloat > 1 ? c.shortPercentOfFloat : c.shortPercentOfFloat * 100)
         : 0;
@@ -123,6 +156,14 @@ export function scoreSqueezeBatch(
         if (c.floatShares / 1_000_000 > filters.maxFloat) return false;
       }
       if ((c.volumeRatio ?? 0) < filters.minVolumeRatio) return false;
+      // Market cap filter
+      if (filters.maxMarketCap > 0 && c.marketCap != null) {
+        if (c.marketCap / 1_000_000_000 > filters.maxMarketCap) return false;
+      }
+      // Near 52w low filter
+      if (filters.maxNearLowPct > 0 && c.nearLowPct != null) {
+        if (c.nearLowPct > filters.maxNearLowPct) return false;
+      }
       if (filters.requireEwAlignment && !isSqueezeAlignedWavePosition(c.ewPosition)) {
         return false;
       }

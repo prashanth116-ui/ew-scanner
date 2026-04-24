@@ -238,16 +238,21 @@ export interface SqueezeData {
   avgVolume3Month: number | null;
   currentPrice: number | null;
   marketCap: number | null;
+  fiftyTwoWeekLow: number | null;
+  fiftyTwoWeekHigh: number | null;
+  heldPercentInsiders: number | null;
+  heldPercentInstitutions: number | null;
   // Optional EW enrichment
   ewPosition?: string;
   ewConfidence?: string;
 }
 
 export interface SqueezeComponentScores {
-  siPercent: number; // 0-30
-  daysTocover: number; // 0-20
+  siPercent: number; // 0-25
+  daysTocover: number; // 0-15
   floatSize: number; // 0-15
-  volumeSurge: number; // 0-20
+  volumeSurge: number; // 0-15
+  near52wLow: number; // 0-15
   ewAlignment: number; // 0-15
 }
 
@@ -258,13 +263,17 @@ export interface ScoredSqueezeCandidate extends SqueezeData {
   components: SqueezeComponentScores;
   tier: SqueezeTier;
   volumeRatio: number | null;
+  nearLowPct: number | null; // how far above 52w low (0% = at low)
 }
 
 export interface SqueezeFilters {
   minSiPercent: number;
   minDaysToCover: number;
-  maxFloat: number; // in millions
+  maxFloat: number; // in millions, 0 = no limit
   minVolumeRatio: number;
+  maxMarketCap: number; // in billions, 0 = no limit
+  maxNearLowPct: number; // max % above 52w low, 0 = no limit
+  minScore: number; // 0-100, skip stocks below this
   requireEwAlignment: boolean;
 }
 
