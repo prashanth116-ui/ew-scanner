@@ -1607,6 +1607,24 @@ function EWScannerPage() {
                         </span>
                       </div>
                       <p className="mt-1.5 text-sm font-medium text-purple-200/70">{altStatus.currentWave}</p>
+                      {/* Alternate wave price table */}
+                      <div className="mt-2 space-y-0.5">
+                        {altWc.waves.map((w) => {
+                          const ts = w.timestamp ?? deepCandidate.series?.timestamps[w.index];
+                          const dateStr = ts
+                            ? new Date(ts * 1000).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+                            : "—";
+                          const isHigh = w.type === "high";
+                          return (
+                            <div key={w.label} className="flex items-center gap-3 text-xs">
+                              <span className="w-7 font-mono font-bold text-purple-300/70">W{w.label}</span>
+                              <span className="w-20 text-right font-mono text-[#e6e6e6]/80">${w.price.toFixed(2)}</span>
+                              <span className="w-24 font-mono text-[#888]">{dateStr}</span>
+                              <span className={isHigh ? "text-green-400/70" : "text-red-400/70"}>{w.type}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                       {altStatus.targets.length > 0 && (() => {
                         const aboveCount = altStatus.targets.filter(t => t.price > deepCandidate.current).length;
                         const targetArrow = aboveCount > altStatus.targets.length / 2 ? "↑" : "↓";

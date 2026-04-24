@@ -817,8 +817,11 @@ export function getWaveStatusInfo(wc: WaveCount, currentPrice: number): WaveStat
       currentWave = "Beyond Wave 5 — possible extension";
     }
   } else if (hasAllFive || isABC) {
-    // Check for completed correction before defaulting to in_progress
-    if (isABC && (pos.includes("complete") || pos.includes("beyond"))) {
+    // Check for completed/likely complete correction before defaulting to in_progress
+    if (isABC && pos.includes("may be complete")) {
+      status = "completed";
+      statusLabel = "Likely Complete";
+    } else if (isABC && (pos.includes("complete") || pos.includes("beyond"))) {
       status = "completed";
       statusLabel = "Correction Complete";
     } else {
