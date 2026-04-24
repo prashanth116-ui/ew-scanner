@@ -15,8 +15,8 @@ import {
 const SECTIONS = [
   { id: "what-is-squeeze", label: "What Is It?" },
   { id: "anatomy", label: "Anatomy" },
-  { id: "case-studies", label: "Case Studies" },
   { id: "patterns", label: "Patterns" },
+  { id: "case-studies", label: "Case Studies" },
   { id: "using-screener", label: "Screener Tips" },
   { id: "risk-management", label: "Risk Mgmt" },
 ];
@@ -231,7 +231,109 @@ export default function SqueezeGuidePage() {
           </div>
         </Section>
 
-        {/* Section 3: Real-World Case Studies */}
+        {/* Section 3: Common Patterns */}
+        <Section
+          id="patterns"
+          title="Common Patterns Across Squeezes"
+          icon={<TrendingUp className="h-5 w-5 text-red-400" />}
+        >
+          <SubSection title='The "Perfect Storm" Checklist'>
+            <p className="mb-2">
+              The highest-probability squeezes share most or all of these conditions:
+            </p>
+            <ul className="list-inside list-disc space-y-1 text-[#c0c0c0]">
+              <li><strong className="text-white">SI% &gt; 20%</strong> of float (higher = better)</li>
+              <li><strong className="text-white">Days to Cover &gt; 3</strong> (shorts can&rsquo;t exit quickly)</li>
+              <li><strong className="text-white">Float &lt; 150M</strong> shares (limited supply)</li>
+              <li><strong className="text-white">Market cap &lt; $5B</strong> (retail flow can move the price)</li>
+              <li><strong className="text-white">Near 52-week lows</strong> (complacent shorts, maximum pain potential)</li>
+              <li><strong className="text-white">Identifiable catalyst</strong> (earnings, activist, regulatory, retail coordination)</li>
+            </ul>
+            <p className="mt-2 text-[#888]">
+              Each missing condition reduces the probability and magnitude. GME had all six. AMC had 3-4. BBBY had 4-5 but the catalyst evaporated.
+            </p>
+          </SubSection>
+
+          <SubSection title="Volume as Confirmation">
+            <p>
+              Volume is the strongest real-time signal that a squeeze is in progress. Normal pre-squeeze volume is 1-3x average.
+              Once covering begins:
+            </p>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-[#c0c0c0]">
+              <li><strong className="text-white">3-10x avg</strong> &mdash; Early ignition phase, covering beginning</li>
+              <li><strong className="text-white">10-50x avg</strong> &mdash; Active squeeze, forced covering in progress</li>
+              <li><strong className="text-white">50x+ avg</strong> &mdash; Peak squeeze, maximum buying pressure</li>
+            </ul>
+            <p className="mt-2 text-[#888]">
+              When volume drops back to normal, the squeeze is ending. This is the single best timing indicator for exits.
+            </p>
+          </SubSection>
+
+          <SubSection title="Catalyst Types">
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#333]">
+                    <th className="px-3 py-2 text-left text-[#a0a0a0]">Catalyst</th>
+                    <th className="px-3 py-2 text-left text-[#a0a0a0]">Example</th>
+                    <th className="px-3 py-2 text-left text-[#a0a0a0]">Strength</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#222]">
+                    <td className="px-3 py-1.5 text-white">Fundamental turnaround</td>
+                    <td className="px-3 py-1.5">CVNA debt restructuring</td>
+                    <td className="px-3 py-1.5 text-green-400">Strongest (sustained)</td>
+                  </tr>
+                  <tr className="border-b border-[#222]">
+                    <td className="px-3 py-1.5 text-white">Activist investor</td>
+                    <td className="px-3 py-1.5">Ryan Cohen at GME</td>
+                    <td className="px-3 py-1.5 text-green-400">Strong</td>
+                  </tr>
+                  <tr className="border-b border-[#222]">
+                    <td className="px-3 py-1.5 text-white">Regulatory/index change</td>
+                    <td className="px-3 py-1.5">TSLA S&P 500 inclusion</td>
+                    <td className="px-3 py-1.5 text-yellow-400">Moderate (one-time)</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-1.5 text-white">Retail coordination</td>
+                    <td className="px-3 py-1.5">AMC Reddit momentum</td>
+                    <td className="px-3 py-1.5 text-yellow-400">Moderate (fragile)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Failed Squeezes: What Goes Wrong">
+            <ul className="list-inside list-disc space-y-1 text-[#c0c0c0]">
+              <li><strong className="text-white">Share dilution</strong> &mdash; Company issues new shares into the rally, flooding supply (AMC, BBBY)</li>
+              <li><strong className="text-white">No catalyst</strong> &mdash; High SI alone isn&rsquo;t enough; shorts can wait indefinitely if nothing forces action</li>
+              <li><strong className="text-white">Shorts add positions</strong> &mdash; Instead of covering, experienced shorts add at higher prices, betting on the eventual collapse</li>
+              <li><strong className="text-white">Broker intervention</strong> &mdash; Trading restrictions or halts break momentum (GME Jan 28)</li>
+              <li><strong className="text-white">Low float deception</strong> &mdash; Reported float is inaccurate; actual available supply is higher than expected</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Timing">
+            <p>
+              Most squeezes follow a predictable arc:
+            </p>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-[#c0c0c0]">
+              <li><strong className="text-white">Build-up (weeks-months)</strong> &mdash; SI increases, price drifts near lows, setup conditions align</li>
+              <li><strong className="text-white">Ignition (1-3 days)</strong> &mdash; Catalyst appears, volume spikes 3-10x, price breaks key resistance</li>
+              <li><strong className="text-white">Squeeze (3-10 days)</strong> &mdash; Forced covering cascade, 50x+ volume, parabolic price action</li>
+              <li><strong className="text-white">Exhaustion (1-3 days)</strong> &mdash; Volume drops, no new shorts to cover, price peaks</li>
+              <li><strong className="text-white">Collapse (days-weeks)</strong> &mdash; Price retraces 50-80%+ as momentum buyers exit</li>
+            </ul>
+            <p className="mt-2 text-[#888]">
+              Exception: Fundamental turnarounds (CVNA, TSLA) can sustain elevated prices because the
+              thesis changes. Pure momentum squeezes (AMC, BBBY) almost always give back most gains.
+            </p>
+          </SubSection>
+        </Section>
+
+        {/* Section 4: Real-World Case Studies */}
         <Section
           id="case-studies"
           title="Real-World Case Studies"
@@ -457,108 +559,6 @@ export default function SqueezeGuidePage() {
           </CaseStudy>
         </Section>
 
-        {/* Section 4: Common Patterns */}
-        <Section
-          id="patterns"
-          title="Common Patterns Across Squeezes"
-          icon={<TrendingUp className="h-5 w-5 text-red-400" />}
-        >
-          <SubSection title='The "Perfect Storm" Checklist'>
-            <p className="mb-2">
-              The highest-probability squeezes share most or all of these conditions:
-            </p>
-            <ul className="list-inside list-disc space-y-1 text-[#c0c0c0]">
-              <li><strong className="text-white">SI% &gt; 20%</strong> of float (higher = better)</li>
-              <li><strong className="text-white">Days to Cover &gt; 3</strong> (shorts can&rsquo;t exit quickly)</li>
-              <li><strong className="text-white">Float &lt; 150M</strong> shares (limited supply)</li>
-              <li><strong className="text-white">Market cap &lt; $5B</strong> (retail flow can move the price)</li>
-              <li><strong className="text-white">Near 52-week lows</strong> (complacent shorts, maximum pain potential)</li>
-              <li><strong className="text-white">Identifiable catalyst</strong> (earnings, activist, regulatory, retail coordination)</li>
-            </ul>
-            <p className="mt-2 text-[#888]">
-              Each missing condition reduces the probability and magnitude. GME had all six. AMC had 3-4. BBBY had 4-5 but the catalyst evaporated.
-            </p>
-          </SubSection>
-
-          <SubSection title="Volume as Confirmation">
-            <p>
-              Volume is the strongest real-time signal that a squeeze is in progress. Normal pre-squeeze volume is 1-3x average.
-              Once covering begins:
-            </p>
-            <ul className="mt-2 list-inside list-disc space-y-1 text-[#c0c0c0]">
-              <li><strong className="text-white">3-10x avg</strong> &mdash; Early ignition phase, covering beginning</li>
-              <li><strong className="text-white">10-50x avg</strong> &mdash; Active squeeze, forced covering in progress</li>
-              <li><strong className="text-white">50x+ avg</strong> &mdash; Peak squeeze, maximum buying pressure</li>
-            </ul>
-            <p className="mt-2 text-[#888]">
-              When volume drops back to normal, the squeeze is ending. This is the single best timing indicator for exits.
-            </p>
-          </SubSection>
-
-          <SubSection title="Catalyst Types">
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-[#333]">
-                    <th className="px-3 py-2 text-left text-[#a0a0a0]">Catalyst</th>
-                    <th className="px-3 py-2 text-left text-[#a0a0a0]">Example</th>
-                    <th className="px-3 py-2 text-left text-[#a0a0a0]">Strength</th>
-                  </tr>
-                </thead>
-                <tbody className="text-[#c0c0c0]">
-                  <tr className="border-b border-[#222]">
-                    <td className="px-3 py-1.5 text-white">Fundamental turnaround</td>
-                    <td className="px-3 py-1.5">CVNA debt restructuring</td>
-                    <td className="px-3 py-1.5 text-green-400">Strongest (sustained)</td>
-                  </tr>
-                  <tr className="border-b border-[#222]">
-                    <td className="px-3 py-1.5 text-white">Activist investor</td>
-                    <td className="px-3 py-1.5">Ryan Cohen at GME</td>
-                    <td className="px-3 py-1.5 text-green-400">Strong</td>
-                  </tr>
-                  <tr className="border-b border-[#222]">
-                    <td className="px-3 py-1.5 text-white">Regulatory/index change</td>
-                    <td className="px-3 py-1.5">TSLA S&P 500 inclusion</td>
-                    <td className="px-3 py-1.5 text-yellow-400">Moderate (one-time)</td>
-                  </tr>
-                  <tr>
-                    <td className="px-3 py-1.5 text-white">Retail coordination</td>
-                    <td className="px-3 py-1.5">AMC Reddit momentum</td>
-                    <td className="px-3 py-1.5 text-yellow-400">Moderate (fragile)</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </SubSection>
-
-          <SubSection title="Failed Squeezes: What Goes Wrong">
-            <ul className="list-inside list-disc space-y-1 text-[#c0c0c0]">
-              <li><strong className="text-white">Share dilution</strong> &mdash; Company issues new shares into the rally, flooding supply (AMC, BBBY)</li>
-              <li><strong className="text-white">No catalyst</strong> &mdash; High SI alone isn&rsquo;t enough; shorts can wait indefinitely if nothing forces action</li>
-              <li><strong className="text-white">Shorts add positions</strong> &mdash; Instead of covering, experienced shorts add at higher prices, betting on the eventual collapse</li>
-              <li><strong className="text-white">Broker intervention</strong> &mdash; Trading restrictions or halts break momentum (GME Jan 28)</li>
-              <li><strong className="text-white">Low float deception</strong> &mdash; Reported float is inaccurate; actual available supply is higher than expected</li>
-            </ul>
-          </SubSection>
-
-          <SubSection title="Timing">
-            <p>
-              Most squeezes follow a predictable arc:
-            </p>
-            <ul className="mt-2 list-inside list-disc space-y-1 text-[#c0c0c0]">
-              <li><strong className="text-white">Build-up (weeks-months)</strong> &mdash; SI increases, price drifts near lows, setup conditions align</li>
-              <li><strong className="text-white">Ignition (1-3 days)</strong> &mdash; Catalyst appears, volume spikes 3-10x, price breaks key resistance</li>
-              <li><strong className="text-white">Squeeze (3-10 days)</strong> &mdash; Forced covering cascade, 50x+ volume, parabolic price action</li>
-              <li><strong className="text-white">Exhaustion (1-3 days)</strong> &mdash; Volume drops, no new shorts to cover, price peaks</li>
-              <li><strong className="text-white">Collapse (days-weeks)</strong> &mdash; Price retraces 50-80%+ as momentum buyers exit</li>
-            </ul>
-            <p className="mt-2 text-[#888]">
-              Exception: Fundamental turnarounds (CVNA, TSLA) can sustain elevated prices because the
-              thesis changes. Pure momentum squeezes (AMC, BBBY) almost always give back most gains.
-            </p>
-          </SubSection>
-        </Section>
-
         {/* Section 5: Using the Screener */}
         <Section
           id="using-screener"
@@ -766,6 +766,16 @@ export default function SqueezeGuidePage() {
             who bought purely for the squeeze got burned.
           </Tip>
         </Section>
+
+        {/* Back to screener */}
+        <div className="flex justify-center pt-2">
+          <Link
+            href="/squeeze"
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-2 text-sm font-medium text-[#5ba3e6] transition-colors hover:bg-[#262626]"
+          >
+            &larr; Back to Squeeze Screener
+          </Link>
+        </div>
       </div>
     </div>
   );

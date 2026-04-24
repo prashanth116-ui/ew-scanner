@@ -5,13 +5,18 @@ import { usePathname } from "next/navigation";
 import { Activity, Menu, X } from "lucide-react";
 import { useState } from "react";
 
-const navItems = [
-  { href: "/", label: "Scanner" },
+const ewItems = [
+  { href: "/", label: "EW Scanner" },
   { href: "/history", label: "History" },
   { href: "/watchlist", label: "Watchlists" },
-  { href: "/squeeze", label: "Squeeze" },
   { href: "/guide", label: "Guide" },
   { href: "/learn", label: "Learn EW" },
+];
+
+const squeezeItems = [
+  { href: "/squeeze", label: "Squeeze" },
+  { href: "/squeeze/watchlist", label: "Watchlist" },
+  { href: "/squeeze/guide", label: "Guide" },
 ];
 
 export function Nav() {
@@ -33,7 +38,21 @@ export function Nav() {
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 sm:flex">
-          {navItems.map((item) => (
+          {ewItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                isActive(item.href)
+                  ? "bg-[#185FA5]/20 text-[#5ba3e6]"
+                  : "text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+          <div className="mx-1 h-4 w-px bg-[#333]" />
+          {squeezeItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -60,7 +79,22 @@ export function Nav() {
       {/* Mobile nav */}
       {mobileOpen && (
         <nav className="border-t border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 sm:hidden">
-          {navItems.map((item) => (
+          {ewItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMobileOpen(false)}
+              className={`flex rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                isActive(item.href)
+                  ? "bg-[#185FA5]/20 text-[#5ba3e6]"
+                  : "text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+          <div className="mx-3 my-1 h-px bg-[#2a2a2a]" />
+          {squeezeItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}

@@ -286,3 +286,23 @@ export interface SavedSqueezeScan {
   candidateCount: number;
   candidates: ScoredSqueezeCandidate[];
 }
+
+// ── Squeeze Watchlist Types ──
+
+export interface SqueezeWatchlistItem {
+  ticker: string;
+  name: string;
+  addedAt: string;
+  scoreAtAdd: number; // 0-100 squeeze score
+  siPercentAtAdd: number; // SI% at time of add
+  tierAtAdd: SqueezeTier;
+}
+
+export interface SqueezeWatchlist {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  items: SqueezeWatchlistItem[];
+  scoreThreshold?: number;
+}

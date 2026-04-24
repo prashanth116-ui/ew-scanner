@@ -15,6 +15,8 @@ import {
   PanelLeftClose,
   PanelLeft,
   BookOpen,
+  ListPlus,
+  Check,
 } from "lucide-react";
 import Link from "next/link";
 import { SQUEEZE_UNIVERSE } from "@/data/squeeze-universe";
@@ -29,11 +31,16 @@ import {
   loadSqueezeScans,
   deleteSqueezeScan,
 } from "@/lib/squeeze-storage";
+import {
+  loadSqueezeWatchlists,
+  addToSqueezeWatchlist,
+} from "@/lib/squeeze-watchlists";
 import type {
   SqueezeData,
   ScoredSqueezeCandidate,
   SqueezeFilters,
   SavedSqueezeScan,
+  SqueezeWatchlist,
 } from "@/lib/ew-types";
 import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-scoring";
 import { useDebounce } from "@/lib/use-debounce";
@@ -215,9 +222,14 @@ function SqueezePage() {
   const [savedScans, setSavedScans] = useState<SavedSqueezeScan[]>([]);
   const [saveName, setSaveName] = useState("");
 
-  // Load saved scans on mount
+  // Watchlists (for add-to-watchlist)
+  const [squeezeWatchlists, setSqueezeWatchlists] = useState<SqueezeWatchlist[]>([]);
+  const [addedTicker, setAddedTicker] = useState<string | null>(null);
+
+  // Load saved scans and watchlists on mount
   useEffect(() => {
     setSavedScans(loadSqueezeScans());
+    setSqueezeWatchlists(loadSqueezeWatchlists());
   }, []);
 
   // Cleanup abort on unmount
@@ -530,6 +542,19 @@ function SqueezePage() {
     setMinScore(f.minScore);
     setRequireEw(f.requireEwAlignment);
   }, []);
+
+  // ── Add to Watchlist ──
+  const handleAddToWatchlist = useCallback(
+    (wlId: string, candidate: ScoredSqueezeCandidate) => {
+      const ok = addToSqueezeWatchlist(wlId, candidate);
+      if (ok) {
+        setAddedTicker(candidate.ticker);
+        setSqueezeWatchlists(loadSqueezeWatchlists());
+        setTimeout(() => setAddedTicker(null), 1500);
+      }
+    },
+    []
+  );
 
   // ── Sort toggle ──
   const toggleSort = useCallback(
@@ -1006,6 +1031,7 @@ function SqueezePage() {
                     <th className="px-3 py-2 text-left text-xs font-medium text-[#a0a0a0]">
                       EW
                     </th>
+                    <th className="px-3 py-2 w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1019,6 +1045,9 @@ function SqueezePage() {
                           expandedTicker === c.ticker ? null : c.ticker
                         )
                       }
+                      watchlists={squeezeWatchlists}
+                      onAddToWatchlist={handleAddToWatchlist}
+                      justAdded={addedTicker === c.ticker}
                     />
                   ))}
                 </tbody>
@@ -1064,12 +1093,19 @@ function TableRow({
   candidate: c,
   expanded,
   onToggle,
+  watchlists,
+  onAddToWatchlist,
+  justAdded,
 }: {
   candidate: ScoredSqueezeCandidate;
   expanded: boolean;
   onToggle: () => void;
+  watchlists: SqueezeWatchlist[];
+  onAddToWatchlist: (wlId: string, candidate: ScoredSqueezeCandidate) => void;
+  justAdded: boolean;
 }) {
   const ewAligned = isSqueezeAlignedWavePosition(c.ewPosition);
+  const [showPicker, setShowPicker] = useState(false);
 
   return (
     <>
@@ -1119,10 +1155,57 @@ function TableRow({
             <span className="text-[#333]">-</span>
           )}
         </td>
+        <td className="px-3 py-2.5">
+          <div className="relative">
+            {justAdded ? (
+              <Check className="h-4 w-4 text-green-400" />
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPicker(!showPicker);
+                }}
+                className="rounded p-0.5 text-[#555] hover:text-[#5ba3e6] transition-colors"
+                title="Add to watchlist"
+              >
+                <ListPlus className="h-4 w-4" />
+              </button>
+            )}
+            {showPicker && watchlists.length > 0 && (
+              <div className="absolute right-0 top-6 z-20 w-48 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] py-1 shadow-xl">
+                {watchlists.map((wl) => (
+                  <button
+                    key={wl.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddToWatchlist(wl.id, c);
+                      setShowPicker(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[#a0a0a0] hover:bg-[#262626] hover:text-white"
+                  >
+                    <ListPlus className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{wl.name}</span>
+                    <span className="ml-auto text-[#555]">{wl.items.length}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {showPicker && watchlists.length === 0 && (
+              <div className="absolute right-0 top-6 z-20 w-52 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 shadow-xl">
+                <p className="text-xs text-[#666]">
+                  No watchlists yet. Create one on the{" "}
+                  <a href="/squeeze/watchlist" className="text-[#5ba3e6] hover:underline">
+                    Watchlist page
+                  </a>.
+                </p>
+              </div>
+            )}
+          </div>
+        </td>
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={10} className="bg-[#0f0f0f] px-4 py-4">
+          <td colSpan={11} className="bg-[#0f0f0f] px-4 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {/* Score breakdown */}
               <div className="space-y-2">
