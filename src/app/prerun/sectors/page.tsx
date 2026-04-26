@@ -238,13 +238,13 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
                   STEALTH
                 </span>
               )}
-              {sector.dataQuality < 100 && (
+              {(sector.dataQuality ?? 100) < 100 && (
                 <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
-                  {sector.dataQuality}% data
+                  {sector.dataQuality ?? 100}% data
                 </span>
               )}
             </div>
-            {sector.subsectors.length > 1 && (
+            {(sector.subsectors?.length ?? 0) > 1 && (
               <div className="text-[10px] text-[#555] mt-0.5">
                 {sector.subsectors.join(" + ")}
               </div>
@@ -437,7 +437,7 @@ export default function SectorRotationPage() {
     const map = new Map<string, StockInSector[]>();
     for (const sector of data.sectors) {
       const merged: StockInSector[] = [];
-      for (const sub of sector.subsectors) {
+      for (const sub of sector.subsectors ?? []) {
         merged.push(...(stocksByOriginalSector.get(sub) ?? []));
       }
       map.set(sector.sector, merged);
@@ -552,11 +552,11 @@ export default function SectorRotationPage() {
             </div>
             <div className="text-right">
               <div className="text-xs text-[#666]">Sector Spread</div>
-              <div className={`text-lg font-bold ${data.sectorSpread > 8 ? "text-green-400" : data.sectorSpread > 4 ? "text-amber-400" : "text-[#a0a0a0]"}`}>
-                {data.sectorSpread}%
+              <div className={`text-lg font-bold ${(data.sectorSpread ?? 0) > 8 ? "text-green-400" : (data.sectorSpread ?? 0) > 4 ? "text-amber-400" : "text-[#a0a0a0]"}`}>
+                {data.sectorSpread ?? 0}%
               </div>
               <div className="text-xs text-[#555]">
-                {data.sectorSpread > 8 ? "Wide" : data.sectorSpread > 4 ? "Moderate" : "Narrow"}
+                {(data.sectorSpread ?? 0) > 8 ? "Wide" : (data.sectorSpread ?? 0) > 4 ? "Moderate" : "Narrow"}
               </div>
             </div>
           </div>
@@ -598,9 +598,9 @@ export default function SectorRotationPage() {
                     style={{ width: `${s.compositeScore}%` }}
                   />
                 </div>
-                {s.dataQuality < 100 && (
-                  <div className="mt-1 text-[10px] text-amber-400/70" title={`${s.dataQuality}% of composite factors have real data`}>
-                    {s.dataQuality}% data
+                {(s.dataQuality ?? 100) < 100 && (
+                  <div className="mt-1 text-[10px] text-amber-400/70" title={`${s.dataQuality ?? 100}% of composite factors have real data`}>
+                    {s.dataQuality ?? 100}% data
                   </div>
                 )}
               </div>
