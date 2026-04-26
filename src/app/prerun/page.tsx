@@ -25,7 +25,7 @@ import type {
   PreRunFilters,
   SavedPreRunScan,
 } from "@/lib/prerun/types";
-import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS } from "@/lib/prerun/types";
+import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE } from "@/lib/prerun/types";
 import {
   savePreRunScan,
   loadPreRunScans,
@@ -88,9 +88,10 @@ function scoreBarGradient(score: number, max: number): string {
   return "bg-red-500";
 }
 
-function scoreDotColor(val: number): string {
-  if (val >= 2) return "bg-green-500";
-  if (val >= 1) return "bg-amber-500";
+function scoreDotColor(val: number, max = 2): string {
+  const pct = max > 0 ? val / max : 0;
+  if (pct >= 0.75) return "bg-green-500";
+  if (pct >= 0.4) return "bg-amber-500";
   return "bg-red-500";
 }
 
@@ -582,13 +583,13 @@ function PreRunPage() {
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-[#a0a0a0]">Min Score</span>
                   <span className="text-white">
-                    {minScore === 0 ? "Any" : `${minScore}/14`}
+                    {minScore === 0 ? "Any" : `${minScore}/${MAX_SCORE}`}
                   </span>
                 </div>
                 <input
                   type="range"
                   min={0}
-                  max={14}
+                  max={MAX_SCORE}
                   step={1}
                   value={minScore}
                   onChange={(e) => setMinScore(Number(e.target.value))}
@@ -942,7 +943,7 @@ function PreRunPage() {
             <p className="text-sm font-medium">Pre-Run Scanner</p>
             <p className="text-xs mt-1 max-w-md text-center">
               Scan {getTickersForSector("All").length} stocks across {sectorBuckets.length} sector
-              buckets for multi-bagger setups. Scores 7 criteria (A-G) through 3 hard gates.
+              buckets for multi-bagger setups. Scores 11 criteria (A-K) through 3 hard gates.
             </p>
             <Link
               href="/prerun/guide"
@@ -982,9 +983,10 @@ function ResultCard({
   const g = result.gates;
   const isPriority = result.verdict === "PRIORITY";
 
-  const criteriaLabels = ["A", "B", "C", "D", "E", "F", "G"] as const;
-  const criteriaValues = [s.scoreA, s.scoreB, s.scoreC, s.scoreD, s.scoreE, s.scoreF, s.scoreG];
-  const criteriaNames = ["Base", "SI", "Catalyst", "Earnings", "Coverage", "Volume", "Index"];
+  const criteriaLabels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"] as const;
+  const criteriaValues = [s.scoreA, s.scoreB, s.scoreC, s.scoreD, s.scoreE, s.scoreF, s.scoreG, s.scoreH, s.scoreI, s.scoreJ, s.scoreK];
+  const criteriaMaxes = [2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2];
+  const criteriaNames = ["Base", "SI", "Catalyst", "Earnings", "Coverage", "Volume", "Index", "Insider", "Options", "RelStr", "Breakout"];
 
   return (
     <div
@@ -1040,22 +1042,29 @@ function ResultCard({
       <div className="mb-3">
         <div className="flex items-center justify-between text-xs mb-1">
           <span className="text-[#a0a0a0]">Score</span>
-          <span className="font-medium text-white">{s.finalScore}/14</span>
+          <span className="font-medium text-white">
+            {s.finalScore}/{MAX_SCORE}
+            {s.sectorModifier !== 0 && (
+              <span className={s.sectorModifier > 0 ? "text-green-400 ml-1" : "text-red-400 ml-1"}>
+                ({s.sectorModifier > 0 ? "+" : ""}{s.sectorModifier} sector)
+              </span>
+            )}
+          </span>
         </div>
         <div className="h-2 bg-[#0f0f0f] rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${scoreBarGradient(s.finalScore, 14)}`}
-            style={{ width: `${(s.finalScore / 14) * 100}%` }}
+            className={`h-full rounded-full transition-all duration-500 ${scoreBarGradient(s.finalScore, MAX_SCORE)}`}
+            style={{ width: `${Math.min(100, (s.finalScore / MAX_SCORE) * 100)}%` }}
           />
         </div>
       </div>
 
-      {/* Score dots (A-G) */}
-      <div className="flex items-center gap-1.5 mb-3">
+      {/* Score dots (A-K) */}
+      <div className="flex flex-wrap items-center gap-1 mb-3">
         {criteriaLabels.map((label, i) => (
-          <div key={label} className="flex flex-col items-center gap-0.5" title={`${criteriaNames[i]}: ${criteriaValues[i]}/2`}>
+          <div key={label} className="flex flex-col items-center gap-0.5" title={`${criteriaNames[i]}: ${criteriaValues[i]}/${criteriaMaxes[i]}`}>
             <div
-              className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white ${scoreDotColor(criteriaValues[i])}`}
+              className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white ${scoreDotColor(criteriaValues[i], criteriaMaxes[i])}`}
             >
               {label}
             </div>
@@ -1063,6 +1072,16 @@ function ResultCard({
           </div>
         ))}
       </div>
+
+      {/* Pattern match badge */}
+      {result.patternMatch && (
+        <div className="mb-3 flex items-center gap-1.5 rounded-md border border-[#5ba3e6]/20 bg-[#5ba3e6]/5 px-2.5 py-1.5">
+          <TrendingUp className="h-3 w-3 text-[#5ba3e6] shrink-0" />
+          <span className="text-[10px] text-[#5ba3e6]">
+            Similar to: <strong>{result.patternMatch.template}</strong> ({result.patternMatch.similarity}% match)
+          </span>
+        </div>
+      )}
 
       {/* Gate indicators */}
       <div className="flex items-center gap-2 mb-3">

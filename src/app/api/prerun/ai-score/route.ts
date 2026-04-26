@@ -61,14 +61,17 @@ export async function POST(request: NextRequest) {
     const prompt = `You are a stock analyst evaluating whether ${ticker}${companyName ? ` (${companyName})` : ""} has a structural narrative catalyst that is NOT yet priced in by the market.
 
 ${recentNews ? `Recent news/context:\n${recentNews}\n` : ""}
-Score the narrative catalyst on this scale:
+This is for a Pre-Run Scanner that identifies stocks building bases 40%+ below ATH that could become multi-baggers. The scanner scores 11 criteria (A-K) including short interest, insider buying, options flow, relative sector strength, and breakout proximity.
+
+Score the narrative catalyst on this expanded scale:
+- 3: Multiple converging catalysts — structural shift + near-term trigger + sector tailwind (rare)
 - 2: Structural change confirmed, not yet consensus (e.g., new regulation benefiting sector, supply chain shift, emerging technology demand)
 - 1: Speculative or unconfirmed catalyst (e.g., rumors, early-stage trends)
 - 0: No catalyst or catalyst already fully priced in
 
 Reply with ONLY valid JSON (no code fences):
 {
-  "suggestedScore": 0 | 1 | 2,
+  "suggestedScore": 0 | 1 | 2 | 3,
   "reasoning": "Brief 1-2 sentence explanation",
   "confidence": "high" | "medium" | "low"
 }`;

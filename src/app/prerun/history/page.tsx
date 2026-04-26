@@ -214,7 +214,7 @@ function HistoryPage() {
                           : "-"}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-white">
-                        {r.scores.finalScore}/14
+                        {r.scores.finalScore}/24
                       </td>
                       <td className="px-4 py-3">
                         <span

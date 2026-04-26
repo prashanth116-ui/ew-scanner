@@ -1,5 +1,25 @@
 /** Pre-Run Scanner Universe — organized by sector bucket. */
 
+/** Sector ETF mapping for relative strength (criterion J) and sector momentum. */
+export const SECTOR_ETF_MAP: Record<string, string> = {
+  "AI Optical/Connectivity Semis": "SMH",
+  "Advanced Packaging/Test": "SMH",
+  "SiC/GaN Power Semis": "SMH",
+  "Beaten-Down Cloud/SaaS": "IGV",
+  "Beaten-Down Biotech": "XBI",
+  "Energy/LNG Turnarounds": "XLE",
+  "Nuclear/Power Neoclouds": "XLU",
+  "Rare Earth/Critical Minerals": "XLB",
+  "EV/Hydrogen Turnarounds": "QCLN",
+  "High Short Interest": "SPY",
+  "Rental/Travel": "PEJ",
+};
+
+/** Get sector ETF for a sector bucket name. */
+export function getSectorETF(sector: string): string {
+  return SECTOR_ETF_MAP[sector] ?? "SPY";
+}
+
 export const SCAN_UNIVERSE: Record<string, string[]> = {
   "AI Optical/Connectivity Semis": [
     "HIMX", "INDI", "ALGM", "FORM", "COHU", "MTSI", "DIOD", "POWI", "SITM", "AEHR", "LASR", "UCTT", "SMCI", "CRDO",

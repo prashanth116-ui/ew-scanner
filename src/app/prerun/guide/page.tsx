@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { BookOpen, AlertTriangle, TrendingUp, Zap, Target, Shield, Layers } from "lucide-react";
+import { BookOpen, AlertTriangle, TrendingUp, Zap, Target, Shield, Layers, ChevronDown, ChevronUp, ClipboardList } from "lucide-react";
 
 function Section({
   icon: Icon,
@@ -87,6 +88,7 @@ function CriterionRow({
   label,
   letter,
   weight,
+  score3,
   score2,
   score1,
   score0,
@@ -94,6 +96,7 @@ function CriterionRow({
   label: string;
   letter: string;
   weight: string;
+  score3?: string;
   score2: string;
   score1: string;
   score0: string;
@@ -110,6 +113,12 @@ function CriterionRow({
         </span>
       </div>
       <div className="space-y-1 text-xs">
+        {score3 && (
+          <div className="flex items-start gap-2">
+            <span className="w-4 shrink-0 font-bold text-emerald-400">3</span>
+            <span className="text-[#a0a0a0]">{score3}</span>
+          </div>
+        )}
         <div className="flex items-start gap-2">
           <span className="w-4 shrink-0 font-bold text-green-400">2</span>
           <span className="text-[#a0a0a0]">{score2}</span>
@@ -124,6 +133,157 @@ function CriterionRow({
         </div>
       </div>
     </div>
+  );
+}
+
+function QuickReferenceCard() {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <section className="rounded-lg border border-[#5ba3e6]/30 bg-[#1a1a1a] overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-6 py-4 text-left"
+      >
+        <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+          <ClipboardList className="h-5 w-5 text-[#5ba3e6]" />
+          Quick Reference
+        </h2>
+        {open ? (
+          <ChevronUp className="h-5 w-5 text-[#666]" />
+        ) : (
+          <ChevronDown className="h-5 w-5 text-[#666]" />
+        )}
+      </button>
+
+      {open && (
+        <div className="border-t border-[#2a2a2a] px-6 pb-6 pt-4 space-y-5">
+          {/* Gates Table */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              3 Hard Gates (all must pass)
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Gate</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Rule</th>
+                    <th className="py-1.5 text-left font-medium">Pass</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">G1</td>
+                    <td className="py-1.5 pr-3">Not already run</td>
+                    <td className="py-1.5">&ge;40% below ATH</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">G2</td>
+                    <td className="py-1.5 pr-3">No existential risk</td>
+                    <td className="py-1.5">No DOJ/SEC/delisting (manual)</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">G3</td>
+                    <td className="py-1.5 pr-3">Base forming</td>
+                    <td className="py-1.5">Price &gt; SMA20 &times; 0.92</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Criteria Table */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              11 Criteria (max 24 pts + sector modifier)
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-2 text-left font-medium w-6"></th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Criterion</th>
+                    <th className="py-1.5 pr-2 text-center font-medium">Max</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Score 0</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Score 1</th>
+                    <th className="py-1.5 text-left font-medium">Score 2 (or 3)</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  {[
+                    { l: "A", name: "Dead Money Base", max: 2, s0: "No discount", s1: "25%+ / 8+ wks", s2: "40%+ / 13+ wks" },
+                    { l: "B", name: "Short Interest", max: 3, s0: "SI <5%", s1: "SI 5-15%", s2: "3: SI>20% + small cap" },
+                    { l: "C", name: "Narrative Catalyst", max: 3, s0: "No catalyst", s1: "Speculative", s2: "3: Multiple catalysts" },
+                    { l: "D", name: "Earnings Inflection", max: 2, s0: "Declining rev", s1: "Growth or near earn", s2: "Accel rev + earn <60d" },
+                    { l: "E", name: "Inst. Under-Ownership", max: 2, s0: "Inst >70%", s1: "Inst 40-70%", s2: "Inst <40%" },
+                    { l: "F", name: "Volume Accumulation", max: 2, s0: "Distribution", s1: "Neutral", s2: "Up/Down >1.3x or float turnover" },
+                    { l: "G", name: "Index Inclusion", max: 2, s0: "N/A", s1: "Possible", s2: "Plausible <18mo" },
+                    { l: "H", name: "Insider Buying", max: 2, s0: "None 90d", s1: "1-2 buys", s2: "3+ cluster buys" },
+                    { l: "I", name: "Options Flow", max: 2, s0: "P/C >1.0", s1: "P/C 0.5-1.0", s2: "P/C <0.5 (bullish)" },
+                    { l: "J", name: "Rel. Strength vs Sector", max: 2, s0: "Under by >5%", s1: "Within 5%", s2: "Over by >5%" },
+                    { l: "K", name: "Breakout Proximity", max: 2, s0: ">10% below resist", s1: "5-10% below", s2: "<5% (coiling)" },
+                  ].map((c) => (
+                    <tr key={c.l} className="border-b border-[#2a2a2a]/50">
+                      <td className="py-1.5 pr-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-purple-500/20 text-[10px] font-bold text-purple-400">
+                          {c.l}
+                        </span>
+                      </td>
+                      <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{c.name}</td>
+                      <td className="py-1.5 pr-2 text-center text-[#5ba3e6]">{c.max}</td>
+                      <td className="py-1.5 pr-3 text-red-400/70">{c.s0}</td>
+                      <td className="py-1.5 pr-3 text-amber-400/70">{c.s1}</td>
+                      <td className="py-1.5 text-green-400/70">{c.s2}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded bg-[#5ba3e6]/20 text-[10px] font-bold text-[#5ba3e6]">
+                        +
+                      </span>
+                    </td>
+                    <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">Sector Momentum</td>
+                    <td className="py-1.5 pr-2 text-center text-[#5ba3e6]">&plusmn;1</td>
+                    <td className="py-1.5 pr-3 text-red-400/70">-1 if sector &lt;-5%</td>
+                    <td className="py-1.5 pr-3 text-[#c0c0c0]">0 (neutral)</td>
+                    <td className="py-1.5 text-green-400/70">+1 if sector &gt;+5%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-1.5 text-[10px] text-[#666]">
+              Time decay: Bases &gt;2 years (104 weeks) halve score A. B &amp; C expanded to 0-3 (highest predictive signal).
+            </p>
+          </div>
+
+          {/* Verdict Thresholds */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              Verdict Thresholds
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="rounded-md border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-purple-400">PRIORITY</p>
+                <p className="text-xs text-[#c0c0c0]">&ge;15 + earn &lt;14d</p>
+              </div>
+              <div className="rounded-md border border-green-500/20 bg-green-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-green-400">KEEP</p>
+                <p className="text-xs text-[#c0c0c0]">&ge;15</p>
+              </div>
+              <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-amber-400">WATCH</p>
+                <p className="text-xs text-[#c0c0c0]">&ge;11</p>
+              </div>
+              <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-red-400">DISCARD</p>
+                <p className="text-xs text-[#c0c0c0]">&lt;11 or gate fail</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -161,6 +321,9 @@ export default function PreRunGuidePage() {
       </div>
 
       <div className="space-y-6">
+        {/* Quick Reference Card */}
+        <QuickReferenceCard />
+
         {/* Case Studies */}
         <Section icon={TrendingUp} title="Case Studies: What Multi-Baggers Looked Like Before the Run">
           <p>
@@ -238,12 +401,12 @@ export default function PreRunGuidePage() {
           </div>
         </Section>
 
-        {/* 7 Criteria */}
-        <Section icon={Layers} title="Layer 2: Seven Criteria (0-14 Points)">
+        {/* 11 Criteria */}
+        <Section icon={Layers} title="Layer 2: Eleven Criteria (max 24 Points + Sector Modifier)">
           <p>
-            Each criterion scores 0 (absent), 1 (partial), or 2 (strong). Total
-            possible: 14 points. Criteria A, B, C are highest weight — these
-            are the core setup ingredients.
+            Each criterion scores 0-2 (B and C expanded to 0-3 for higher
+            predictive weight). Total possible: 24 points + sector momentum
+            modifier (&plusmn;1). Criteria A, B, C are highest weight.
           </p>
           <div className="space-y-3 pt-2">
             <CriterionRow
@@ -256,16 +419,18 @@ export default function PreRunGuidePage() {
             />
             <CriterionRow
               letter="B"
-              label="Short Interest ≥15% Float"
-              weight="HIGH"
+              label="Short Interest"
+              weight="HIGH (0-3)"
+              score3="Short float ≥20% and small cap (<$20B). Extreme squeeze potential."
               score2="Short float ≥15% and market cap under $20B. Maximum squeeze fuel."
-              score1="Short float 8-15% OR large cap with 15%+. Some fuel but less explosive."
-              score0="Short float under 8%. Not enough fuel for a squeeze-driven move."
+              score1="Short float 5-15%. Some fuel but less explosive."
+              score0="Short float under 5%. Not enough fuel for a squeeze-driven move."
             />
             <CriterionRow
               letter="C"
               label="Narrative Catalyst"
-              weight="HIGH"
+              weight="HIGH (0-3)"
+              score3="Multiple converging catalysts — structural shift + near-term trigger + sector tailwind."
               score2="Structural change confirmed but not yet consensus. The market hasn't priced it in."
               score1="Speculative or unconfirmed catalyst. Early-stage trend, could go either way."
               score0="No catalyst or already fully priced in. Nothing to drive re-rating."
@@ -302,7 +467,44 @@ export default function PreRunGuidePage() {
               score1="Possible but not near-term. Size or profitability not quite there yet."
               score0="N/A or years away. Not a factor in the thesis."
             />
+            <CriterionRow
+              letter="H"
+              label="Insider Buying"
+              weight="MEDIUM"
+              score2="3+ insider purchases in last 90 days. Cluster buying = strong conviction."
+              score1="1-2 insider purchases. Some insider interest."
+              score0="No insider buys in last 90 days."
+            />
+            <CriterionRow
+              letter="I"
+              label="Options Flow (Put/Call)"
+              weight="MEDIUM"
+              score2="Put/Call OI ratio < 0.5. Heavy call accumulation — bullish smart money flow."
+              score1="Put/Call ratio 0.5-1.0. Neutral."
+              score0="Put/Call ratio > 1.0. Bears in control."
+            />
+            <CriterionRow
+              letter="J"
+              label="Relative Strength vs Sector"
+              weight="MEDIUM"
+              score2="Stock 20-day return outperforming sector ETF by > 5%. Leading the sector."
+              score1="Within 5% of sector. Moving in-line."
+              score0="Underperforming sector by > 5%. Lagging — something wrong."
+            />
+            <CriterionRow
+              letter="K"
+              label="Breakout Proximity"
+              weight="MEDIUM"
+              score2="Within 5% of 3-month base high (resistance). Coiling near breakout."
+              score1="5-10% below resistance. Getting close."
+              score0="More than 10% below resistance. Not ready yet."
+            />
           </div>
+          <p className="mt-3 text-xs text-[#666]">
+            <strong className="text-[#a0a0a0]">Time decay:</strong> Bases older than 2 years (104 weeks) have score A halved — dead money that&apos;s been dead too long loses energy.
+            <br />
+            <strong className="text-[#a0a0a0]">Sector modifier:</strong> +1 if sector ETF 20d return &gt; +5% (tailwind), -1 if &lt; -5% (headwind).
+          </p>
         </Section>
 
         {/* Verdict Tiers */}
@@ -313,7 +515,7 @@ export default function PreRunGuidePage() {
                 PRIORITY
               </span>
               <span className="text-sm text-[#c0c0c0]">
-                Score ≥9 + earnings within 14 days + all gates pass. Highest
+                Score ≥15 + earnings within 14 days + all gates pass. Highest
                 probability window — hard catalyst imminent.
               </span>
             </div>
@@ -322,7 +524,7 @@ export default function PreRunGuidePage() {
                 KEEP
               </span>
               <span className="text-sm text-[#c0c0c0]">
-                Score ≥10 + all gates pass. Strong setup, actively track and
+                Score ≥15 + all gates pass. Strong setup, actively track and
                 size a position.
               </span>
             </div>
@@ -331,7 +533,7 @@ export default function PreRunGuidePage() {
                 WATCH
               </span>
               <span className="text-sm text-[#c0c0c0]">
-                Score 7-9 + all gates pass. Interesting but needs more
+                Score 11-14 + all gates pass. Interesting but needs more
                 confirmation. Monitor for improvement.
               </span>
             </div>
@@ -340,7 +542,7 @@ export default function PreRunGuidePage() {
                 DISCARD
               </span>
               <span className="text-sm text-[#c0c0c0]">
-                Score &lt;7 OR any gate fails. Does not meet criteria. Move on.
+                Score &lt;11 OR any gate fails. Does not meet criteria. Move on.
               </span>
             </div>
           </div>
