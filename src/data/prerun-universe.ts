@@ -2,13 +2,13 @@
 
 export const SCAN_UNIVERSE: Record<string, string[]> = {
   "AI Optical/Connectivity Semis": [
-    "HIMX", "INDI", "ALGM", "FORM", "COHU", "MTSI", "DIOD", "POWI", "SITM", "AEHR", "LASR", "UCTT",
+    "HIMX", "INDI", "ALGM", "FORM", "COHU", "MTSI", "DIOD", "POWI", "SITM", "AEHR", "LASR", "UCTT", "SMCI", "CRDO",
   ],
   "Advanced Packaging/Test": [
     "AMKR", "CAMT", "ICHR", "KLIC", "ACLS", "ONTO", "PRDO",
   ],
   "SiC/GaN Power Semis": [
-    "WOLF", "AEIS", "VICR", "MPWR",
+    "WOLF", "AEIS", "VICR", "MPWR", "ON",
   ],
   "Beaten-Down Cloud/SaaS": [
     "CRM", "DDOG", "SNOW", "GTLB", "ESTC", "MDB", "CFLT", "HUBS", "ZS", "OKTA",
@@ -17,10 +17,10 @@ export const SCAN_UNIVERSE: Record<string, string[]> = {
     "MRNA", "BNTX", "NVAX", "IONS", "EXEL", "BMRN", "RXRX", "SEER", "PACB",
   ],
   "Energy/LNG Turnarounds": [
-    "LNG", "AR", "TELL", "NFE", "NEXT", "RRC", "CTRA",
+    "LNG", "AR", "TELL", "NFE", "NEXT", "RRC", "CTRA", "VG",
   ],
   "Nuclear/Power Neoclouds": [
-    "SMR", "NNE", "CEG", "VST", "TLN", "RKLB",
+    "SMR", "NNE", "CEG", "VST", "TLN", "RKLB", "OKLO", "IREN",
   ],
   "Rare Earth/Critical Minerals": [
     "UUUU", "REX",
@@ -32,7 +32,7 @@ export const SCAN_UNIVERSE: Record<string, string[]> = {
     "GME", "AMC", "UPST", "SOFI", "HOOD", "LCID", "RIVN", "BYND",
   ],
   "Rental/Travel": [
-    "CAR",
+    "CAR", "HTZ", "ABNB", "EXPE",
   ],
 };
 

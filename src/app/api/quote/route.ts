@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
+import { validateTicker } from "@/lib/api-utils";
 import { findStructuralReferences } from "@/lib/ew-structural";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
@@ -15,9 +16,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const ticker = request.nextUrl.searchParams.get("ticker");
+  const ticker = validateTicker(request.nextUrl.searchParams.get("ticker"));
   if (!ticker) {
-    return NextResponse.json({ error: "ticker param required" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid or missing ticker" }, { status: 400 });
   }
 
   const detail = request.nextUrl.searchParams.get("detail") === "1";

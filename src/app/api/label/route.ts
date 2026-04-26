@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
+import { validateTicker, sanitizeForPrompt, checkOriginAuth } from "@/lib/api-utils";
+import { checkFeatureGate, incrementUsage } from "@/lib/auth-gate";
 
 interface CandidateInput {
   ticker: string;
@@ -19,8 +21,29 @@ interface CandidateInput {
 }
 
 export async function POST(request: NextRequest) {
-  // Rate limit: 10 req/min per IP
-  const rl = rateLimit(`label:${getClientKey(request)}`, 10, 60_000);
+  // Origin check — AI endpoints only accept same-origin or API key
+  const auth = checkOriginAuth(request, process.env.AI_API_KEY);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  // Feature gate: check user tier + usage limit
+  const gate = await checkFeatureGate("label_batches");
+  if (!gate.allowed) {
+    return NextResponse.json(
+      {
+        error: "Usage limit reached",
+        tier: gate.tier,
+        used: gate.used,
+        limit: gate.limit,
+        upgrade: true,
+      },
+      { status: 403 }
+    );
+  }
+
+  // Rate limit: 5 req/min per IP (AI endpoint — costs money)
+  const rl = rateLimit(`label:${getClientKey(request)}`, 5, 60_000);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded" },
@@ -36,6 +59,14 @@ export async function POST(request: NextRequest) {
 
   if (!candidates?.length) {
     return NextResponse.json({ error: "No candidates" }, { status: 400 });
+  }
+
+  // Validate all tickers
+  for (const c of candidates) {
+    const valid = validateTicker(c.ticker);
+    if (!valid) continue;
+    c.ticker = valid;
+    if (c.scannerMode) c.scannerMode = sanitizeForPrompt(c.scannerMode, 50);
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -130,6 +161,11 @@ ${chunkLines}`;
       for (const labels of results) {
         Object.assign(allLabels, labels);
       }
+    }
+
+    // Increment usage on success
+    if (gate.userId) {
+      await incrementUsage(gate.userId, "label_batches");
     }
 
     return NextResponse.json({ labels: allLabels });

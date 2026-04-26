@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
+import { validateTickers } from "@/lib/api-utils";
 import { fetchPreRunData } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
 
@@ -18,9 +19,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as { tickers: string[] };
-    const tickers = body.tickers?.slice(0, 200); // Cap at 200
-    if (!tickers?.length) {
-      return NextResponse.json({ error: "tickers array required" }, { status: 400 });
+    const tickers = validateTickers(body.tickers).slice(0, 200);
+    if (!tickers.length) {
+      return NextResponse.json({ error: "tickers array required (valid A-Z tickers)" }, { status: 400 });
     }
 
     const results = [];

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
+import { validateTicker } from "@/lib/api-utils";
 import { fetchSqueezeData } from "@/lib/squeeze-fetch";
 
 export async function GET(request: NextRequest) {
@@ -12,10 +13,10 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const ticker = request.nextUrl.searchParams.get("ticker");
+  const ticker = validateTicker(request.nextUrl.searchParams.get("ticker"));
   if (!ticker) {
     return NextResponse.json(
-      { error: "ticker param required" },
+      { error: "Invalid or missing ticker" },
       { status: 400 }
     );
   }

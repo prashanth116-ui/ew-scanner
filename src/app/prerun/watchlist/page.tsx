@@ -30,6 +30,7 @@ import {
   loadPreRunAlerts,
   markAlertRead,
 } from "@/lib/prerun/storage";
+import { scorePreRun } from "@/lib/prerun/scoring";
 
 // ── Score labels ──
 
@@ -217,18 +218,23 @@ function WatchlistContent() {
         const res = await fetch(`/api/prerun/stock?ticker=${encodeURIComponent(ticker)}`);
         if (res.ok) {
           const result: PreRunResult = await res.json();
-          // Update the item's latest data in the watchlist items state
+          // Re-score with fresh data + user's manual inputs
           setItems((prev) =>
-            prev.map((it) =>
-              it.ticker === ticker
-                ? {
-                    ...it,
-                    latestData: result.data,
-                    latestScores: result.scores,
-                    latestGates: result.gates,
-                  }
-                : it
-            )
+            prev.map((it) => {
+              if (it.ticker !== ticker) return it;
+              const rescored = scorePreRun(
+                result.data,
+                it.gate2Pass,
+                it.scoreC,
+                it.scoreG,
+              );
+              return {
+                ...it,
+                latestData: rescored.data,
+                latestScores: rescored.scores,
+                latestGates: rescored.gates,
+              };
+            })
           );
         }
       } catch {
@@ -343,6 +349,18 @@ function WatchlistContent() {
                   const shortPct = item.latestData?.shortFloat ?? null;
                   const daysEarn = daysToEarnings(item);
                   const score = item.latestScores?.finalScore ?? null;
+                  // Derive live verdict from refreshed scores/gates when available
+                  const liveVerdict: PreRunVerdict | null = (() => {
+                    const s = item.latestScores;
+                    const g = item.latestGates;
+                    if (!s || !g) return null;
+                    if (!g.gate1 || !g.gate2 || !g.gate3) return "DISCARD";
+                    if (s.finalScore >= 9 && item.latestData?.daysToEarnings != null && item.latestData.daysToEarnings <= 14) return "PRIORITY";
+                    if (s.finalScore >= 9) return "KEEP";
+                    if (s.finalScore >= 7) return "WATCH";
+                    return "DISCARD";
+                  })();
+                  const displayVerdict = liveVerdict ?? item.verdict;
                   const nearStop = isPriceNearStop(item);
                   const urgentEarnings = earningsUrgent(item);
                   const isSaving = saving.has(item.id);
@@ -351,7 +369,7 @@ function WatchlistContent() {
                     <Fragment key={item.id}>
                       {/* Main row */}
                       <tr
-                        className={`cursor-pointer transition-colors hover:bg-[#262626] ${VERDICT_BORDER[item.verdict]}`}
+                        className={`cursor-pointer transition-colors hover:bg-[#262626] ${VERDICT_BORDER[displayVerdict]}`}
                         onClick={() => toggleExpand(item.id)}
                       >
                         <td className="px-2 py-3 text-center">
@@ -397,9 +415,9 @@ function WatchlistContent() {
                         </td>
                         <td className="px-3 py-3">
                           <span
-                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[item.verdict]}`}
+                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[displayVerdict]}`}
                           >
-                            {item.verdict}
+                            {displayVerdict}
                           </span>
                         </td>
                         <td className={`px-3 py-3 text-right font-mono ${nearStop ? "text-red-400 font-semibold" : "text-[#a0a0a0]"}`}>
@@ -421,7 +439,7 @@ function WatchlistContent() {
 
                       {/* Expanded detail row */}
                       {isExpanded && es && (
-                        <tr className={VERDICT_BORDER[item.verdict]}>
+                        <tr className={VERDICT_BORDER[displayVerdict]}>
                           <td colSpan={12} className="bg-[#141414] px-6 py-4">
                             <div className="grid gap-6 lg:grid-cols-2">
                               {/* Left column: Scores + Gates */}

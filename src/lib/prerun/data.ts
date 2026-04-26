@@ -15,6 +15,13 @@ const YAHOO_SUMMARY =
 const YAHOO_CHART =
   "https://query1.finance.yahoo.com/v8/finance/chart";
 
+function fetchWithTimeout(url: string, init: RequestInit, ms = 15000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...init, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 function extractRaw(val: unknown): number | null {
   if (val == null) return null;
   if (typeof val === "number") return val;
@@ -33,7 +40,7 @@ async function fetchYahooSummary(
   if (!auth) return null;
 
   const url = `${YAHOO_SUMMARY}/${encodeURIComponent(ticker)}?modules=${modules.join(",")}&crumb=${encodeURIComponent(auth.crumb)}`;
-  let res = await fetch(url, {
+  let res = await fetchWithTimeout(url, {
     headers: { "User-Agent": UA, Cookie: auth.cookie },
   });
 
@@ -42,7 +49,7 @@ async function fetchYahooSummary(
     const retryAuth = await getYahooCrumb();
     if (!retryAuth) return null;
     const retryUrl = `${YAHOO_SUMMARY}/${encodeURIComponent(ticker)}?modules=${modules.join(",")}&crumb=${encodeURIComponent(retryAuth.crumb)}`;
-    res = await fetch(retryUrl, {
+    res = await fetchWithTimeout(retryUrl, {
       headers: { "User-Agent": UA, Cookie: retryAuth.cookie },
     });
   }
@@ -73,7 +80,7 @@ async function fetchYahooChart(
   if (!auth) return null;
 
   const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&crumb=${encodeURIComponent(auth.crumb)}`;
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     headers: { "User-Agent": UA, Cookie: auth.cookie },
   });
   if (!res.ok) return null;
@@ -109,36 +116,6 @@ async function fetchYahooChart(
   };
 }
 
-/** Fetch short interest from Finnhub (if key available). */
-async function fetchFinnhubShortInterest(
-  ticker: string
-): Promise<number | null> {
-  const key = process.env.FINNHUB_API_KEY;
-  if (!key) return null;
-
-  const to = new Date().toISOString().slice(0, 10);
-  const from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-
-  try {
-    const url = `https://finnhub.io/api/v1/stock/short-interest?symbol=${encodeURIComponent(ticker)}&from=${from}&to=${to}&token=${key}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-
-    const data = (await res.json()) as {
-      data?: { shortInterest?: number; avgDailyShareTraded?: number }[];
-    };
-    const latest = data?.data?.[0];
-    if (!latest?.shortInterest || !latest.avgDailyShareTraded) return null;
-
-    // Approximate short % of float from short interest / avg volume ratio
-    return null; // Finnhub free tier may not have percentage directly
-  } catch {
-    return null;
-  }
-}
-
 /** Fetch earnings calendar from Finnhub. */
 async function fetchFinnhubEarnings(
   ticker: string
@@ -153,7 +130,7 @@ async function fetchFinnhubEarnings(
 
   try {
     const url = `https://finnhub.io/api/v1/calendar/earnings?symbol=${encodeURIComponent(ticker)}&from=${from}&to=${to}&token=${key}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {});
     if (!res.ok) return null;
 
     const data = (await res.json()) as {
@@ -209,10 +186,10 @@ function calcVolumeAccumulation(
 function calcWeeksInBase(
   highs: number[],
   timestamps: number[],
-  high52w: number
+  ath: number
 ): number {
   // Find last time price was near ATH (within 5%)
-  const threshold = high52w * 0.95;
+  const threshold = ath * 0.95;
   let lastNearAth = -1;
   for (let i = highs.length - 1; i >= 0; i--) {
     if (highs[i] >= threshold) {
@@ -220,7 +197,7 @@ function calcWeeksInBase(
       break;
     }
   }
-  if (lastNearAth < 0) return Math.floor(timestamps.length / 5); // Approximate from chart length
+  if (lastNearAth < 0) return timestamps.length; // Never near ATH in chart — use full chart length (weekly data = weeks)
   const now = timestamps[timestamps.length - 1] ?? Date.now() / 1000;
   const then = timestamps[lastNearAth];
   return Math.floor((now - then) / (7 * 24 * 60 * 60));
@@ -230,8 +207,9 @@ function calcWeeksInBase(
 export async function fetchPreRunData(
   ticker: string
 ): Promise<PreRunStockData | null> {
-  // Fetch Yahoo summary + chart in parallel
-  const [summary, chart, finnhubEarnings] = await Promise.all([
+  // Fetch Yahoo summary + 3mo chart + 5y chart + Finnhub earnings in parallel
+  // Use allSettled so a timeout on 5y chart or Finnhub doesn't crash the entire ticker
+  const settled = await Promise.allSettled([
     fetchYahooSummary(ticker, [
       "defaultKeyStatistics",
       "financialData",
@@ -239,10 +217,17 @@ export async function fetchPreRunData(
       "recommendationTrend",
       "price",
       "summaryDetail",
+      "majorHoldersBreakdown",
     ]),
-    fetchYahooChart(ticker, "3mo", "1d"),
+    fetchYahooChart(ticker, "3mo", "1d"),   // SMA20 + volume
+    fetchYahooChart(ticker, "5y", "1wk"),   // True ATH
     fetchFinnhubEarnings(ticker),
   ]);
+
+  const summary = settled[0].status === "fulfilled" ? settled[0].value : null;
+  const chart3mo = settled[1].status === "fulfilled" ? settled[1].value : null;
+  const chart5y = settled[2].status === "fulfilled" ? settled[2].value : null;
+  const finnhubEarnings = settled[3].status === "fulfilled" ? settled[3].value : null;
 
   if (!summary) return null;
 
@@ -252,15 +237,31 @@ export async function fetchPreRunData(
   const price = (summary.price ?? {}) as Record<string, unknown>;
   const detail = (summary.summaryDetail ?? {}) as Record<string, unknown>;
   const trend = (summary.recommendationTrend ?? {}) as Record<string, unknown>;
+  const holders = (summary.majorHoldersBreakdown ?? {}) as Record<string, unknown>;
 
   const currentPrice = extractRaw(price.regularMarketPrice);
   const high52w = extractRaw(detail.fiftyTwoWeekHigh);
   const low52w = extractRaw(detail.fiftyTwoWeekLow);
   const marketCap = extractRaw(price.marketCap);
 
+  // True ATH from 5y weekly highs (fallback to 52w high)
+  let allTimeHigh = high52w;
+  if (chart5y) {
+    for (const h of chart5y.highs) {
+      if (h > 0 && (allTimeHigh === null || h > allTimeHigh)) allTimeHigh = h;
+    }
+  }
+
+  // Institutional ownership %
+  let institutionalPct = extractRaw(holders.institutionsPercentHeld);
+  if (institutionalPct !== null && institutionalPct <= 1) {
+    institutionalPct *= 100; // Convert decimal (0.65) to percentage (65)
+  }
+
   // Short float: try Yahoo first
   let shortFloat = extractRaw(stats.shortPercentOfFloat);
   // Normalize: Yahoo returns as decimal (0.15 = 15%), convert to percentage
+  // Yahoo's decimal format is always < 1; values >= 1 are already percentages
   if (shortFloat !== null && shortFloat < 1) {
     shortFloat = shortFloat * 100;
   }
@@ -298,16 +299,21 @@ export async function fetchPreRunData(
     daysToEarnings = Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
   }
 
-  // Calculate from chart data
-  const sma20 = chart ? calcSMA(chart.closes, 20) : null;
-  const volAccum = chart
-    ? calcVolumeAccumulation(chart.closes, chart.opens, chart.volumes)
+  // Calculate from 3mo chart data
+  const sma20 = chart3mo ? calcSMA(chart3mo.closes, 20) : null;
+  const volAccum = chart3mo
+    ? calcVolumeAccumulation(chart3mo.closes, chart3mo.opens, chart3mo.volumes)
     : { avgUp: 0, avgDown: 0 };
 
-  // % from ATH
+  // Weeks in base from 5y weekly data
+  const weeksInBase = (chart5y && allTimeHigh)
+    ? calcWeeksInBase(chart5y.highs, chart5y.timestamps, allTimeHigh)
+    : null;
+
+  // % from ATH (use true ATH, not 52w high)
   const pctFromAth =
-    currentPrice !== null && high52w !== null && high52w > 0
-      ? ((1 - currentPrice / high52w) * 100)
+    currentPrice !== null && allTimeHigh !== null && allTimeHigh > 0
+      ? ((1 - currentPrice / allTimeHigh) * 100)
       : null;
 
   return {
@@ -329,6 +335,9 @@ export async function fetchPreRunData(
     sma20,
     avgVolumeUpDays: volAccum.avgUp,
     avgVolumeDownDays: volAccum.avgDown,
+    allTimeHigh,
+    weeksInBase,
+    institutionalPct,
     lastUpdated: new Date().toISOString(),
   };
 }

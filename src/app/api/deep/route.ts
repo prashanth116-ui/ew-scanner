@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
+import { validateTicker, sanitizeForPrompt, checkOriginAuth } from "@/lib/api-utils";
+import { checkFeatureGate, incrementUsage } from "@/lib/auth-gate";
 
 interface DeepInput {
   ticker: string;
@@ -47,8 +49,29 @@ interface DeepInput {
 }
 
 export async function POST(request: NextRequest) {
-  // Rate limit: 20 req/min per IP
-  const rl = rateLimit(`deep:${getClientKey(request)}`, 20, 60_000);
+  // Origin check — AI endpoints only accept same-origin or API key
+  const auth = checkOriginAuth(request, process.env.AI_API_KEY);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  // Feature gate: check user tier + usage limit
+  const gate = await checkFeatureGate("deep_analyses");
+  if (!gate.allowed) {
+    return NextResponse.json(
+      {
+        error: "Usage limit reached",
+        tier: gate.tier,
+        used: gate.used,
+        limit: gate.limit,
+        upgrade: true,
+      },
+      { status: 403 }
+    );
+  }
+
+  // Rate limit: 10 req/min per IP (AI endpoint — costs money)
+  const rl = rateLimit(`deep:${getClientKey(request)}`, 10, 60_000);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded" },
@@ -57,6 +80,17 @@ export async function POST(request: NextRequest) {
   }
 
   const data = (await request.json()) as DeepInput;
+
+  // Validate ticker
+  const validTicker = validateTicker(data.ticker);
+  if (!validTicker) {
+    return NextResponse.json({ error: "Invalid ticker" }, { status: 400 });
+  }
+  data.ticker = validTicker;
+  // Sanitize free-text fields to prevent prompt injection
+  if (data.name) data.name = sanitizeForPrompt(data.name, 100);
+  if (data.label) data.label = sanitizeForPrompt(data.label, 100);
+  if (data.scannerMode) data.scannerMode = sanitizeForPrompt(data.scannerMode, 50);
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -210,6 +244,11 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
     const lastBrace = text.lastIndexOf("}");
     if (firstBrace !== -1 && lastBrace > firstBrace) {
       text = text.slice(firstBrace, lastBrace + 1);
+    }
+
+    // Increment usage on success
+    if (gate.userId) {
+      await incrementUsage(gate.userId, "deep_analyses");
     }
 
     // Try JSON parse

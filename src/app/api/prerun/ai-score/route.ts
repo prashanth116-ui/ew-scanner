@@ -2,9 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
+import { validateTicker, sanitizeForPrompt, checkOriginAuth } from "@/lib/api-utils";
+import { checkFeatureGate, incrementUsage } from "@/lib/auth-gate";
 
 export async function POST(request: NextRequest) {
-  const rl = rateLimit(`prerun-ai:${getClientKey(request)}`, 10, 60_000);
+  // Origin check — AI endpoints only accept same-origin or API key
+  const auth = checkOriginAuth(request, process.env.AI_API_KEY);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  // Feature gate: check user tier + usage limit
+  const gate = await checkFeatureGate("ai_scores");
+  if (!gate.allowed) {
+    return NextResponse.json(
+      {
+        error: "Usage limit reached",
+        tier: gate.tier,
+        used: gate.used,
+        limit: gate.limit,
+        upgrade: true,
+      },
+      { status: 403 }
+    );
+  }
+
+  // Rate limit: 5 req/min per IP (AI endpoint — costs money)
+  const rl = rateLimit(`prerun-ai:${getClientKey(request)}`, 5, 60_000);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded" },
@@ -27,13 +51,16 @@ export async function POST(request: NextRequest) {
       recentNews?: string;
     };
 
-    if (!body.ticker) {
-      return NextResponse.json({ error: "ticker required" }, { status: 400 });
+    const ticker = validateTicker(body.ticker);
+    if (!ticker) {
+      return NextResponse.json({ error: "Invalid ticker" }, { status: 400 });
     }
+    const companyName = body.companyName ? sanitizeForPrompt(body.companyName, 100) : "";
+    const recentNews = body.recentNews ? sanitizeForPrompt(body.recentNews, 500) : "";
 
-    const prompt = `You are a stock analyst evaluating whether ${body.ticker}${body.companyName ? ` (${body.companyName})` : ""} has a structural narrative catalyst that is NOT yet priced in by the market.
+    const prompt = `You are a stock analyst evaluating whether ${ticker}${companyName ? ` (${companyName})` : ""} has a structural narrative catalyst that is NOT yet priced in by the market.
 
-${body.recentNews ? `Recent news/context:\n${body.recentNews}\n` : ""}
+${recentNews ? `Recent news/context:\n${recentNews}\n` : ""}
 Score the narrative catalyst on this scale:
 - 2: Structural change confirmed, not yet consensus (e.g., new regulation benefiting sector, supply chain shift, emerging technology demand)
 - 1: Speculative or unconfirmed catalyst (e.g., rumors, early-stage trends)
@@ -59,6 +86,11 @@ Reply with ONLY valid JSON (no code fences):
     const lastBrace = text.lastIndexOf("}");
     if (firstBrace !== -1 && lastBrace > firstBrace) {
       text = text.slice(firstBrace, lastBrace + 1);
+    }
+
+    // Increment usage on success
+    if (gate.userId) {
+      await incrementUsage(gate.userId, "ai_scores");
     }
 
     try {

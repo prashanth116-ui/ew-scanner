@@ -29,13 +29,13 @@ export function evaluateGate3(data: PreRunStockData): boolean {
   return data.currentPrice > data.sma20 * 0.92;
 }
 
-/** Criterion A: Dead money base (0-2). */
+/** Criterion A: Dead money base (0-2). Price decline + time basing. */
 export function scoreA(data: PreRunStockData): number {
   const pct = data.pctFromAth ?? 0;
-  // Estimate weeks in base from chart data — approximate as 3mo = 13 weeks
-  // If pctFromAth >= 40, likely been in base for a while
-  if (pct >= 40) return 2; // 40-80% below ATH (assume 6+ months)
-  if (pct >= 25) return 1; // 25-40% below highs
+  const weeks = data.weeksInBase ?? 0;
+  if (pct >= 40 && weeks >= 13) return 2; // 40%+ down AND 3+ months basing
+  if (pct >= 25 && weeks >= 8) return 1;  // 25%+ down AND 2+ months
+  if (pct >= 40) return 1;                // Deep discount floor — 40%+ off ATH always scores 1
   return 0;
 }
 
@@ -68,8 +68,15 @@ export function scoreD(data: PreRunStockData): number {
 
 /** Criterion E: Institutional under-ownership (0-2). */
 export function scoreE(data: PreRunStockData): number {
+  const instPct = data.institutionalPct;
+  if (instPct !== null) {
+    if (instPct < 40) return 2;  // Genuinely under-owned
+    if (instPct <= 70) return 1; // Moderate
+    return 0;                    // Fully owned, no room for new buyers
+  }
+  // Fallback to analyst count if no institutional data
   const analysts = data.analystCount ?? 0;
-  if (analysts === 0) return 1; // No data — neutral
+  if (analysts === 0) return 1;
   if (analysts < 10) return 2;
   if (analysts <= 20) return 1;
   return 0;
@@ -132,7 +139,7 @@ export function scorePreRun(
   if (gatesPass) {
     if (finalScore >= 9 && data.daysToEarnings !== null && data.daysToEarnings <= 14) {
       verdict = "PRIORITY";
-    } else if (finalScore >= 10) {
+    } else if (finalScore >= 9) {
       verdict = "KEEP";
     } else if (finalScore >= 7) {
       verdict = "WATCH";

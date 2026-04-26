@@ -19,11 +19,14 @@ export interface PreRunStockData {
   sma20: number | null;
   avgVolumeUpDays: number | null;
   avgVolumeDownDays: number | null;
+  allTimeHigh: number | null;      // True ATH from 5y weekly data
+  weeksInBase: number | null;      // Weeks since price was near ATH
+  institutionalPct: number | null; // Institutional ownership % (0-100)
   lastUpdated: string;
 }
 
 export interface PreRunGates {
-  gate1: boolean; // Not already run (40%+ below 52w high)
+  gate1: boolean; // Not already run (40%+ below all-time high)
   gate2: boolean; // No existential risk (manual)
   gate3: boolean; // Base forming, not freefall
 }
@@ -149,8 +152,8 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
   {
     name: "SNDK Pattern",
     shortName: "SNDK",
-    description: "Min 40% from ATH, min 15% SI, score ≥10. Classic multi-bagger setup.",
-    filters: { minPctFromAth: 40, minShortFloat: 15, minScore: 10 },
+    description: "Min 40% from ATH, min 15% SI, score ≥9. Classic multi-bagger setup.",
+    filters: { minPctFromAth: 40, minShortFloat: 15, minScore: 9 },
     recommended: true,
   },
   {
