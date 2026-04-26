@@ -66,7 +66,7 @@ async function fetchYahooSummary(
 }
 
 /** Fetch price chart data for volume analysis + SMA calc. */
-async function fetchYahooChart(
+export async function fetchYahooChart(
   ticker: string,
   range = "3mo",
   interval = "1d"
@@ -353,7 +353,7 @@ async function fetchSECQuarterlyRevenue(
 }
 
 /** Calculate SMA from closes. */
-function calcSMA(closes: number[], period: number): number | null {
+export function calcSMA(closes: number[], period: number): number | null {
   if (closes.length < period) return null;
   const slice = closes.slice(-period);
   return slice.reduce((a, b) => a + b, 0) / period;
@@ -411,7 +411,7 @@ function calcWeeksInBase(
 }
 
 /** Calculate 20-day return from chart closes. */
-function calc20dReturn(closes: number[]): number | null {
+export function calc20dReturn(closes: number[]): number | null {
   if (closes.length < 20) return null;
   const recent = closes[closes.length - 1];
   const past = closes[closes.length - 20];

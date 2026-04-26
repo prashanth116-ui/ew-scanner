@@ -1,0 +1,522 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import type {
+  SectorRotationResult,
+  SectorRotationScore,
+  RRGQuadrant,
+} from "@/lib/prerun/sector-rotation-types";
+import {
+  loadSectorRotation,
+  saveSectorRotation,
+} from "@/lib/prerun/sector-rotation-storage";
+
+// ── Color helpers ──
+
+function compositeColor(score: number): string {
+  if (score >= 67) return "bg-green-500";
+  if (score >= 33) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function compositeTextColor(score: number): string {
+  if (score >= 67) return "text-green-400";
+  if (score >= 33) return "text-amber-400";
+  return "text-red-400";
+}
+
+function quadrantColor(q: RRGQuadrant): string {
+  switch (q) {
+    case "LEADING": return "bg-green-500/20 text-green-400 border-green-500/30";
+    case "WEAKENING": return "bg-amber-500/20 text-amber-400 border-amber-500/30";
+    case "LAGGING": return "bg-red-500/20 text-red-400 border-red-500/30";
+    case "IMPROVING": return "bg-cyan-500/20 text-cyan-400 border-cyan-500/30";
+  }
+}
+
+function quadrantDotColor(q: RRGQuadrant): string {
+  switch (q) {
+    case "LEADING": return "#4ade80";
+    case "WEAKENING": return "#fbbf24";
+    case "LAGGING": return "#f87171";
+    case "IMPROVING": return "#22d3ee";
+  }
+}
+
+// ── RRG SVG Chart ──
+
+function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
+  const W = 500;
+  const H = 400;
+  const PAD = 50;
+
+  // Find axis ranges
+  const ratios = sectors.map((s) => s.rsRatio);
+  const moms = sectors.map((s) => s.rsMomentum);
+  const rMin = Math.min(99, ...ratios) - 0.5;
+  const rMax = Math.max(101, ...ratios) + 0.5;
+  const mMin = Math.min(-0.1, ...moms) - 0.02;
+  const mMax = Math.max(0.1, ...moms) + 0.02;
+
+  const scaleX = (v: number) => PAD + ((v - rMin) / (rMax - rMin)) * (W - 2 * PAD);
+  const scaleY = (v: number) => H - PAD - ((v - mMin) / (mMax - mMin)) * (H - 2 * PAD);
+
+  const cx = scaleX(100);
+  const cy = scaleY(0);
+
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[500px]" role="img" aria-label="Relative Rotation Graph">
+      {/* Quadrant backgrounds */}
+      <rect x={cx} y={PAD} width={W - PAD - cx} height={cy - PAD} fill="rgba(74,222,128,0.05)" />
+      <rect x={PAD} y={PAD} width={cx - PAD} height={cy - PAD} fill="rgba(34,211,238,0.05)" />
+      <rect x={PAD} y={cy} width={cx - PAD} height={H - PAD - cy} fill="rgba(248,113,113,0.05)" />
+      <rect x={cx} y={cy} width={W - PAD - cx} height={H - PAD - cy} fill="rgba(251,191,36,0.05)" />
+
+      {/* Crosshair */}
+      <line x1={cx} y1={PAD} x2={cx} y2={H - PAD} stroke="#333" strokeWidth={1} />
+      <line x1={PAD} y1={cy} x2={W - PAD} y2={cy} stroke="#333" strokeWidth={1} />
+
+      {/* Quadrant labels */}
+      <text x={W - PAD - 5} y={PAD + 15} textAnchor="end" fill="#4ade80" fontSize={11} opacity={0.5}>LEADING</text>
+      <text x={PAD + 5} y={PAD + 15} textAnchor="start" fill="#22d3ee" fontSize={11} opacity={0.5}>IMPROVING</text>
+      <text x={PAD + 5} y={H - PAD - 5} textAnchor="start" fill="#f87171" fontSize={11} opacity={0.5}>LAGGING</text>
+      <text x={W - PAD - 5} y={H - PAD - 5} textAnchor="end" fill="#fbbf24" fontSize={11} opacity={0.5}>WEAKENING</text>
+
+      {/* Axis labels */}
+      <text x={W / 2} y={H - 8} textAnchor="middle" fill="#666" fontSize={10}>RS-Ratio</text>
+      <text x={12} y={H / 2} textAnchor="middle" fill="#666" fontSize={10} transform={`rotate(-90,12,${H / 2})`}>RS-Momentum</text>
+
+      {/* Sector dots */}
+      {sectors.map((s) => {
+        const x = scaleX(s.rsRatio);
+        const y = scaleY(s.rsMomentum);
+        const color = quadrantDotColor(s.quadrant);
+        const isHov = hovered === s.sector;
+        // Short label: first word or ETF
+        const label = s.etf;
+
+        return (
+          <g
+            key={s.sector}
+            onMouseEnter={() => setHovered(s.sector)}
+            onMouseLeave={() => setHovered(null)}
+            style={{ cursor: "pointer" }}
+          >
+            <circle
+              cx={x}
+              cy={y}
+              r={isHov ? 7 : 5}
+              fill={color}
+              stroke={isHov ? "#fff" : "none"}
+              strokeWidth={1.5}
+              opacity={isHov ? 1 : 0.85}
+            />
+            <text
+              x={x}
+              y={y - 10}
+              textAnchor="middle"
+              fill={color}
+              fontSize={isHov ? 11 : 9}
+              fontWeight={isHov ? "bold" : "normal"}
+            >
+              {label}
+            </text>
+            {isHov && (
+              <text x={x} y={y + 20} textAnchor="middle" fill="#a0a0a0" fontSize={10}>
+                {s.sector} ({s.compositeScore}/100)
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ── Sector Detail Accordion ──
+
+function SectorDetail({ sector }: { sector: SectorRotationScore }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className={`border rounded-lg ${sector.stealthAccumulation ? "border-cyan-500/40" : "border-[#2a2a2a]"}`}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-lg">{sector.trendArrow}</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium text-white truncate">{sector.sector}</span>
+              <span className="text-xs text-[#666]">{sector.etf}</span>
+              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${quadrantColor(sector.quadrant)}`}>
+                {sector.quadrant}
+              </span>
+              {sector.stealthAccumulation && (
+                <span className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-400">
+                  STEALTH
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className={`text-lg font-bold ${compositeTextColor(sector.compositeScore)}`}>
+            {sector.compositeScore}
+          </span>
+          {open ? <ChevronUp className="h-4 w-4 text-[#666]" /> : <ChevronDown className="h-4 w-4 text-[#666]" />}
+        </div>
+      </button>
+
+      {open && (
+        <div className="border-t border-[#2a2a2a] px-4 py-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-[#888]">Momentum Composite</span>
+              <span className="text-white">{sector.momentumComposite} <span className="text-[#666]">({sector.momentumPercentile}th %ile)</span></span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">Acceleration</span>
+              <span className={sector.acceleration > 0 ? "text-green-400" : sector.acceleration < 0 ? "text-red-400" : "text-[#a0a0a0]"}>
+                {sector.acceleration > 0 ? "+" : ""}{sector.acceleration}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">Mansfield RS</span>
+              <span className={sector.mansfieldRS > 0 ? "text-green-400" : sector.mansfieldRS < 0 ? "text-red-400" : "text-[#a0a0a0]"}>
+                {sector.mansfieldRS > 0 ? "+" : ""}{sector.mansfieldRS}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">CMF (20d)</span>
+              <span className={sector.cmf20 > 0 ? "text-green-400" : sector.cmf20 < 0 ? "text-red-400" : "text-[#a0a0a0]"}>
+                {sector.cmf20 > 0 ? "+" : ""}{sector.cmf20}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">OBV Trend</span>
+              <span className={sector.obvTrend === 1 ? "text-green-400" : sector.obvTrend === -1 ? "text-red-400" : "text-[#a0a0a0]"}>
+                {sector.obvTrend === 1 ? "Accumulation" : sector.obvTrend === -1 ? "Distribution" : "Flat"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">Breadth (%&gt;50d SMA)</span>
+              <span className="text-white">{sector.breadthPct !== null ? `${sector.breadthPct}%` : "N/A"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">Unusual Volume</span>
+              <span className={sector.unusualVolume ? "text-amber-400" : "text-[#a0a0a0]"}>
+                {sector.unusualVolume ? "Yes" : "No"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">Insider Buys</span>
+              <span className={sector.aggregateInsiderBuys > 0 ? "text-green-400" : "text-[#a0a0a0]"}>
+                {sector.aggregateInsiderBuys}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">Avg P/C Ratio</span>
+              <span className="text-white">{sector.aggregatePCR !== null ? sector.aggregatePCR : "N/A"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">Earnings Beat %</span>
+              <span className="text-white">{sector.earningsBeatPct}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">Smart Money Score</span>
+              <span className={compositeTextColor(sector.smartMoneyScore)}>{sector.smartMoneyScore}/100</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#888]">RS-Ratio / Momentum</span>
+              <span className="text-white">{sector.rsRatio} / {sector.rsMomentum}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ──
+
+export default function SectorRotationPage() {
+  const [data, setData] = useState<SectorRotationResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async (skipCache = false) => {
+    setLoading(true);
+    setError(null);
+
+    // Try localStorage cache first
+    if (!skipCache) {
+      const cached = loadSectorRotation();
+      if (cached) {
+        setData(cached);
+        setLoading(false);
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch("/api/prerun/sector-rotation");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+      }
+      const result = (await res.json()) as SectorRotationResult;
+      setData(result);
+      saveSectorRotation(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  if (loading && !data) {
+    return (
+      <div className="mx-auto max-w-7xl px-6 py-12 text-center">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
+        <p className="mt-4 text-[#888]">Calculating sector rotation...</p>
+        <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 13 ETFs</p>
+      </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <div className="mx-auto max-w-7xl px-6 py-12 text-center">
+        <p className="text-red-400">Error: {error}</p>
+        <button
+          onClick={() => fetchData(true)}
+          className="mt-4 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
+          <p className="text-sm text-[#888]">
+            Updated {new Date(data.calculatedAt).toLocaleString()}
+          </p>
+        </div>
+        <button
+          onClick={() => fetchData(true)}
+          disabled={loading}
+          className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
+      </div>
+
+      {/* Panel 1: Rotation Status Banner */}
+      <div className={`rounded-xl border p-4 ${data.rotationActive ? "border-green-500/30 bg-green-500/5" : "border-[#2a2a2a] bg-[#141414]"}`}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`h-3 w-3 rounded-full ${data.rotationActive ? "bg-green-500 animate-pulse" : "bg-[#555]"}`} />
+            <div>
+              <div className="font-semibold text-white">
+                {data.rotationActive ? "Rotation Active" : "No Clear Rotation"}
+              </div>
+              <div className="text-sm text-[#a0a0a0]">{data.rotationSummary}</div>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-[#666]">Dispersion Index</div>
+            <div className={`text-lg font-bold ${data.dispersionIndex > 3 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#a0a0a0]"}`}>
+              {data.dispersionIndex}
+            </div>
+            <div className="text-xs text-[#555]">
+              {data.dispersionIndex > 3 ? "High divergence" : data.dispersionIndex > 2 ? "Moderate" : "Low divergence"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Panel 2: Sector Heatmap Grid */}
+      <div>
+        <h2 className="mb-3 text-lg font-semibold text-white">Sector Scores</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+          {data.sectors.map((s) => (
+            <div
+              key={s.sector}
+              className={`rounded-lg border p-3 transition-colors ${
+                s.stealthAccumulation
+                  ? "border-cyan-500/40 bg-cyan-500/5"
+                  : "border-[#2a2a2a] bg-[#141414]"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-1">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-medium text-white" title={s.sector}>
+                    {s.sector}
+                  </div>
+                  <div className="text-xs text-[#666]">{s.etf}</div>
+                </div>
+                <span className="text-lg shrink-0">{s.trendArrow}</span>
+              </div>
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className={compositeTextColor(s.compositeScore)}>{s.compositeScore}</span>
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${quadrantColor(s.quadrant)}`}>
+                    {s.quadrant}
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 w-full rounded-full bg-[#2a2a2a]">
+                  <div
+                    className={`h-1.5 rounded-full ${compositeColor(s.compositeScore)}`}
+                    style={{ width: `${s.compositeScore}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Panel 3: RRG + Panel 4: Leading Indicators / Smart Money */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* RRG Chart */}
+        <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+          <h2 className="mb-3 text-lg font-semibold text-white">Relative Rotation Graph</h2>
+          <div className="flex justify-center">
+            <RRGChart sectors={data.sectors} />
+          </div>
+        </div>
+
+        {/* Leading Indicators + Smart Money */}
+        <div className="space-y-4">
+          {/* Leading Indicators */}
+          <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+            <h2 className="mb-3 text-base font-semibold text-white">Leading Indicators</h2>
+            {(() => {
+              const withSignals = data.sectors.filter(
+                (s) => s.stealthAccumulation || s.flowPriceDivergence || s.breadthDivergence || s.accelerationInflection
+              );
+              if (withSignals.length === 0) {
+                return <p className="text-sm text-[#666]">No leading indicators detected</p>;
+              }
+              return (
+                <div className="space-y-2">
+                  {withSignals.map((s) => {
+                    const signals: string[] = [];
+                    if (s.flowPriceDivergence) signals.push("Flow/price divergence");
+                    if (s.breadthDivergence) signals.push("Breadth divergence");
+                    if (s.accelerationInflection) signals.push("Momentum inflection");
+                    return (
+                      <div key={s.sector} className="flex items-start gap-2 text-sm">
+                        <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${s.stealthAccumulation ? "bg-cyan-400" : "bg-amber-400"}`} />
+                        <div>
+                          <span className="font-medium text-white">{s.sector}</span>
+                          {s.stealthAccumulation && (
+                            <span className="ml-2 text-xs text-cyan-400">(Stealth)</span>
+                          )}
+                          <div className="text-xs text-[#888]">{signals.join(", ")}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Stocks to Watch */}
+          <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+            <h2 className="mb-3 text-base font-semibold text-white">Stocks to Watch</h2>
+            {data.topStocksToWatch.length === 0 ? (
+              <p className="text-sm text-[#666]">No rotation targets detected. Run a Pre-Run scan first for stock-level data.</p>
+            ) : (
+              <div className="space-y-3">
+                {data.topStocksToWatch.map((sw) => (
+                  <div key={sw.sector}>
+                    <div className="text-xs font-medium text-[#888] mb-1">{sw.sector}</div>
+                    <div className="flex flex-wrap gap-2">
+                      {sw.stocks.map((stock) => (
+                        <div
+                          key={stock.ticker}
+                          className="rounded-md border border-[#333] bg-[#1a1a1a] px-2.5 py-1.5 text-sm"
+                          title={stock.reasons.join(", ")}
+                        >
+                          <span className="font-medium text-white">{stock.ticker}</span>
+                          <span className="ml-1.5 text-xs text-[#888]">{stock.score}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Panel 5: Sector Detail Cards */}
+      <div>
+        <h2 className="mb-3 text-lg font-semibold text-white">Sector Details</h2>
+        <div className="space-y-2">
+          {data.sectors.map((s) => (
+            <SectorDetail key={s.sector} sector={s} />
+          ))}
+        </div>
+      </div>
+
+      {/* Panel 6: Cross-Sector Pairs */}
+      <div>
+        <h2 className="mb-3 text-lg font-semibold text-white">Cross-Sector Pairs</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+            <div className="text-xs font-medium text-[#888] mb-1">XLY / XLP (Risk Appetite)</div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-xl font-bold text-white">{data.crossSectorPairs.xlyXlp.ratio}</span>
+              <span className={`text-sm ${
+                data.crossSectorPairs.xlyXlp.trend.includes("Rising") ? "text-green-400" :
+                data.crossSectorPairs.xlyXlp.trend.includes("Falling") ? "text-red-400" : "text-[#888]"
+              }`}>
+                {data.crossSectorPairs.xlyXlp.trend}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-[#666]">
+              Rising = cyclical rotation (risk-on). Falling = defensive rotation (risk-off).
+            </p>
+          </div>
+          <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+            <div className="text-xs font-medium text-[#888] mb-1">XLK / XLU (Growth vs Defense)</div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-xl font-bold text-white">{data.crossSectorPairs.xlkXlu.ratio}</span>
+              <span className={`text-sm ${
+                data.crossSectorPairs.xlkXlu.trend.includes("Rising") ? "text-green-400" :
+                data.crossSectorPairs.xlkXlu.trend.includes("Falling") ? "text-red-400" : "text-[#888]"
+              }`}>
+                {data.crossSectorPairs.xlkXlu.trend}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-[#666]">
+              Rising = growth favored. Falling = defensive/utilities favored.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

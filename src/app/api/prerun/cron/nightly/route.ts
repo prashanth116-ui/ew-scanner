@@ -6,6 +6,7 @@ import { getAllPreRunTickers } from "@/data/prerun-universe";
 import { sendTelegramMessage } from "@/lib/ew-telegram";
 import type { PreRunResult } from "@/lib/prerun/types";
 import { MAX_SCORE } from "@/lib/prerun/types";
+import { calculateSectorRotation, formatSectorRotationTelegram } from "@/lib/prerun/sector-rotation";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 1100; // Respect Finnhub 60/min rate limit
@@ -189,6 +190,14 @@ export async function GET(request: NextRequest) {
     // Auto AI scoring for top 5
     const aiScored = await autoAiScore(qualifying, 5);
 
+    // Sector rotation calculation (pass all results for breadth/smart money)
+    let rotationResult = null;
+    try {
+      rotationResult = await calculateSectorRotation(results);
+    } catch (rotErr) {
+      logError("api/prerun/cron/nightly/rotation", rotErr);
+    }
+
     // Send Telegram summary
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -200,6 +209,15 @@ export async function GET(request: NextRequest) {
       if (!tgResult.ok) {
         logError("api/prerun/cron/nightly/telegram", new Error(tgResult.error ?? "Telegram send failed"));
       }
+
+      // Send rotation as separate message (avoid 4096 char limit)
+      if (rotationResult) {
+        const rotMsg = formatSectorRotationTelegram(rotationResult);
+        const rotTgResult = await sendTelegramMessage(botToken, chatId, rotMsg);
+        if (!rotTgResult.ok) {
+          logError("api/prerun/cron/nightly/rotation-telegram", new Error(rotTgResult.error ?? "Rotation Telegram send failed"));
+        }
+      }
     }
 
     return NextResponse.json({
@@ -208,6 +226,7 @@ export async function GET(request: NextRequest) {
       qualifyingCount: qualifying.length,
       telegramSent,
       aiScored: aiScored.length,
+      rotationCalculated: rotationResult !== null,
       results: qualifying,
     });
   } catch (err) {

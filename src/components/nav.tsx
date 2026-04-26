@@ -30,6 +30,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/prerun/guide", label: "Guide" },
     { href: "/prerun/watchlist", label: "Watchlist" },
     { href: "/prerun/history", label: "History" },
+    { href: "/prerun/sectors", label: "Sectors" },
   ],
 };
 
