@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookOpen, AlertTriangle, TrendingUp, Zap, Target, Shield, Layers, ChevronDown, ChevronUp, ClipboardList } from "lucide-react";
+import { BookOpen, AlertTriangle, TrendingUp, Zap, Target, Shield, Layers, ChevronDown, ChevronUp, ClipboardList, Database, Sparkles } from "lucide-react";
 
 function Section({
   icon: Icon,
@@ -439,24 +439,24 @@ export default function PreRunGuidePage() {
               letter="D"
               label="Earnings Inflection"
               weight="MEDIUM"
-              score2="Revenue growth >20% YoY AND earnings within 60 days. Hard catalyst incoming."
-              score1="Revenue growth >0% OR earnings within 60 days. Some positive momentum."
-              score0="Revenue declining OR no near-term earnings. No inflection visible."
+              score2="Accelerating YoY revenue + earnings within 60 days + beat streak ≥2. Hard catalyst with momentum."
+              score1="Revenue growing OR earnings within 60 days OR beat streak. Some positive signal."
+              score0="Revenue declining, no near-term earnings, no beat streak. No inflection visible."
             />
             <CriterionRow
               letter="E"
               label="Institutional Under-Ownership"
               weight="MEDIUM"
-              score2="Less than 10 analysts covering. Room for discovery — wall street hasn't noticed yet."
-              score1="10-20 analysts. Moderate coverage, some discovery potential remains."
-              score0="More than 20 analysts. Fully covered, nothing to discover."
+              score2="Institutional ownership <40%. Under-owned — room for fund inflows as thesis develops."
+              score1="Institutional ownership 40-70%. Moderate ownership, some discovery potential."
+              score0="Institutional ownership >70%. Fully owned — limited incremental buying power."
             />
             <CriterionRow
               letter="F"
               label="Volume Accumulation"
               weight="MEDIUM"
-              score2="Heavy volume on up days, light on down days — clear 4+ week pattern of smart money buying."
-              score1="Some evidence but inconsistent. Mixed signals."
+              score2="Up/down volume ratio >1.3x OR float turnover >1x in 20 days. Clear smart money accumulation."
+              score1="Some volume evidence but inconsistent. Mixed signals or moderate float turnover."
               score0="Distribution pattern (heavy selling) or no pattern. No accumulation visible."
             />
             <CriterionRow
@@ -548,6 +548,89 @@ export default function PreRunGuidePage() {
           </div>
         </Section>
 
+        {/* Pattern Matching */}
+        <Section icon={Sparkles} title="Historical Pattern Matching">
+          <p>
+            Each scanned stock is compared against 5 historical runner templates
+            to identify similarities. When a match exceeds 50% similarity, a
+            badge appears on the scanner (e.g., &ldquo;Similar to: CVNA 2023 (82%)&rdquo;).
+          </p>
+          <div className="mt-3 space-y-2">
+            <p className="text-xs font-medium text-white">Templates:</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {[
+                { t: "SNDK 2013", d: "Long base, moderate SI, mid-cap semi" },
+                { t: "CAR 2021", d: "Extreme SI, short base, rapid squeeze" },
+                { t: "CVNA 2023", d: "Max pessimism, very high SI, small cap turnaround" },
+                { t: "GME 2021", d: "Ultra-high SI, micro cap, retail-driven" },
+                { t: "SMCI 2024", d: "Deep discount, low SI, large cap AI theme" },
+              ].map((p) => (
+                <div
+                  key={p.t}
+                  className="rounded border border-[#2a2a2a] bg-[#141414] px-3 py-2"
+                >
+                  <p className="text-xs font-bold text-[#5ba3e6]">{p.t}</p>
+                  <p className="text-[10px] text-[#666]">{p.d}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-[#666]">
+              Matching uses range-based similarity across 5 features: ATH drop %,
+              base weeks, short interest, market cap, and volume ratio. A perfect
+              match doesn&apos;t guarantee the same outcome — it means the setup
+              shares structural characteristics.
+            </p>
+          </div>
+        </Section>
+
+        {/* Data Sources */}
+        <Section icon={Database} title="Data Sources">
+          <p>
+            The scanner pulls data from multiple free APIs. All new fields are
+            nullable — if an API call fails, the criterion scores 0 instead of
+            blocking the scan.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2a2a2a] text-[#666]">
+                  <th className="py-1.5 pr-3 text-left font-medium">Source</th>
+                  <th className="py-1.5 pr-3 text-left font-medium">Powers</th>
+                  <th className="py-1.5 text-left font-medium">Details</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#c0c0c0]">
+                <tr className="border-b border-[#2a2a2a]/50">
+                  <td className="py-1.5 pr-3 font-medium text-white">Yahoo Finance</td>
+                  <td className="py-1.5 pr-3">A, E, F, G, I, J, K</td>
+                  <td className="py-1.5">Quote summary, 3mo chart, institutional %, float shares, options chain (P/C ratio)</td>
+                </tr>
+                <tr className="border-b border-[#2a2a2a]/50">
+                  <td className="py-1.5 pr-3 font-medium text-white">Finnhub</td>
+                  <td className="py-1.5 pr-3">D (beat streak), H</td>
+                  <td className="py-1.5">Earnings calendar + surprises, insider transactions (90d window)</td>
+                </tr>
+                <tr className="border-b border-[#2a2a2a]/50">
+                  <td className="py-1.5 pr-3 font-medium text-white">SEC EDGAR</td>
+                  <td className="py-1.5 pr-3">D (revenue)</td>
+                  <td className="py-1.5">XBRL company facts — quarterly revenue for YoY growth calculation</td>
+                </tr>
+                <tr>
+                  <td className="py-1.5 pr-3 font-medium text-white">Sector ETFs</td>
+                  <td className="py-1.5 pr-3">J, Sector Mod</td>
+                  <td className="py-1.5">Sector ETF 20d return via Yahoo chart (cached 5min per sector)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-[#666]">
+            <strong className="text-[#a0a0a0]">Nightly auto-scoring:</strong>{" "}
+            The cron job runs a full scan nightly and automatically fires AI
+            catalyst analysis (Claude Sonnet) for the top 5 scoring stocks.
+            Results are sent to Telegram.
+          </p>
+        </Section>
+
         {/* Sector Buckets */}
         <Section icon={Zap} title="Sector Buckets">
           <p>
@@ -557,26 +640,32 @@ export default function PreRunGuidePage() {
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {[
-              "AI Optical/Connectivity Semis",
-              "Advanced Packaging/Test",
-              "SiC/GaN Power Semis",
-              "Beaten-Down Cloud/SaaS",
-              "Beaten-Down Biotech",
-              "Energy/LNG Turnarounds",
-              "Nuclear/Power Neoclouds",
-              "Rare Earth/Critical Minerals",
-              "EV/Hydrogen Turnarounds",
-              "High Short Interest",
-              "Rental/Travel",
+              { name: "AI Optical/Connectivity Semis", etf: "SMH" },
+              { name: "Advanced Packaging/Test", etf: "SMH" },
+              { name: "SiC/GaN Power Semis", etf: "SMH" },
+              { name: "Beaten-Down Cloud/SaaS", etf: "IGV" },
+              { name: "Beaten-Down Biotech", etf: "XBI" },
+              { name: "Energy/LNG Turnarounds", etf: "XLE" },
+              { name: "Nuclear/Power Neoclouds", etf: "ICLN" },
+              { name: "Rare Earth/Critical Minerals", etf: "XME" },
+              { name: "EV/Hydrogen Turnarounds", etf: "IDRV" },
+              { name: "High Short Interest", etf: "IWM" },
+              { name: "Rental/Travel", etf: "PEJ" },
             ].map((b) => (
               <div
-                key={b}
-                className="rounded border border-[#2a2a2a] bg-[#141414] px-3 py-2 text-xs text-[#a0a0a0]"
+                key={b.name}
+                className="rounded border border-[#2a2a2a] bg-[#141414] px-3 py-2"
               >
-                {b}
+                <p className="text-xs text-[#a0a0a0]">{b.name}</p>
+                <p className="text-[10px] text-[#5ba3e6]">ETF: {b.etf}</p>
               </div>
             ))}
           </div>
+          <p className="mt-2 text-xs text-[#666]">
+            Sector ETFs power criterion J (relative strength) and the sector
+            momentum modifier (&plusmn;1). The scanner compares each stock&apos;s 20-day
+            return against its sector ETF.
+          </p>
         </Section>
 
         {/* Common Mistakes */}
