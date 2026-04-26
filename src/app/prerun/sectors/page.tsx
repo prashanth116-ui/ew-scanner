@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Clock } from "lucide-react";
 import type {
   SectorRotationResult,
   SectorRotationScore,
   RRGQuadrant,
 } from "@/lib/prerun/sector-rotation-types";
+import type { PreRunResult } from "@/lib/prerun/types";
 import {
   loadSectorRotation,
   saveSectorRotation,
 } from "@/lib/prerun/sector-rotation-storage";
+import { loadScanResults } from "@/lib/prerun/storage";
+import { getSectorForTicker } from "@/data/prerun-universe";
 
 // ── Color helpers ──
 
@@ -42,6 +45,76 @@ function quadrantDotColor(q: RRGQuadrant): string {
     case "LAGGING": return "#f87171";
     case "IMPROVING": return "#22d3ee";
   }
+}
+
+// ── Data freshness helpers ──
+
+function timeAgo(isoDate: string): { text: string; stale: boolean; veryStale: boolean } {
+  const diffMs = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+
+  let text: string;
+  if (mins < 1) text = "just now";
+  else if (mins < 60) text = `${mins}m ago`;
+  else if (hours < 24) text = `${hours}h ago`;
+  else text = `${days}d ago`;
+
+  return { text, stale: hours >= 6, veryStale: hours >= 24 };
+}
+
+function DataAgeBadge({ calculatedAt }: { calculatedAt: string }) {
+  const [age, setAge] = useState(() => timeAgo(calculatedAt));
+
+  // Update every minute
+  useEffect(() => {
+    setAge(timeAgo(calculatedAt));
+    const interval = setInterval(() => setAge(timeAgo(calculatedAt)), 60_000);
+    return () => clearInterval(interval);
+  }, [calculatedAt]);
+
+  if (age.veryStale) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs text-red-400">
+        <AlertTriangle className="h-3 w-3" />
+        {age.text} — data is stale
+      </span>
+    );
+  }
+  if (age.stale) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
+        <Clock className="h-3 w-3" />
+        {age.text}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-[#888]">
+      <Clock className="h-3 w-3" />
+      {age.text}
+    </span>
+  );
+}
+
+// ── Stock ranking helpers ──
+
+interface StockInSector {
+  ticker: string;
+  companyName: string;
+  rs20d: number | null;
+  pctFromAth: number | null;
+  finalScore: number;
+  verdict: string;
+}
+
+function rsColor(rs: number | null): string {
+  if (rs === null) return "text-[#666]";
+  if (rs > 5) return "text-green-400";
+  if (rs > 0) return "text-green-400/70";
+  if (rs > -5) return "text-red-400/70";
+  return "text-red-400";
 }
 
 // ── RRG SVG Chart ──
@@ -138,8 +211,12 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
 
 // ── Sector Detail Accordion ──
 
-function SectorDetail({ sector }: { sector: SectorRotationScore }) {
+function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks: StockInSector[] }) {
   const [open, setOpen] = useState(false);
+
+  const leaders = stocks.filter((s) => s.rs20d !== null && s.rs20d > 0).sort((a, b) => (b.rs20d ?? 0) - (a.rs20d ?? 0));
+  const laggards = stocks.filter((s) => s.rs20d !== null && s.rs20d <= 0).sort((a, b) => (a.rs20d ?? 0) - (b.rs20d ?? 0));
+  const noData = stocks.filter((s) => s.rs20d === null);
 
   return (
     <div className={`border rounded-lg ${sector.stealthAccumulation ? "border-cyan-500/40" : "border-[#2a2a2a]"}`}>
@@ -165,6 +242,7 @@ function SectorDetail({ sector }: { sector: SectorRotationScore }) {
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          <span className="text-xs text-[#666]">{stocks.length} stocks</span>
           <span className={`text-lg font-bold ${compositeTextColor(sector.compositeScore)}`}>
             {sector.compositeScore}
           </span>
@@ -173,7 +251,8 @@ function SectorDetail({ sector }: { sector: SectorRotationScore }) {
       </button>
 
       {open && (
-        <div className="border-t border-[#2a2a2a] px-4 py-3">
+        <div className="border-t border-[#2a2a2a] px-4 py-3 space-y-4">
+          {/* Sector indicators grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-[#888]">Momentum Composite</span>
@@ -236,6 +315,73 @@ function SectorDetail({ sector }: { sector: SectorRotationScore }) {
               <span className="text-white">{sector.rsRatio} / {sector.rsMomentum}</span>
             </div>
           </div>
+
+          {/* Leading / Lagging stocks */}
+          {stocks.length > 0 && (
+            <div className="border-t border-[#2a2a2a] pt-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Leaders */}
+                <div>
+                  <div className="text-xs font-semibold text-green-400 mb-2">
+                    Leaders ({leaders.length})
+                  </div>
+                  {leaders.length === 0 ? (
+                    <p className="text-xs text-[#555]">None</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {leaders.map((s) => (
+                        <div key={s.ticker} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-medium text-white">{s.ticker}</span>
+                            <span className="text-[#555] truncate">{s.companyName}</span>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className={rsColor(s.rs20d)}>
+                              {s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}
+                            </span>
+                            <span className="text-[#666] w-8 text-right">{s.finalScore}pt</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Laggards */}
+                <div>
+                  <div className="text-xs font-semibold text-red-400 mb-2">
+                    Laggards ({laggards.length})
+                  </div>
+                  {laggards.length === 0 ? (
+                    <p className="text-xs text-[#555]">None</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {laggards.map((s) => (
+                        <div key={s.ticker} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-medium text-white">{s.ticker}</span>
+                            <span className="text-[#555] truncate">{s.companyName}</span>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className={rsColor(s.rs20d)}>
+                              {s.rs20d !== null ? `${s.rs20d.toFixed(1)}%` : "-"}
+                            </span>
+                            <span className="text-[#666] w-8 text-right">{s.finalScore}pt</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {noData.length > 0 && (
+                <div className="mt-2 text-xs text-[#555]">
+                  No RS data: {noData.map((s) => s.ticker).join(", ")}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -248,6 +394,32 @@ export default function SectorRotationPage() {
   const [data, setData] = useState<SectorRotationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [scanResults, setScanResults] = useState<PreRunResult[]>([]);
+
+  // Load pre-run scan results from localStorage for stock-level data
+  useEffect(() => {
+    setScanResults(loadScanResults());
+  }, []);
+
+  // Build stock-by-sector lookup
+  const stocksBySector = useMemo(() => {
+    const map = new Map<string, StockInSector[]>();
+    for (const r of scanResults) {
+      const sector = getSectorForTicker(r.data.ticker);
+      if (sector === "Other") continue;
+      const existing = map.get(sector) ?? [];
+      existing.push({
+        ticker: r.data.ticker,
+        companyName: r.data.companyName,
+        rs20d: r.data.relativeStrength20d,
+        pctFromAth: r.data.pctFromAth,
+        finalScore: r.scores.finalScore,
+        verdict: r.verdict,
+      });
+      map.set(sector, existing);
+    }
+    return map;
+  }, [scanResults]);
 
   const fetchData = useCallback(async (skipCache = false) => {
     setLoading(true);
@@ -315,9 +487,12 @@ export default function SectorRotationPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
-          <p className="text-sm text-[#888]">
-            Updated {new Date(data.calculatedAt).toLocaleString()}
-          </p>
+          <div className="mt-1 flex items-center gap-3">
+            <DataAgeBadge calculatedAt={data.calculatedAt} />
+            <span className="text-xs text-[#555]">
+              {new Date(data.calculatedAt).toLocaleString()}
+            </span>
+          </div>
         </div>
         <button
           onClick={() => fetchData(true)}
@@ -473,10 +648,15 @@ export default function SectorRotationPage() {
 
       {/* Panel 5: Sector Detail Cards */}
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-white">Sector Details</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-white">Sector Details</h2>
+          {scanResults.length === 0 && (
+            <span className="text-xs text-[#555]">Run a Pre-Run scan to see stock-level data</span>
+          )}
+        </div>
         <div className="space-y-2">
           {data.sectors.map((s) => (
-            <SectorDetail key={s.sector} sector={s} />
+            <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} />
           ))}
         </div>
       </div>
