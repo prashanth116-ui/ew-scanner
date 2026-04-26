@@ -3,6 +3,10 @@
     {
       "path": "/api/alert/cron",
       "schedule": "0 21 * * 1-5"
+    },
+    {
+      "path": "/api/prerun/cron/nightly",
+      "schedule": "30 21 * * 1-5"
     }
   ]
 }

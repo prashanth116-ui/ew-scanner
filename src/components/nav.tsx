@@ -17,12 +17,22 @@ const squeezeItems = [
   { href: "/squeeze", label: "Squeeze" },
 ];
 
+const preRunItems = [
+  { href: "/prerun", label: "Pre-Run" },
+  { href: "/prerun/watchlist", label: "Watchlist" },
+  { href: "/prerun/history", label: "History" },
+  { href: "/prerun/guide", label: "Guide" },
+];
+
 export function Nav() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    if (href === "/prerun") return pathname === "/prerun";
+    return pathname.startsWith(href);
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-[#2a2a2a] bg-[#0f0f0f]/95 backdrop-blur-sm">
@@ -53,10 +63,24 @@ export function Nav() {
           </nav>
         </div>
 
-        {/* Right: Squeeze nav */}
+        {/* Right: Squeeze + Pre-Run nav */}
         <div className="flex items-center gap-1">
           <nav className="hidden items-center gap-1 sm:flex">
             {squeezeItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  isActive(item.href)
+                    ? "bg-[#185FA5]/20 text-[#5ba3e6]"
+                    : "text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+            <span className="mx-1 h-4 w-px bg-[#2a2a2a]" />
+            {preRunItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -100,6 +124,21 @@ export function Nav() {
           ))}
           <div className="mx-3 my-1 h-px bg-[#2a2a2a]" />
           {squeezeItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMobileOpen(false)}
+              className={`flex rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                isActive(item.href)
+                  ? "bg-[#185FA5]/20 text-[#5ba3e6]"
+                  : "text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+          <div className="mx-3 my-1 h-px bg-[#2a2a2a]" />
+          {preRunItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
