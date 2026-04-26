@@ -1,18 +1,57 @@
 /**
  * Sector Rotation Tracker engine.
  * SERVER-ONLY: Used by /api/prerun/sector-rotation route + nightly cron.
+ *
+ * Fix log:
+ * - Fix 1: Merge sectors sharing same ETF proxy (3 SMH subsectors → 1 "Semiconductors")
+ * - Fix 2: Breadth uses SMA20 (what pre-run stores), labeling corrected
+ * - Fix 3: Breadth = null when < 5 stocks have data (statistically meaningless)
+ * - Fix 4: Flow/price divergence uses rolling 20-bar CMF persistence check
+ * - Fix 5: dataQuality field tracks what % of composite has real data
+ * - Fix 6: Dynamic weight redistribution when pre-run data missing
+ * - Fix 7: Multi-signal rotation detection (dispersion + spread), not fixed threshold
  */
 
 import "server-only";
 
 import { fetchYahooChart, calcSMA, calc20dReturn } from "./data";
-import { SECTOR_ETF_MAP, SCAN_UNIVERSE, getSectorForTicker } from "@/data/prerun-universe";
+import { SCAN_UNIVERSE, getSectorForTicker } from "@/data/prerun-universe";
 import type {
   SectorRotationScore,
   SectorRotationResult,
   RRGQuadrant,
 } from "./sector-rotation-types";
 import type { PreRunResult } from "./types";
+
+// ── Fix 1: Rotation-specific ETF mapping ──
+// Separate from SECTOR_ETF_MAP so pre-run relative strength is unaffected.
+// IWM replaces SPY for "High Short Interest" (small/mid cap stocks, SPY would be self-benchmark).
+
+const ROTATION_ETF_MAP: Record<string, string> = {
+  "AI Optical/Connectivity Semis": "SMH",
+  "Advanced Packaging/Test": "SMH",
+  "SiC/GaN Power Semis": "SMH",
+  "Beaten-Down Cloud/SaaS": "IGV",
+  "Beaten-Down Biotech": "XBI",
+  "Energy/LNG Turnarounds": "XLE",
+  "Nuclear/Power Neoclouds": "XLU",
+  "Rare Earth/Critical Minerals": "XLB",
+  "EV/Hydrogen Turnarounds": "QCLN",
+  "High Short Interest": "IWM",
+  "Rental/Travel": "PEJ",
+};
+
+const ETF_DISPLAY_NAMES: Record<string, string> = {
+  SMH: "Semiconductors",
+  IGV: "Cloud/SaaS",
+  XBI: "Biotech",
+  XLE: "Energy/LNG",
+  XLU: "Nuclear/Power",
+  XLB: "Critical Minerals",
+  QCLN: "EV/Hydrogen",
+  IWM: "High Short Interest",
+  PEJ: "Rental/Travel",
+};
 
 // ── Pure math functions ──
 
@@ -34,7 +73,6 @@ function calcMomentumComposite(closes: number[]): number {
 
 function calcAcceleration(closes: number[]): number {
   if (closes.length < 26) return 0;
-  // ROC of ROC: first compute ROC(20) series, then ROC(5) of that
   const rocSeries: number[] = [];
   for (let i = 20; i < closes.length; i++) {
     const past = closes[i - 20];
@@ -54,22 +92,17 @@ function calcAcceleration(closes: number[]): number {
 function calcMansfieldRS(sectorCloses: number[], spyCloses: number[]): number {
   const len = Math.min(sectorCloses.length, spyCloses.length);
   if (len < 201) return 0;
-  // Align from the end
   const sc = sectorCloses.slice(-len);
   const sp = spyCloses.slice(-len);
 
-  // Dorsey Relative Strength = sector/SPY
   const drs: number[] = [];
   for (let i = 0; i < len; i++) {
     drs.push(sp[i] !== 0 ? sc[i] / sp[i] : 0);
   }
 
-  // SMA(200) of DRS
   const sma200 = drs.slice(-200).reduce((a, b) => a + b, 0) / 200;
   if (sma200 === 0) return 0;
-
-  const currentDRS = drs[drs.length - 1];
-  return 100 * (currentDRS / sma200 - 1);
+  return 100 * (drs[drs.length - 1] / sma200 - 1);
 }
 
 function calcCMF(
@@ -93,11 +126,42 @@ function calcCMF(
   return volSum !== 0 ? mfvSum / volSum : 0;
 }
 
+/**
+ * Fix 4: Count how many of the last `lookback` rolling CMF values are positive.
+ * Each value is a 20-bar CMF ending at that bar.
+ */
+function calcRollingCMFPositiveCount(
+  highs: number[],
+  lows: number[],
+  closes: number[],
+  volumes: number[],
+  period: number,
+  lookback: number
+): number {
+  const len = Math.min(highs.length, lows.length, closes.length, volumes.length);
+  if (len < period + lookback) return 0;
+
+  let positiveCount = 0;
+  for (let offset = 0; offset < lookback; offset++) {
+    const end = len - offset;
+    if (end < period) break;
+    let mfvSum = 0;
+    let volSum = 0;
+    for (let i = end - period; i < end; i++) {
+      const hl = highs[i] - lows[i];
+      const mfm = hl !== 0 ? ((closes[i] - lows[i]) - (highs[i] - closes[i])) / hl : 0;
+      mfvSum += mfm * volumes[i];
+      volSum += volumes[i];
+    }
+    if (volSum !== 0 && mfvSum / volSum > 0) positiveCount++;
+  }
+  return positiveCount;
+}
+
 function calcOBVSlope(closes: number[], volumes: number[], lookback = 20): -1 | 0 | 1 {
   const len = Math.min(closes.length, volumes.length);
   if (len < lookback + 1) return 0;
 
-  // Build OBV series for the lookback window
   const obv: number[] = [0];
   const start = len - lookback;
   for (let i = start + 1; i < len; i++) {
@@ -107,7 +171,6 @@ function calcOBVSlope(closes: number[], volumes: number[], lookback = 20): -1 | 
     else obv.push(prev);
   }
 
-  // Simple linear regression slope
   const n = obv.length;
   let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
   for (let i = 0; i < n; i++) {
@@ -120,7 +183,6 @@ function calcOBVSlope(closes: number[], volumes: number[], lookback = 20): -1 | 
   if (denom === 0) return 0;
   const slope = (n * sumXY - sumX * sumY) / denom;
 
-  // Normalize slope relative to avg OBV magnitude
   const avgObv = Math.abs(sumY / n) || 1;
   const normalizedSlope = slope / avgObv;
 
@@ -139,30 +201,23 @@ function calcRRG(
   const sc = sectorCloses.slice(-len);
   const sp = spyCloses.slice(-len);
 
-  // DRS series
   const drs: number[] = [];
   for (let i = 0; i < len; i++) {
     drs.push(sp[i] !== 0 ? sc[i] / sp[i] : 0);
   }
 
-  // SMA(10) and SMA(30) of DRS
   const sma10 = drs.slice(-10).reduce((a, b) => a + b, 0) / 10;
   const sma30 = drs.slice(-30).reduce((a, b) => a + b, 0) / 30;
-
   const rsRatio = sma30 !== 0 ? (sma10 / sma30) * 100 : 100;
 
-  // RS-Momentum: need yesterday's rsRatio too
   let prevRsRatio = 100;
   if (len >= 32) {
-    const prevDrs = drs.slice(-11, -1);
-    const prevDrs30 = drs.slice(-31, -1);
-    const prevSma10 = prevDrs.reduce((a, b) => a + b, 0) / 10;
-    const prevSma30 = prevDrs30.reduce((a, b) => a + b, 0) / 30;
+    const prevSma10 = drs.slice(-11, -1).reduce((a, b) => a + b, 0) / 10;
+    const prevSma30 = drs.slice(-31, -1).reduce((a, b) => a + b, 0) / 30;
     prevRsRatio = prevSma30 !== 0 ? (prevSma10 / prevSma30) * 100 : 100;
   }
   const rsMomentum = rsRatio - prevRsRatio;
 
-  // Quadrant classification
   let quadrant: RRGQuadrant;
   if (rsRatio >= 100 && rsMomentum >= 0) quadrant = "LEADING";
   else if (rsRatio >= 100 && rsMomentum < 0) quadrant = "WEAKENING";
@@ -170,19 +225,6 @@ function calcRRG(
   else quadrant = "IMPROVING";
 
   return { rsRatio, rsMomentum, quadrant };
-}
-
-function calcBreadthPct(stockCloses: number[][]): number | null {
-  if (stockCloses.length === 0) return null;
-
-  let above50sma = 0;
-  for (const closes of stockCloses) {
-    const sma50 = calcSMA(closes, 50);
-    if (sma50 !== null && closes.length > 0 && closes[closes.length - 1] > sma50) {
-      above50sma++;
-    }
-  }
-  return (above50sma / stockCloses.length) * 100;
 }
 
 // ── Normalization helpers ──
@@ -198,6 +240,13 @@ function clampNormalize(value: number, min: number, max: number): number {
   return ((clamped - min) / (max - min)) * 100;
 }
 
+function stddev(values: number[]): number {
+  if (values.length === 0) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
 // ── Chart data type ──
 
 interface ChartData {
@@ -209,27 +258,76 @@ interface ChartData {
   timestamps: number[];
 }
 
+// ── Fix 5/6: Dynamic composite weighting ──
+
+const BASE_WEIGHTS = {
+  momentum: 25,
+  acceleration: 15,
+  mansfield: 20,
+  cmf: 15,
+  breadth: 15,
+  smartMoney: 10,
+};
+
+function computeComposite(
+  normalized: Record<string, number>,
+  hasBreadth: boolean,
+  hasSmartMoney: boolean
+): { score: number; dataQuality: number } {
+  const available: Record<string, number> = {
+    momentum: BASE_WEIGHTS.momentum,
+    acceleration: BASE_WEIGHTS.acceleration,
+    mansfield: BASE_WEIGHTS.mansfield,
+    cmf: BASE_WEIGHTS.cmf,
+  };
+  if (hasBreadth) available.breadth = BASE_WEIGHTS.breadth;
+  if (hasSmartMoney) available.smartMoney = BASE_WEIGHTS.smartMoney;
+
+  const totalAvailable = Object.values(available).reduce((a, b) => a + b, 0);
+  const totalBase = Object.values(BASE_WEIGHTS).reduce((a, b) => a + b, 0);
+
+  let score = 0;
+  for (const [key, weight] of Object.entries(available)) {
+    const normalizedWeight = weight / totalAvailable;
+    score += (normalized[key] ?? 50) * normalizedWeight;
+  }
+
+  const dataQuality = Math.round((totalAvailable / totalBase) * 100);
+  return { score: Math.round(score), dataQuality };
+}
+
 // ── Cache ──
 
 let cachedResult: { data: SectorRotationResult; ts: number } | null = null;
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+const CACHE_TTL = 15 * 60 * 1000;
 
 // ── Main calculation ──
 
 export async function calculateSectorRotation(
   preRunResults?: PreRunResult[]
 ): Promise<SectorRotationResult> {
-  // Check cache
   if (cachedResult && Date.now() - cachedResult.ts < CACHE_TTL) {
     return cachedResult.data;
   }
 
-  // Get unique sector ETFs
-  const uniqueETFs = [...new Set(Object.values(SECTOR_ETF_MAP))];
-  const crossETFs = ["XLY", "XLP", "XLK", "XLU"];
-  const allETFs = [...new Set(["SPY", ...uniqueETFs, ...crossETFs])];
+  // Fix 1: Build ETF groups — merge sectors sharing the same ETF
+  const etfGroups = new Map<string, { subsectors: string[]; displayName: string }>();
+  for (const [sector, etf] of Object.entries(ROTATION_ETF_MAP)) {
+    const existing = etfGroups.get(etf);
+    if (existing) {
+      existing.subsectors.push(sector);
+    } else {
+      etfGroups.set(etf, {
+        subsectors: [sector],
+        displayName: ETF_DISPLAY_NAMES[etf] ?? etf,
+      });
+    }
+  }
 
-  // Fetch 1y daily OHLCV for all ETFs in parallel
+  // Fetch all ETFs + SPY + cross-sector pairs
+  const crossETFs = ["XLY", "XLP", "XLK", "XLU"];
+  const allETFs = [...new Set(["SPY", ...etfGroups.keys(), ...crossETFs])];
+
   const chartResults = await Promise.allSettled(
     allETFs.map((etf) => fetchYahooChart(etf, "1y", "1d"))
   );
@@ -247,7 +345,7 @@ export async function calculateSectorRotation(
     throw new Error("Failed to fetch SPY data");
   }
 
-  // Build pre-run lookup by sector
+  // Build pre-run lookup by original sector name
   const preRunBySector = new Map<string, PreRunResult[]>();
   if (preRunResults) {
     for (const r of preRunResults) {
@@ -258,11 +356,11 @@ export async function calculateSectorRotation(
     }
   }
 
-  // Compute per-sector scores
-  const sectors = Object.keys(SCAN_UNIVERSE);
-  const rawScores: {
-    sector: string;
+  // Compute per-ETF-group scores
+  interface RawScore {
+    displayName: string;
     etf: string;
+    subsectors: string[];
     momentumComposite: number;
     acceleration: number;
     mansfieldRS: number;
@@ -273,23 +371,28 @@ export async function calculateSectorRotation(
     quadrant: RRGQuadrant;
     breadthPct: number | null;
     roc20d: number;
-    chart: ChartData | undefined;
-    // Leading indicators
     flowPriceDivergence: boolean;
     breadthDivergence: boolean;
     accelerationInflection: boolean;
-    // Smart money
     aggregateInsiderBuys: number;
     aggregatePCR: number | null;
     unusualVolume: boolean;
     earningsBeatPct: number;
     smartMoneyScore: number;
-  }[] = [];
+    hasSmartMoneyData: boolean;
+  }
 
-  for (const sector of sectors) {
-    const etf = SECTOR_ETF_MAP[sector] ?? "SPY";
+  const rawScores: RawScore[] = [];
+
+  for (const [etf, group] of etfGroups) {
     const chart = charts.get(etf);
     if (!chart) continue;
+
+    // Fix 1: Merge all stocks from all subsectors
+    const allStocks: PreRunResult[] = [];
+    for (const sub of group.subsectors) {
+      allStocks.push(...(preRunBySector.get(sub) ?? []));
+    }
 
     const mc = calcMomentumComposite(chart.closes);
     const accel = calcAcceleration(chart.closes);
@@ -299,49 +402,40 @@ export async function calculateSectorRotation(
     const rrg = calcRRG(chart.closes, spyChart.closes);
     const roc20d = calcROC(chart.closes, 20);
 
-    // Breadth: use stock closes from pre-run data if available
-    // We don't have individual stock chart data here, so breadth from pre-run results
-    const sectorStocks = preRunBySector.get(sector) ?? [];
+    // Fix 2+3: Breadth using SMA20 (what pre-run stores), null if < 5 stocks
     let breadthPct: number | null = null;
-    if (sectorStocks.length > 0) {
-      const aboveSma = sectorStocks.filter(
-        (r) => r.data.currentPrice !== null && r.data.sma20 !== null && r.data.currentPrice > r.data.sma20
+    const stocksWithPrice = allStocks.filter(
+      (r) => r.data.currentPrice !== null && r.data.sma20 !== null
+    );
+    if (stocksWithPrice.length >= 5) {
+      const aboveSma = stocksWithPrice.filter(
+        (r) => r.data.currentPrice! > r.data.sma20!
       ).length;
-      breadthPct = (aboveSma / sectorStocks.length) * 100;
+      breadthPct = Math.round((aboveSma / stocksWithPrice.length) * 100);
     }
 
-    // Leading indicators
-    // flowPriceDivergence: CMF > 0 for 15+ bars AND 20d ROC < 0
+    // Fix 4: Flow/price divergence — check that CMF was positive for 15+ of last 20 bars
     let flowPriceDivergence = false;
     if (cmf > 0 && roc20d < 0) {
-      // Check if CMF has been positive for ~15 bars by checking at midpoint
-      if (chart.closes.length >= 35) {
-        const midCmf = calcCMF(
-          chart.highs.slice(0, -10),
-          chart.lows.slice(0, -10),
-          chart.closes.slice(0, -10),
-          chart.volumes.slice(0, -10),
-          20
-        );
-        flowPriceDivergence = midCmf > 0;
-      }
+      const positiveCount = calcRollingCMFPositiveCount(
+        chart.highs, chart.lows, chart.closes, chart.volumes, 20, 20
+      );
+      flowPriceDivergence = positiveCount >= 15;
     }
 
-    // breadthDivergence: breadth improving + sector price declining
-    let breadthDivergence = false;
-    if (breadthPct !== null && breadthPct > 50 && roc20d < 0) {
-      breadthDivergence = true;
-    }
+    // Breadth divergence: > 50% stocks healthy but sector ETF declining
+    const breadthDivergence = breadthPct !== null && breadthPct > 50 && roc20d < 0;
 
-    // accelerationInflection: acceleration > 0 AND 20d ROC < 0
+    // Acceleration inflection: 2nd derivative positive but price still negative
     const accelerationInflection = accel > 0 && roc20d < 0;
 
-    // Smart money aggregation from pre-run results
+    // Fix 6: Smart money — only score if we have pre-run data for this sector
+    const hasSmartMoneyData = allStocks.length > 0;
     let aggregateInsiderBuys = 0;
     let totalPCR = 0;
     let pcrCount = 0;
     let beatStreakCount = 0;
-    for (const r of sectorStocks) {
+    for (const r of allStocks) {
       aggregateInsiderBuys += r.data.insiderBuys90d ?? 0;
       if (r.data.putCallRatio !== null) {
         totalPCR += r.data.putCallRatio;
@@ -350,11 +444,11 @@ export async function calculateSectorRotation(
       if ((r.data.earningsBeatStreak ?? 0) >= 2) beatStreakCount++;
     }
     const aggregatePCR = pcrCount > 0 ? totalPCR / pcrCount : null;
-    const earningsBeatPct = sectorStocks.length > 0
-      ? (beatStreakCount / sectorStocks.length) * 100
+    const earningsBeatPct = allStocks.length > 0
+      ? Math.round((beatStreakCount / allStocks.length) * 100)
       : 0;
 
-    // Unusual volume: ETF volume > 1.5x 20d avg
+    // Unusual volume (from ETF chart — always available)
     let unusualVolume = false;
     if (chart.volumes.length >= 21) {
       const avgVol20 = chart.volumes.slice(-21, -1).reduce((a, b) => a + b, 0) / 20;
@@ -362,17 +456,20 @@ export async function calculateSectorRotation(
       unusualVolume = avgVol20 > 0 && todayVol > 1.5 * avgVol20;
     }
 
-    // Smart money composite (0-100)
+    // Smart money composite — only meaningful with pre-run data
     let smartMoneyScore = 0;
-    if (aggregateInsiderBuys > 0) smartMoneyScore += 25;
-    if (aggregateInsiderBuys >= 3) smartMoneyScore += 10;
-    if (aggregatePCR !== null && aggregatePCR < 0.7) smartMoneyScore += 25;
-    if (unusualVolume) smartMoneyScore += 20;
-    if (earningsBeatPct >= 50) smartMoneyScore += 20;
+    if (hasSmartMoneyData) {
+      if (aggregateInsiderBuys > 0) smartMoneyScore += 25;
+      if (aggregateInsiderBuys >= 3) smartMoneyScore += 10;
+      if (aggregatePCR !== null && aggregatePCR < 0.7) smartMoneyScore += 25;
+      if (unusualVolume) smartMoneyScore += 20;
+      if (earningsBeatPct >= 50) smartMoneyScore += 20;
+    }
 
     rawScores.push({
-      sector,
+      displayName: group.displayName,
       etf,
+      subsectors: group.subsectors,
       momentumComposite: mc,
       acceleration: accel,
       mansfieldRS: mrs,
@@ -383,7 +480,6 @@ export async function calculateSectorRotation(
       quadrant: rrg.quadrant,
       breadthPct,
       roc20d,
-      chart,
       flowPriceDivergence,
       breadthDivergence,
       accelerationInflection,
@@ -392,13 +488,12 @@ export async function calculateSectorRotation(
       unusualVolume,
       earningsBeatPct,
       smartMoneyScore,
+      hasSmartMoneyData,
     });
   }
 
-  // Percentile-rank momentum composite
+  // Percentile-rank and min-max normalization
   const allMomentums = rawScores.map((s) => s.momentumComposite);
-
-  // Min-max for acceleration
   const accels = rawScores.map((s) => s.acceleration);
   const accelMin = Math.min(...accels);
   const accelMax = Math.max(...accels);
@@ -407,36 +502,24 @@ export async function calculateSectorRotation(
   const scoredSectors: SectorRotationScore[] = rawScores.map((raw) => {
     const momentumPercentile = percentileRank(allMomentums, raw.momentumComposite);
 
-    // Normalize each factor to 0-100
-    const normMomentum = momentumPercentile;
-    const normAccel = accelMax !== accelMin
-      ? ((raw.acceleration - accelMin) / (accelMax - accelMin)) * 100
-      : 50;
-    const normMansfield = clampNormalize(raw.mansfieldRS, -20, 20);
-    const normCMF = clampNormalize(raw.cmf20, -1, 1);
-    const normBreadth = raw.breadthPct ?? 50; // Fallback to neutral
-    const normSmartMoney = raw.smartMoneyScore;
+    const normalized: Record<string, number> = {
+      momentum: momentumPercentile,
+      acceleration: accelMax !== accelMin
+        ? ((raw.acceleration - accelMin) / (accelMax - accelMin)) * 100
+        : 50,
+      mansfield: clampNormalize(raw.mansfieldRS, -20, 20),
+      cmf: clampNormalize(raw.cmf20, -1, 1),
+      breadth: raw.breadthPct ?? 50,
+      smartMoney: raw.smartMoneyScore,
+    };
 
-    // Composite weighted blend
+    // Fix 5/6: Dynamic composite with data quality tracking
     const hasBreadth = raw.breadthPct !== null;
-    let compositeScore: number;
-    if (hasBreadth) {
-      compositeScore =
-        normMomentum * 0.25 +
-        normAccel * 0.15 +
-        normMansfield * 0.20 +
-        normCMF * 0.15 +
-        normBreadth * 0.15 +
-        normSmartMoney * 0.10;
-    } else {
-      // Redistribute breadth weight
-      compositeScore =
-        normMomentum * 0.30 +
-        normAccel * 0.17 +
-        normMansfield * 0.23 +
-        normCMF * 0.18 +
-        normSmartMoney * 0.12;
-    }
+    const { score: compositeScore, dataQuality } = computeComposite(
+      normalized,
+      hasBreadth,
+      raw.hasSmartMoneyData
+    );
 
     // Trend from 20d ROC
     let trend: "UP" | "DOWN" | "FLAT";
@@ -447,7 +530,6 @@ export async function calculateSectorRotation(
     else if (raw.roc20d > -3) { trend = "DOWN"; trendArrow = "\u2198"; }
     else { trend = "DOWN"; trendArrow = "\u2193"; }
 
-    // Stealth accumulation: 2+ leading indicators
     const leadingCount = [
       raw.flowPriceDivergence,
       raw.breadthDivergence,
@@ -456,8 +538,9 @@ export async function calculateSectorRotation(
     const stealthAccumulation = leadingCount >= 2;
 
     return {
-      sector: raw.sector,
+      sector: raw.displayName,
       etf: raw.etf,
+      subsectors: raw.subsectors,
       momentumComposite: Math.round(raw.momentumComposite * 100) / 100,
       momentumPercentile: Math.round(momentumPercentile),
       acceleration: Math.round(raw.acceleration * 100) / 100,
@@ -467,31 +550,36 @@ export async function calculateSectorRotation(
       flowPriceDivergence: raw.flowPriceDivergence,
       breadthDivergence: raw.breadthDivergence,
       accelerationInflection: raw.accelerationInflection,
-      breadthPct: raw.breadthPct !== null ? Math.round(raw.breadthPct) : null,
+      breadthPct: raw.breadthPct,
       aggregateInsiderBuys: raw.aggregateInsiderBuys,
       aggregatePCR: raw.aggregatePCR !== null ? Math.round(raw.aggregatePCR * 100) / 100 : null,
       unusualVolume: raw.unusualVolume,
-      earningsBeatPct: Math.round(raw.earningsBeatPct),
+      earningsBeatPct: raw.earningsBeatPct,
       smartMoneyScore: Math.round(raw.smartMoneyScore),
       rsRatio: Math.round(raw.rsRatio * 100) / 100,
       rsMomentum: Math.round(raw.rsMomentum * 10000) / 10000,
       quadrant: raw.quadrant,
-      compositeScore: Math.round(compositeScore),
+      compositeScore,
+      dataQuality,
       trend,
       trendArrow,
       stealthAccumulation,
     };
   });
 
-  // Sort by composite score desc
   scoredSectors.sort((a, b) => b.compositeScore - a.compositeScore);
 
-  // Rotation detection
+  // Fix 7: Multi-signal rotation detection
   const all20dReturns = rawScores.map((r) => r.roc20d);
-  const mean20d = all20dReturns.reduce((a, b) => a + b, 0) / all20dReturns.length;
-  const variance = all20dReturns.reduce((a, b) => a + (b - mean20d) ** 2, 0) / all20dReturns.length;
-  const dispersionIndex = Math.round(Math.sqrt(variance) * 100) / 100;
-  const rotationActive = dispersionIndex > 2.0;
+  const dispersionIndex = Math.round(stddev(all20dReturns) * 100) / 100;
+  const sectorSpread = Math.round(
+    (Math.max(...all20dReturns) - Math.min(...all20dReturns)) * 100
+  ) / 100;
+
+  // Rotation active when:
+  // - High dispersion (> 4): sectors clearly diverging, OR
+  // - Moderate dispersion (> 2) AND wide spread (> 8%): some sectors moving strongly apart
+  const rotationActive = dispersionIndex > 4 || (dispersionIndex > 2 && sectorSpread > 8);
 
   // Rotation summary
   let rotationSummary = "No clear rotation detected";
@@ -499,22 +587,15 @@ export async function calculateSectorRotation(
     const improving = scoredSectors.filter((s) => s.quadrant === "IMPROVING" || s.stealthAccumulation);
     const weakening = scoredSectors.filter((s) => s.quadrant === "WEAKENING" || s.quadrant === "LAGGING");
     if (improving.length > 0 && weakening.length > 0) {
-      const toSector = improving[0].sector;
-      const fromSector = weakening[weakening.length - 1].sector;
-      rotationSummary = `Money flowing FROM ${fromSector} TO ${toSector}`;
+      rotationSummary = `Money flowing FROM ${weakening[weakening.length - 1].sector} TO ${improving[0].sector}`;
     } else if (improving.length > 0) {
       rotationSummary = `Rotation INTO ${improving[0].sector}`;
     } else {
-      rotationSummary = "Sectors diverging — watch for rotation signal";
+      rotationSummary = "Sectors diverging \u2014 watch for rotation signal";
     }
   }
 
   // Cross-sector pairs
-  const xlyChart = charts.get("XLY");
-  const xlpChart = charts.get("XLP");
-  const xlkChart = charts.get("XLK");
-  const xluChart = charts.get("XLU");
-
   function pairAnalysis(
     numChart: ChartData | undefined,
     denChart: ChartData | undefined
@@ -522,12 +603,10 @@ export async function calculateSectorRotation(
     if (!numChart || !denChart || numChart.closes.length < 21 || denChart.closes.length < 21) {
       return { ratio: 0, trend: "N/A" };
     }
-    const currentRatio = denChart.closes[denChart.closes.length - 1] !== 0
-      ? numChart.closes[numChart.closes.length - 1] / denChart.closes[denChart.closes.length - 1]
-      : 0;
-    const pastRatio = denChart.closes[denChart.closes.length - 21] !== 0
-      ? numChart.closes[numChart.closes.length - 21] / denChart.closes[denChart.closes.length - 21]
-      : 0;
+    const denNow = denChart.closes[denChart.closes.length - 1];
+    const denPast = denChart.closes[denChart.closes.length - 21];
+    const currentRatio = denNow !== 0 ? numChart.closes[numChart.closes.length - 1] / denNow : 0;
+    const pastRatio = denPast !== 0 ? numChart.closes[numChart.closes.length - 21] / denPast : 0;
     const change = pastRatio !== 0 ? ((currentRatio - pastRatio) / pastRatio) * 100 : 0;
     let trend: string;
     if (change > 1) trend = "Rising (Risk-On)";
@@ -537,26 +616,30 @@ export async function calculateSectorRotation(
   }
 
   const crossSectorPairs = {
-    xlyXlp: pairAnalysis(xlyChart, xlpChart),
-    xlkXlu: pairAnalysis(xlkChart, xluChart),
+    xlyXlp: pairAnalysis(charts.get("XLY"), charts.get("XLP")),
+    xlkXlu: pairAnalysis(charts.get("XLK"), charts.get("XLU")),
   };
 
-  // Top stocks to watch (for sectors with stealth accumulation or Improving quadrant)
+  // Top stocks to watch
   const topStocksToWatch: SectorRotationResult["topStocksToWatch"] = [];
   const watchSectors = scoredSectors.filter(
     (s) => s.stealthAccumulation || s.quadrant === "IMPROVING"
   );
 
   for (const sector of watchSectors.slice(0, 3)) {
-    const sectorStocks = preRunBySector.get(sector.sector) ?? [];
+    // Gather stocks from all subsectors
+    const sectorStocks: PreRunResult[] = [];
+    for (const sub of sector.subsectors) {
+      sectorStocks.push(...(preRunBySector.get(sub) ?? []));
+    }
     if (sectorStocks.length === 0) continue;
 
     const ranked = sectorStocks
       .map((r) => {
         const score =
           r.scores.finalScore * 0.4 +
-          r.scores.scoreJ * 0.2 * 12 + // Normalize J (0-2) to comparable scale
-          r.scores.scoreK * 0.2 * 12 + // Normalize K (0-2) to comparable scale
+          r.scores.scoreJ * 0.2 * 12 +
+          r.scores.scoreK * 0.2 * 12 +
           ((r.data.insiderBuys90d ?? 0) > 0 ? 10 : 0) * 0.1 +
           ((r.data.putCallRatio ?? 1) < 0.7 ? 10 : 0) * 0.1;
 
@@ -583,6 +666,7 @@ export async function calculateSectorRotation(
     rotationActive,
     rotationSummary,
     dispersionIndex,
+    sectorSpread,
     crossSectorPairs,
     topStocksToWatch,
   };
@@ -597,12 +681,13 @@ export function formatSectorRotationTelegram(result: SectorRotationResult): stri
   const lines: string[] = [];
   lines.push("<b>Sector Rotation</b>");
   lines.push(result.rotationSummary);
-  lines.push(`Dispersion: ${result.dispersionIndex}`);
+  lines.push(`Dispersion: ${result.dispersionIndex} | Spread: ${result.sectorSpread}%`);
   lines.push("");
 
   lines.push("<b>Top 3 Sectors:</b>");
   for (const s of result.sectors.slice(0, 3)) {
-    lines.push(`${s.trendArrow} ${s.sector} (${s.etf}): ${s.compositeScore}/100 [${s.quadrant}]`);
+    const dq = s.dataQuality < 100 ? ` (${s.dataQuality}% data)` : "";
+    lines.push(`${s.trendArrow} ${s.sector} (${s.etf}): ${s.compositeScore}/100 [${s.quadrant}]${dq}`);
   }
 
   const stealth = result.sectors.filter((s) => s.stealthAccumulation);
@@ -611,8 +696,8 @@ export function formatSectorRotationTelegram(result: SectorRotationResult): stri
     lines.push("<b>Stealth Accumulation:</b>");
     for (const s of stealth) {
       const signals: string[] = [];
-      if (s.flowPriceDivergence) signals.push("CMF positive + price flat");
-      if (s.breadthDivergence) signals.push("breadth improving");
+      if (s.flowPriceDivergence) signals.push("CMF persistent + price flat");
+      if (s.breadthDivergence) signals.push("breadth divergence");
       if (s.accelerationInflection) signals.push("momentum inflecting");
       lines.push(`${s.sector} \u2014 ${signals.join(", ")}`);
     }

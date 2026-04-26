@@ -238,7 +238,17 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
                   STEALTH
                 </span>
               )}
+              {sector.dataQuality < 100 && (
+                <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
+                  {sector.dataQuality}% data
+                </span>
+              )}
             </div>
+            {sector.subsectors.length > 1 && (
+              <div className="text-[10px] text-[#555] mt-0.5">
+                {sector.subsectors.join(" + ")}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -283,7 +293,7 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[#888]">Breadth (%&gt;50d SMA)</span>
+              <span className="text-[#888]">Breadth (% &gt; 20d SMA)</span>
               <span className="text-white">{sector.breadthPct !== null ? `${sector.breadthPct}%` : "N/A"}</span>
             </div>
             <div className="flex justify-between">
@@ -401,8 +411,8 @@ export default function SectorRotationPage() {
     setScanResults(loadScanResults());
   }, []);
 
-  // Build stock-by-sector lookup
-  const stocksBySector = useMemo(() => {
+  // Build stock-by-sector lookup using original sector names
+  const stocksByOriginalSector = useMemo(() => {
     const map = new Map<string, StockInSector[]>();
     for (const r of scanResults) {
       const sector = getSectorForTicker(r.data.ticker);
@@ -420,6 +430,20 @@ export default function SectorRotationPage() {
     }
     return map;
   }, [scanResults]);
+
+  // Fix 1: Map stocks to merged sector display names via subsectors
+  const stocksBySector = useMemo(() => {
+    if (!data) return new Map<string, StockInSector[]>();
+    const map = new Map<string, StockInSector[]>();
+    for (const sector of data.sectors) {
+      const merged: StockInSector[] = [];
+      for (const sub of sector.subsectors) {
+        merged.push(...(stocksByOriginalSector.get(sub) ?? []));
+      }
+      map.set(sector.sector, merged);
+    }
+    return map;
+  }, [data, stocksByOriginalSector]);
 
   const fetchData = useCallback(async (skipCache = false) => {
     setLoading(true);
@@ -516,13 +540,24 @@ export default function SectorRotationPage() {
               <div className="text-sm text-[#a0a0a0]">{data.rotationSummary}</div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-xs text-[#666]">Dispersion Index</div>
-            <div className={`text-lg font-bold ${data.dispersionIndex > 3 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#a0a0a0]"}`}>
-              {data.dispersionIndex}
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <div className="text-xs text-[#666]">Dispersion</div>
+              <div className={`text-lg font-bold ${data.dispersionIndex > 4 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#a0a0a0]"}`}>
+                {data.dispersionIndex}
+              </div>
+              <div className="text-xs text-[#555]">
+                {data.dispersionIndex > 4 ? "High" : data.dispersionIndex > 2 ? "Moderate" : "Low"}
+              </div>
             </div>
-            <div className="text-xs text-[#555]">
-              {data.dispersionIndex > 3 ? "High divergence" : data.dispersionIndex > 2 ? "Moderate" : "Low divergence"}
+            <div className="text-right">
+              <div className="text-xs text-[#666]">Sector Spread</div>
+              <div className={`text-lg font-bold ${data.sectorSpread > 8 ? "text-green-400" : data.sectorSpread > 4 ? "text-amber-400" : "text-[#a0a0a0]"}`}>
+                {data.sectorSpread}%
+              </div>
+              <div className="text-xs text-[#555]">
+                {data.sectorSpread > 8 ? "Wide" : data.sectorSpread > 4 ? "Moderate" : "Narrow"}
+              </div>
             </div>
           </div>
         </div>
@@ -563,6 +598,11 @@ export default function SectorRotationPage() {
                     style={{ width: `${s.compositeScore}%` }}
                   />
                 </div>
+                {s.dataQuality < 100 && (
+                  <div className="mt-1 text-[10px] text-amber-400/70" title={`${s.dataQuality}% of composite factors have real data`}>
+                    {s.dataQuality}% data
+                  </div>
+                )}
               </div>
             </div>
           ))}

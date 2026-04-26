@@ -5,6 +5,7 @@ export type RRGQuadrant = "LEADING" | "WEAKENING" | "LAGGING" | "IMPROVING";
 export interface SectorRotationScore {
   sector: string;
   etf: string;
+  subsectors: string[];       // Original sector names merged into this entry
 
   // Tier 1: Core Rotation (0-100 normalized)
   momentumComposite: number;
@@ -18,7 +19,7 @@ export interface SectorRotationScore {
   flowPriceDivergence: boolean;
   breadthDivergence: boolean;
   accelerationInflection: boolean;
-  breadthPct: number | null;
+  breadthPct: number | null;   // % of stocks > 20d SMA (null if < 5 stocks)
 
   // Tier 3: Smart Money
   aggregateInsiderBuys: number;
@@ -34,6 +35,7 @@ export interface SectorRotationScore {
 
   // Composite
   compositeScore: number;
+  dataQuality: number;         // 0-100, what % of composite factors have real data
   trend: "UP" | "DOWN" | "FLAT";
   trendArrow: string;
   stealthAccumulation: boolean;
@@ -45,6 +47,7 @@ export interface SectorRotationResult {
   rotationActive: boolean;
   rotationSummary: string;
   dispersionIndex: number;
+  sectorSpread: number;        // Max - min 20d return across sectors
   crossSectorPairs: {
     xlyXlp: { ratio: number; trend: string };
     xlkXlu: { ratio: number; trend: string };
