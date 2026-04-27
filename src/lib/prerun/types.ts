@@ -185,8 +185,8 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
   {
     name: "Sector Scan: Semis",
     shortName: "Semis",
-    description: "Scans AI optical + power semi + advanced packaging buckets.",
-    filters: { sectorBucket: "AI Optical/Connectivity Semis", minScore: 11 },
+    description: "Scans all semiconductor stocks in the universe.",
+    filters: { sectorBucket: "Semiconductors", minScore: 11 },
   },
   {
     name: "High SI",

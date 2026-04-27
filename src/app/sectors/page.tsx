@@ -12,6 +12,12 @@ import {
   loadSectorRotation,
   saveSectorRotation,
 } from "@/lib/sector-rotation/storage";
+import {
+  saveSnapshot,
+  loadHistory,
+  getSnapshot,
+} from "@/lib/sector-rotation/history";
+import type { DailySnapshot, SectorSnapshot } from "@/lib/sector-rotation/history";
 import { loadScanResults } from "@/lib/prerun/storage";
 import { SECTOR_UNIVERSE, getSectorForSymbol } from "@/data/sector-universe";
 
@@ -278,7 +284,7 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
 
 // ── Sector Detail Accordion ──
 
-function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks: StockInSector[] }) {
+function SectorDetail({ sector, stocks, prevSnapshot }: { sector: SectorRotationScore; stocks: StockInSector[]; prevSnapshot?: SectorSnapshot | null }) {
   const [open, setOpen] = useState(false);
   const [showNoData, setShowNoData] = useState(false);
 
@@ -328,6 +334,15 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
           <span className="text-xs text-[#666]">{stocks.length} stocks</span>
           <span className={`text-lg font-bold ${compositeTextColor(sector.compositeScore)}`}>
             {sector.compositeScore}
+            {prevSnapshot && (() => {
+              const delta = sector.compositeScore - prevSnapshot.compositeScore;
+              if (delta === 0) return null;
+              return (
+                <span className={`ml-1 text-xs font-semibold ${delta > 0 ? "text-green-400" : "text-red-400"}`}>
+                  ({delta > 0 ? "+" : ""}{delta})
+                </span>
+              );
+            })()}
           </span>
           {open ? <ChevronUp className="h-4 w-4 text-[#666]" /> : <ChevronDown className="h-4 w-4 text-[#666]" />}
         </div>
@@ -512,6 +527,43 @@ export default function SectorRotationPage() {
   const [error, setError] = useState<string | null>(null);
   const [scanResults, setScanResults] = useState<PreRunResult[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>("score");
+  const [compareDate, setCompareDate] = useState<string | null>(null);
+  const [history, setHistory] = useState<DailySnapshot[]>([]);
+
+  // Load history from localStorage
+  useEffect(() => {
+    setHistory(loadHistory());
+  }, []);
+
+  // Reload history after fresh fetch (data change = potential new snapshot)
+  useEffect(() => {
+    if (data) setHistory(loadHistory());
+  }, [data]);
+
+  // Build comparison lookup: sector name → SectorSnapshot for selected date
+  const comparisonMap = useMemo(() => {
+    if (!compareDate) return null;
+    const snap = getSnapshot(compareDate);
+    if (!snap) return null;
+    const map = new Map<string, SectorSnapshot>();
+    for (const s of snap.sectors) map.set(s.sector, s);
+    return map;
+  }, [compareDate]);
+
+  // Comparison summary counts
+  const comparisonSummary = useMemo(() => {
+    if (!comparisonMap || !data) return null;
+    let improved = 0, declined = 0, unchanged = 0;
+    for (const s of data.sectors) {
+      const prev = comparisonMap.get(s.sector);
+      if (!prev) { unchanged++; continue; }
+      const delta = s.compositeScore - prev.compositeScore;
+      if (delta > 2) improved++;
+      else if (delta < -2) declined++;
+      else unchanged++;
+    }
+    return { improved, declined, unchanged };
+  }, [comparisonMap, data]);
 
   // Load pre-run scan results from localStorage for stock-level data
   useEffect(() => {
@@ -598,6 +650,7 @@ export default function SectorRotationPage() {
       const result = (await res.json()) as SectorRotationResult;
       setData(result);
       saveSectorRotation(result);
+      saveSnapshot(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch");
     } finally {
@@ -700,30 +753,86 @@ export default function SectorRotationPage() {
 
       {/* Panel 2: Sector Heatmap Grid */}
       <div>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-white">Sector Scores</h2>
-          <div className="flex items-center gap-1 overflow-x-auto">
-            <span className="text-xs text-[#555] shrink-0 mr-1">Sort:</span>
-            {([
-              ["score", "Score"],
-              ["action", "Action"],
-              ["quadrant", "Quadrant"],
-              ["acceleration", "Accel"],
-              ["name", "Name"],
-            ] as [SortMode, string][]).map(([mode, label]) => (
+        <div className="mb-3 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-white">Sector Scores</h2>
+            <div className="flex items-center gap-1 overflow-x-auto">
+              <span className="text-xs text-[#555] shrink-0 mr-1">Sort:</span>
+              {([
+                ["score", "Score"],
+                ["action", "Action"],
+                ["quadrant", "Quadrant"],
+                ["acceleration", "Accel"],
+                ["name", "Name"],
+              ] as [SortMode, string][]).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setSortMode(mode)}
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    sortMode === mode
+                      ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30"
+                      : "text-[#666] hover:text-[#a0a0a0] border border-transparent"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Comparison date selector */}
+          {history.length > 0 && (
+            <div className="flex items-center gap-1 overflow-x-auto">
+              <span className="text-xs text-[#555] shrink-0 mr-1">Compare:</span>
               <button
-                key={mode}
-                onClick={() => setSortMode(mode)}
+                onClick={() => setCompareDate(null)}
                 className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  sortMode === mode
+                  compareDate === null
                     ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30"
                     : "text-[#666] hover:text-[#a0a0a0] border border-transparent"
                 }`}
               >
-                {label}
+                None
               </button>
-            ))}
-          </div>
+              {history.map((snap) => {
+                const d = new Date(snap.date + "T12:00:00");
+                const daysAgo = Math.round((Date.now() - d.getTime()) / 86_400_000);
+                let label: string;
+                if (daysAgo <= 1) label = "Yesterday";
+                else if (daysAgo <= 8) label = "1w ago";
+                else if (daysAgo <= 15) label = "2w ago";
+                else if (daysAgo <= 22) label = "3w ago";
+                else label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                return (
+                  <button
+                    key={snap.date}
+                    onClick={() => setCompareDate(snap.date)}
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      compareDate === snap.date
+                        ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                        : "text-[#666] hover:text-[#a0a0a0] border border-transparent"
+                    }`}
+                    title={snap.date}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Comparison summary banner */}
+          {compareDate && comparisonSummary && (
+            <div className="flex items-center gap-2 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-1.5 text-xs text-[#a0a0a0]">
+              <span className="text-purple-400 font-medium">
+                Comparing to {new Date(compareDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              </span>
+              <span>&mdash;</span>
+              <span className="text-green-400">{comparisonSummary.improved} improved</span>
+              <span className="text-red-400">{comparisonSummary.declined} declined</span>
+              <span className="text-[#666]">{comparisonSummary.unchanged} unchanged</span>
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {sortedSectors.map((s) => (
@@ -773,6 +882,36 @@ export default function SectorRotationPage() {
                     </span>
                   )}
                 </div>
+                {/* Delta indicators when comparison active */}
+                {(() => {
+                  const prev = comparisonMap?.get(s.sector);
+                  if (!prev) return null;
+                  const delta = s.compositeScore - prev.compositeScore;
+                  const quadChanged = s.quadrant !== prev.quadrant;
+                  const curAction = getTradingAction(s);
+                  const prevAction = getTradingAction({ ...s, compositeScore: prev.compositeScore, acceleration: prev.acceleration, quadrant: prev.quadrant } as SectorRotationScore);
+                  const actionChanged = curAction !== prevAction;
+                  if (delta === 0 && !quadChanged && !actionChanged) return null;
+                  return (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                      {delta !== 0 && (
+                        <span className={`text-[10px] font-semibold ${delta > 0 ? "text-green-400" : "text-red-400"}`}>
+                          {delta > 0 ? "+" : ""}{delta}
+                        </span>
+                      )}
+                      {quadChanged && (
+                        <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 text-[9px] text-[#888]">
+                          was {prev.quadrant}
+                        </span>
+                      )}
+                      {actionChanged && (
+                        <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 text-[9px] text-[#888]">
+                          was {prevAction}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           ))}
@@ -866,7 +1005,7 @@ export default function SectorRotationPage() {
         </div>
         <div className="space-y-2">
           {sortedSectors.map((s) => (
-            <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} />
+            <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} prevSnapshot={comparisonMap?.get(s.sector)} />
           ))}
         </div>
       </div>

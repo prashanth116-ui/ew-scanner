@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as { tickers: string[] };
-    const tickers = validateTickers(body.tickers).slice(0, 200);
+    const tickers = validateTickers(body.tickers).slice(0, 800);
     if (!tickers.length) {
       return NextResponse.json({ error: "tickers array required (valid A-Z tickers)" }, { status: 400 });
     }
