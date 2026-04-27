@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from "rea
 import {
   Search,
   Loader2,
-  ChevronRight,
   ChevronDown,
   X,
   Save,
@@ -12,8 +11,6 @@ import {
   ArrowUpDown,
   Zap,
   TrendingUp,
-  PanelLeftClose,
-  PanelLeft,
   AlertTriangle,
   BookOpen,
   ListPlus,
@@ -46,7 +43,14 @@ import type {
 } from "@/lib/ew-types";
 import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-scoring";
 import { useDebounce } from "@/lib/use-debounce";
+import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
+import { formatM, formatNum, formatDate } from "@/lib/format-utils";
+import { tierColor } from "@/lib/color-utils";
 import { ScannerCTA } from "@/components/scanner-cta";
+import { ScoreBar } from "@/components/score-bar";
+import { SidebarShell } from "@/components/sidebar-shell";
+import { SidebarSection } from "@/components/sidebar-section";
+import { PresetList } from "@/components/preset-list";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 300;
@@ -104,54 +108,9 @@ type SortKey =
   | "ticker";
 type SortDir = "asc" | "desc";
 
-function formatM(val: number | null): string {
-  if (val == null) return "-";
-  const m = val / 1_000_000;
-  if (m >= 1000) return `${(m / 1000).toFixed(1)}B`;
-  return `${m.toFixed(1)}M`;
-}
-
 function formatPct(val: number | null): string {
   if (val == null) return "-";
   return `${normalizeSiPercent(val).toFixed(1)}%`;
-}
-
-function formatNum(val: number | null, decimals = 2): string {
-  if (val == null) return "-";
-  return val.toFixed(decimals);
-}
-
-function formatDate(ts: number | null): string {
-  if (ts == null) return "-";
-  return new Date(ts * 1000).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function tierColor(tier: string): string {
-  switch (tier) {
-    case "high":
-      return "bg-red-500/20 text-red-400 border-red-500/30";
-    case "medium":
-      return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
-    default:
-      return "bg-[#2a2a2a] text-[#a0a0a0] border-[#333]";
-  }
-}
-
-function ScoreBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const pct = max > 0 ? (value / max) * 100 : 0;
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-20 text-[#a0a0a0] shrink-0">{label}</span>
-      <div className="flex-1 h-2 bg-[#1a1a1a] rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="w-8 text-right text-[#ccc]">{value.toFixed(0)}</span>
-    </div>
-  );
 }
 
 export default function SqueezePageWrapper() {
@@ -213,15 +172,7 @@ function SqueezePage() {
 
   // Sidebar collapse (full + sections)
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const toggleSection = useCallback((key: string) => {
-    setCollapsed((prev) => {
-      const s = new Set(prev);
-      if (s.has(key)) s.delete(key);
-      else s.add(key);
-      return s;
-    });
-  }, []);
+  const { collapsed, toggleSection } = useCollapsibleSections();
 
   // Saved scans
   const [savedScans, setSavedScans] = useState<SavedSqueezeScan[]>([]);
@@ -623,90 +574,20 @@ function SqueezePage() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
-      {/* ── Sidebar Toggle (visible when collapsed) ── */}
-      {!sidebarOpen && (
-        <>
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-md border border-[#2a2a2a] bg-[#141414] text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors shrink-0 self-start sticky top-20"
-            title="Show sidebar"
-          >
-            <PanelLeft className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#141414] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors self-start"
-          >
-            <PanelLeft className="h-3.5 w-3.5" />
-            Filters
-          </button>
-        </>
-      )}
-
-      {/* ── Left Sidebar ── */}
-      <aside className={`w-full lg:w-72 shrink-0 space-y-4 ${sidebarOpen ? "" : "hidden lg:hidden"}`}>
-        {/* Sidebar header with collapse toggle */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[#a0a0a0] uppercase tracking-wider">Controls</h2>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="flex items-center justify-center w-7 h-7 rounded-md text-[#666] hover:text-white hover:bg-[#1a1a1a] transition-colors"
-            title="Hide sidebar"
-          >
-            <PanelLeftClose className="h-4 w-4" />
-          </button>
-        </div>
-
+      <SidebarShell open={sidebarOpen} onToggle={setSidebarOpen}>
         {/* Quick Presets */}
-        <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
-          <button
-            onClick={() => toggleSection("presets")}
-            className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
-          >
-            <span>Quick Presets</span>
-            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("presets") ? "" : "rotate-90"}`} />
-          </button>
-          {!collapsed.has("presets") && (
-            <div className="border-t border-[#2a2a2a] px-4 pb-3 pt-2">
-              <div className="space-y-1.5">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.name}
-                    onClick={() => applyPreset(p)}
-                    className="group flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-[#262626]"
-                  >
-                    <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-[#555] transition-colors group-hover:text-[#5ba3e6]" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-[#e6e6e6] group-hover:text-[#5ba3e6]">
-                        {p.shortName}
-                        {p.recommended && (
-                          <span className="ml-1.5 inline-flex items-center rounded-full bg-[#5ba3e6]/10 px-1.5 py-0.5 text-[9px] font-medium text-[#5ba3e6]">
-                            Best
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-[10px] leading-tight text-[#555] group-hover:text-[#a0a0a0]">
-                        {p.description}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        <SidebarSection title="Quick Presets" sectionKey="presets" collapsed={collapsed.has("presets")} onToggle={toggleSection}>
+          <PresetList presets={PRESETS} onSelect={applyPreset} />
+        </SidebarSection>
 
         {/* Filters */}
-        <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
-          <button
-            onClick={() => toggleSection("filters")}
-            className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
-          >
-            <span>Filters <span className="normal-case text-[#666]">({minSiPercent}% SI, {minDtc} DTC{minScore > 0 ? `, ${minScore}+ score` : ""})</span></span>
-            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("filters") ? "" : "rotate-90"}`} />
-          </button>
-          {!collapsed.has("filters") && (
-            <div className="border-t border-[#2a2a2a] px-4 pb-4 pt-3 space-y-4">
+        <SidebarSection
+          title={`Filters (${minSiPercent}% SI, ${minDtc} DTC${minScore > 0 ? `, ${minScore}+ score` : ""})`}
+          sectionKey="filters"
+          collapsed={collapsed.has("filters")}
+          onToggle={toggleSection}
+        >
+            <div className="space-y-4">
               {/* Min SI% */}
               <div>
                 <div className="flex justify-between text-xs mb-1">
@@ -853,8 +734,7 @@ function SqueezePage() {
                 Reset Filters
               </button>
             </div>
-          )}
-        </div>
+        </SidebarSection>
 
         {/* Scan / Cancel */}
         <div className="flex gap-2">
@@ -881,16 +761,13 @@ function SqueezePage() {
         </div>
 
         {/* Saved Scans */}
-        <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
-          <button
-            onClick={() => toggleSection("saved")}
-            className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
-          >
-            <span>Saved Scans <span className="normal-case text-[#666]">({savedScans.length})</span></span>
-            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("saved") ? "" : "rotate-90"}`} />
-          </button>
-          {!collapsed.has("saved") && (
-            <div className="border-t border-[#2a2a2a] px-4 pb-4 pt-2 space-y-2">
+        <SidebarSection
+          title={`Saved Scans (${savedScans.length})`}
+          sectionKey="saved"
+          collapsed={collapsed.has("saved")}
+          onToggle={toggleSection}
+        >
+            <div className="space-y-2">
               {/* Save current */}
               {scored.length > 0 && (
                 <div className="flex gap-2">
@@ -939,9 +816,8 @@ function SqueezePage() {
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      </aside>
+        </SidebarSection>
+      </SidebarShell>
 
       {/* ── Main Content ── */}
       <main className="flex-1 min-w-0">

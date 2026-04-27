@@ -21,20 +21,10 @@ import type { DailySnapshot, SectorSnapshot } from "@/lib/sector-rotation/histor
 import { loadScanResults } from "@/lib/prerun/storage";
 import { SECTOR_UNIVERSE, getSectorForSymbol } from "@/data/sector-universe";
 import { ScannerCTA } from "@/components/scanner-cta";
+import { compositeColor, compositeTextColor } from "@/lib/color-utils";
 
 // ── Color helpers ──
 
-function compositeColor(score: number): string {
-  if (score >= 67) return "bg-green-500";
-  if (score >= 33) return "bg-amber-500";
-  return "bg-red-500";
-}
-
-function compositeTextColor(score: number): string {
-  if (score >= 67) return "text-green-400";
-  if (score >= 33) return "text-amber-400";
-  return "text-red-400";
-}
 
 function quadrantColor(q: RRGQuadrant): string {
   switch (q) {

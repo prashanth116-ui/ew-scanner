@@ -9,8 +9,6 @@ import {
   X,
   ArrowUpDown,
   Layers,
-  PanelLeftClose,
-  PanelLeft,
   Copy,
   Check,
   ExternalLink,
@@ -36,6 +34,11 @@ import { getConfluenceUniverse, getConfluenceTickerInfo } from "@/data/confluenc
 import { getSectorForSymbol } from "@/data/sector-universe";
 import type { SectorRotationScore, SectorRotationResult } from "@/lib/sector-rotation/types";
 import { ScannerCTA } from "@/components/scanner-cta";
+import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
+import { SidebarShell } from "@/components/sidebar-shell";
+import { SidebarSection } from "@/components/sidebar-section";
+import { PresetList } from "@/components/preset-list";
+import { ScoreBar } from "@/components/score-bar";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 1200;
@@ -149,7 +152,7 @@ export default function ConfluencePage() {
 
   // UI state
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const { collapsed, toggleSection } = useCollapsibleSections();
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
   // Ticker search
@@ -164,15 +167,6 @@ export default function ConfluencePage() {
     return () => {
       scanAbort.current?.abort();
     };
-  }, []);
-
-  const toggleSection = useCallback((key: string) => {
-    setCollapsed((prev) => {
-      const s = new Set(prev);
-      if (s.has(key)) s.delete(key);
-      else s.add(key);
-      return s;
-    });
   }, []);
 
   // Build a map from ticker -> sector rotation data
@@ -433,89 +427,15 @@ export default function ConfluencePage() {
   return (
     <>
       <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
-        {/* Sidebar Toggle (visible when collapsed) */}
-        {!sidebarOpen && (
-          <>
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="hidden lg:flex items-center justify-center w-8 h-8 rounded-md border border-[#2a2a2a] bg-[#141414] text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors shrink-0 self-start sticky top-20"
-              title="Show sidebar"
-            >
-              <PanelLeft className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#141414] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors self-start"
-            >
-              <PanelLeft className="h-3.5 w-3.5" />
-              Filters
-            </button>
-          </>
-        )}
-
-        {/* Left Sidebar */}
-        <aside className={`w-full lg:w-72 shrink-0 space-y-4 ${sidebarOpen ? "" : "hidden lg:hidden"}`}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-[#a0a0a0] uppercase tracking-wider">Controls</h2>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="flex items-center justify-center w-7 h-7 rounded-md text-[#666] hover:text-white hover:bg-[#1a1a1a] transition-colors"
-              title="Hide sidebar"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
-          </div>
-
+        <SidebarShell open={sidebarOpen} onToggle={setSidebarOpen}>
           {/* Presets */}
-          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
-            <button
-              onClick={() => toggleSection("presets")}
-              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
-            >
-              <span>Presets</span>
-              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("presets") ? "" : "rotate-90"}`} />
-            </button>
-            {!collapsed.has("presets") && (
-              <div className="border-t border-[#2a2a2a] px-4 pb-3 pt-2">
-                <div className="space-y-1.5">
-                  {CONFLUENCE_PRESETS.map((p) => (
-                    <button
-                      key={p.name}
-                      onClick={() => applyPreset(p)}
-                      className="group flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-[#262626]"
-                    >
-                      <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-[#555] transition-colors group-hover:text-[#ec4899]" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-[#e6e6e6] group-hover:text-[#ec4899]">
-                          {p.shortName}
-                          {p.recommended && (
-                            <span className="ml-1.5 inline-flex items-center rounded-full bg-[#ec4899]/10 px-1.5 py-0.5 text-[9px] font-medium text-[#ec4899]">
-                              Best
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-[10px] leading-tight text-[#555] group-hover:text-[#a0a0a0]">
-                          {p.description}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <SidebarSection title="Presets" sectionKey="presets" collapsed={collapsed.has("presets")} onToggle={toggleSection}>
+            <PresetList presets={CONFLUENCE_PRESETS} onSelect={applyPreset} accent="#ec4899" />
+          </SidebarSection>
 
           {/* Weights */}
-          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
-            <button
-              onClick={() => toggleSection("weights")}
-              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
-            >
-              <span>Weights</span>
-              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("weights") ? "" : "rotate-90"}`} />
-            </button>
-            {!collapsed.has("weights") && (
-              <div className="border-t border-[#2a2a2a] px-4 pb-4 pt-3 space-y-3">
+          <SidebarSection title="Weights" sectionKey="weights" collapsed={collapsed.has("weights")} onToggle={toggleSection}>
+              <div className="space-y-3">
                 {(["ew", "squeeze", "prerun", "sector"] as const).map((key) => (
                   <div key={key}>
                     <div className="flex justify-between text-xs mb-1">
@@ -534,22 +454,12 @@ export default function ConfluencePage() {
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+          </SidebarSection>
 
           {/* Thresholds */}
-          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
-            <button
-              onClick={() => toggleSection("thresholds")}
-              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
-            >
-              <span>Thresholds</span>
-              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("thresholds") ? "" : "rotate-90"}`} />
-            </button>
-            {!collapsed.has("thresholds") && (
-              <div className="border-t border-[#2a2a2a] px-4 pb-4 pt-3 space-y-3">
+          <SidebarSection title="Thresholds" sectionKey="thresholds" collapsed={collapsed.has("thresholds")} onToggle={toggleSection}>
                 {(["ew", "squeeze", "prerun", "sector"] as const).map((key) => (
-                  <div key={key}>
+                  <div key={key} className="mb-3 last:mb-0">
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-[#a0a0a0] capitalize">{key === "ew" ? "EW" : key === "prerun" ? "Pre-Run" : key.charAt(0).toUpperCase() + key.slice(1)}</span>
                       <span className="text-white">{(thresholds[key] * 100).toFixed(0)}%</span>
@@ -565,21 +475,11 @@ export default function ConfluencePage() {
                     />
                   </div>
                 ))}
-              </div>
-            )}
-          </div>
+          </SidebarSection>
 
           {/* Signal filter */}
-          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
-            <button
-              onClick={() => toggleSection("signal")}
-              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
-            >
-              <span>Signal Filter</span>
-              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("signal") ? "" : "rotate-90"}`} />
-            </button>
-            {!collapsed.has("signal") && (
-              <div className="border-t border-[#2a2a2a] px-4 pb-4 pt-3 space-y-2">
+          <SidebarSection title="Signal Filter" sectionKey="signal" collapsed={collapsed.has("signal")} onToggle={toggleSection}>
+              <div className="space-y-2">
                 {(["strong", "moderate", "weak", "none"] as ConfluenceSignal[]).map((sig) => (
                   <label key={sig} className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -594,21 +494,11 @@ export default function ConfluencePage() {
                   </label>
                 ))}
               </div>
-            )}
-          </div>
+          </SidebarSection>
 
           {/* Sector filter — enhanced with counts */}
           {sectorsWithCounts.length > 0 && (
-            <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
-              <button
-                onClick={() => toggleSection("sector-filter")}
-                className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
-              >
-                <span>Sector</span>
-                <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("sector-filter") ? "" : "rotate-90"}`} />
-              </button>
-              {!collapsed.has("sector-filter") && (
-                <div className="border-t border-[#2a2a2a] px-3 pb-3 pt-2">
+            <SidebarSection title="Sector" sectionKey="sector-filter" collapsed={collapsed.has("sector-filter")} onToggle={toggleSection}>
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       onClick={() => setSectorFilter("All")}
@@ -634,9 +524,7 @@ export default function ConfluencePage() {
                       </button>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
+            </SidebarSection>
           )}
 
           {/* Scan / Cancel */}
@@ -664,16 +552,7 @@ export default function ConfluencePage() {
           </div>
 
           {/* Ticker search */}
-          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
-            <button
-              onClick={() => toggleSection("ticker")}
-              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
-            >
-              <span>Add Ticker</span>
-              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("ticker") ? "" : "rotate-90"}`} />
-            </button>
-            {!collapsed.has("ticker") && (
-              <div className="border-t border-[#2a2a2a] px-4 pb-4 pt-2 space-y-2">
+          <SidebarSection title="Add Ticker" sectionKey="ticker" collapsed={collapsed.has("ticker")} onToggle={toggleSection}>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -695,9 +574,7 @@ export default function ConfluencePage() {
                     )}
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
+          </SidebarSection>
 
           {/* Reset */}
           <button
@@ -711,7 +588,7 @@ export default function ConfluencePage() {
           >
             Reset All
           </button>
-        </aside>
+        </SidebarShell>
 
         {/* Main Content */}
         <main className="flex-1 min-w-0">
@@ -1029,8 +906,8 @@ function ResultRow({
                   {expandedPanel === "ew" && (
                     <div className="pt-2 border-t border-[#2a2a2a] mt-2">
                       <div className="space-y-2">
-                        <MiniBar label="Score" value={result.ewResult.enhancedScore} max={25} color="#5ba3e6" />
-                        <MiniBar label="Normalized" value={result.ewResult.enhancedNormalized * 100} max={100} color="#5ba3e6" />
+                        <ScoreBar size="sm" label="Score" value={result.ewResult.enhancedScore} max={25} color="#5ba3e6" />
+                        <ScoreBar size="sm" label="Normalized" value={result.ewResult.enhancedNormalized * 100} max={100} color="#5ba3e6" />
                       </div>
                       <ScannerLink scanner="ew" />
                     </div>
@@ -1062,15 +939,15 @@ function ResultRow({
                     <div className="pt-2 border-t border-[#2a2a2a] mt-2">
                       {result.squeezeResult.components ? (
                         <div className="space-y-2">
-                          <MiniBar label="SI %" value={result.squeezeResult.components.siPercent} max={25} color="#ef4444" />
-                          <MiniBar label="Days Cover" value={result.squeezeResult.components.daysTocover} max={15} color="#f97316" />
-                          <MiniBar label="Float Size" value={result.squeezeResult.components.floatSize} max={15} color="#eab308" />
-                          <MiniBar label="Vol Surge" value={result.squeezeResult.components.volumeSurge} max={15} color="#3b82f6" />
-                          <MiniBar label="Near Low" value={result.squeezeResult.components.near52wLow} max={15} color="#a855f7" />
-                          <MiniBar label="EW Align" value={result.squeezeResult.components.ewAlignment} max={15} color="#22c55e" />
+                          <ScoreBar size="sm" label="SI %" value={result.squeezeResult.components.siPercent} max={25} color="#ef4444" />
+                          <ScoreBar size="sm" label="Days Cover" value={result.squeezeResult.components.daysTocover} max={15} color="#f97316" />
+                          <ScoreBar size="sm" label="Float Size" value={result.squeezeResult.components.floatSize} max={15} color="#eab308" />
+                          <ScoreBar size="sm" label="Vol Surge" value={result.squeezeResult.components.volumeSurge} max={15} color="#3b82f6" />
+                          <ScoreBar size="sm" label="Near Low" value={result.squeezeResult.components.near52wLow} max={15} color="#a855f7" />
+                          <ScoreBar size="sm" label="EW Align" value={result.squeezeResult.components.ewAlignment} max={15} color="#22c55e" />
                         </div>
                       ) : (
-                        <MiniBar label="Score" value={result.squeezeResult.squeezeScore} max={100} color="#f59e0b" />
+                        <ScoreBar size="sm" label="Score" value={result.squeezeResult.squeezeScore} max={100} color="#f59e0b" />
                       )}
                       <ScannerLink scanner="squeeze" />
                     </div>
@@ -1104,7 +981,7 @@ function ResultRow({
                   {expandedPanel === "prerun" && (
                     <div className="pt-2 border-t border-[#2a2a2a] mt-2">
                       <div className="space-y-2">
-                        <MiniBar label="Score" value={result.prerunResult.finalScore} max={24} color="#10b981" />
+                        <ScoreBar size="sm" label="Score" value={result.prerunResult.finalScore} max={24} color="#10b981" />
                       </div>
                       <ScannerLink scanner="prerun" />
                     </div>
@@ -1131,7 +1008,7 @@ function ResultRow({
                   {expandedPanel === "sector" && (
                     <div className="pt-2 border-t border-[#2a2a2a] mt-2">
                       <div className="space-y-2">
-                        <MiniBar label="Composite" value={result.sectorResult.compositeScore} max={100} color="#8b5cf6" />
+                        <ScoreBar size="sm" label="Composite" value={result.sectorResult.compositeScore} max={100} color="#8b5cf6" />
                       </div>
                       <ScannerLink scanner="sector" />
                     </div>
@@ -1246,25 +1123,6 @@ function DetailRow({ label, value, highlight }: { label: string; value: string; 
     <div className="flex justify-between text-xs">
       <span className="text-[#666]">{label}</span>
       <span className={highlight ? "text-[#ec4899] font-semibold" : "text-white font-medium"}>{value}</span>
-    </div>
-  );
-}
-
-/** Mini horizontal bar used in expanded panel deep dive. */
-function MiniBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const pct = Math.min(100, (value / max) * 100);
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] text-[#666] w-16 shrink-0 truncate">{label}</span>
-      <div className="flex-1 h-1.5 bg-[#0f0f0f] rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${pct}%`, backgroundColor: color }}
-        />
-      </div>
-      <span className="text-[10px] text-[#888] w-10 text-right shrink-0">
-        {value.toFixed(value % 1 === 0 ? 0 : 1)}/{max}
-      </span>
     </div>
   );
 }

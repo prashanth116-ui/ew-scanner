@@ -54,6 +54,7 @@ import { EWDeepChart } from "@/components/ew-deep-chart";
 import { EWUniverseBuilder } from "@/components/ew-universe-builder";
 import { EWAlertConfig } from "@/components/ew-alert-config";
 import { useDebounce } from "@/lib/use-debounce";
+import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 
 const HTF_OPTIONS = ["Monthly", "Weekly"] as const;
 const LTF_OPTIONS = ["Daily", "4H", "1H"] as const;
@@ -205,14 +206,7 @@ function EWScannerPage() {
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   // Collapsible left panel sections (stores collapsed section keys)
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const toggleSection = useCallback((key: string) => {
-    setCollapsed((prev) => {
-      const s = new Set(prev);
-      if (s.has(key)) s.delete(key); else s.add(key);
-      return s;
-    });
-  }, []);
+  const { collapsed, toggleSection } = useCollapsibleSections();
 
   // Single-ticker search
   const [tickerSearch, setTickerSearch] = useState("");
