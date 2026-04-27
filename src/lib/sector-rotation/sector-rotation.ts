@@ -15,43 +15,13 @@
 import "server-only";
 
 import { fetchYahooChart, calcSMA, calc20dReturn } from "@/lib/prerun/data";
-import { SCAN_UNIVERSE, getSectorForTicker } from "@/data/prerun-universe";
+import { SECTOR_UNIVERSE, getSectorForSymbol } from "@/data/sector-universe";
 import type {
   SectorRotationScore,
   SectorRotationResult,
   RRGQuadrant,
 } from "./types";
 import type { PreRunResult } from "@/lib/prerun/types";
-
-// ── Fix 1: Rotation-specific ETF mapping ──
-// Separate from SECTOR_ETF_MAP so pre-run relative strength is unaffected.
-// IWM replaces SPY for "High Short Interest" (small/mid cap stocks, SPY would be self-benchmark).
-
-const ROTATION_ETF_MAP: Record<string, string> = {
-  "AI Optical/Connectivity Semis": "SMH",
-  "Advanced Packaging/Test": "SMH",
-  "SiC/GaN Power Semis": "SMH",
-  "Beaten-Down Cloud/SaaS": "IGV",
-  "Beaten-Down Biotech": "XBI",
-  "Energy/LNG Turnarounds": "XLE",
-  "Nuclear/Power Neoclouds": "XLU",
-  "Rare Earth/Critical Minerals": "XLB",
-  "EV/Hydrogen Turnarounds": "QCLN",
-  "High Short Interest": "IWM",
-  "Rental/Travel": "PEJ",
-};
-
-const ETF_DISPLAY_NAMES: Record<string, string> = {
-  SMH: "Semiconductors",
-  IGV: "Cloud/SaaS",
-  XBI: "Biotech",
-  XLE: "Energy/LNG",
-  XLU: "Nuclear/Power",
-  XLB: "Critical Minerals",
-  QCLN: "EV/Hydrogen",
-  IWM: "High Short Interest",
-  PEJ: "Rental/Travel",
-};
 
 // ── Pure math functions ──
 
@@ -310,23 +280,17 @@ export async function calculateSectorRotation(
     return cachedResult.data;
   }
 
-  // Fix 1: Build ETF groups — merge sectors sharing the same ETF
-  const etfGroups = new Map<string, { subsectors: string[]; displayName: string }>();
-  for (const [sector, etf] of Object.entries(ROTATION_ETF_MAP)) {
-    const existing = etfGroups.get(etf);
-    if (existing) {
-      existing.subsectors.push(sector);
-    } else {
-      etfGroups.set(etf, {
-        subsectors: [sector],
-        displayName: ETF_DISPLAY_NAMES[etf] ?? etf,
-      });
-    }
-  }
+  // Build sector groups from centralized sector-universe (1:1 sector→ETF)
+  const sectorGroups = SECTOR_UNIVERSE.map((s) => ({
+    id: s.id,
+    displayName: s.displayName,
+    etf: s.etf,
+  }));
 
   // Fetch all ETFs + SPY + cross-sector pairs
   const crossETFs = ["XLY", "XLP", "XLK", "XLU"];
-  const allETFs = [...new Set(["SPY", ...etfGroups.keys(), ...crossETFs])];
+  const sectorETFs = sectorGroups.map((s) => s.etf);
+  const allETFs = [...new Set(["SPY", ...sectorETFs, ...crossETFs])];
 
   const chartResults = await Promise.allSettled(
     allETFs.map((etf) => fetchYahooChart(etf, "1y", "1d"))
@@ -345,22 +309,23 @@ export async function calculateSectorRotation(
     throw new Error("Failed to fetch SPY data");
   }
 
-  // Build pre-run lookup by original sector name
+  // Build pre-run lookup by sector display name
   const preRunBySector = new Map<string, PreRunResult[]>();
   if (preRunResults) {
     for (const r of preRunResults) {
-      const sector = getSectorForTicker(r.data.ticker);
-      const existing = preRunBySector.get(sector) ?? [];
+      const sectorName = getSectorForSymbol(r.data.ticker);
+      if (sectorName === "Other") continue;
+      const existing = preRunBySector.get(sectorName) ?? [];
       existing.push(r);
-      preRunBySector.set(sector, existing);
+      preRunBySector.set(sectorName, existing);
     }
   }
 
-  // Compute per-ETF-group scores
+  // Compute per-sector scores
   interface RawScore {
     displayName: string;
     etf: string;
-    subsectors: string[];
+    sectorId: string;
     momentumComposite: number;
     acceleration: number;
     mansfieldRS: number;
@@ -384,15 +349,12 @@ export async function calculateSectorRotation(
 
   const rawScores: RawScore[] = [];
 
-  for (const [etf, group] of etfGroups) {
-    const chart = charts.get(etf);
+  for (const group of sectorGroups) {
+    const chart = charts.get(group.etf);
     if (!chart) continue;
 
-    // Fix 1: Merge all stocks from all subsectors
-    const allStocks: PreRunResult[] = [];
-    for (const sub of group.subsectors) {
-      allStocks.push(...(preRunBySector.get(sub) ?? []));
-    }
+    // Gather pre-run stocks for this sector
+    const allStocks = preRunBySector.get(group.displayName) ?? [];
 
     const mc = calcMomentumComposite(chart.closes);
     const accel = calcAcceleration(chart.closes);
@@ -468,8 +430,8 @@ export async function calculateSectorRotation(
 
     rawScores.push({
       displayName: group.displayName,
-      etf,
-      subsectors: group.subsectors,
+      etf: group.etf,
+      sectorId: group.id,
       momentumComposite: mc,
       acceleration: accel,
       mansfieldRS: mrs,
@@ -540,7 +502,7 @@ export async function calculateSectorRotation(
     return {
       sector: raw.displayName,
       etf: raw.etf,
-      subsectors: raw.subsectors,
+      subsectors: [raw.sectorId],
       momentumComposite: Math.round(raw.momentumComposite * 100) / 100,
       momentumPercentile: Math.round(momentumPercentile),
       acceleration: Math.round(raw.acceleration * 100) / 100,
@@ -627,11 +589,8 @@ export async function calculateSectorRotation(
   );
 
   for (const sector of watchSectors.slice(0, 3)) {
-    // Gather stocks from all subsectors
-    const sectorStocks: PreRunResult[] = [];
-    for (const sub of sector.subsectors) {
-      sectorStocks.push(...(preRunBySector.get(sub) ?? []));
-    }
+    // Gather pre-run stocks for this sector
+    const sectorStocks = preRunBySector.get(sector.sector) ?? [];
     if (sectorStocks.length === 0) continue;
 
     const ranked = sectorStocks

@@ -190,32 +190,36 @@ export default function SectorGuidePage() {
             </p>
           </SubSection>
 
-          <SubSection title="Tracked Sectors">
+          <SubSection title="Tracked Sectors (13 GICS-Based)">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-[#2a2a2a] text-[#666]">
                     <th className="py-1.5 pr-3 text-left font-medium">Sector</th>
                     <th className="py-1.5 pr-3 text-left font-medium">ETF Proxy</th>
-                    <th className="py-1.5 text-left font-medium">Theme</th>
+                    <th className="py-1.5 text-left font-medium">Coverage</th>
                   </tr>
                 </thead>
                 <tbody className="text-[#c0c0c0]">
-                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Semiconductors</td><td className="py-1.5 pr-3">SMH</td><td className="py-1.5">AI, packaging, power semis</td></tr>
-                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Cloud/SaaS</td><td className="py-1.5 pr-3">IGV</td><td className="py-1.5">Beaten-down software names</td></tr>
-                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Biotech</td><td className="py-1.5 pr-3">XBI</td><td className="py-1.5">Beaten-down biotech</td></tr>
-                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Energy/LNG</td><td className="py-1.5 pr-3">XLE</td><td className="py-1.5">Energy turnarounds</td></tr>
-                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Nuclear/Power</td><td className="py-1.5 pr-3">XLU</td><td className="py-1.5">Nuclear renaissance, neoclouds</td></tr>
-                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Critical Minerals</td><td className="py-1.5 pr-3">XLB</td><td className="py-1.5">Rare earth, strategic materials</td></tr>
-                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">EV/Hydrogen</td><td className="py-1.5 pr-3">QCLN</td><td className="py-1.5">Clean energy turnarounds</td></tr>
-                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">High Short Interest</td><td className="py-1.5 pr-3">IWM</td><td className="py-1.5">Heavily shorted small/mid caps</td></tr>
-                  <tr><td className="py-1.5 pr-3 font-medium text-white">Rental/Travel</td><td className="py-1.5 pr-3">PEJ</td><td className="py-1.5">Consumer discretionary travel</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Semiconductors</td><td className="py-1.5 pr-3">SMH</td><td className="py-1.5">Chips, foundries, equipment, EDA</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Software &amp; Cloud</td><td className="py-1.5 pr-3">IGV</td><td className="py-1.5">Enterprise SaaS, cybersecurity, dev tools</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Biotech</td><td className="py-1.5 pr-3">XBI</td><td className="py-1.5">Drug discovery, genomics, mRNA</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Health Care</td><td className="py-1.5 pr-3">XLV</td><td className="py-1.5">Pharma, devices, managed care</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Financials</td><td className="py-1.5 pr-3">XLF</td><td className="py-1.5">Banks, insurance, payments, asset mgmt</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Consumer Discretionary</td><td className="py-1.5 pr-3">XLY</td><td className="py-1.5">Retail, autos, homebuilders, travel</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Communication Services</td><td className="py-1.5 pr-3">XLC</td><td className="py-1.5">Media, telecom, social, gaming</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Industrials</td><td className="py-1.5 pr-3">XLI</td><td className="py-1.5">Aerospace, defense, logistics, machinery</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Consumer Staples</td><td className="py-1.5 pr-3">XLP</td><td className="py-1.5">Food, beverages, household, tobacco</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Energy</td><td className="py-1.5 pr-3">XLE</td><td className="py-1.5">Oil, gas, pipelines, oilfield services</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Utilities</td><td className="py-1.5 pr-3">XLU</td><td className="py-1.5">Electric, gas, water, nuclear power</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Real Estate</td><td className="py-1.5 pr-3">XLRE</td><td className="py-1.5">REITs, real estate services</td></tr>
+                  <tr><td className="py-1.5 pr-3 font-medium text-white">Materials</td><td className="py-1.5 pr-3">XLB</td><td className="py-1.5">Chemicals, metals, mining, packaging</td></tr>
                 </tbody>
               </table>
             </div>
             <p className="mt-2 text-[10px] text-[#555]">
-              Note: Three semiconductor subsectors (AI Optical, Advanced Packaging, SiC/GaN Power) share the SMH ETF
-              proxy and are merged into one &quot;Semiconductors&quot; entry on the dashboard.
+              ~713 stocks classified across 13 GICS-based sectors. Each sector has a 1:1 ETF proxy.
+              Semiconductors and Biotech are split from Technology and Health Care respectively for finer granularity.
             </p>
           </SubSection>
         </Section>
@@ -570,13 +574,14 @@ export default function SectorGuidePage() {
           <SubSection title="Known Limitations">
             <ul className="list-disc pl-4 space-y-1">
               <li>
-                <strong className="text-white">ETF proxy imprecision</strong> &mdash; The ETF may not perfectly represent
-                the thematic sector it proxies. IWM (Russell 2000) for &quot;High Short Interest&quot; is a broad small-cap
-                index, not a pure short-squeeze ETF.
+                <strong className="text-white">ETF proxy imprecision</strong> &mdash; Each sector uses one ETF proxy (e.g.,
+                SMH for Semiconductors, IGV for Software). The ETF composition may not perfectly match the stocks classified
+                in that sector.
               </li>
               <li>
-                <strong className="text-white">Small sector universes</strong> &mdash; Sectors with fewer than 5 stocks
-                show &quot;N/A&quot; for breadth because the sample size is too small for statistical meaning.
+                <strong className="text-white">Breadth requires pre-run data</strong> &mdash; Breadth (% of stocks above 20d SMA)
+                requires a Pre-Run scan to be run first. Without scan data, breadth shows &quot;N/A&quot; and weight is
+                redistributed to other factors.
               </li>
               <li>
                 <strong className="text-white">Composite weights are not backtested</strong> &mdash; The 25/15/20/15/15/10

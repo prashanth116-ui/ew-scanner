@@ -13,7 +13,7 @@ import {
   saveSectorRotation,
 } from "@/lib/sector-rotation/storage";
 import { loadScanResults } from "@/lib/prerun/storage";
-import { getSectorForTicker } from "@/data/prerun-universe";
+import { SECTOR_UNIVERSE, getSectorForSymbol } from "@/data/sector-universe";
 
 // ── Color helpers ──
 
@@ -244,11 +244,7 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
                 </span>
               )}
             </div>
-            {(sector.subsectors?.length ?? 0) > 1 && (
-              <div className="text-[10px] text-[#555] mt-0.5">
-                {sector.subsectors.join(" + ")}
-              </div>
-            )}
+            {/* subsectors display removed — 1:1 sector-to-ETF mapping */}
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -411,39 +407,31 @@ export default function SectorRotationPage() {
     setScanResults(loadScanResults());
   }, []);
 
-  // Build stock-by-sector lookup using original sector names
-  const stocksByOriginalSector = useMemo(() => {
-    const map = new Map<string, StockInSector[]>();
+  // Build stock list per sector: ALL sector-universe stocks, enriched with pre-run data
+  const stocksBySector = useMemo(() => {
+    // Index scan results by ticker for fast lookup
+    const scanByTicker = new Map<string, (typeof scanResults)[number]>();
     for (const r of scanResults) {
-      const sector = getSectorForTicker(r.data.ticker);
-      if (sector === "Other") continue;
-      const existing = map.get(sector) ?? [];
-      existing.push({
-        ticker: r.data.ticker,
-        companyName: r.data.companyName,
-        rs20d: r.data.relativeStrength20d,
-        pctFromAth: r.data.pctFromAth,
-        finalScore: r.scores.finalScore,
-        verdict: r.verdict,
+      scanByTicker.set(r.data.ticker, r);
+    }
+
+    const map = new Map<string, StockInSector[]>();
+    for (const sectorDef of SECTOR_UNIVERSE) {
+      const stocks: StockInSector[] = sectorDef.stocks.map((stock) => {
+        const preRun = scanByTicker.get(stock.symbol);
+        return {
+          ticker: stock.symbol,
+          companyName: stock.name,
+          rs20d: preRun?.data.relativeStrength20d ?? null,
+          pctFromAth: preRun?.data.pctFromAth ?? null,
+          finalScore: preRun?.scores.finalScore ?? 0,
+          verdict: preRun?.verdict ?? "",
+        };
       });
-      map.set(sector, existing);
+      map.set(sectorDef.displayName, stocks);
     }
     return map;
   }, [scanResults]);
-
-  // Fix 1: Map stocks to merged sector display names via subsectors
-  const stocksBySector = useMemo(() => {
-    if (!data) return new Map<string, StockInSector[]>();
-    const map = new Map<string, StockInSector[]>();
-    for (const sector of data.sectors) {
-      const merged: StockInSector[] = [];
-      for (const sub of sector.subsectors ?? []) {
-        merged.push(...(stocksByOriginalSector.get(sub) ?? []));
-      }
-      map.set(sector.sector, merged);
-    }
-    return map;
-  }, [data, stocksByOriginalSector]);
 
   const fetchData = useCallback(async (skipCache = false) => {
     setLoading(true);
@@ -484,7 +472,7 @@ export default function SectorRotationPage() {
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">Calculating sector rotation...</p>
-        <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 13 ETFs</p>
+        <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 15 ETFs across 13 sectors</p>
       </div>
     );
   }
@@ -566,7 +554,7 @@ export default function SectorRotationPage() {
       {/* Panel 2: Sector Heatmap Grid */}
       <div>
         <h2 className="mb-3 text-lg font-semibold text-white">Sector Scores</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {data.sectors.map((s) => (
             <div
               key={s.sector}
