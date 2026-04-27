@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Activity, TrendingUp, Zap, BarChart3, Search, Shield } from "lucide-react";
+import { Activity, TrendingUp, Zap, BarChart3, Search, Shield, Clock, Database } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "About",
@@ -41,12 +41,12 @@ const scanners = [
     href: "/prerun",
     title: "Pre-Run Scanner",
     description:
-      "Multi-bagger stock screener with 7 algorithmic scoring criteria across 11 sector buckets. Identify beaten-down stocks with structural catalysts before they run.",
+      "Multi-bagger stock screener with 7 algorithmic scoring criteria across 900+ stocks in 13 GICS sectors. Identify beaten-down stocks with structural catalysts before they run.",
     icon: TrendingUp,
     features: [
       "3-gate qualification + 7-criteria scoring (0-14 scale)",
       "AI narrative catalyst scoring",
-      "11 sector buckets: EV, Nuclear, Rare Earth, Semis, and more",
+      "13 GICS sectors: Semis, Software, Biotech, Energy, and more",
       "TradingView webhook integration for price alerts",
     ],
     color: "#10b981",
@@ -163,6 +163,115 @@ export default function AboutPage() {
               <p className="text-xs leading-relaxed text-[#a0a0a0]">{f.desc}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Data Freshness */}
+      <section>
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <Database className="h-6 w-6 text-[#5ba3e6]" />
+          <h2 className="text-2xl font-bold text-white">Data Freshness</h2>
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#2a2a2a] bg-[#1a1a1a]">
+                <th className="px-4 py-3 text-left font-semibold text-white">Scanner</th>
+                <th className="px-4 py-3 text-left font-semibold text-white">Data Source</th>
+                <th className="px-4 py-3 text-left font-semibold text-white">Freshness</th>
+                <th className="px-4 py-3 text-left font-semibold text-white">Cache</th>
+                <th className="px-4 py-3 text-left font-semibold text-white">Refresh</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#2a2a2a]">
+              <tr className="bg-[#141414]">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-[#5ba3e6]" />
+                    <span className="font-medium text-white">EW Scanner</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Yahoo Finance weekly bars</td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-xs text-amber-400">Weekly</span>
+                </td>
+                <td className="px-4 py-3 text-[#a0a0a0]">None</td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Manual + cron</td>
+              </tr>
+              <tr className="bg-[#141414]">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-[#10b981]" />
+                    <span className="font-medium text-white">Pre-Run Scanner</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Yahoo + Finnhub + SEC EDGAR</td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-xs text-green-400">EOD</span>
+                </td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Manual save only</td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Manual + nightly cron</td>
+              </tr>
+              <tr className="bg-[#141414]">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-[#f59e0b]" />
+                    <span className="font-medium text-white">Squeeze Screener</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Yahoo Finance quoteSummary</td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-xs text-green-400">Near real-time</span>
+                </td>
+                <td className="px-4 py-3 text-[#a0a0a0]">None</td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Every lookup</td>
+              </tr>
+              <tr className="bg-[#141414]">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-[#8b5cf6]" />
+                    <span className="font-medium text-white">Sector Rotation</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Yahoo Finance daily bars (16 ETFs)</td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-xs text-green-400">EOD</span>
+                </td>
+                <td className="px-4 py-3 text-[#a0a0a0]">4h client + 15min server</td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Auto every 10 min</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="h-4 w-4 text-[#5ba3e6]" />
+              <span className="text-xs font-semibold text-white">EW Scanner</span>
+            </div>
+            <p className="text-xs text-[#777]">Uses weekly bars for swing/position timeframes. Data updates each Friday close. Best for multi-week setups, not intraday.</p>
+          </div>
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="h-4 w-4 text-[#10b981]" />
+              <span className="text-xs font-semibold text-white">Pre-Run</span>
+            </div>
+            <p className="text-xs text-[#777]">Prices are EOD (1-2 days). SEC revenue filings can lag 30-90 days (quarterly). Insider data updates daily via Finnhub.</p>
+          </div>
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="h-4 w-4 text-[#f59e0b]" />
+              <span className="text-xs font-semibold text-white">Squeeze</span>
+            </div>
+            <p className="text-xs text-[#777]">Freshest data. No caching. Price and volume are near real-time. Short interest updates EOD after market close.</p>
+          </div>
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="h-4 w-4 text-[#8b5cf6]" />
+              <span className="text-xs font-semibold text-white">Sectors</span>
+            </div>
+            <p className="text-xs text-[#777]">Auto-refreshes every 10 minutes while viewing. Client cache (4h) + server cache (15min). Manual refresh bypasses cache.</p>
+          </div>
         </div>
       </section>
 

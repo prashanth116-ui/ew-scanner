@@ -662,12 +662,20 @@ export default function SectorRotationPage() {
     fetchData();
   }, [fetchData]);
 
+  // Auto-refresh every 10 minutes (skip cache to get fresh data)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 10 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
   if (loading && !data) {
     return (
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">Calculating sector rotation...</p>
-        <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 15 ETFs + batch quotes for ~684 stocks</p>
+        <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 15 ETFs + batch quotes for ~900 stocks</p>
       </div>
     );
   }
