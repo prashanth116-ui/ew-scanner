@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense, Fragment } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Activity,
@@ -23,6 +23,8 @@ import {
   ListPlus,
   Bell,
   Check,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
@@ -192,6 +194,7 @@ function EWScannerPage() {
 
   const [sortBy, setSortBy] = useState<SortKey>("score");
   const [groupBy, setGroupBy] = useState<GroupKey>("none");
+  const [viewMode, setViewMode] = useState<"detailed" | "compact">("detailed");
 
   const [savedScans, setSavedScans] = useState<SavedScan[]>([]);
   const [showSaved, setShowSaved] = useState(false);
@@ -911,33 +914,41 @@ function EWScannerPage() {
           </div>
 
           {/* Universe */}
-          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
-            <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[#a0a0a0]">
-              Universe
-            </label>
-            <select
-              value={universe}
-              onChange={(e) => {
-                if (e.target.value === "__custom__") {
-                  setShowUniverseBuilder(true);
-                } else {
-                  setUniverse(e.target.value);
-                }
-              }}
-              className="w-full rounded-md border border-[#2a2a2a] bg-[#262626] px-3 py-2 text-sm text-[#e6e6e6]"
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
+            <button
+              onClick={() => toggleSection("universe")}
+              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
             >
-              {UNIVERSE_KEYS.map((k) => (
-                <option key={k} value={k}>
-                  {k} ({UNIVERSES[k].length})
-                </option>
-              ))}
-              {loadCustomUniverses().map((u) => (
-                <option key={u.id} value={`custom:${u.id}`}>
-                  {u.name} ({u.tickers.length})
-                </option>
-              ))}
-              <option value="__custom__">+ Custom...</option>
-            </select>
+              <span>Universe <span className="normal-case text-[#666]">({universe.startsWith("custom:") ? universe.replace("custom:", "") : universe})</span></span>
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("universe") ? "" : "rotate-90"}`} />
+            </button>
+            {!collapsed.has("universe") && (
+              <div className="border-t border-[#2a2a2a] px-4 pb-4 pt-3">
+                <select
+                  value={universe}
+                  onChange={(e) => {
+                    if (e.target.value === "__custom__") {
+                      setShowUniverseBuilder(true);
+                    } else {
+                      setUniverse(e.target.value);
+                    }
+                  }}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#262626] px-3 py-2 text-sm text-[#e6e6e6]"
+                >
+                  {UNIVERSE_KEYS.map((k) => (
+                    <option key={k} value={k}>
+                      {k} ({UNIVERSES[k].length})
+                    </option>
+                  ))}
+                  {loadCustomUniverses().map((u) => (
+                    <option key={u.id} value={`custom:${u.id}`}>
+                      {u.name} ({u.tickers.length})
+                    </option>
+                  ))}
+                  <option value="__custom__">+ Custom...</option>
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Sliders / Filters */}
@@ -1133,17 +1144,11 @@ function EWScannerPage() {
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <CandidateCard
-                  c={tickerResult}
-                  idx={0}
+              {viewMode === "compact" ? (
+                <CompactTable
+                  items={[tickerResult]}
                   labels={tickerLabel ? { [tickerResult.ticker]: tickerLabel } : {}}
                   labeling={tickerSearching}
-                  minDecline={minDecline}
-                  minMonths={minMonths}
-                  minRecovery={minRecovery}
-                  getDot={getDot}
-                  dotCss={dotCss}
                   scoreTextColor={scoreTextColor}
                   scoreBgColor={scoreBgColor}
                   confidenceBadge={confidenceBadge}
@@ -1151,7 +1156,27 @@ function EWScannerPage() {
                   runDeep={runDeep}
                   mode={mode}
                 />
-              </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <CandidateCard
+                    c={tickerResult}
+                    idx={0}
+                    labels={tickerLabel ? { [tickerResult.ticker]: tickerLabel } : {}}
+                    labeling={tickerSearching}
+                    minDecline={minDecline}
+                    minMonths={minMonths}
+                    minRecovery={minRecovery}
+                    getDot={getDot}
+                    dotCss={dotCss}
+                    scoreTextColor={scoreTextColor}
+                    scoreBgColor={scoreBgColor}
+                    confidenceBadge={confidenceBadge}
+                    fmtYear={fmtYear}
+                    runDeep={runDeep}
+                    mode={mode}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -1212,7 +1237,7 @@ function EWScannerPage() {
                 </div>
               </div>
 
-              {/* Sort + Group controls */}
+              {/* Sort + Group + View controls */}
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <ArrowUpDown className="h-3.5 w-3.5 text-[#666]" />
@@ -1260,6 +1285,31 @@ function EWScannerPage() {
                       </Select.Content>
                     </Select.Portal>
                   </Select.Root>
+                </div>
+
+                <div className="ml-auto flex items-center gap-1">
+                  <button
+                    onClick={() => setViewMode("detailed")}
+                    className={`rounded-md p-1.5 transition-colors ${
+                      viewMode === "detailed"
+                        ? "bg-[#185FA5]/30 text-[#5ba3e6]"
+                        : "text-[#666] hover:text-white"
+                    }`}
+                    title="Detailed cards"
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode("compact")}
+                    className={`rounded-md p-1.5 transition-colors ${
+                      viewMode === "compact"
+                        ? "bg-[#185FA5]/30 text-[#5ba3e6]"
+                        : "text-[#666] hover:text-white"
+                    }`}
+                    title="Compact table"
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 
@@ -1328,53 +1378,93 @@ function EWScannerPage() {
 
           {/* Scanning skeleton */}
           {scanning && results.length === 0 && (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="animate-pulse rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4"
-                >
-                  <div className="mb-3 h-5 w-20 rounded bg-[#262626]" />
-                  <div className="mb-2 h-3 w-full rounded bg-[#262626]" />
-                  <div className="h-3 w-3/4 rounded bg-[#262626]" />
-                </div>
-              ))}
-            </div>
+            viewMode === "compact" ? (
+              <div className="space-y-2">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="animate-pulse flex items-center gap-4 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3"
+                  >
+                    <div className="h-4 w-14 rounded bg-[#262626]" />
+                    <div className="h-4 w-10 rounded bg-[#262626]" />
+                    <div className="h-4 w-16 rounded bg-[#262626]" />
+                    <div className="h-4 flex-1 rounded bg-[#262626]" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="animate-pulse rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4"
+                  >
+                    <div className="mb-3 h-5 w-20 rounded bg-[#262626]" />
+                    <div className="mb-2 h-3 w-full rounded bg-[#262626]" />
+                    <div className="h-3 w-3/4 rounded bg-[#262626]" />
+                  </div>
+                ))}
+              </div>
+            )
           )}
 
           {/* Result cards (grouped or flat) */}
-          {grouped.map(({ groupLabel, items }) => (
-            <div key={groupLabel}>
-              {groupLabel !== "__all__" && (
-                <h3 className="mb-2 mt-4 text-sm font-semibold text-[#a0a0a0]">
-                  {groupLabel}
-                  <span className="ml-2 text-xs text-[#666]">({items.length})</span>
-                </h3>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {items.map((c, idx) => (
-                  <CandidateCard
-                    key={c.ticker}
-                    c={c}
-                    idx={idx}
-                    labels={labels}
-                    labeling={labeling}
-                    minDecline={minDecline}
-                    minMonths={minMonths}
-                    minRecovery={minRecovery}
-                    getDot={getDot}
-                    dotCss={dotCss}
-                    scoreTextColor={scoreTextColor}
-                    scoreBgColor={scoreBgColor}
-                    confidenceBadge={confidenceBadge}
-                    fmtYear={fmtYear}
-                    runDeep={runDeep}
-                    mode={mode}
-                  />
-                ))}
+          {viewMode === "compact" ? (
+            grouped.map(({ groupLabel, items }) => (
+              <div key={groupLabel}>
+                {groupLabel !== "__all__" && (
+                  <h3 className="mb-2 mt-4 text-sm font-semibold text-[#a0a0a0]">
+                    {groupLabel}
+                    <span className="ml-2 text-xs text-[#666]">({items.length})</span>
+                  </h3>
+                )}
+                <CompactTable
+                  items={items}
+                  labels={labels}
+                  labeling={labeling}
+                  scoreTextColor={scoreTextColor}
+                  scoreBgColor={scoreBgColor}
+                  confidenceBadge={confidenceBadge}
+                  fmtYear={fmtYear}
+                  runDeep={runDeep}
+                  mode={mode}
+                />
               </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            grouped.map(({ groupLabel, items }) => (
+              <div key={groupLabel}>
+                {groupLabel !== "__all__" && (
+                  <h3 className="mb-2 mt-4 text-sm font-semibold text-[#a0a0a0]">
+                    {groupLabel}
+                    <span className="ml-2 text-xs text-[#666]">({items.length})</span>
+                  </h3>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {items.map((c, idx) => (
+                    <CandidateCard
+                      key={c.ticker}
+                      c={c}
+                      idx={idx}
+                      labels={labels}
+                      labeling={labeling}
+                      minDecline={minDecline}
+                      minMonths={minMonths}
+                      minRecovery={minRecovery}
+                      getDot={getDot}
+                      dotCss={dotCss}
+                      scoreTextColor={scoreTextColor}
+                      scoreBgColor={scoreBgColor}
+                      confidenceBadge={confidenceBadge}
+                      fmtYear={fmtYear}
+                      runDeep={runDeep}
+                      mode={mode}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
 
           {/* Filtered out (collapsed) */}
           {results.length > modeFiltered.length && (
@@ -1520,6 +1610,7 @@ function EWScannerPage() {
                     const microStatus = microWc ? getWaveStatusInfo(microWc, deepCandidate.current) : null;
                     const altWc = macroWc.alternateCount;
                     const altStatus = altWc ? getWaveStatusInfo(altWc, deepCandidate.current) : null;
+                    const wavesCollapsed = collapsed.has("deep-waves");
 
                     const renderWaveColumn = (
                       wc: typeof macroWc,
@@ -1616,23 +1707,34 @@ function EWScannerPage() {
                     };
 
                     return (
-                    <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
-                      <div className={`grid gap-4 ${microWc ? "grid-cols-2" : "grid-cols-1"}`}>
-                        {/* Macro (Weekly) column */}
-                        <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-2.5">
-                          {renderWaveColumn(macroWc, macroStatus, "Macro (Weekly)", "purple", deepCandidate.series)}
-                        </div>
-                        {/* Micro (Daily) column */}
-                        {microWc && microStatus && (
-                          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-2.5">
-                            {renderWaveColumn(microWc, microStatus, "Micro (Daily)", "cyan", deepCandidate.dailySeries)}
+                    <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
+                      <button
+                        onClick={() => toggleSection("deep-waves")}
+                        className="flex w-full items-center justify-between px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-[#a0a0a0]"
+                      >
+                        <span>Wave Counts <span className="normal-case text-[#666]">({macroWc.waves.map((w) => w.label).join("-")})</span></span>
+                        <ChevronRight className={`h-3 w-3 transition-transform ${wavesCollapsed ? "" : "rotate-90"}`} />
+                      </button>
+                      {!wavesCollapsed && (
+                        <div className="border-t border-[#2a2a2a] p-3">
+                          <div className={`grid gap-4 ${microWc ? "grid-cols-2" : "grid-cols-1"}`}>
+                            {/* Macro (Weekly) column */}
+                            <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-2.5">
+                              {renderWaveColumn(macroWc, macroStatus, "Macro (Weekly)", "purple", deepCandidate.series)}
+                            </div>
+                            {/* Micro (Daily) column */}
+                            {microWc && microStatus && (
+                              <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-2.5">
+                                {renderWaveColumn(microWc, microStatus, "Micro (Daily)", "cyan", deepCandidate.dailySeries)}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                      {/* Alternate count row below */}
-                      {altWc && altStatus && (
-                        <div className="mt-3 rounded-lg border border-purple-500/10 bg-purple-500/[0.02] p-2.5">
-                          {renderWaveColumn(altWc, altStatus, "Alternate Count", "purple", deepCandidate.series)}
+                          {/* Alternate count row below */}
+                          {altWc && altStatus && (
+                            <div className="mt-3 rounded-lg border border-purple-500/10 bg-purple-500/[0.02] p-2.5">
+                              {renderWaveColumn(altWc, altStatus, "Alternate Count", "purple", deepCandidate.series)}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1984,6 +2086,189 @@ function CandidateCard({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CompactTable({
+  items,
+  labels,
+  labeling,
+  scoreTextColor,
+  scoreBgColor,
+  confidenceBadge,
+  fmtYear,
+  runDeep,
+  mode,
+}: {
+  items: EnhancedScoredCandidate[];
+  labels: Record<string, string>;
+  labeling: boolean;
+  scoreTextColor: (n: number) => string;
+  scoreBgColor: (n: number) => string;
+  confidenceBadge: (tier: string) => string;
+  fmtYear: (y: number) => string;
+  runDeep: (c: EnhancedScoredCandidate) => void;
+  mode: ScannerMode;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpand = (ticker: string) => {
+    setExpanded((prev) => {
+      const s = new Set(prev);
+      if (s.has(ticker)) s.delete(ticker); else s.add(ticker);
+      return s;
+    });
+  };
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-[#2a2a2a] bg-[#1a1a1a] text-[9px] uppercase tracking-wider text-[#666]">
+            <th className="px-3 py-2 text-left font-medium">Ticker</th>
+            <th className="px-2 py-2 text-right font-medium">Score</th>
+            <th className="px-2 py-2 text-left font-medium">Confidence</th>
+            <th className="px-2 py-2 text-right font-medium">Decline</th>
+            <th className="px-2 py-2 text-right font-medium">Duration</th>
+            <th className="px-2 py-2 text-right font-medium">Recovery</th>
+            <th className="px-2 py-2 text-left font-medium">AI Label</th>
+            <th className="px-2 py-2 text-right font-medium"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((c, idx) => {
+            const pct = Math.round(c.enhancedNormalized * 100);
+            const isExpanded = expanded.has(c.ticker);
+            return (
+              <Fragment key={c.ticker}>
+                <tr
+                  onClick={() => toggleExpand(c.ticker)}
+                  className="ew-card-in cursor-pointer border-b border-[#2a2a2a] bg-[#1a1a1a] transition-colors hover:bg-[#222]"
+                  style={{ animationDelay: `${idx * 30}ms` }}
+                >
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <ChevronRight className={`h-3 w-3 shrink-0 text-[#555] transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                      <span className="font-bold text-white">{c.ticker}</span>
+                      <span className="hidden truncate text-[#666] sm:inline">{c.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <div className="h-1.5 w-8 overflow-hidden rounded-full bg-[#262626]">
+                        <div
+                          className={`h-full rounded-full ${scoreBgColor(c.enhancedNormalized)}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className={`font-bold ${scoreTextColor(c.enhancedNormalized)}`}>{pct}%</span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-2.5">
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${confidenceBadge(c.confidenceTier)}`}>
+                      {c.confidenceTier}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2.5 text-right font-mono text-red-400">{c.declinePct.toFixed(1)}%</td>
+                  <td className="px-2 py-2.5 text-right font-mono text-yellow-400">{c.monthsDecline.toFixed(0)}mo</td>
+                  <td className="px-2 py-2.5 text-right font-mono text-green-400">{c.recoveryPct.toFixed(1)}%</td>
+                  <td className="max-w-[180px] truncate px-2 py-2.5 text-[#5ba3e6]">
+                    {labels[c.ticker] ?? (labeling ? "..." : "")}
+                  </td>
+                  <td className="px-2 py-2.5 text-right">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); runDeep(c); }}
+                      className="rounded-md border border-[#2a2a2a] bg-[#262626] px-2 py-1 text-[10px] text-[#a0a0a0] transition-colors hover:border-[#3a3a3a] hover:text-white"
+                    >
+                      Deep
+                    </button>
+                  </td>
+                </tr>
+                {isExpanded && (
+                  <tr className="border-b border-[#2a2a2a]">
+                    <td colSpan={8} className="bg-[#161616] px-4 py-3">
+                      <div className="flex flex-wrap gap-4">
+                        {/* Left: analysis details */}
+                        <div className="min-w-[200px] flex-1 space-y-1.5 text-xs">
+                          {c.fibAnalysis && (
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block h-2 w-2 rounded-full ${c.fibAnalysis.withinGoldenZone ? "bg-green-400" : "bg-yellow-400"}`} />
+                              <span className="text-[#c0c0c0]">Fib:</span>
+                              <span className="text-[#a0a0a0]">{c.fibAnalysis.depthLabel}</span>
+                            </div>
+                          )}
+                          {c.volumeAnalysis && (
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block h-2 w-2 rounded-full ${c.volumeAnalysis.confirmation ? "bg-green-400" : "bg-yellow-400"}`} />
+                              <span className="text-[#c0c0c0]">Volume:</span>
+                              <span className="text-[#a0a0a0]">{c.volumeAnalysis.volumeTrend}</span>
+                            </div>
+                          )}
+                          {c.structureAnalysis && (
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block h-2 w-2 rounded-full ${c.structureAnalysis.classification === "impulsive" ? "bg-green-400" : "bg-yellow-400"}`} />
+                              <span className="text-[#c0c0c0]">Structure:</span>
+                              <span className="text-[#a0a0a0]">{c.structureAnalysis.classification} ({c.structureAnalysis.swingCount} swings)</span>
+                            </div>
+                          )}
+                          {c.waveCount && (
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block h-2 w-2 rounded-full ${c.waveCount.isValid && c.waveCount.score >= 50 ? "bg-green-400" : "bg-yellow-400"}`} />
+                              <span className="text-[#c0c0c0]">Waves:</span>
+                              <span className="text-[#a0a0a0]">{c.waveCount.waves.map((w) => w.label).join("-")} ({c.waveCount.score}/100)</span>
+                            </div>
+                          )}
+                          {c.fibAnalysis?.extensions && c.fibAnalysis.extensions.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block h-2 w-2 rounded-full bg-blue-400" />
+                              <span className="text-[#c0c0c0]">Targets:</span>
+                              <span className="text-[#a0a0a0]">{c.fibAnalysis.extensions.slice(0, 3).map((e) => `$${e.price.toFixed(0)}`).join(", ")}</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Center: prices */}
+                        <div className="flex gap-4 text-center text-xs">
+                          <div>
+                            <p className="text-[#666]">ATH</p>
+                            <p className="font-mono font-medium text-[#e6e6e6]">${c.ath.toFixed(2)}</p>
+                            <p className="text-[10px] text-[#555]">{fmtYear(c.athYear)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[#666]">Low</p>
+                            <p className="font-mono font-medium text-red-400">${c.low.toFixed(2)}</p>
+                            <p className="text-[10px] text-[#555]">{fmtYear(c.lowYear)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[#666]">Current</p>
+                            <p className="font-mono font-medium text-green-400">${c.current.toFixed(2)}</p>
+                          </div>
+                        </div>
+                        {/* Right: sparkline + fib bar */}
+                        <div className="flex flex-col items-center gap-1">
+                          {c.series && (
+                            <EWSparkline
+                              series={c.series}
+                              athIdx={c.athIdx}
+                              lowIdx={c.lowIdx}
+                              fibLevels={c.fibAnalysis?.levels}
+                              waveLabels={c.waveCount?.waves}
+                              width={160}
+                              height={40}
+                            />
+                          )}
+                          {c.fibAnalysis && (
+                            <EWFibBar retracementDepth={c.fibAnalysis.retracementDepth} extensions={c.fibAnalysis.extensions} width={160} height={18} />
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
