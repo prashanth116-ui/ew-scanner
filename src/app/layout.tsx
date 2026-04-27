@@ -21,11 +21,11 @@ export const metadata: Metadata = {
     template: "%s | EW Scanner",
   },
   description:
-    "Elliott Wave Scanner — Algorithmic wave counting, Fibonacci analysis, and AI-powered deep analysis.",
+    "Free algorithmic stock scanning — Elliott Wave analysis, short squeeze screening, multi-bagger detection, and sector rotation tracking with AI-powered insights.",
   openGraph: {
     title: "EW Scanner",
     description:
-      "Elliott Wave Scanner — Algorithmic wave counting, Fibonacci analysis, and AI-powered deep analysis.",
+      "Free algorithmic stock scanning — Elliott Wave analysis, short squeeze screening, multi-bagger detection, and sector rotation tracking with AI-powered insights.",
     siteName: "EW Scanner",
     type: "website",
   },
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: "EW Scanner",
     description:
-      "Elliott Wave Scanner — Algorithmic wave counting, Fibonacci analysis, and AI-powered deep analysis.",
+      "Free algorithmic stock scanning — Elliott Wave analysis, short squeeze screening, multi-bagger detection, and sector rotation tracking with AI-powered insights.",
   },
 };
 

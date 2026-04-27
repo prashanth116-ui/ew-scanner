@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Activity, TrendingUp, Zap, BarChart3, Search, Shield, Clock, Database } from "lucide-react";
+import { Activity, TrendingUp, Zap, BarChart3, Search, Shield, Clock, Database, Mail } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "About",
@@ -13,7 +13,7 @@ const scanners = [
     href: "/",
     title: "EW Scanner",
     description:
-      "Algorithmic Elliott Wave counting across 600+ stocks. Fibonacci analysis, multi-timeframe confirmation, and AI-powered deep analysis for every candidate.",
+      "Algorithmic Elliott Wave counting across curated stock universes (S&P 500, Nasdaq, Biotech, Energy, and more). Fibonacci analysis, multi-timeframe confirmation, and AI-powered deep analysis.",
     icon: Activity,
     features: [
       "4 scanner modes: W2 Bottom, W4 Pullback, W5 Exhaust, Breakout",
@@ -27,7 +27,7 @@ const scanners = [
     href: "/squeeze",
     title: "Squeeze Screener",
     description:
-      "Screen 700+ stocks for short squeeze setups. Real-time short interest, days to cover, float analysis, and Elliott Wave alignment scoring.",
+      "Screen 700+ stocks for short squeeze setups. Short interest, days to cover, float analysis, and Elliott Wave alignment scoring.",
     icon: Zap,
     features: [
       "5 preset strategies: GME-Style, Vol Ignition, Micro Float, Near Lows, Wide Net",
@@ -41,10 +41,10 @@ const scanners = [
     href: "/prerun",
     title: "Pre-Run Scanner",
     description:
-      "Multi-bagger stock screener with 7 algorithmic scoring criteria across 900+ stocks in 13 GICS sectors. Identify beaten-down stocks with structural catalysts before they run.",
+      "Multi-bagger stock screener with 11 algorithmic scoring criteria across 680+ stocks in 13 GICS sectors. Identify beaten-down stocks with structural catalysts before they run.",
     icon: TrendingUp,
     features: [
-      "3-gate qualification + 7-criteria scoring (0-14 scale)",
+      "3-gate qualification + 11-criteria scoring (0-24 scale)",
       "AI narrative catalyst scoring",
       "13 GICS sectors: Semis, Software, Biotech, Energy, and more",
       "TradingView webhook integration for price alerts",
@@ -55,7 +55,7 @@ const scanners = [
     href: "/sectors",
     title: "Sector Rotation",
     description:
-      "Multi-factor sector analysis tracking 16 ETFs across 11 GICS sectors. RRG quadrant mapping, momentum scoring, and cross-sector pair ratios to identify where institutional money is flowing.",
+      "Multi-factor sector analysis tracking 900+ stocks across 13 GICS sectors. RRG quadrant mapping, momentum scoring, and cross-sector pair ratios to identify where institutional money is flowing.",
     icon: BarChart3,
     features: [
       "Relative Rotation Graphs (RRG) with 4-quadrant classification",
@@ -281,6 +281,20 @@ export default function AboutPage() {
             <p className="text-xs text-[#777]">Auto-refreshes every 10 minutes while viewing. Client cache (4h) + server cache (15min). Manual refresh bypasses cache.</p>
           </div>
         </div>
+      </section>
+
+      {/* Contact */}
+      <section className="text-center">
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <Mail className="h-6 w-6 text-[#5ba3e6]" />
+          <h2 className="text-2xl font-bold text-white">Contact</h2>
+        </div>
+        <p className="text-sm text-[#a0a0a0]">
+          Questions, feedback, or bug reports? Reach us at{" "}
+          <a href="mailto:support@ewscanner.com" className="text-[#5ba3e6] hover:underline">
+            support@ewscanner.com
+          </a>
+        </p>
       </section>
 
       {/* Disclaimer */}

@@ -64,9 +64,9 @@ const features: {
   },
   {
     label: "All scanner modes",
-    free: "EW + Squeeze + Pre-Run",
-    pro: "EW + Squeeze + Pre-Run",
-    unlimited: "EW + Squeeze + Pre-Run",
+    free: "All 4 scanners",
+    pro: "All 4 scanners",
+    unlimited: "All 4 scanners",
   },
 ];
 
@@ -367,9 +367,9 @@ export default function PricingPage() {
               Are all scanners free to use?
             </p>
             <p className="mt-1 text-[#a0a0a0]">
-              Yes — the Elliott Wave, Squeeze, and Pre-Run scanners are always
-              free. Paid plans unlock more AI-powered analyses and cloud
-              features.
+              Yes — all four scanners (Elliott Wave, Squeeze, Pre-Run, and
+              Sector Rotation) are always free. Paid plans unlock more
+              AI-powered analyses and cloud features.
             </p>
           </div>
         </div>

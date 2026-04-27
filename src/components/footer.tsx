@@ -12,6 +12,9 @@ const scannerLinks = [
 const resourceLinks = [
   { href: "/about", label: "About" },
   { href: "/guide", label: "EW Scanner Guide" },
+  { href: "/squeeze/guide", label: "Squeeze Guide" },
+  { href: "/prerun/guide", label: "Pre-Run Guide" },
+  { href: "/sectors/guide", label: "Sector Rotation Guide" },
   { href: "/learn", label: "Learn EW" },
   { href: "/pricing", label: "Pricing" },
 ];
