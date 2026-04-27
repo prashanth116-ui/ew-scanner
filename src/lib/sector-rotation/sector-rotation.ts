@@ -14,14 +14,14 @@
 
 import "server-only";
 
-import { fetchYahooChart, calcSMA, calc20dReturn } from "./data";
+import { fetchYahooChart, calcSMA, calc20dReturn } from "@/lib/prerun/data";
 import { SCAN_UNIVERSE, getSectorForTicker } from "@/data/prerun-universe";
 import type {
   SectorRotationScore,
   SectorRotationResult,
   RRGQuadrant,
-} from "./sector-rotation-types";
-import type { PreRunResult } from "./types";
+} from "./types";
+import type { PreRunResult } from "@/lib/prerun/types";
 
 // ── Fix 1: Rotation-specific ETF mapping ──
 // Separate from SECTOR_ETF_MAP so pre-run relative strength is unaffected.

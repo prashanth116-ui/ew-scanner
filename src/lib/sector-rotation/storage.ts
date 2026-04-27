@@ -3,7 +3,7 @@
  * 24-hour TTL. Mirrors prerun/storage.ts pattern.
  */
 
-import type { SectorRotationResult } from "./sector-rotation-types";
+import type { SectorRotationResult } from "./types";
 
 const STORAGE_KEY = "ew-scanner-sector-rotation";
 const TTL = 24 * 60 * 60 * 1000; // 24 hours

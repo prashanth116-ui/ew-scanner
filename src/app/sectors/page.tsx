@@ -6,12 +6,12 @@ import type {
   SectorRotationResult,
   SectorRotationScore,
   RRGQuadrant,
-} from "@/lib/prerun/sector-rotation-types";
+} from "@/lib/sector-rotation/types";
 import type { PreRunResult } from "@/lib/prerun/types";
 import {
   loadSectorRotation,
   saveSectorRotation,
-} from "@/lib/prerun/sector-rotation-storage";
+} from "@/lib/sector-rotation/storage";
 import { loadScanResults } from "@/lib/prerun/storage";
 import { getSectorForTicker } from "@/data/prerun-universe";
 
@@ -460,7 +460,7 @@ export default function SectorRotationPage() {
     }
 
     try {
-      const res = await fetch("/api/prerun/sector-rotation");
+      const res = await fetch("/api/sector-rotation");
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Unknown error" }));
         throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
