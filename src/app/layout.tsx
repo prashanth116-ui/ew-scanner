@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Nav } from "@/components/nav";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { DataManager } from "@/components/data-manager";
+import { Footer } from "@/components/footer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -54,13 +54,7 @@ export default function RootLayout({
         <main id="main-content" className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
-        <footer className="border-t border-[#2a2a2a] bg-[#0f0f0f]">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 text-xs text-[#555]">
-            <a href="/about" className="transition-colors hover:text-[#a0a0a0]">Elliott Wave Scanner</a>
-            <DataManager />
-            <span>&copy; 2026</span>
-          </div>
-        </footer>
+        <Footer />
       </body>
     </html>
   );

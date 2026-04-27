@@ -28,6 +28,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
 import * as Select from "@radix-ui/react-select";
 import { UNIVERSES, UNIVERSE_KEYS, type UniverseKey } from "@/data/ew-universes";
+import { ScannerCTA } from "@/components/scanner-cta";
 import {
   scoreBatchEnhanced,
   type EnrichedQuoteInput,
@@ -135,9 +136,12 @@ const PRESETS: Preset[] = [
 
 export default function EWScannerPageWrapper() {
   return (
-    <Suspense fallback={null}>
-      <EWScannerPage />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <EWScannerPage />
+      </Suspense>
+      <ScannerCTA />
+    </>
   );
 }
 

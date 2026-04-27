@@ -106,8 +106,18 @@ export function Nav() {
             ))}
           </nav>
 
-          {/* Pricing + Auth */}
+          {/* About + Pricing + Auth */}
           <div className="hidden items-center gap-2 sm:flex">
+            <Link
+              href="/about"
+              className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                pathname === "/about"
+                  ? "text-[#5ba3e6]"
+                  : "text-[#a0a0a0] hover:text-white"
+              }`}
+            >
+              About
+            </Link>
             <Link
               href="/pricing"
               className={`px-2 py-1.5 text-sm font-medium transition-colors ${
@@ -192,6 +202,13 @@ export function Nav() {
             </div>
           ))}
           <div className="mx-3 my-2 h-px bg-[#2a2a2a]" aria-hidden="true" />
+          <Link
+            href="/about"
+            onClick={closeMobile}
+            className="flex rounded-md px-3 py-2 text-sm font-medium text-[#a0a0a0] transition-colors hover:bg-[#1a1a1a] hover:text-white"
+          >
+            About
+          </Link>
           <Link
             href="/pricing"
             onClick={closeMobile}

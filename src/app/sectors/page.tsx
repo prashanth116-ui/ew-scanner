@@ -20,6 +20,7 @@ import {
 import type { DailySnapshot, SectorSnapshot } from "@/lib/sector-rotation/history";
 import { loadScanResults } from "@/lib/prerun/storage";
 import { SECTOR_UNIVERSE, getSectorForSymbol } from "@/data/sector-universe";
+import { ScannerCTA } from "@/components/scanner-cta";
 
 // ── Color helpers ──
 
@@ -1054,6 +1055,7 @@ export default function SectorRotationPage() {
           </div>
         </div>
       </div>
+      <ScannerCTA />
     </div>
   );
 }

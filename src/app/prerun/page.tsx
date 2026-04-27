@@ -40,6 +40,7 @@ import {
   getSectorBuckets,
   getSectorForTicker,
 } from "@/data/prerun-universe";
+import { ScannerCTA } from "@/components/scanner-cta";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 300;
@@ -104,9 +105,12 @@ function formatMktCap(val: number | null): string {
 
 export default function PreRunPageWrapper() {
   return (
-    <Suspense fallback={null}>
-      <PreRunPage />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <PreRunPage />
+      </Suspense>
+      <ScannerCTA />
+    </>
   );
 }
 

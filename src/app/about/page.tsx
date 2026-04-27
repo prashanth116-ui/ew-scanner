@@ -51,6 +51,20 @@ const scanners = [
     ],
     color: "#10b981",
   },
+  {
+    href: "/sectors",
+    title: "Sector Rotation",
+    description:
+      "Multi-factor sector analysis tracking 16 ETFs across 11 GICS sectors. RRG quadrant mapping, momentum scoring, and cross-sector pair ratios to identify where institutional money is flowing.",
+    icon: BarChart3,
+    features: [
+      "Relative Rotation Graphs (RRG) with 4-quadrant classification",
+      "Composite scoring: momentum, relative strength, breadth",
+      "Cross-sector pairs: XLY/XLP, XLK/XLU ratios",
+      "Historical snapshots with trend comparison",
+    ],
+    color: "#8b5cf6",
+  },
 ];
 
 const features = [
@@ -112,9 +126,9 @@ export default function AboutPage() {
       {/* Scanner cards */}
       <section>
         <h2 className="mb-8 text-center text-2xl font-bold text-white">
-          Three Scanners, One Platform
+          Four Scanners, One Platform
         </h2>
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {scanners.map((s) => (
             <Link
               key={s.href}

@@ -46,6 +46,7 @@ import type {
 } from "@/lib/ew-types";
 import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-scoring";
 import { useDebounce } from "@/lib/use-debounce";
+import { ScannerCTA } from "@/components/scanner-cta";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 300;
@@ -155,9 +156,12 @@ function ScoreBar({ label, value, max, color }: { label: string; value: number; 
 
 export default function SqueezePageWrapper() {
   return (
-    <Suspense fallback={null}>
-      <SqueezePage />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <SqueezePage />
+      </Suspense>
+      <ScannerCTA />
+    </>
   );
 }
 
