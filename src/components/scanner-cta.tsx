@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Zap, TrendingUp, BarChart3 } from "lucide-react";
+import { Activity, Zap, TrendingUp, BarChart3, Layers } from "lucide-react";
 
 const scanners = [
   {
@@ -41,9 +41,19 @@ const scanners = [
     icon: BarChart3,
     color: "#8b5cf6",
   },
+  {
+    id: "confluence",
+    href: "/confluence",
+    title: "Confluence Scanner",
+    description:
+      "Highest conviction setups — stocks passing all 4 scanners simultaneously for maximum signal alignment.",
+    icon: Layers,
+    color: "#ec4899",
+  },
 ];
 
 function getCurrentScannerId(pathname: string): string {
+  if (pathname.startsWith("/confluence")) return "confluence";
   if (pathname.startsWith("/sectors")) return "sectors";
   if (pathname.startsWith("/prerun")) return "prerun";
   if (pathname.startsWith("/squeeze")) return "squeeze";

@@ -11,6 +11,7 @@ const scannerTabs = [
   { id: "squeeze", label: "Squeeze", href: "/squeeze" },
   { id: "prerun", label: "Pre-Run", href: "/prerun" },
   { id: "sectors", label: "Sectors", href: "/sectors" },
+  { id: "confluence", label: "Confluence", href: "/confluence" },
 ] as const;
 
 const subPages: Record<string, { href: string; label: string }[]> = {
@@ -36,9 +37,13 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/sectors", label: "Dashboard" },
     { href: "/sectors/guide", label: "Guide" },
   ],
+  confluence: [
+    { href: "/confluence", label: "Scanner" },
+  ],
 };
 
-function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" {
+function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" {
+  if (pathname.startsWith("/confluence")) return "confluence";
   if (pathname.startsWith("/sectors")) return "sectors";
   if (pathname.startsWith("/prerun")) return "prerun";
   if (pathname.startsWith("/squeeze")) return "squeeze";
@@ -56,6 +61,7 @@ export function Nav() {
     if (href === "/squeeze") return pathname === "/squeeze";
     if (href === "/prerun") return pathname === "/prerun";
     if (href === "/sectors") return pathname === "/sectors";
+    if (href === "/confluence") return pathname === "/confluence";
     return pathname.startsWith(href);
   };
 
@@ -210,7 +216,7 @@ export function Nav() {
                   {item.label}
                 </Link>
               ))}
-              {tab.id !== "sectors" && (
+              {tab.id !== "confluence" && (
                 <div className="mx-3 my-2 h-px bg-[#2a2a2a]" aria-hidden="true" />
               )}
             </div>
