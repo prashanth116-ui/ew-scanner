@@ -38,6 +38,14 @@ export interface ConfluenceSqueezeResult {
   tier: string;
   shortPercentOfFloat?: number | null;
   shortRatio?: number | null;
+  components?: {
+    siPercent: number;
+    daysTocover: number;
+    floatSize: number;
+    volumeSurge: number;
+    near52wLow: number;
+    ewAlignment: number;
+  };
 }
 
 export interface ConfluencePreRunResult {
@@ -58,6 +66,7 @@ export interface ConfluenceResult {
   ticker: string;
   name: string;
   sector: string;
+  price?: number;
   scores: ConfluenceScores;
   signal: ConfluenceSignal;
   ewResult: ConfluenceEWResult | null;
@@ -70,6 +79,7 @@ export interface ConfluenceResult {
 export interface ConfluenceScanResult {
   ticker: string;
   name: string;
+  price?: number;
   ewResult: ConfluenceEWResult | null;
   squeezeResult: ConfluenceSqueezeResult | null;
   prerunResult: ConfluencePreRunResult | null;

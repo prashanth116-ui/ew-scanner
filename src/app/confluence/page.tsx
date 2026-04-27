@@ -11,6 +11,11 @@ import {
   Layers,
   PanelLeftClose,
   PanelLeft,
+  Copy,
+  Check,
+  ExternalLink,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import Link from "next/link";
 import type {
@@ -52,16 +57,69 @@ const SIGNAL_LABELS: Record<ConfluenceSignal, string> = {
   none: "NONE",
 };
 
-function scoreBarColor(val: number): string {
-  if (val >= 0.6) return "bg-pink-500";
-  if (val >= 0.4) return "bg-amber-500";
-  if (val >= 0.2) return "bg-[#666]";
-  return "bg-[#333]";
-}
+const SIGNAL_BAR_COLORS: Record<ConfluenceSignal, string> = {
+  strong: "bg-pink-500",
+  moderate: "bg-amber-500",
+  weak: "bg-[#555]",
+  none: "bg-[#333]",
+};
 
 function passDot(pass: boolean): string {
   return pass ? "bg-pink-500" : "bg-[#333]";
 }
+
+/** Generate a one-line natural language summary for a confluence result. */
+function generateWhyThisStock(r: ConfluenceResult): string {
+  const parts: string[] = [];
+
+  if (r.ewResult) {
+    if (r.scores.ewNormalized >= 0.6) parts.push("strong EW wave setup");
+    else if (r.scores.ewNormalized >= 0.4) parts.push("favorable EW positioning");
+    if (r.ewResult.wavePosition) {
+      const wp = r.ewResult.wavePosition.toLowerCase();
+      if (wp.length < 40) parts.push(wp);
+    }
+    if (r.ewResult.fibDepthLabel) parts.push(`fib ${r.ewResult.fibDepthLabel} retracement`);
+  }
+
+  if (r.squeezeResult) {
+    if (r.scores.squeezeNormalized >= 0.6) parts.push("high short squeeze potential");
+    else if (r.scores.squeezeNormalized >= 0.3) parts.push("elevated short interest");
+    if (r.squeezeResult.shortPercentOfFloat != null) {
+      const si = r.squeezeResult.shortPercentOfFloat * (r.squeezeResult.shortPercentOfFloat < 1 ? 100 : 1);
+      if (si > 10) parts.push(`${si.toFixed(0)}% SI`);
+    }
+  }
+
+  if (r.prerunResult) {
+    if (r.prerunResult.verdict === "PRIORITY") parts.push("priority pre-run candidate");
+    else if (r.prerunResult.verdict === "KEEP") parts.push("strong fundamental catalyst");
+    if (r.prerunResult.daysToEarnings != null && r.prerunResult.daysToEarnings <= 30) {
+      parts.push(`earnings in ${r.prerunResult.daysToEarnings}d`);
+    }
+    if (r.prerunResult.pctFromAth != null && r.prerunResult.pctFromAth < -40) {
+      parts.push(`${r.prerunResult.pctFromAth.toFixed(0)}% from ATH`);
+    }
+  }
+
+  if (r.sectorResult) {
+    if (r.sectorResult.quadrant === "LEADING") parts.push("leading sector rotation");
+    else if (r.sectorResult.quadrant === "IMPROVING") parts.push("improving sector momentum");
+    if (r.sectorResult.trend === "UP") parts.push("sector uptrend");
+  }
+
+  if (parts.length === 0) return "Limited data available — review individual scanner details below.";
+  // Cap at 4 reasons to keep it concise
+  return parts.slice(0, 4).join(" · ");
+}
+
+// Scanner link paths
+const SCANNER_LINKS: Record<string, { href: string; label: string }> = {
+  ew: { href: "/", label: "EW Scanner" },
+  squeeze: { href: "/squeeze", label: "Squeeze Scanner" },
+  prerun: { href: "/pre-run", label: "Pre-Run Scanner" },
+  sector: { href: "/sectors", label: "Sector Scanner" },
+};
 
 export default function ConfluencePage() {
   // Weights & thresholds
@@ -97,6 +155,9 @@ export default function ConfluencePage() {
   // Ticker search
   const [tickerSearch, setTickerSearch] = useState("");
   const [tickerSearching, setTickerSearching] = useState(false);
+
+  // Export toast
+  const [copiedToast, setCopiedToast] = useState(false);
 
   // Cleanup abort on unmount
   useEffect(() => {
@@ -148,6 +209,7 @@ export default function ConfluencePage() {
         ticker: r.ticker,
         name: r.name || tickerInfo?.name || r.ticker,
         sector,
+        price: r.price,
         scores,
         signal,
         ewResult: r.ewResult,
@@ -208,10 +270,15 @@ export default function ConfluencePage() {
     return { total: filtered.length, strong, moderate, weak };
   }, [filtered]);
 
-  // Unique sectors for filter
-  const sectors = useMemo(() => {
-    const s = new Set(confluenceResults.map((r) => r.sector));
-    return Array.from(s).sort();
+  // Unique sectors for filter with counts
+  const sectorsWithCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of confluenceResults) {
+      counts.set(r.sector, (counts.get(r.sector) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([sector, count]) => ({ sector, count }));
   }, [confluenceResults]);
 
   // Scan
@@ -246,7 +313,6 @@ export default function ConfluencePage() {
         setScanning(false);
         return;
       }
-      // Sector data is non-critical, continue without it
     }
 
     const results: ConfluenceScanResult[] = [];
@@ -354,6 +420,15 @@ export default function ConfluencePage() {
       return s;
     });
   }, []);
+
+  // Export / copy watchlist
+  const copyWatchlist = useCallback(() => {
+    const symbols = sorted.map((r) => r.ticker).join(", ");
+    navigator.clipboard.writeText(symbols).then(() => {
+      setCopiedToast(true);
+      setTimeout(() => setCopiedToast(false), 2000);
+    });
+  }, [sorted]);
 
   return (
     <>
@@ -522,8 +597,8 @@ export default function ConfluencePage() {
             )}
           </div>
 
-          {/* Sector filter */}
-          {sectors.length > 0 && (
+          {/* Sector filter — enhanced with counts */}
+          {sectorsWithCounts.length > 0 && (
             <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
               <button
                 onClick={() => toggleSection("sector-filter")}
@@ -533,17 +608,32 @@ export default function ConfluencePage() {
                 <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("sector-filter") ? "" : "rotate-90"}`} />
               </button>
               {!collapsed.has("sector-filter") && (
-                <div className="border-t border-[#2a2a2a] px-4 pb-4 pt-3">
-                  <select
-                    value={sectorFilter}
-                    onChange={(e) => setSectorFilter(e.target.value)}
-                    className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#ec4899] focus:outline-none"
-                  >
-                    <option value="All">All Sectors</option>
-                    {sectors.map((s) => (
-                      <option key={s} value={s}>{s}</option>
+                <div className="border-t border-[#2a2a2a] px-3 pb-3 pt-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setSectorFilter("All")}
+                      className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
+                        sectorFilter === "All"
+                          ? "bg-[#ec4899]/15 text-[#ec4899] border border-[#ec4899]/30"
+                          : "text-[#a0a0a0] border border-[#2a2a2a] hover:border-[#444] hover:text-white"
+                      }`}
+                    >
+                      All ({confluenceResults.length})
+                    </button>
+                    {sectorsWithCounts.map(({ sector, count }) => (
+                      <button
+                        key={sector}
+                        onClick={() => setSectorFilter(sectorFilter === sector ? "All" : sector)}
+                        className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
+                          sectorFilter === sector
+                            ? "bg-[#ec4899]/15 text-[#ec4899] border border-[#ec4899]/30"
+                            : "text-[#a0a0a0] border border-[#2a2a2a] hover:border-[#444] hover:text-white"
+                        }`}
+                      >
+                        {sector} ({count})
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
               )}
             </div>
@@ -666,7 +756,7 @@ export default function ConfluencePage() {
             </div>
           )}
 
-          {/* Sort row */}
+          {/* Action bar: sort pills + export */}
           {sorted.length > 0 && (
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <span className="text-xs text-[#666]">Sort:</span>
@@ -690,27 +780,50 @@ export default function ConfluencePage() {
                   }`}
                 >
                   {s.label}
-                  {sortKey === s.key && <ArrowUpDown className="h-3 w-3" />}
+                  {sortKey === s.key && (
+                    sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />
+                  )}
                 </button>
               ))}
+
+              {/* Export / Copy Watchlist */}
+              <div className="ml-auto">
+                <button
+                  onClick={copyWatchlist}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-[#a0a0a0] hover:text-white border border-[#2a2a2a] hover:border-[#444] transition-colors"
+                  title="Copy all visible tickers to clipboard"
+                >
+                  {copiedToast ? (
+                    <>
+                      <Check className="h-3 w-3 text-green-400" />
+                      <span className="text-green-400">Copied {sorted.length}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3" />
+                      Copy Watchlist
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 
           {/* Results table */}
           {sorted.length > 0 ? (
             <div className="space-y-2">
-              {/* Header row */}
+              {/* Clickable header row */}
               <div className="hidden sm:grid grid-cols-[2.5rem_4rem_1fr_8rem_5rem_4rem_5rem_4rem_4rem_4rem] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-[#555]">
                 <span>#</span>
                 <span>Ticker</span>
                 <span>Name</span>
-                <span>Confluence</span>
-                <span>Pass</span>
+                <SortHeader label="Score" sortKey="confluence" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortHeader label="Pass" sortKey="pass" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 <span>Signal</span>
-                <span>EW</span>
-                <span>Sqz</span>
-                <span>Pre</span>
-                <span>Sec</span>
+                <SortHeader label="EW" sortKey="ew" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortHeader label="Sqz" sortKey="squeeze" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortHeader label="Pre" sortKey="prerun" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortHeader label="Sec" sortKey="sector" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
               </div>
 
               {sorted.map((result, idx) => (
@@ -720,6 +833,7 @@ export default function ConfluencePage() {
                   rank={idx + 1}
                   expanded={expandedTicker === result.ticker}
                   onToggle={() => setExpandedTicker(expandedTicker === result.ticker ? null : result.ticker)}
+                  thresholds={thresholds}
                 />
               ))}
             </div>
@@ -746,6 +860,37 @@ export default function ConfluencePage() {
   );
 }
 
+// -- Sortable header cell --
+
+function SortHeader({
+  label,
+  sortKey: key,
+  currentKey,
+  dir,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  currentKey: SortKey;
+  dir: SortDir;
+  onSort: (key: SortKey) => void;
+}) {
+  const active = currentKey === key;
+  return (
+    <button
+      onClick={() => onSort(key)}
+      className={`flex items-center gap-0.5 text-[10px] uppercase tracking-wider transition-colors cursor-pointer ${
+        active ? "text-[#ec4899]" : "text-[#555] hover:text-[#a0a0a0]"
+      }`}
+    >
+      {label}
+      {active && (
+        dir === "desc" ? <ArrowDown className="h-2.5 w-2.5" /> : <ArrowUp className="h-2.5 w-2.5" />
+      )}
+    </button>
+  );
+}
+
 // -- Result Row Component --
 
 function ResultRow({
@@ -753,13 +898,16 @@ function ResultRow({
   rank,
   expanded,
   onToggle,
+  thresholds,
 }: {
   result: ConfluenceResult;
   rank: number;
   expanded: boolean;
   onToggle: () => void;
+  thresholds: ConfluenceThresholds;
 }) {
   const s = result.scores;
+  const [expandedPanel, setExpandedPanel] = useState<string | null>(null);
 
   return (
     <div className="ew-card-in rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] hover:border-[#3a3a3a] transition-colors">
@@ -784,7 +932,7 @@ function ResultRow({
           <div className="flex items-center gap-2 pl-8">
             <div className="flex-1 h-2 bg-[#0f0f0f] rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full ${scoreBarColor(s.confluenceScore)}`}
+                className={`h-full rounded-full ${SIGNAL_BAR_COLORS[result.signal]}`}
                 style={{ width: `${Math.min(100, s.confluenceScore * 100)}%` }}
               />
             </div>
@@ -808,12 +956,17 @@ function ResultRow({
         <div className="hidden sm:grid grid-cols-[2.5rem_4rem_1fr_8rem_5rem_4rem_5rem_4rem_4rem_4rem] gap-2 items-center">
           <span className="text-xs text-[#555]">{rank}</span>
           <span className="text-sm font-bold text-white">{result.ticker}</span>
-          <span className="text-xs text-[#a0a0a0] truncate">{result.name}</span>
-          {/* Confluence bar */}
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs text-[#a0a0a0] truncate">{result.name}</span>
+            {result.price != null && (
+              <span className="text-[10px] text-[#555] shrink-0">${result.price.toFixed(2)}</span>
+            )}
+          </div>
+          {/* Confluence bar — signal-colored */}
           <div className="flex items-center gap-2">
             <div className="flex-1 h-2 bg-[#0f0f0f] rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full ${scoreBarColor(s.confluenceScore)}`}
+                className={`h-full rounded-full ${SIGNAL_BAR_COLORS[result.signal]}`}
                 style={{ width: `${Math.min(100, s.confluenceScore * 100)}%` }}
               />
             </div>
@@ -823,7 +976,7 @@ function ResultRow({
           </div>
           {/* Pass dots */}
           <div className="flex items-center gap-1.5">
-            <PassDots scores={s} thresholds={DEFAULT_THRESHOLDS} />
+            <PassDots scores={s} thresholds={thresholds} />
             <span className="text-[10px] text-[#666]">{s.passCount}/4</span>
           </div>
           {/* Signal */}
@@ -841,6 +994,21 @@ function ResultRow({
       {/* Expanded detail */}
       {expanded && (
         <div className="border-t border-[#2a2a2a] px-4 py-4">
+          {/* "Why This Stock" summary */}
+          <div className="mb-3 flex items-start gap-2 px-1">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-[#a0a0a0]">
+                <span className="text-[#ec4899] font-medium">Why this stock: </span>
+                {generateWhyThisStock(result)}
+              </p>
+            </div>
+            {result.price != null && (
+              <div className="shrink-0 text-right">
+                <span className="text-sm font-bold text-white">${result.price.toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* EW Panel */}
             <DetailPanel
@@ -848,14 +1016,25 @@ function ResultRow({
               color="#5ba3e6"
               available={!!result.ewResult}
               score={s.ewNormalized}
+              expanded={expandedPanel === "ew"}
+              onToggle={() => setExpandedPanel(expandedPanel === "ew" ? null : "ew")}
             >
               {result.ewResult && (
                 <div className="space-y-1.5">
                   <DetailRow label="Enhanced Score" value={result.ewResult.enhancedScore.toFixed(1)} />
                   <DetailRow label="Normalized" value={`${(result.ewResult.enhancedNormalized * 100).toFixed(0)}%`} />
-                  <DetailRow label="Confidence" value={result.ewResult.confidenceTier} />
+                  <DetailRow label="Confidence" value={result.ewResult.confidenceTier} highlight={result.ewResult.confidenceTier === "HIGH"} />
                   {result.ewResult.fibDepthLabel && <DetailRow label="Fib Level" value={result.ewResult.fibDepthLabel} />}
                   {result.ewResult.wavePosition && <DetailRow label="Wave" value={result.ewResult.wavePosition} />}
+                  {expandedPanel === "ew" && (
+                    <div className="pt-2 border-t border-[#2a2a2a] mt-2">
+                      <div className="space-y-2">
+                        <MiniBar label="Score" value={result.ewResult.enhancedScore} max={25} color="#5ba3e6" />
+                        <MiniBar label="Normalized" value={result.ewResult.enhancedNormalized * 100} max={100} color="#5ba3e6" />
+                      </div>
+                      <ScannerLink scanner="ew" />
+                    </div>
+                  )}
                 </div>
               )}
             </DetailPanel>
@@ -866,16 +1045,35 @@ function ResultRow({
               color="#f59e0b"
               available={!!result.squeezeResult}
               score={s.squeezeNormalized}
+              expanded={expandedPanel === "squeeze"}
+              onToggle={() => setExpandedPanel(expandedPanel === "squeeze" ? null : "squeeze")}
             >
               {result.squeezeResult && (
                 <div className="space-y-1.5">
                   <DetailRow label="Squeeze Score" value={`${result.squeezeResult.squeezeScore}/100`} />
-                  <DetailRow label="Tier" value={result.squeezeResult.tier} />
+                  <DetailRow label="Tier" value={result.squeezeResult.tier} highlight={result.squeezeResult.tier === "high"} />
                   {result.squeezeResult.shortPercentOfFloat != null && (
                     <DetailRow label="SI %" value={`${(result.squeezeResult.shortPercentOfFloat * (result.squeezeResult.shortPercentOfFloat < 1 ? 100 : 1)).toFixed(1)}%`} />
                   )}
                   {result.squeezeResult.shortRatio != null && (
                     <DetailRow label="Days to Cover" value={result.squeezeResult.shortRatio.toFixed(1)} />
+                  )}
+                  {expandedPanel === "squeeze" && (
+                    <div className="pt-2 border-t border-[#2a2a2a] mt-2">
+                      {result.squeezeResult.components ? (
+                        <div className="space-y-2">
+                          <MiniBar label="SI %" value={result.squeezeResult.components.siPercent} max={25} color="#ef4444" />
+                          <MiniBar label="Days Cover" value={result.squeezeResult.components.daysTocover} max={15} color="#f97316" />
+                          <MiniBar label="Float Size" value={result.squeezeResult.components.floatSize} max={15} color="#eab308" />
+                          <MiniBar label="Vol Surge" value={result.squeezeResult.components.volumeSurge} max={15} color="#3b82f6" />
+                          <MiniBar label="Near Low" value={result.squeezeResult.components.near52wLow} max={15} color="#a855f7" />
+                          <MiniBar label="EW Align" value={result.squeezeResult.components.ewAlignment} max={15} color="#22c55e" />
+                        </div>
+                      ) : (
+                        <MiniBar label="Score" value={result.squeezeResult.squeezeScore} max={100} color="#f59e0b" />
+                      )}
+                      <ScannerLink scanner="squeeze" />
+                    </div>
                   )}
                 </div>
               )}
@@ -887,11 +1085,13 @@ function ResultRow({
               color="#10b981"
               available={!!result.prerunResult}
               score={s.prerunNormalized}
+              expanded={expandedPanel === "prerun"}
+              onToggle={() => setExpandedPanel(expandedPanel === "prerun" ? null : "prerun")}
             >
               {result.prerunResult && (
                 <div className="space-y-1.5">
                   <DetailRow label="Score" value={`${result.prerunResult.finalScore}/24`} />
-                  <DetailRow label="Verdict" value={result.prerunResult.verdict} />
+                  <DetailRow label="Verdict" value={result.prerunResult.verdict} highlight={result.prerunResult.verdict === "PRIORITY"} />
                   {result.prerunResult.pctFromAth != null && (
                     <DetailRow label="% from ATH" value={`${result.prerunResult.pctFromAth.toFixed(0)}%`} />
                   )}
@@ -900,6 +1100,14 @@ function ResultRow({
                   )}
                   {result.prerunResult.daysToEarnings != null && (
                     <DetailRow label="Earnings In" value={`${result.prerunResult.daysToEarnings}d`} />
+                  )}
+                  {expandedPanel === "prerun" && (
+                    <div className="pt-2 border-t border-[#2a2a2a] mt-2">
+                      <div className="space-y-2">
+                        <MiniBar label="Score" value={result.prerunResult.finalScore} max={24} color="#10b981" />
+                      </div>
+                      <ScannerLink scanner="prerun" />
+                    </div>
                   )}
                 </div>
               )}
@@ -911,13 +1119,23 @@ function ResultRow({
               color="#8b5cf6"
               available={!!result.sectorResult}
               score={s.sectorNormalized}
+              expanded={expandedPanel === "sector"}
+              onToggle={() => setExpandedPanel(expandedPanel === "sector" ? null : "sector")}
             >
               {result.sectorResult ? (
                 <div className="space-y-1.5">
                   <DetailRow label="Sector" value={result.sector} />
                   <DetailRow label="Composite" value={`${result.sectorResult.compositeScore}/100`} />
-                  <DetailRow label="Quadrant" value={result.sectorResult.quadrant} />
+                  <DetailRow label="Quadrant" value={result.sectorResult.quadrant} highlight={result.sectorResult.quadrant === "LEADING"} />
                   <DetailRow label="Trend" value={result.sectorResult.trend} />
+                  {expandedPanel === "sector" && (
+                    <div className="pt-2 border-t border-[#2a2a2a] mt-2">
+                      <div className="space-y-2">
+                        <MiniBar label="Composite" value={result.sectorResult.compositeScore} max={100} color="#8b5cf6" />
+                      </div>
+                      <ScannerLink scanner="sector" />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -968,19 +1186,38 @@ function DetailPanel({
   color,
   available,
   score,
+  expanded: panelExpanded,
+  onToggle,
   children,
 }: {
   title: string;
   color: string;
   available: boolean;
   score: number;
+  expanded?: boolean;
+  onToggle?: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color }}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle?.();
+        }}
+        className="flex items-center justify-between mb-2 w-full group cursor-pointer"
+      >
+        <span
+          className="text-[10px] uppercase tracking-wider font-medium group-hover:brightness-125 transition-all"
+          style={{ color }}
+        >
           {title}
+          {available && (
+            <ChevronRight
+              className={`inline h-3 w-3 ml-0.5 transition-transform ${panelExpanded ? "rotate-90" : ""}`}
+              style={{ color }}
+            />
+          )}
         </span>
         {available ? (
           <span className="text-xs font-bold text-white">
@@ -989,7 +1226,7 @@ function DetailPanel({
         ) : (
           <span className="text-[10px] text-[#444]">N/A</span>
         )}
-      </div>
+      </button>
       {/* Score bar */}
       <div className="h-1.5 bg-[#0f0f0f] rounded-full overflow-hidden mb-3">
         <div
@@ -1004,11 +1241,45 @@ function DetailPanel({
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex justify-between text-xs">
       <span className="text-[#666]">{label}</span>
-      <span className="text-white font-medium">{value}</span>
+      <span className={highlight ? "text-[#ec4899] font-semibold" : "text-white font-medium"}>{value}</span>
     </div>
+  );
+}
+
+/** Mini horizontal bar used in expanded panel deep dive. */
+function MiniBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const pct = Math.min(100, (value / max) * 100);
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-[#666] w-16 shrink-0 truncate">{label}</span>
+      <div className="flex-1 h-1.5 bg-[#0f0f0f] rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+      <span className="text-[10px] text-[#888] w-10 text-right shrink-0">
+        {value.toFixed(value % 1 === 0 ? 0 : 1)}/{max}
+      </span>
+    </div>
+  );
+}
+
+/** "View in Scanner" link rendered inside expanded panel. */
+function ScannerLink({ scanner }: { scanner: string }) {
+  const info = SCANNER_LINKS[scanner];
+  if (!info) return null;
+  return (
+    <Link
+      href={info.href}
+      className="flex items-center gap-1 mt-3 text-[10px] text-[#666] hover:text-[#ec4899] transition-colors"
+    >
+      <ExternalLink className="h-3 w-3" />
+      View in {info.label}
+    </Link>
   );
 }

@@ -42,25 +42,29 @@ export async function POST(request: NextRequest) {
           fetchAndScorePreRun(ticker),
         ]);
 
-        const ewResult = ewSettled.status === "fulfilled" ? ewSettled.value : null;
-        const squeezeResult = squeezeSettled.status === "fulfilled" ? squeezeSettled.value : null;
-        const prerunResult = prerunSettled.status === "fulfilled" ? prerunSettled.value : null;
+        const ewRaw = ewSettled.status === "fulfilled" ? ewSettled.value : null;
+        const squeezeRaw = squeezeSettled.status === "fulfilled" ? squeezeSettled.value : null;
+        const prerunRaw = prerunSettled.status === "fulfilled" ? prerunSettled.value : null;
 
         // Need at least one scanner result
-        if (!ewResult && !squeezeResult && !prerunResult) return null;
+        if (!ewRaw && !squeezeRaw && !prerunRaw) return null;
 
         // Determine company name from whichever source has it
         const name =
-          (squeezeResult as ConfluenceSqueezeResult & { _name?: string })?._name ??
-          (prerunResult as ConfluencePreRunResult & { _name?: string })?._name ??
+          (squeezeRaw as ConfluenceSqueezeResult & { _name?: string })?._name ??
+          (prerunRaw as ConfluencePreRunResult & { _name?: string })?._name ??
           ticker;
+
+        // Extract price before stripping internal fields
+        const price = (ewRaw as ConfluenceEWResult & { _price?: number })?._price;
 
         return {
           ticker,
           name,
-          ewResult: ewResult ? stripInternal(ewResult) : null,
-          squeezeResult: squeezeResult ? stripInternal(squeezeResult) : null,
-          prerunResult: prerunResult ? stripInternal(prerunResult) : null,
+          price,
+          ewResult: ewRaw ? stripInternal(ewRaw) : null,
+          squeezeResult: squeezeRaw ? stripInternal(squeezeRaw) : null,
+          prerunResult: prerunRaw ? stripInternal(prerunRaw) : null,
         };
       })
     );
@@ -81,17 +85,24 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/** Strip internal _name field before sending to client. */
+/** Strip internal _-prefixed fields before sending to client. */
 function stripInternal<T>(obj: T): T {
-  if (obj && typeof obj === "object" && "_name" in obj) {
-    const { _name, ...rest } = obj as Record<string, unknown>;
-    void _name;
-    return rest as T;
+  if (obj && typeof obj === "object") {
+    const cleaned: Record<string, unknown> = {};
+    let hasInternal = false;
+    for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
+      if (key.startsWith("_")) {
+        hasInternal = true;
+      } else {
+        cleaned[key] = val;
+      }
+    }
+    return hasInternal ? (cleaned as T) : obj;
   }
   return obj;
 }
 
-async function fetchAndScoreEW(ticker: string): Promise<(ConfluenceEWResult & { _name?: string }) | null> {
+async function fetchAndScoreEW(ticker: string): Promise<(ConfluenceEWResult & { _price?: number }) | null> {
   const quoteData = await fetchEWQuoteData(ticker, { detail: true });
   if (!quoteData) return null;
 
@@ -121,6 +132,7 @@ async function fetchAndScoreEW(ticker: string): Promise<(ConfluenceEWResult & { 
     confidenceTier: scored.confidenceTier,
     fibDepthLabel: scored.fibAnalysis?.nearestLevel?.label ?? undefined,
     wavePosition: scored.waveCount?.position ?? undefined,
+    _price: quoteData.current,
   };
 }
 
@@ -135,6 +147,7 @@ async function fetchAndScoreSqueeze(ticker: string): Promise<(ConfluenceSqueezeR
     tier: scored.tier,
     shortPercentOfFloat: data.shortPercentOfFloat,
     shortRatio: data.shortRatio,
+    components: scored.components,
     _name: data.name,
   };
 }
