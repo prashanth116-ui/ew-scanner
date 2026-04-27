@@ -501,11 +501,17 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
 
 // ── Main Page ──
 
+type SortMode = "score" | "action" | "quadrant" | "acceleration" | "name";
+
+const ACTION_RANK: Record<TradingAction, number> = { TRADE: 0, BUILD: 1, WATCH: 2, TRIM: 3, AVOID: 4 };
+const QUADRANT_RANK: Record<RRGQuadrant, number> = { LEADING: 0, IMPROVING: 1, WEAKENING: 2, LAGGING: 3 };
+
 export default function SectorRotationPage() {
   const [data, setData] = useState<SectorRotationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [scanResults, setScanResults] = useState<PreRunResult[]>([]);
+  const [sortMode, setSortMode] = useState<SortMode>("score");
 
   // Load pre-run scan results from localStorage for stock-level data
   useEffect(() => {
@@ -542,6 +548,32 @@ export default function SectorRotationPage() {
     }
     return map;
   }, [scanResults, data]);
+
+  // Sort sectors based on selected mode
+  const sortedSectors = useMemo(() => {
+    if (!data) return [];
+    const sectors = [...data.sectors];
+    switch (sortMode) {
+      case "score":
+        return sectors.sort((a, b) => b.compositeScore - a.compositeScore);
+      case "action":
+        return sectors.sort((a, b) => {
+          const diff = ACTION_RANK[getTradingAction(a)] - ACTION_RANK[getTradingAction(b)];
+          return diff !== 0 ? diff : b.compositeScore - a.compositeScore;
+        });
+      case "quadrant":
+        return sectors.sort((a, b) => {
+          const diff = QUADRANT_RANK[a.quadrant] - QUADRANT_RANK[b.quadrant];
+          return diff !== 0 ? diff : b.compositeScore - a.compositeScore;
+        });
+      case "acceleration":
+        return sectors.sort((a, b) => b.acceleration - a.acceleration);
+      case "name":
+        return sectors.sort((a, b) => a.sector.localeCompare(b.sector));
+      default:
+        return sectors;
+    }
+  }, [data, sortMode]);
 
   const fetchData = useCallback(async (skipCache = false) => {
     setLoading(true);
@@ -668,9 +700,33 @@ export default function SectorRotationPage() {
 
       {/* Panel 2: Sector Heatmap Grid */}
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-white">Sector Scores</h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Sector Scores</h2>
+          <div className="flex items-center gap-1 overflow-x-auto">
+            <span className="text-xs text-[#555] shrink-0 mr-1">Sort:</span>
+            {([
+              ["score", "Score"],
+              ["action", "Action"],
+              ["quadrant", "Quadrant"],
+              ["acceleration", "Accel"],
+              ["name", "Name"],
+            ] as [SortMode, string][]).map(([mode, label]) => (
+              <button
+                key={mode}
+                onClick={() => setSortMode(mode)}
+                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  sortMode === mode
+                    ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30"
+                    : "text-[#666] hover:text-[#a0a0a0] border border-transparent"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {data.sectors.map((s) => (
+          {sortedSectors.map((s) => (
             <div
               key={s.sector}
               className={`rounded-lg border p-3 transition-colors ${
@@ -809,7 +865,7 @@ export default function SectorRotationPage() {
           )}
         </div>
         <div className="space-y-2">
-          {data.sectors.map((s) => (
+          {sortedSectors.map((s) => (
             <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} />
           ))}
         </div>
