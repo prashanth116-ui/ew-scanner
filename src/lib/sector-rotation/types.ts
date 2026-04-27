@@ -5,7 +5,7 @@ export type RRGQuadrant = "LEADING" | "WEAKENING" | "LAGGING" | "IMPROVING";
 export interface SectorRotationScore {
   sector: string;
   etf: string;
-  subsectors: string[];       // Original sector names merged into this entry
+  subsectors: string[];       // Sector ID (1:1 with ETF proxy)
 
   // Tier 1: Core Rotation (0-100 normalized)
   momentumComposite: number;
@@ -19,7 +19,7 @@ export interface SectorRotationScore {
   flowPriceDivergence: boolean;
   breadthDivergence: boolean;
   accelerationInflection: boolean;
-  breadthPct: number | null;   // % of stocks > 20d SMA (null if < 5 stocks)
+  breadthPct: number | null;   // % of stocks > 20d SMA (stock-level if >= 5, ETF proxy otherwise)
 
   // Tier 3: Smart Money
   aggregateInsiderBuys: number;
@@ -39,6 +39,9 @@ export interface SectorRotationScore {
   trend: "UP" | "DOWN" | "FLAT";
   trendArrow: string;
   stealthAccumulation: boolean;
+
+  // RRG trail (historical positions, oldest first, current last)
+  rrgTrail: { rsRatio: number; rsMomentum: number }[];
 }
 
 export interface SectorRotationResult {
@@ -56,4 +59,6 @@ export interface SectorRotationResult {
     sector: string;
     stocks: { ticker: string; score: number; reasons: string[] }[];
   }[];
+  /** Per-stock quote data from batch fetch (price vs 50d SMA). */
+  stockQuotes: Record<string, { price: number; sma50: number | null; pctFromSma50: number | null }>;
 }

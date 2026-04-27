@@ -419,6 +419,68 @@ export function calc20dReturn(closes: number[]): number | null {
   return ((recent - past) / past) * 100;
 }
 
+// ── Batch quotes for sector-level breadth + RS ──
+
+export interface BatchQuote {
+  symbol: string;
+  price: number;
+  sma50: number | null;
+  volume: number;
+  avgVolume10d: number;
+}
+
+/**
+ * Fetch basic quote data (price, 50d SMA, volume) for many symbols at once.
+ * Uses Yahoo Finance v7/finance/quote which supports comma-separated symbols.
+ * Batches in groups of 80 to stay within URL limits.
+ */
+export async function fetchBatchQuotes(
+  symbols: string[],
+  batchSize = 80
+): Promise<Map<string, BatchQuote>> {
+  const auth = await getYahooCrumb();
+  if (!auth) return new Map();
+
+  const results = new Map<string, BatchQuote>();
+  const batches: string[][] = [];
+  for (let i = 0; i < symbols.length; i += batchSize) {
+    batches.push(symbols.slice(i, i + batchSize));
+  }
+
+  const batchResults = await Promise.allSettled(
+    batches.map(async (batch) => {
+      const symbolStr = batch.map((s) => encodeURIComponent(s)).join(",");
+      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolStr}&fields=symbol,regularMarketPrice,fiftyDayAverage,regularMarketVolume,averageDailyVolume10Day&crumb=${encodeURIComponent(auth.crumb)}`;
+      const res = await fetchWithTimeout(url, {
+        headers: { "User-Agent": UA, Cookie: auth.cookie },
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (
+        (data as { quoteResponse?: { result?: Record<string, unknown>[] } })
+          ?.quoteResponse?.result ?? []
+      );
+    })
+  );
+
+  for (const r of batchResults) {
+    if (r.status !== "fulfilled") continue;
+    for (const quote of r.value) {
+      const symbol = quote.symbol as string;
+      if (!symbol) continue;
+      results.set(symbol, {
+        symbol,
+        price: (quote.regularMarketPrice as number) ?? 0,
+        sma50: (quote.fiftyDayAverage as number) ?? null,
+        volume: (quote.regularMarketVolume as number) ?? 0,
+        avgVolume10d: (quote.averageDailyVolume10Day as number) ?? 0,
+      });
+    }
+  }
+
+  return results;
+}
+
 // ── Sector ETF chart cache (shared across tickers in same scan) ──
 
 const sectorChartCache = new Map<string, { closes: number[]; ts: number }>();

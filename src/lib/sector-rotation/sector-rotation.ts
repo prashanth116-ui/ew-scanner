@@ -1,21 +1,17 @@
 /**
  * Sector Rotation Tracker engine.
- * SERVER-ONLY: Used by /api/prerun/sector-rotation route + nightly cron.
+ * SERVER-ONLY: Used by /api/sector-rotation route + nightly cron.
  *
- * Fix log:
- * - Fix 1: Merge sectors sharing same ETF proxy (3 SMH subsectors → 1 "Semiconductors")
- * - Fix 2: Breadth uses SMA20 (what pre-run stores), labeling corrected
- * - Fix 3: Breadth = null when < 5 stocks have data (statistically meaningless)
- * - Fix 4: Flow/price divergence uses rolling 20-bar CMF persistence check
- * - Fix 5: dataQuality field tracks what % of composite has real data
- * - Fix 6: Dynamic weight redistribution when pre-run data missing
- * - Fix 7: Multi-signal rotation detection (dispersion + spread), not fixed threshold
+ * 13 GICS-based sectors with 1:1 ETF proxy mapping.
+ * Composite scoring: momentum, acceleration, Mansfield RS, CMF, breadth, smart money.
+ * Dynamic weight redistribution when pre-run data is missing.
  */
 
 import "server-only";
 
-import { fetchYahooChart, calcSMA, calc20dReturn } from "@/lib/prerun/data";
-import { SECTOR_UNIVERSE, getSectorForSymbol } from "@/data/sector-universe";
+import { fetchYahooChart, calcSMA, calc20dReturn, fetchBatchQuotes } from "@/lib/prerun/data";
+import type { BatchQuote } from "@/lib/prerun/data";
+import { SECTOR_UNIVERSE, getSectorForSymbol, getAllSectorSymbols } from "@/data/sector-universe";
 import type {
   SectorRotationScore,
   SectorRotationResult,
@@ -97,7 +93,7 @@ function calcCMF(
 }
 
 /**
- * Fix 4: Count how many of the last `lookback` rolling CMF values are positive.
+ * Count how many of the last `lookback` rolling CMF values are positive.
  * Each value is a 20-bar CMF ending at that bar.
  */
 function calcRollingCMFPositiveCount(
@@ -161,12 +157,35 @@ function calcOBVSlope(closes: number[], volumes: number[], lookback = 20): -1 | 
   return 0;
 }
 
+/** Compute RS-Ratio and RS-Momentum at a given offset from the end of the DRS array. */
+function calcRRGPoint(
+  drs: number[],
+  offset: number
+): { rsRatio: number; rsMomentum: number } | null {
+  const end = drs.length - offset;
+  if (end < 31) return null;
+
+  const sma10 = drs.slice(end - 10, end).reduce((a, b) => a + b, 0) / 10;
+  const sma30 = drs.slice(end - 30, end).reduce((a, b) => a + b, 0) / 30;
+  const rsRatio = sma30 !== 0 ? (sma10 / sma30) * 100 : 100;
+
+  let prevRsRatio = 100;
+  if (end >= 32) {
+    const prevSma10 = drs.slice(end - 11, end - 1).reduce((a, b) => a + b, 0) / 10;
+    const prevSma30 = drs.slice(end - 31, end - 1).reduce((a, b) => a + b, 0) / 30;
+    prevRsRatio = prevSma30 !== 0 ? (prevSma10 / prevSma30) * 100 : 100;
+  }
+  const rsMomentum = rsRatio - prevRsRatio;
+
+  return { rsRatio, rsMomentum };
+}
+
 function calcRRG(
   sectorCloses: number[],
   spyCloses: number[]
-): { rsRatio: number; rsMomentum: number; quadrant: RRGQuadrant } {
+): { rsRatio: number; rsMomentum: number; quadrant: RRGQuadrant; trail: { rsRatio: number; rsMomentum: number }[] } {
   const len = Math.min(sectorCloses.length, spyCloses.length);
-  if (len < 31) return { rsRatio: 100, rsMomentum: 0, quadrant: "LAGGING" };
+  if (len < 31) return { rsRatio: 100, rsMomentum: 0, quadrant: "LAGGING", trail: [] };
 
   const sc = sectorCloses.slice(-len);
   const sp = spyCloses.slice(-len);
@@ -176,17 +195,9 @@ function calcRRG(
     drs.push(sp[i] !== 0 ? sc[i] / sp[i] : 0);
   }
 
-  const sma10 = drs.slice(-10).reduce((a, b) => a + b, 0) / 10;
-  const sma30 = drs.slice(-30).reduce((a, b) => a + b, 0) / 30;
-  const rsRatio = sma30 !== 0 ? (sma10 / sma30) * 100 : 100;
-
-  let prevRsRatio = 100;
-  if (len >= 32) {
-    const prevSma10 = drs.slice(-11, -1).reduce((a, b) => a + b, 0) / 10;
-    const prevSma30 = drs.slice(-31, -1).reduce((a, b) => a + b, 0) / 30;
-    prevRsRatio = prevSma30 !== 0 ? (prevSma10 / prevSma30) * 100 : 100;
-  }
-  const rsMomentum = rsRatio - prevRsRatio;
+  // Current position
+  const current = calcRRGPoint(drs, 0)!;
+  const { rsRatio, rsMomentum } = current;
 
   let quadrant: RRGQuadrant;
   if (rsRatio >= 100 && rsMomentum >= 0) quadrant = "LEADING";
@@ -194,7 +205,14 @@ function calcRRG(
   else if (rsRatio < 100 && rsMomentum < 0) quadrant = "LAGGING";
   else quadrant = "IMPROVING";
 
-  return { rsRatio, rsMomentum, quadrant };
+  // Trailing tail: 4 weekly snapshots + current (oldest first)
+  const trail: { rsRatio: number; rsMomentum: number }[] = [];
+  for (const offset of [20, 15, 10, 5, 0]) {
+    const pt = calcRRGPoint(drs, offset);
+    if (pt) trail.push(pt);
+  }
+
+  return { rsRatio, rsMomentum, quadrant, trail };
 }
 
 // ── Normalization helpers ──
@@ -228,7 +246,7 @@ interface ChartData {
   timestamps: number[];
 }
 
-// ── Fix 5/6: Dynamic composite weighting ──
+// ── Dynamic composite weighting ──
 
 const BASE_WEIGHTS = {
   momentum: 25,
@@ -287,14 +305,17 @@ export async function calculateSectorRotation(
     etf: s.etf,
   }));
 
-  // Fetch all ETFs + SPY + cross-sector pairs
+  // Fetch all ETFs + SPY + cross-sector pairs + batch stock quotes (in parallel)
   const crossETFs = ["XLY", "XLP", "XLK", "XLU"];
   const sectorETFs = sectorGroups.map((s) => s.etf);
   const allETFs = [...new Set(["SPY", ...sectorETFs, ...crossETFs])];
+  const allStockSymbols = getAllSectorSymbols();
 
-  const chartResults = await Promise.allSettled(
-    allETFs.map((etf) => fetchYahooChart(etf, "1y", "1d"))
-  );
+  // Fetch ETF charts and batch stock quotes in parallel
+  const [chartResults, batchQuotes] = await Promise.all([
+    Promise.allSettled(allETFs.map((etf) => fetchYahooChart(etf, "1y", "1d"))),
+    fetchBatchQuotes(allStockSymbols),
+  ]);
 
   const charts = new Map<string, ChartData>();
   for (let i = 0; i < allETFs.length; i++) {
@@ -334,6 +355,7 @@ export async function calculateSectorRotation(
     rsRatio: number;
     rsMomentum: number;
     quadrant: RRGQuadrant;
+    rrgTrail: { rsRatio: number; rsMomentum: number }[];
     breadthPct: number | null;
     roc20d: number;
     flowPriceDivergence: boolean;
@@ -364,19 +386,41 @@ export async function calculateSectorRotation(
     const rrg = calcRRG(chart.closes, spyChart.closes);
     const roc20d = calcROC(chart.closes, 20);
 
-    // Fix 2+3: Breadth using SMA20 (what pre-run stores), null if < 5 stocks
+    // Breadth: 3-tier cascade — batch quotes (best), pre-run (good), ETF proxy (fallback)
     let breadthPct: number | null = null;
-    const stocksWithPrice = allStocks.filter(
-      (r) => r.data.currentPrice !== null && r.data.sma20 !== null
-    );
-    if (stocksWithPrice.length >= 5) {
-      const aboveSma = stocksWithPrice.filter(
-        (r) => r.data.currentPrice! > r.data.sma20!
-      ).length;
-      breadthPct = Math.round((aboveSma / stocksWithPrice.length) * 100);
+
+    // Tier 1: Batch quote data (price vs 50d SMA for all sector stocks)
+    const sectorDef = SECTOR_UNIVERSE.find((s) => s.id === group.id);
+    const sectorSymbols = sectorDef?.stocks.map((s) => s.symbol) ?? [];
+    const quotesInSector = sectorSymbols
+      .map((sym) => batchQuotes.get(sym))
+      .filter((q): q is BatchQuote => q != null && q.price > 0 && q.sma50 != null && q.sma50 > 0);
+
+    if (quotesInSector.length >= 5) {
+      const aboveSma = quotesInSector.filter((q) => q.price > q.sma50!).length;
+      breadthPct = Math.round((aboveSma / quotesInSector.length) * 100);
+    } else {
+      // Tier 2: Pre-run stock-level data
+      const stocksWithPrice = allStocks.filter(
+        (r) => r.data.currentPrice !== null && r.data.sma20 !== null
+      );
+      if (stocksWithPrice.length >= 5) {
+        const aboveSma = stocksWithPrice.filter(
+          (r) => r.data.currentPrice! > r.data.sma20!
+        ).length;
+        breadthPct = Math.round((aboveSma / stocksWithPrice.length) * 100);
+      } else if (chart.closes.length >= 20) {
+        // Tier 3: ETF-level breadth proxy
+        const sma20 = calcSMA(chart.closes, 20);
+        const lastClose = chart.closes[chart.closes.length - 1];
+        if (sma20 !== null && sma20 > 0) {
+          const pctFromSma = ((lastClose - sma20) / sma20) * 100;
+          breadthPct = Math.round(Math.max(0, Math.min(100, 50 + pctFromSma * 7)));
+        }
+      }
     }
 
-    // Fix 4: Flow/price divergence — check that CMF was positive for 15+ of last 20 bars
+    // Flow/price divergence — check that CMF was positive for 15+ of last 20 bars
     let flowPriceDivergence = false;
     if (cmf > 0 && roc20d < 0) {
       const positiveCount = calcRollingCMFPositiveCount(
@@ -391,7 +435,7 @@ export async function calculateSectorRotation(
     // Acceleration inflection: 2nd derivative positive but price still negative
     const accelerationInflection = accel > 0 && roc20d < 0;
 
-    // Fix 6: Smart money — only score if we have pre-run data for this sector
+    // Smart money — only score if we have pre-run data for this sector
     const hasSmartMoneyData = allStocks.length > 0;
     let aggregateInsiderBuys = 0;
     let totalPCR = 0;
@@ -440,6 +484,7 @@ export async function calculateSectorRotation(
       rsRatio: rrg.rsRatio,
       rsMomentum: rrg.rsMomentum,
       quadrant: rrg.quadrant,
+      rrgTrail: rrg.trail,
       breadthPct,
       roc20d,
       flowPriceDivergence,
@@ -475,7 +520,7 @@ export async function calculateSectorRotation(
       smartMoney: raw.smartMoneyScore,
     };
 
-    // Fix 5/6: Dynamic composite with data quality tracking
+    // Dynamic composite with data quality tracking
     const hasBreadth = raw.breadthPct !== null;
     const { score: compositeScore, dataQuality } = computeComposite(
       normalized,
@@ -526,12 +571,16 @@ export async function calculateSectorRotation(
       trend,
       trendArrow,
       stealthAccumulation,
+      rrgTrail: raw.rrgTrail.map((pt) => ({
+        rsRatio: Math.round(pt.rsRatio * 100) / 100,
+        rsMomentum: Math.round(pt.rsMomentum * 10000) / 10000,
+      })),
     };
   });
 
   scoredSectors.sort((a, b) => b.compositeScore - a.compositeScore);
 
-  // Fix 7: Multi-signal rotation detection
+  // Multi-signal rotation detection
   const all20dReturns = rawScores.map((r) => r.roc20d);
   const dispersionIndex = Math.round(stddev(all20dReturns) * 100) / 100;
   const sectorSpread = Math.round(
@@ -543,15 +592,24 @@ export async function calculateSectorRotation(
   // - Moderate dispersion (> 2) AND wide spread (> 8%): some sectors moving strongly apart
   const rotationActive = dispersionIndex > 4 || (dispersionIndex > 2 && sectorSpread > 8);
 
-  // Rotation summary
+  // Rotation summary — prefer WEAKENING (active outflow) over LAGGING (already rotated)
+  // Sort by acceleration to pick the most actively deteriorating/improving sectors
   let rotationSummary = "No clear rotation detected";
   if (rotationActive && scoredSectors.length >= 2) {
     const improving = scoredSectors.filter((s) => s.quadrant === "IMPROVING" || s.stealthAccumulation);
-    const weakening = scoredSectors.filter((s) => s.quadrant === "WEAKENING" || s.quadrant === "LAGGING");
-    if (improving.length > 0 && weakening.length > 0) {
-      rotationSummary = `Money flowing FROM ${weakening[weakening.length - 1].sector} TO ${improving[0].sector}`;
+    const activelyWeakening = scoredSectors.filter((s) => s.quadrant === "WEAKENING");
+    const lagging = scoredSectors.filter((s) => s.quadrant === "LAGGING");
+    // FROM: prefer WEAKENING (money actively leaving) over LAGGING (already left)
+    const fromPool = activelyWeakening.length > 0 ? activelyWeakening : lagging;
+    if (improving.length > 0 && fromPool.length > 0) {
+      // Pick most actively deteriorating FROM (lowest acceleration)
+      const fromSector = [...fromPool].sort((a, b) => a.acceleration - b.acceleration)[0];
+      // Pick most actively improving TO (highest acceleration)
+      const toSector = [...improving].sort((a, b) => b.acceleration - a.acceleration)[0];
+      rotationSummary = `Money flowing FROM ${fromSector.sector} TO ${toSector.sector}`;
     } else if (improving.length > 0) {
-      rotationSummary = `Rotation INTO ${improving[0].sector}`;
+      const toSector = [...improving].sort((a, b) => b.acceleration - a.acceleration)[0];
+      rotationSummary = `Rotation INTO ${toSector.sector}`;
     } else {
       rotationSummary = "Sectors diverging \u2014 watch for rotation signal";
     }
@@ -619,6 +677,15 @@ export async function calculateSectorRotation(
     }
   }
 
+  // Build compact stock quotes map for client-side RS display
+  const stockQuotes: Record<string, { price: number; sma50: number | null; pctFromSma50: number | null }> = {};
+  for (const [symbol, q] of batchQuotes) {
+    const pctFromSma50 = q.sma50 != null && q.sma50 > 0
+      ? Math.round(((q.price - q.sma50) / q.sma50) * 1000) / 10  // 1 decimal
+      : null;
+    stockQuotes[symbol] = { price: q.price, sma50: q.sma50, pctFromSma50 };
+  }
+
   const result: SectorRotationResult = {
     calculatedAt: new Date().toISOString(),
     sectors: scoredSectors,
@@ -628,6 +695,7 @@ export async function calculateSectorRotation(
     sectorSpread,
     crossSectorPairs,
     topStocksToWatch,
+    stockQuotes,
   };
 
   cachedResult = { data: result, ts: Date.now() };

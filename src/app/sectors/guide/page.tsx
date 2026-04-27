@@ -218,7 +218,7 @@ export default function SectorGuidePage() {
               </table>
             </div>
             <p className="mt-2 text-[10px] text-[#555]">
-              ~713 stocks classified across 13 GICS-based sectors. Each sector has a 1:1 ETF proxy.
+              ~684 stocks classified across 13 GICS-based sectors. Each sector has a 1:1 ETF proxy.
               Semiconductors and Biotech are split from Technology and Health Care respectively for finer granularity.
             </p>
           </SubSection>
@@ -411,8 +411,8 @@ export default function SectorGuidePage() {
                 <tr className="border-b border-[#2a2a2a]/50">
                   <td className="py-2 pr-3 font-medium text-white">Breadth</td>
                   <td className="py-2 pr-3">15%</td>
-                  <td className="py-2 pr-3">% of sector stocks above their 20-day SMA</td>
-                  <td className="py-2">Shows internal health. High breadth + declining ETF = bullish divergence. Requires &ge;5 stocks for statistical validity (shows N/A otherwise).</td>
+                  <td className="py-2 pr-3">% of sector stocks above their 50-day SMA (batch quotes) or 20-day SMA (pre-run)</td>
+                  <td className="py-2">Shows internal health. High breadth + declining ETF = bullish divergence. Uses batch Yahoo quotes for all ~684 stocks. Falls back to pre-run data or ETF proxy if quotes unavailable.</td>
                 </tr>
                 <tr>
                   <td className="py-2 pr-3 font-medium text-white">Smart Money</td>
@@ -579,9 +579,11 @@ export default function SectorGuidePage() {
                 in that sector.
               </li>
               <li>
-                <strong className="text-white">Breadth requires pre-run data</strong> &mdash; Breadth (% of stocks above 20d SMA)
-                requires a Pre-Run scan to be run first. Without scan data, breadth shows &quot;N/A&quot; and weight is
-                redistributed to other factors.
+                <strong className="text-white">Breadth data sources</strong> &mdash; Breadth uses a 3-tier cascade:
+                (1) batch quotes from Yahoo Finance (price vs 50d SMA for all ~684 stocks — best quality),
+                (2) Pre-Run scan data (price vs 20d SMA — good quality, limited to scanned stocks),
+                (3) ETF proxy (ETF close vs its own 20d SMA — rough estimate). Tier 1 is used by default
+                when the API returns stock quote data.
               </li>
               <li>
                 <strong className="text-white">Composite weights are not backtested</strong> &mdash; The 25/15/20/15/15/10

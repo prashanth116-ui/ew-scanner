@@ -124,13 +124,21 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
   const H = 400;
   const PAD = 50;
 
-  // Find axis ranges
-  const ratios = sectors.map((s) => s.rsRatio);
-  const moms = sectors.map((s) => s.rsMomentum);
-  const rMin = Math.min(99, ...ratios) - 0.5;
-  const rMax = Math.max(101, ...ratios) + 0.5;
-  const mMin = Math.min(-0.1, ...moms) - 0.02;
-  const mMax = Math.max(0.1, ...moms) + 0.02;
+  // Find axis ranges (include trail points for proper scaling)
+  const allRatios: number[] = [];
+  const allMoms: number[] = [];
+  for (const s of sectors) {
+    allRatios.push(s.rsRatio);
+    allMoms.push(s.rsMomentum);
+    for (const pt of s.rrgTrail ?? []) {
+      allRatios.push(pt.rsRatio);
+      allMoms.push(pt.rsMomentum);
+    }
+  }
+  const rMin = Math.min(99, ...allRatios) - 0.5;
+  const rMax = Math.max(101, ...allRatios) + 0.5;
+  const mMin = Math.min(-0.1, ...allMoms) - 0.02;
+  const mMax = Math.max(0.1, ...allMoms) + 0.02;
 
   const scaleX = (v: number) => PAD + ((v - rMin) / (rMax - rMin)) * (W - 2 * PAD);
   const scaleY = (v: number) => H - PAD - ((v - mMin) / (mMax - mMin)) * (H - 2 * PAD);
@@ -162,14 +170,41 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
       <text x={W / 2} y={H - 8} textAnchor="middle" fill="#666" fontSize={10}>RS-Ratio</text>
       <text x={12} y={H / 2} textAnchor="middle" fill="#666" fontSize={10} transform={`rotate(-90,12,${H / 2})`}>RS-Momentum</text>
 
-      {/* Sector dots */}
+      {/* Trailing tails — 4-week history showing direction of movement */}
+      {sectors.map((s) => {
+        const trail = s.rrgTrail;
+        if (!trail || trail.length < 2) return null;
+        const color = quadrantDotColor(s.quadrant);
+        const points = trail.map((pt) => `${scaleX(pt.rsRatio)},${scaleY(pt.rsMomentum)}`).join(" ");
+        const isHov = hovered === s.sector;
+        return (
+          <g key={`trail-${s.sector}`}>
+            <polyline
+              points={points}
+              fill="none"
+              stroke={color}
+              strokeWidth={isHov ? 2 : 1.5}
+              opacity={isHov ? 0.8 : 0.3}
+              strokeLinejoin="round"
+            />
+            {/* Small dot at trail start (oldest point) */}
+            <circle
+              cx={scaleX(trail[0].rsRatio)}
+              cy={scaleY(trail[0].rsMomentum)}
+              r={2}
+              fill={color}
+              opacity={isHov ? 0.6 : 0.2}
+            />
+          </g>
+        );
+      })}
+
+      {/* Sector dots — labels shown on hover to avoid overlap with 13 sectors */}
       {sectors.map((s) => {
         const x = scaleX(s.rsRatio);
         const y = scaleY(s.rsMomentum);
         const color = quadrantDotColor(s.quadrant);
         const isHov = hovered === s.sector;
-        // Short label: first word or ETF
-        const label = s.etf;
 
         return (
           <g
@@ -187,19 +222,18 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
               strokeWidth={1.5}
               opacity={isHov ? 1 : 0.85}
             />
-            <text
-              x={x}
-              y={y - 10}
-              textAnchor="middle"
-              fill={color}
-              fontSize={isHov ? 11 : 9}
-              fontWeight={isHov ? "bold" : "normal"}
-            >
-              {label}
-            </text>
-            {isHov && (
-              <text x={x} y={y + 20} textAnchor="middle" fill="#a0a0a0" fontSize={10}>
-                {s.sector} ({s.compositeScore}/100)
+            {isHov ? (
+              <>
+                <text x={x} y={y - 12} textAnchor="middle" fill={color} fontSize={11} fontWeight="bold">
+                  {s.etf}
+                </text>
+                <text x={x} y={y + 20} textAnchor="middle" fill="#a0a0a0" fontSize={10}>
+                  {s.sector} ({s.compositeScore}/100)
+                </text>
+              </>
+            ) : (
+              <text x={x} y={y - 8} textAnchor="middle" fill={color} fontSize={8} opacity={0.7}>
+                {s.etf}
               </text>
             )}
           </g>
@@ -213,6 +247,7 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
 
 function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks: StockInSector[] }) {
   const [open, setOpen] = useState(false);
+  const [showNoData, setShowNoData] = useState(false);
 
   const leaders = stocks.filter((s) => s.rs20d !== null && s.rs20d > 0).sort((a, b) => (b.rs20d ?? 0) - (a.rs20d ?? 0));
   const laggards = stocks.filter((s) => s.rs20d !== null && s.rs20d <= 0).sort((a, b) => (a.rs20d ?? 0) - (b.rs20d ?? 0));
@@ -338,7 +373,14 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
                       {leaders.map((s) => (
                         <div key={s.ticker} className="flex items-center justify-between text-xs">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-medium text-white">{s.ticker}</span>
+                            <a
+                              href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium text-white hover:text-[#5ba3e6] transition-colors"
+                            >
+                              {s.ticker}
+                            </a>
                             <span className="text-[#555] truncate">{s.companyName}</span>
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
@@ -365,7 +407,14 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
                       {laggards.map((s) => (
                         <div key={s.ticker} className="flex items-center justify-between text-xs">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-medium text-white">{s.ticker}</span>
+                            <a
+                              href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium text-white hover:text-[#5ba3e6] transition-colors"
+                            >
+                              {s.ticker}
+                            </a>
                             <span className="text-[#555] truncate">{s.companyName}</span>
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
@@ -382,8 +431,22 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
               </div>
 
               {noData.length > 0 && (
-                <div className="mt-2 text-xs text-[#555]">
-                  No RS data: {noData.map((s) => s.ticker).join(", ")}
+                <div className="mt-2">
+                  <button
+                    onClick={() => setShowNoData(!showNoData)}
+                    className="text-xs text-[#555] hover:text-[#888] transition-colors"
+                  >
+                    {showNoData ? "Hide" : "Show"} {noData.length} stocks without scan data {showNoData ? "\u25B2" : "\u25BC"}
+                  </button>
+                  {showNoData && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {noData.map((s) => (
+                        <span key={s.ticker} className="rounded border border-[#2a2a2a] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#555]">
+                          {s.ticker}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -407,7 +470,7 @@ export default function SectorRotationPage() {
     setScanResults(loadScanResults());
   }, []);
 
-  // Build stock list per sector: ALL sector-universe stocks, enriched with pre-run data
+  // Build stock list per sector: ALL sector-universe stocks, enriched with pre-run + batch quote data
   const stocksBySector = useMemo(() => {
     // Index scan results by ticker for fast lookup
     const scanByTicker = new Map<string, (typeof scanResults)[number]>();
@@ -415,14 +478,19 @@ export default function SectorRotationPage() {
       scanByTicker.set(r.data.ticker, r);
     }
 
+    const quotes = data?.stockQuotes ?? {};
+
     const map = new Map<string, StockInSector[]>();
     for (const sectorDef of SECTOR_UNIVERSE) {
       const stocks: StockInSector[] = sectorDef.stocks.map((stock) => {
         const preRun = scanByTicker.get(stock.symbol);
+        const quote = quotes[stock.symbol];
+        // Prefer pre-run RS, fall back to batch quote pctFromSma50
+        const rs20d = preRun?.data.relativeStrength20d ?? quote?.pctFromSma50 ?? null;
         return {
           ticker: stock.symbol,
           companyName: stock.name,
-          rs20d: preRun?.data.relativeStrength20d ?? null,
+          rs20d,
           pctFromAth: preRun?.data.pctFromAth ?? null,
           finalScore: preRun?.scores.finalScore ?? 0,
           verdict: preRun?.verdict ?? "",
@@ -431,7 +499,7 @@ export default function SectorRotationPage() {
       map.set(sectorDef.displayName, stocks);
     }
     return map;
-  }, [scanResults]);
+  }, [scanResults, data]);
 
   const fetchData = useCallback(async (skipCache = false) => {
     setLoading(true);
@@ -472,7 +540,7 @@ export default function SectorRotationPage() {
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">Calculating sector rotation...</p>
-        <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 15 ETFs across 13 sectors</p>
+        <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 15 ETFs + batch quotes for ~684 stocks</p>
       </div>
     );
   }
@@ -554,7 +622,7 @@ export default function SectorRotationPage() {
       {/* Panel 2: Sector Heatmap Grid */}
       <div>
         <h2 className="mb-3 text-lg font-semibold text-white">Sector Scores</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {data.sectors.map((s) => (
             <div
               key={s.sector}
