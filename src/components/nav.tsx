@@ -90,13 +90,24 @@ export function Nav() {
         <div className="flex items-center gap-1">
           {/* Desktop scanner tabs */}
           <nav className="hidden items-center gap-1 sm:flex" aria-label="Scanner selection">
+            <Link
+              href="/about"
+              aria-current={pathname === "/about" ? "page" : undefined}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                pathname === "/about"
+                  ? "border-b-2 border-[#5ba3e6] text-white"
+                  : "text-[#a0a0a0] hover:text-white"
+              }`}
+            >
+              About
+            </Link>
             {scannerTabs.map((tab) => (
               <Link
                 key={tab.id}
                 href={tab.href}
                 aria-current={activeScanner === tab.id ? "page" : undefined}
                 className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                  activeScanner === tab.id
+                  activeScanner === tab.id && pathname !== "/about"
                     ? "border-b-2 border-[#5ba3e6] text-white"
                     : "text-[#a0a0a0] hover:text-white"
                 }`}
@@ -106,18 +117,8 @@ export function Nav() {
             ))}
           </nav>
 
-          {/* About + Pricing + Auth */}
+          {/* Pricing + Auth */}
           <div className="hidden items-center gap-2 sm:flex">
-            <Link
-              href="/about"
-              className={`px-2 py-1.5 text-sm font-medium transition-colors ${
-                pathname === "/about"
-                  ? "text-[#5ba3e6]"
-                  : "text-[#a0a0a0] hover:text-white"
-              }`}
-            >
-              About
-            </Link>
             <Link
               href="/pricing"
               className={`px-2 py-1.5 text-sm font-medium transition-colors ${
@@ -176,6 +177,19 @@ export function Nav() {
           className="border-t border-[#2a2a2a] bg-[#0f0f0f] px-4 py-3 sm:hidden"
           aria-label="Mobile navigation"
         >
+          <Link
+            href="/about"
+            onClick={closeMobile}
+            aria-current={pathname === "/about" ? "page" : undefined}
+            className={`flex rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              pathname === "/about"
+                ? "bg-[#185FA5]/20 text-[#5ba3e6]"
+                : "text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+            }`}
+          >
+            About
+          </Link>
+          <div className="mx-3 my-2 h-px bg-[#2a2a2a]" aria-hidden="true" />
           {scannerTabs.map((tab) => (
             <div key={tab.id} role="group" aria-label={tab.label}>
               <div className="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-[#666]">
@@ -202,13 +216,6 @@ export function Nav() {
             </div>
           ))}
           <div className="mx-3 my-2 h-px bg-[#2a2a2a]" aria-hidden="true" />
-          <Link
-            href="/about"
-            onClick={closeMobile}
-            className="flex rounded-md px-3 py-2 text-sm font-medium text-[#a0a0a0] transition-colors hover:bg-[#1a1a1a] hover:text-white"
-          >
-            About
-          </Link>
           <Link
             href="/pricing"
             onClick={closeMobile}

@@ -106,19 +106,13 @@ export default function AboutPage() {
             href="/"
             className="rounded-md bg-[#185FA5] px-6 py-3 text-sm font-semibold text-white hover:bg-[#1a6dba]"
           >
-            Open Scanner
+            Get Started
           </Link>
           <Link
-            href="/guide"
+            href="/pricing"
             className="rounded-md border border-[#2a2a2a] px-6 py-3 text-sm font-semibold text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
           >
-            Read the Guide
-          </Link>
-          <Link
-            href="/learn"
-            className="rounded-md border border-[#2a2a2a] px-6 py-3 text-sm font-semibold text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
-          >
-            Learn Elliott Wave
+            View Pricing
           </Link>
         </div>
       </section>
