@@ -39,6 +39,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
   ],
   confluence: [
     { href: "/confluence", label: "Scanner" },
+    { href: "/confluence/guide", label: "Guide" },
   ],
 };
 

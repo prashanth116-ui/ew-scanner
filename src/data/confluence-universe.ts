@@ -3,7 +3,7 @@
  * Returns tickers present in at least 2 of the 3 universe lists.
  */
 
-import { UNIVERSES, type TickerInfo } from "./ew-universes";
+import { UNIVERSES, UNIVERSE_KEYS, type TickerInfo } from "./ew-universes";
 import { SQUEEZE_UNIVERSE } from "./squeeze-universe";
 import { SECTOR_UNIVERSE } from "./sector-universe";
 
@@ -15,9 +15,13 @@ export function getConfluenceUniverse(): TickerInfo[] {
   // Build sets of symbols from each universe
   const ewSymbols = new Set<string>();
   const ewMap = new Map<string, TickerInfo>();
-  for (const ticker of UNIVERSES.SP500 ?? []) {
-    ewSymbols.add(ticker.symbol);
-    ewMap.set(ticker.symbol, ticker);
+  for (const key of UNIVERSE_KEYS) {
+    for (const ticker of UNIVERSES[key] ?? []) {
+      ewSymbols.add(ticker.symbol);
+      if (!ewMap.has(ticker.symbol)) {
+        ewMap.set(ticker.symbol, ticker);
+      }
+    }
   }
 
   const squeezeSymbols = new Set<string>();
