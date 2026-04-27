@@ -324,7 +324,7 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[#888]">Breadth (% &gt; 20d SMA)</span>
+              <span className="text-[#888]">Breadth (% &gt; 50d SMA)</span>
               <span className="text-white">{sector.breadthPct !== null ? `${sector.breadthPct}%` : "N/A"}</span>
             </div>
             <div className="flex justify-between">
@@ -572,6 +572,11 @@ export default function SectorRotationPage() {
             <span className="text-xs text-[#555]">
               {new Date(data.calculatedAt).toLocaleString()}
             </span>
+            {data.stockQuotes && (
+              <span className="text-xs text-[#555]">
+                {Object.keys(data.stockQuotes).length} quotes
+              </span>
+            )}
           </div>
         </div>
         <button

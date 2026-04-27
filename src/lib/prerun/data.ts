@@ -438,8 +438,11 @@ export async function fetchBatchQuotes(
   symbols: string[],
   batchSize = 80
 ): Promise<Map<string, BatchQuote>> {
-  const auth = await getYahooCrumb();
-  if (!auth) return new Map();
+  let auth = await getYahooCrumb();
+  if (!auth) {
+    console.error("[fetchBatchQuotes] Failed to get Yahoo crumb — returning empty");
+    return new Map();
+  }
 
   const results = new Map<string, BatchQuote>();
   const batches: string[][] = [];
@@ -447,20 +450,34 @@ export async function fetchBatchQuotes(
     batches.push(symbols.slice(i, i + batchSize));
   }
 
+  let hadAuth401 = false;
+
+  async function fetchBatch(
+    batch: string[],
+    crumb: string,
+    cookie: string
+  ): Promise<Record<string, unknown>[]> {
+    const symbolStr = batch.map((s) => encodeURIComponent(s)).join(",");
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolStr}&crumb=${encodeURIComponent(crumb)}`;
+    const res = await fetchWithTimeout(url, {
+      headers: { "User-Agent": UA, Cookie: cookie },
+    });
+    if (!res.ok) {
+      console.error(`[fetchBatchQuotes] HTTP ${res.status} for batch of ${batch.length} symbols`);
+      if (res.status === 401) hadAuth401 = true;
+      return [];
+    }
+    const data = await res.json();
+    return (
+      (data as { quoteResponse?: { result?: Record<string, unknown>[] } })
+        ?.quoteResponse?.result ?? []
+    );
+  }
+
+  // First attempt
+  const { crumb, cookie } = auth;
   const batchResults = await Promise.allSettled(
-    batches.map(async (batch) => {
-      const symbolStr = batch.map((s) => encodeURIComponent(s)).join(",");
-      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolStr}&fields=symbol,regularMarketPrice,fiftyDayAverage,regularMarketVolume,averageDailyVolume10Day&crumb=${encodeURIComponent(auth.crumb)}`;
-      const res = await fetchWithTimeout(url, {
-        headers: { "User-Agent": UA, Cookie: auth.cookie },
-      });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return (
-        (data as { quoteResponse?: { result?: Record<string, unknown>[] } })
-          ?.quoteResponse?.result ?? []
-      );
-    })
+    batches.map((batch) => fetchBatch(batch, crumb, cookie))
   );
 
   for (const r of batchResults) {
@@ -478,6 +495,34 @@ export async function fetchBatchQuotes(
     }
   }
 
+  // Retry with fresh crumb if we got 401s and have no results
+  if (hadAuth401 && results.size === 0) {
+    console.warn("[fetchBatchQuotes] Got 401, retrying with fresh crumb...");
+    invalidateCrumbCache();
+    auth = await getYahooCrumb();
+    if (!auth) return results;
+
+    const retryResults = await Promise.allSettled(
+      batches.map((batch) => fetchBatch(batch, auth!.crumb, auth!.cookie))
+    );
+
+    for (const r of retryResults) {
+      if (r.status !== "fulfilled") continue;
+      for (const quote of r.value) {
+        const symbol = quote.symbol as string;
+        if (!symbol) continue;
+        results.set(symbol, {
+          symbol,
+          price: (quote.regularMarketPrice as number) ?? 0,
+          sma50: (quote.fiftyDayAverage as number) ?? null,
+          volume: (quote.regularMarketVolume as number) ?? 0,
+          avgVolume10d: (quote.averageDailyVolume10Day as number) ?? 0,
+        });
+      }
+    }
+  }
+
+  console.log(`[fetchBatchQuotes] Fetched ${results.size}/${symbols.length} stock quotes`);
   return results;
 }
 
