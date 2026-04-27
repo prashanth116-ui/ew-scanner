@@ -98,6 +98,39 @@ function DataAgeBadge({ calculatedAt }: { calculatedAt: string }) {
   );
 }
 
+// ── Trading action helpers ──
+
+type TradingAction = "TRADE" | "BUILD" | "WATCH" | "TRIM" | "AVOID";
+
+function getTradingAction(s: SectorRotationScore): TradingAction {
+  // Best: LEADING with strong composite + positive acceleration
+  if (s.quadrant === "LEADING" && s.compositeScore >= 60 && s.acceleration > 0) return "TRADE";
+  // Early entry: IMPROVING with positive acceleration (textbook rotation entry)
+  if (s.quadrant === "IMPROVING" && s.acceleration > 0) return "BUILD";
+  // Good: LEADING with high composite (even if accel is turning)
+  if (s.quadrant === "LEADING" && s.compositeScore >= 60) return "TRADE";
+  // Decent: LEADING but weak composite — still outperforming SPY
+  if (s.quadrant === "LEADING") return "WATCH";
+  // Warning: WEAKENING — money starting to leave
+  if (s.quadrant === "WEAKENING") return "TRIM";
+  // Potential: IMPROVING but not yet accelerating
+  if (s.quadrant === "IMPROVING") return "WATCH";
+  // Transition signal: LAGGING but acceleration turning positive with decent composite
+  if (s.quadrant === "LAGGING" && s.acceleration > 0 && s.compositeScore >= 40) return "WATCH";
+  // Bottom: LAGGING
+  return "AVOID";
+}
+
+function actionBadge(action: TradingAction): { label: string; className: string } {
+  switch (action) {
+    case "TRADE": return { label: "TRADE", className: "bg-green-500/15 text-green-400 border-green-500/30" };
+    case "BUILD": return { label: "BUILD", className: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" };
+    case "WATCH": return { label: "WATCH", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+    case "TRIM": return { label: "TRIM", className: "bg-orange-500/15 text-orange-400 border-orange-500/30" };
+    case "AVOID": return { label: "AVOID", className: "bg-red-500/15 text-red-400 border-red-500/30" };
+  }
+}
+
 // ── Stock ranking helpers ──
 
 interface StockInSector {
@@ -268,6 +301,15 @@ function SectorDetail({ sector, stocks }: { sector: SectorRotationScore; stocks:
               <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${quadrantColor(sector.quadrant)}`}>
                 {sector.quadrant}
               </span>
+              {(() => {
+                const action = getTradingAction(sector);
+                const badge = actionBadge(action);
+                return (
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${badge.className}`}>
+                    {badge.label}
+                  </span>
+                );
+              })()}
               {sector.stealthAccumulation && (
                 <span className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-400">
                   STEALTH
@@ -659,11 +701,22 @@ export default function SectorRotationPage() {
                     style={{ width: `${s.compositeScore}%` }}
                   />
                 </div>
-                {(s.dataQuality ?? 100) < 100 && (
-                  <div className="mt-1 text-[10px] text-amber-400/70" title={`${s.dataQuality ?? 100}% of composite factors have real data`}>
-                    {s.dataQuality ?? 100}% data
-                  </div>
-                )}
+                <div className="mt-1.5 flex items-center justify-between">
+                  {(() => {
+                    const action = getTradingAction(s);
+                    const badge = actionBadge(action);
+                    return (
+                      <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>
+                        {badge.label}
+                      </span>
+                    );
+                  })()}
+                  {(s.dataQuality ?? 100) < 100 && (
+                    <span className="text-[10px] text-amber-400/70" title={`${s.dataQuality ?? 100}% of composite factors have real data`}>
+                      {s.dataQuality ?? 100}% data
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ))}
