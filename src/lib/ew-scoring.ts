@@ -257,12 +257,13 @@ export function scoreEnhanced(
   const rsWeighted = 0;
 
   const totalRaw = baseWeighted + fibWeighted + volWeighted + structWeighted + waveCountWeighted + rsWeighted;
-  const enhancedNormalized = Math.min(totalRaw / ENHANCED_MAX, 1);
+  const safeTotalRaw = Number.isFinite(totalRaw) ? totalRaw : 0;
+  const enhancedNormalized = Math.min(safeTotalRaw / ENHANCED_MAX, 1);
 
   return {
     ...base,
     sector: q.sector,
-    enhancedScore: Math.round(totalRaw * 10) / 10,
+    enhancedScore: Math.round(safeTotalRaw * 10) / 10,
     enhancedMax: ENHANCED_MAX,
     enhancedNormalized,
     confidenceTier: assignConfidenceTier(enhancedNormalized),

@@ -74,7 +74,7 @@ export function exportToCsv(
   const rows = candidates.map((c) =>
     [
       c.ticker,
-      `"${c.name}"`,
+      `"${c.name.replace(/"/g, '""')}"`,
       c.score,
       `${(c.normalizedScore * 100).toFixed(0)}%`,
       `${c.declinePct.toFixed(1)}%`,
@@ -85,7 +85,7 @@ export function exportToCsv(
       c.low.toFixed(2),
       c.lowYear,
       c.current.toFixed(2),
-      `"${labels[c.ticker] || "\u2014"}"`,
+      `"${(labels[c.ticker] || "\u2014").replace(/"/g, '""')}"`,
       c.passed ? "Yes" : "No",
     ].join(",")
   );
@@ -184,8 +184,8 @@ export function exportEnhancedToCsv(
   const rows = candidates.map((c) =>
     [
       c.ticker,
-      `"${c.name}"`,
-      `"${c.sector ?? ""}"`,
+      `"${c.name.replace(/"/g, '""')}"`,
+      `"${(c.sector ?? "").replace(/"/g, '""')}"`,
       mode,
       c.score,
       c.enhancedScore.toFixed(1),
@@ -194,7 +194,7 @@ export function exportEnhancedToCsv(
       `${c.declinePct.toFixed(1)}%`,
       c.monthsDecline.toFixed(1),
       `${c.recoveryPct.toFixed(1)}%`,
-      `"${c.fibAnalysis?.depthLabel ?? ""}"`,
+      `"${(c.fibAnalysis?.depthLabel ?? "").replace(/"/g, '""')}"`,
       c.fibAnalysis?.withinGoldenZone ? "Yes" : "No",
       c.volumeAnalysis?.volumeTrend ?? "",
       c.structureAnalysis?.classification ?? "",
@@ -204,7 +204,7 @@ export function exportEnhancedToCsv(
       c.low.toFixed(2),
       c.lowYear,
       c.current.toFixed(2),
-      `"${labels[c.ticker] || ""}"`,
+      `"${(labels[c.ticker] || "").replace(/"/g, '""')}"`,
     ].join(",")
   );
 

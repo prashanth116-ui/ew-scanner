@@ -72,9 +72,17 @@ export function EWDeepChart({
 
       chartRef.current = chart;
 
-      // Candlestick data
-      const candleData = series.timestamps.map((ts, i) => ({
-        time: ts as import("lightweight-charts").UTCTimestamp,
+      // Candlestick data — use minimum array length to prevent out-of-bounds
+      const barCount = Math.min(
+        series.timestamps.length,
+        series.open.length,
+        series.high.length,
+        series.low.length,
+        series.close.length,
+        series.volume.length
+      );
+      const candleData = Array.from({ length: barCount }, (_, i) => ({
+        time: series.timestamps[i] as import("lightweight-charts").UTCTimestamp,
         open: series.open[i],
         high: series.high[i],
         low: series.low[i],
@@ -91,8 +99,8 @@ export function EWDeepChart({
       candleSeries.setData(candleData);
 
       // Volume bars
-      const volData = series.timestamps.map((ts, i) => ({
-        time: ts as import("lightweight-charts").UTCTimestamp,
+      const volData = Array.from({ length: barCount }, (_, i) => ({
+        time: series.timestamps[i] as import("lightweight-charts").UTCTimestamp,
         value: series.volume[i],
         color: series.close[i] >= series.open[i] ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)",
       }));

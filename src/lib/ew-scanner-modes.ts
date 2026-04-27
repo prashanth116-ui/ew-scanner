@@ -65,8 +65,9 @@ export function applyModeFilters(
       });
 
     case "wave4":
-      // Shallow pullback: decline 10-40%, strong recovery (above 50% retracement)
+      // Shallow pullback: decline 10-40%, strong recovery (above 23.6% retracement)
       return candidates.filter((c) => {
+        if (c.declinePct < 10) return false;
         if (c.declinePct > 40) return false;
         const retrace = c.fibAnalysis?.retracementDepth ?? 0;
         if (retrace < 0.236) return false;

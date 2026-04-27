@@ -122,7 +122,7 @@ const UNIVERSES_DEF = {
     { symbol: "ILMN", name: "Illumina", sector: "Healthcare" },
     { symbol: "DXCM", name: "DexCom", sector: "Healthcare" },
     { symbol: "ALGN", name: "Align Technology", sector: "Healthcare" },
-{ symbol: "BMRN", name: "BioMarin", sector: "Healthcare" },
+    { symbol: "BMRN", name: "BioMarin", sector: "Healthcare" },
     { symbol: "EXAS", name: "Exact Sciences", sector: "Healthcare" },
   ],
   Energy: [

@@ -20,7 +20,9 @@ export function analyzeMomentum(
   // Rate of change during decline (negative value expected)
   const declineBars = lowIdx - athIdx;
   const declineRoc =
-    declineBars > 0 ? (close[lowIdx] - close[athIdx]) / close[athIdx] : 0;
+    declineBars > 0 && close[athIdx] > 0
+      ? (close[lowIdx] - close[athIdx]) / close[athIdx]
+      : 0;
 
   // Rate of change during recovery
   const recoveryBars = len - 1 - lowIdx;

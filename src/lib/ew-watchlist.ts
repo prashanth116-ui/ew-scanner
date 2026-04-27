@@ -43,7 +43,16 @@ export function saveScan(
   existing.unshift(scan);
   // Keep max 50 saved scans
   const trimmed = existing.slice(0, 50);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+  } catch {
+    // QuotaExceededError — trim to 20 and retry
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed.slice(0, 20)));
+    } catch {
+      return null;
+    }
+  }
 
   return scan;
 }
@@ -62,7 +71,9 @@ export function loadScans(): SavedScan[] {
 export function deleteScan(id: string): void {
   if (!isClient()) return;
   const scans = loadScans().filter((s) => s.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(scans));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(scans));
+  } catch { /* quota error on delete is unlikely but safe to ignore */ }
 }
 
 export function updateScan(
@@ -76,7 +87,9 @@ export function updateScan(
   if (updates.name !== undefined) scans[idx].name = updates.name;
   if (updates.notes !== undefined) scans[idx].notes = updates.notes;
   if (updates.tags !== undefined) scans[idx].tags = updates.tags;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(scans));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(scans));
+  } catch { /* quota — update lost but app continues */ }
 }
 
 /** Find the most recent scan matching mode+universe before the given date. */
@@ -122,7 +135,11 @@ export function saveCustomUniverse(name: string, tickers: string[]): CustomUnive
   existing.push(universe);
   // Keep max 10 custom universes
   const trimmed = existing.slice(-10);
-  localStorage.setItem(CUSTOM_UNIVERSE_KEY, JSON.stringify(trimmed));
+  try {
+    localStorage.setItem(CUSTOM_UNIVERSE_KEY, JSON.stringify(trimmed));
+  } catch {
+    return null;
+  }
 
   return universe;
 }
@@ -141,5 +158,7 @@ export function loadCustomUniverses(): CustomUniverse[] {
 export function deleteCustomUniverse(id: string): void {
   if (!isClient()) return;
   const universes = loadCustomUniverses().filter((u) => u.id !== id);
-  localStorage.setItem(CUSTOM_UNIVERSE_KEY, JSON.stringify(universes));
+  try {
+    localStorage.setItem(CUSTOM_UNIVERSE_KEY, JSON.stringify(universes));
+  } catch { /* safe to ignore */ }
 }
