@@ -19,6 +19,7 @@ const SECTIONS = [
   { id: "rrg-chart", label: "RRG Chart" },
   { id: "composite-score", label: "Composite Score" },
   { id: "leading-indicators", label: "Leading Indicators" },
+  { id: "trading-framework", label: "Trading Framework" },
   { id: "cross-sector", label: "Cross-Sector Pairs" },
   { id: "limitations", label: "Limitations" },
 ];
@@ -491,7 +492,154 @@ export default function SectorGuidePage() {
           </Tip>
         </Section>
 
-        {/* Section 6: Cross-Sector Pairs */}
+        {/* Section 6: Trading Framework */}
+        <Section
+          id="trading-framework"
+          title="Trading Framework"
+          icon={<Scale className="h-5 w-5 text-[#5ba3e6]" />}
+        >
+          <p>
+            Use the composite score, acceleration, and RRG quadrant together to decide <strong className="text-white">what to trade</strong>,{" "}
+            <strong className="text-white">what to watch</strong>, and <strong className="text-white">what to avoid</strong>.
+          </p>
+
+          <SubSection title="Action Matrix by Quadrant">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Quadrant</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Action</th>
+                    <th className="py-1.5 text-left font-medium">Why</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-green-400">LEADING</td>
+                    <td className="py-2 pr-3 text-green-400">Actively trade</td>
+                    <td className="py-2">Momentum + relative strength confirmed. These are the highest-probability setups. Ride winners, add on pullbacks to support.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-cyan-400">IMPROVING</td>
+                    <td className="py-2 pr-3 text-cyan-400">Build positions early</td>
+                    <td className="py-2">Best risk/reward entry zone. Sector is turning before consensus. Start small, add as it moves toward Leading. Look for stealth accumulation signals.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-amber-400">WEAKENING</td>
+                    <td className="py-2 pr-3 text-amber-400">Tighten stops, trim</td>
+                    <td className="py-2">Still outperforming but losing steam. Do not open new positions. Tighten trailing stops on existing holdings. Money is starting to leave.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 font-medium text-red-400">LAGGING</td>
+                    <td className="py-2 pr-3 text-red-400">Avoid entirely</td>
+                    <td className="py-2">Underperforming and getting worse. No new longs. Only revisit when acceleration turns positive (watch for Lagging &rarr; Improving transition).</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Minimum Thresholds for New Positions">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Signal</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Trade</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Watch</th>
+                    <th className="py-1.5 text-left font-medium">Avoid</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-white">Composite Score</td>
+                    <td className="py-2 pr-3 text-green-400">&ge; 60</td>
+                    <td className="py-2 pr-3 text-amber-400">40 &ndash; 59</td>
+                    <td className="py-2 text-red-400">&lt; 40</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-white">Acceleration</td>
+                    <td className="py-2 pr-3 text-green-400">&gt; 0 (positive)</td>
+                    <td className="py-2 pr-3 text-amber-400">&minus;20 to 0</td>
+                    <td className="py-2 text-red-400">&lt; &minus;20</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-white">Mansfield RS</td>
+                    <td className="py-2 pr-3 text-green-400">&gt; 0 (above SPY)</td>
+                    <td className="py-2 pr-3 text-amber-400">&minus;5 to 0</td>
+                    <td className="py-2 text-red-400">&lt; &minus;5</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 font-medium text-white">Quadrant</td>
+                    <td className="py-2 pr-3 text-green-400">LEADING / IMPROVING</td>
+                    <td className="py-2 pr-3 text-amber-400">WEAKENING</td>
+                    <td className="py-2 text-red-400">LAGGING</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2">
+              <strong className="text-white">Ideal setup:</strong> Composite &ge; 60 AND acceleration &gt; 0 AND quadrant is LEADING or IMPROVING.
+              Meeting all three = highest conviction. Meeting two of three = acceptable with tighter risk management.
+            </p>
+          </SubSection>
+
+          <SubSection title="Stock Selection Within a Sector">
+            <p>Once you identify a tradeable sector, pick the strongest individual stocks:</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>
+                <strong className="text-white">RS Leaders</strong> &mdash; In the sector detail accordion, stocks with the highest
+                positive RS (% above 50d SMA) are outperforming their peers. These lead the sector move.
+              </li>
+              <li>
+                <strong className="text-white">Pre-Run Score &ge; 15</strong> &mdash; Stocks with high EW Scanner scores have strong
+                technical setups (base patterns, volume, institutional accumulation).
+              </li>
+              <li>
+                <strong className="text-white">Insider Buying</strong> &mdash; Stocks with insider buys in the last 90 days confirm
+                smart money conviction at the company level.
+              </li>
+              <li>
+                <strong className="text-white">Avoid RS Laggards</strong> &mdash; Even in a strong sector, stocks with deeply negative RS
+                are dragging. A rising tide lifts most boats, but not the ones with holes.
+              </li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Examples">
+            <div className="space-y-3">
+              <div className="rounded-md bg-green-500/10 border border-green-500/20 p-3">
+                <div className="font-semibold text-green-400 text-[11px] mb-1">TRADE: Semiconductors (SMH)</div>
+                <div className="text-[10px] text-green-400/70">
+                  Composite 80, Acceleration +88, Mansfield RS +33, Quadrant LEADING.
+                  All thresholds exceeded. This is the strongest sector &mdash; buy leaders like AMD, NVDA, AVGO on pullbacks.
+                </div>
+              </div>
+              <div className="rounded-md bg-cyan-500/10 border border-cyan-500/20 p-3">
+                <div className="font-semibold text-cyan-400 text-[11px] mb-1">EARLY ENTRY: Software &amp; Cloud (IGV)</div>
+                <div className="text-[10px] text-cyan-400/70">
+                  Composite 33, Acceleration +831, Quadrant IMPROVING. Score is low but acceleration is extremely high &mdash;
+                  the sector is inflecting hard. Start small positions in the strongest names. This is a recovery play, not a momentum trade.
+                </div>
+              </div>
+              <div className="rounded-md bg-red-500/10 border border-red-500/20 p-3">
+                <div className="font-semibold text-red-400 text-[11px] mb-1">AVOID: Health Care (XLV)</div>
+                <div className="text-[10px] text-red-400/70">
+                  Composite 22, Acceleration &minus;172, Mansfield RS &minus;8, Quadrant LAGGING.
+                  All signals negative. No new positions until acceleration turns positive and the sector starts moving toward Improving.
+                </div>
+              </div>
+            </div>
+          </SubSection>
+
+          <Tip>
+            The simplest rule: <strong className="text-white">trade the LEADING sector, build positions in the IMPROVING sector,
+            and stay away from everything in LAGGING</strong>. Acceleration is your early warning &mdash; when it flips positive
+            in a LAGGING sector, that&apos;s your signal to start watching for the Lagging &rarr; Improving transition.
+          </Tip>
+        </Section>
+
+        {/* Section 7: Cross-Sector Pairs (was 6) */}
         <Section
           id="cross-sector"
           title="Cross-Sector Pairs"
