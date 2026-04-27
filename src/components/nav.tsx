@@ -148,8 +148,8 @@ export function Nav() {
         </div>
       </div>
 
-      {/* Row 2: Sub-nav (desktop only) */}
-      <div className="hidden border-t border-[#2a2a2a] sm:block">
+      {/* Row 2: Sub-nav (desktop only, hidden on About/Pricing) */}
+      {pathname !== "/about" && pathname !== "/pricing" && <div className="hidden border-t border-[#2a2a2a] sm:block">
         <nav
           className="mx-auto flex max-w-7xl items-center justify-center gap-1 px-6 py-1.5"
           aria-label={`${scannerTabs.find((t) => t.id === activeScanner)?.label} pages`}
@@ -169,7 +169,7 @@ export function Nav() {
             </Link>
           ))}
         </nav>
-      </div>
+      </div>}
 
       {/* Mobile nav */}
       {mobileOpen && (
