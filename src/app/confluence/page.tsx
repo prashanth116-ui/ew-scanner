@@ -840,13 +840,40 @@ export default function ConfluencePage() {
               <p className="text-xs mt-1">Try enabling more signal types or lowering thresholds.</p>
             </div>
           ) : !scanning ? (
-            <div className="flex flex-col items-center justify-center py-16 text-[#666]">
-              <Layers className="h-12 w-12 mb-3 opacity-30" />
-              <p className="text-sm font-medium">Confluence Scanner</p>
-              <p className="text-xs mt-1 max-w-md text-center">
-                Scan {getConfluenceUniverse().length} stocks across all 4 scanners.
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-12 text-center">
+              <Layers className="mx-auto h-12 w-12 text-[#333]" />
+              <h2 className="mt-4 text-lg font-semibold text-white">
+                Ready to Scan
+              </h2>
+              <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
+                Cross-reference {getConfluenceUniverse().length} stocks across all 4 scanners.
                 Stocks passing multiple scanners simultaneously represent the highest conviction setups.
               </p>
+              <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
+                <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                  <p className="text-2xl font-bold text-[#ec4899]">{getConfluenceUniverse().length}</p>
+                  <p className="text-[10px] text-[#666]">Stocks</p>
+                </div>
+                <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                  <p className="text-2xl font-bold text-[#ec4899]">4</p>
+                  <p className="text-[10px] text-[#666]">Scanners</p>
+                </div>
+                <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                  <p className="text-2xl font-bold text-[#ec4899]">4</p>
+                  <p className="text-[10px] text-[#666]">Presets</p>
+                </div>
+                <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                  <p className="text-2xl font-bold text-[#ec4899]">AI</p>
+                  <p className="text-[10px] text-[#666]">Summary</p>
+                </div>
+              </div>
+              <Link
+                href="/confluence/guide"
+                className="mt-6 inline-flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#141414] px-3 py-1.5 text-xs font-medium text-[#a0a0a0] transition-colors hover:text-[#ec4899] hover:border-[#ec4899]/30"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Confluence Guide
+              </Link>
             </div>
           ) : null}
         </main>

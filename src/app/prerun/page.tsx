@@ -846,22 +846,55 @@ function PreRunPage() {
             </p>
           </div>
         ) : !scanning ? (
-          <div className="flex flex-col items-center justify-center py-16 text-[#666]">
-            <Zap className="h-12 w-12 mb-3 opacity-30" />
-            <p className="text-sm font-medium">Pre-Run Scanner</p>
-            <p className="text-xs mt-1 max-w-md text-center">
-              Scan {getTickersForSector("All").length} stocks across {sectorBuckets.length} sector
-              buckets for multi-bagger setups. Scores 11 criteria (A-K) through 3 hard gates.
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-12 text-center">
+            <TrendingUp className="mx-auto h-12 w-12 text-[#333]" />
+            <h2 className="mt-4 text-lg font-semibold text-white">
+              Ready to Scan
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
+              Screen {getTickersForSector("All").length} stocks across {sectorBuckets.length} sectors
+              for multi-bagger setups. Scores 11 criteria through 3 hard gates with pattern matching.
             </p>
+            <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#10b981]">{getTickersForSector("All").length}</p>
+                <p className="text-[10px] text-[#666]">Stocks</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#10b981]">11</p>
+                <p className="text-[10px] text-[#666]">Score Criteria</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#10b981]">3</p>
+                <p className="text-[10px] text-[#666]">Hard Gates</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#10b981]">AI</p>
+                <p className="text-[10px] text-[#666]">Scoring</p>
+              </div>
+            </div>
             <Link
               href="/prerun/guide"
-              className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#a0a0a0] transition-colors hover:text-[#5ba3e6] hover:border-[#5ba3e6]/30"
+              className="mt-6 inline-flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#141414] px-3 py-1.5 text-xs font-medium text-[#a0a0a0] transition-colors hover:text-[#10b981] hover:border-[#10b981]/30"
             >
               <AlertTriangle className="h-3.5 w-3.5" />
               Pre-Run Guide
             </Link>
           </div>
         ) : null}
+
+        {/* Filtered-out disclosure */}
+        {rawResults.length > filtered.length && sorted.length > 0 && (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-xs text-[#555] hover:text-[#888] transition-colors">
+              {rawResults.length - filtered.length} stock{rawResults.length - filtered.length !== 1 ? "s" : ""} filtered out
+            </summary>
+            <p className="mt-1 text-[11px] text-[#444]">
+              {rawResults.length - filtered.length} of {rawResults.length} scanned stocks did not pass the current filter thresholds.
+              Adjust Min Score, % from ATH, or sector filter to include more results.
+            </p>
+          </details>
+        )}
       </main>
     </div>
   );

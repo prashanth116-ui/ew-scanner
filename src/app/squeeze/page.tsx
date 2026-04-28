@@ -266,6 +266,9 @@ function SqueezePage() {
     return arr;
   }, [scored, sortKey, sortDir]);
 
+  // Filtered-out tickers (transparency)
+  const filteredOutCount = rawResults.length - scored.length;
+
   // Stats
   const stats = useMemo(() => {
     if (scored.length === 0) return { avgSi: 0, avgDtc: 0, highCount: 0, finraDate: null as number | null };
@@ -1069,23 +1072,55 @@ function SqueezePage() {
             </p>
           </div>
         ) : !scanning ? (
-          <div className="flex flex-col items-center justify-center py-16 text-[#666]">
-            <Zap className="h-12 w-12 mb-3 opacity-30" />
-            <p className="text-sm font-medium">Short Squeeze Screener</p>
-            <p className="text-xs mt-1 max-w-md text-center">
-              Click Scan to screen {ALL_TICKERS.length} stocks for short squeeze
-              candidates. Combines SI%, days to cover, float size, volume
-              surge, and optional EW wave alignment.
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-12 text-center">
+            <Zap className="mx-auto h-12 w-12 text-[#333]" />
+            <h2 className="mt-4 text-lg font-semibold text-white">
+              Ready to Scan
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
+              Screen {ALL_TICKERS.length} stocks for short squeeze setups. Combines SI%, days to cover,
+              float analysis, volume surge, and optional EW wave alignment scoring.
             </p>
+            <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#f59e0b]">{ALL_TICKERS.length}</p>
+                <p className="text-[10px] text-[#666]">Stocks</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#f59e0b]">6</p>
+                <p className="text-[10px] text-[#666]">Scoring Factors</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#f59e0b]">5</p>
+                <p className="text-[10px] text-[#666]">Presets</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#f59e0b]">EW</p>
+                <p className="text-[10px] text-[#666]">Enrichment</p>
+              </div>
+            </div>
             <Link
               href="/squeeze/guide"
-              className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#a0a0a0] transition-colors hover:text-[#5ba3e6] hover:border-[#5ba3e6]/30"
+              className="mt-6 inline-flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#141414] px-3 py-1.5 text-xs font-medium text-[#a0a0a0] transition-colors hover:text-[#f59e0b] hover:border-[#f59e0b]/30"
             >
               <BookOpen className="h-3.5 w-3.5" />
-              Squeeze Guide &mdash; Case studies &amp; patterns
+              Squeeze Guide
             </Link>
           </div>
         ) : null}
+
+        {/* Filtered-out disclosure */}
+        {filteredOutCount > 0 && sorted.length > 0 && (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-xs text-[#555] hover:text-[#888] transition-colors">
+              {filteredOutCount} stock{filteredOutCount !== 1 ? "s" : ""} filtered out
+            </summary>
+            <p className="mt-1 text-[11px] text-[#444]">
+              {filteredOutCount} of {rawResults.length} scanned stocks did not pass the current filter thresholds.
+              Adjust Min SI%, Max Float, or Min Score to include more results.
+            </p>
+          </details>
+        )}
       </main>
     </div>
   );
