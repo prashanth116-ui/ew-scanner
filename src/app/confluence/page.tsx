@@ -42,7 +42,7 @@ import {
 } from "@/lib/confluence/storage";
 import { getConfluenceUniverse, getConfluenceTickerInfo } from "@/data/confluence-universe";
 import { getSectorForSymbol } from "@/data/sector-universe";
-import type { SectorRotationScore, SectorRotationResult } from "@/lib/sector-rotation/types";
+import type { SectorRotationScore, SectorRotationResult, RRGQuadrant } from "@/lib/sector-rotation/types";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 import { SidebarShell } from "@/components/sidebar-shell";
@@ -147,6 +147,9 @@ export default function ConfluencePage() {
   // Sector filter
   const [sectorFilter, setSectorFilter] = useState("All");
 
+  // Quadrant filter
+  const [quadrantFilter, setQuadrantFilter] = useState<Set<RRGQuadrant>>(new Set());
+
   // Scan state
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState("");
@@ -242,9 +245,10 @@ export default function ConfluencePage() {
     return confluenceResults.filter((r) => {
       if (!signalFilter.has(r.signal)) return false;
       if (sectorFilter !== "All" && r.sector !== sectorFilter) return false;
+      if (quadrantFilter.size > 0 && r.sectorResult && !quadrantFilter.has(r.sectorResult.quadrant as RRGQuadrant)) return false;
       return true;
     });
-  }, [confluenceResults, signalFilter, sectorFilter]);
+  }, [confluenceResults, signalFilter, sectorFilter, quadrantFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -409,6 +413,11 @@ export default function ConfluencePage() {
   const applyPreset = useCallback((preset: typeof CONFLUENCE_PRESETS[number]) => {
     setWeights({ ...preset.weights });
     setThresholds({ ...preset.thresholds });
+    if (preset.name === "Rotation Opportunities") {
+      setQuadrantFilter(new Set<RRGQuadrant>(["IMPROVING"]));
+    } else {
+      setQuadrantFilter(new Set());
+    }
   }, []);
 
   // Sort toggle
@@ -423,6 +432,16 @@ export default function ConfluencePage() {
     },
     [sortKey]
   );
+
+  // Quadrant filter toggle
+  const toggleQuadrant = useCallback((q: RRGQuadrant) => {
+    setQuadrantFilter((prev) => {
+      const s = new Set(prev);
+      if (s.has(q)) s.delete(q);
+      else s.add(q);
+      return s;
+    });
+  }, []);
 
   // Signal filter toggle
   const toggleSignal = useCallback((sig: ConfluenceSignal) => {
@@ -542,6 +561,45 @@ export default function ConfluencePage() {
                   </label>
                 ))}
               </div>
+          </SidebarSection>
+
+          {/* Quadrant filter */}
+          <SidebarSection title="Quadrant" sectionKey="quadrant" collapsed={collapsed.has("quadrant")} onToggle={toggleSection}>
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { q: "LEADING" as RRGQuadrant, color: "green", label: "Leading" },
+                { q: "IMPROVING" as RRGQuadrant, color: "cyan", label: "Improving" },
+                { q: "WEAKENING" as RRGQuadrant, color: "amber", label: "Weakening" },
+                { q: "LAGGING" as RRGQuadrant, color: "red", label: "Lagging" },
+              ] as const).map(({ q, color, label }) => {
+                const active = quadrantFilter.has(q);
+                const colorMap: Record<string, { active: string; inactive: string }> = {
+                  green:  { active: "bg-green-500/15 text-green-400 border-green-500/30", inactive: "text-[#a0a0a0] border-[#2a2a2a] hover:border-green-500/30 hover:text-green-400" },
+                  cyan:   { active: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30", inactive: "text-[#a0a0a0] border-[#2a2a2a] hover:border-cyan-500/30 hover:text-cyan-400" },
+                  amber:  { active: "bg-amber-500/15 text-amber-400 border-amber-500/30", inactive: "text-[#a0a0a0] border-[#2a2a2a] hover:border-amber-500/30 hover:text-amber-400" },
+                  red:    { active: "bg-red-500/15 text-red-400 border-red-500/30", inactive: "text-[#a0a0a0] border-[#2a2a2a] hover:border-red-500/30 hover:text-red-400" },
+                };
+                return (
+                  <button
+                    key={q}
+                    onClick={() => toggleQuadrant(q)}
+                    className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium border transition-colors ${
+                      active ? colorMap[color].active : colorMap[color].inactive
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              {quadrantFilter.size > 0 && (
+                <button
+                  onClick={() => setQuadrantFilter(new Set())}
+                  className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium text-[#666] border border-[#2a2a2a] hover:text-white hover:border-[#444] transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </SidebarSection>
 
           {/* Sector filter — enhanced with counts */}
@@ -695,6 +753,7 @@ export default function ConfluencePage() {
               setThresholds({ ...DEFAULT_THRESHOLDS });
               setSignalFilter(new Set(["strong", "moderate", "weak"]));
               setSectorFilter("All");
+              setQuadrantFilter(new Set());
             }}
             className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors"
           >
@@ -859,7 +918,7 @@ export default function ConfluencePage() {
                   <p className="text-[10px] text-[#666]">Scanners</p>
                 </div>
                 <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
-                  <p className="text-2xl font-bold text-[#ec4899]">4</p>
+                  <p className="text-2xl font-bold text-[#ec4899]">5</p>
                   <p className="text-[10px] text-[#666]">Presets</p>
                 </div>
                 <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">

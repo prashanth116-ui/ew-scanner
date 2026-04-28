@@ -20,6 +20,7 @@ const SECTIONS = [
   { id: "composite-score", label: "Composite Score" },
   { id: "leading-indicators", label: "Leading Indicators" },
   { id: "trading-framework", label: "Trading Framework" },
+  { id: "rotation-workflow", label: "Rotation Workflow" },
   { id: "cross-sector", label: "Cross-Sector Pairs" },
   { id: "limitations", label: "Limitations" },
 ];
@@ -639,7 +640,191 @@ export default function SectorGuidePage() {
           </Tip>
         </Section>
 
-        {/* Section 7: Cross-Sector Pairs (was 6) */}
+        {/* Section 7: Rotation Workflow */}
+        <Section
+          id="rotation-workflow"
+          title="Rotation Workflow"
+          icon={<TrendingUp className="h-5 w-5 text-[#5ba3e6]" />}
+        >
+          <p>
+            A step-by-step system for catching sector rotation early and turning it into trades.
+            This workflow connects the Sectors dashboard to the Pre-Run, EW, and Confluence scanners.
+          </p>
+
+          <SubSection title="The Rotation Playbook">
+            <p className="mb-2">Five steps from sector signal to trade entry:</p>
+            <ol className="list-decimal pl-4 space-y-2">
+              <li>
+                <strong className="text-white">Check the Sectors page</strong> &mdash; Find sectors in the{" "}
+                <span className="text-cyan-400">IMPROVING</span> quadrant. These are turning before the crowd notices.
+              </li>
+              <li>
+                <strong className="text-white">Confirm the inflection</strong> &mdash; Look for: acceleration &gt; 0,
+                Mansfield RS rising (even if still negative), and a{" "}
+                <span className="text-cyan-400 font-semibold">STEALTH</span> accumulation badge.
+                Two of three confirms the turn is real.
+              </li>
+              <li>
+                <strong className="text-white">Run the Pre-Run scanner filtered to that sector</strong> &mdash;
+                Focus on PRIORITY and KEEP stocks. These have the strongest fundamental + technical setups within
+                the rotating sector.
+              </li>
+              <li>
+                <strong className="text-white">Cross-check the EW scanner</strong> &mdash; Stocks in Wave 2 or Wave 4
+                positions offer the best risk/reward entries. A sector rotation + corrective wave = high-conviction setup.
+              </li>
+              <li>
+                <strong className="text-white">Use the Confluence &quot;Rotation Opportunities&quot; preset</strong> &mdash;
+                This preset auto-filters to IMPROVING sectors with heavy sector weighting. The intersection of all four
+                scanners gives you the highest-probability candidates.
+              </li>
+            </ol>
+          </SubSection>
+
+          <SubSection title="When to Enter">
+            <p className="mb-2">Three entry stages with different risk/reward profiles:</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Stage</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Signal</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Risk/Reward</th>
+                    <th className="py-1.5 text-left font-medium">Conviction</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-amber-400">Earliest</td>
+                    <td className="py-2 pr-3">Acceleration flips positive while sector is still in <span className="text-red-400">LAGGING</span></td>
+                    <td className="py-2 pr-3 text-green-400">Highest R/R</td>
+                    <td className="py-2 text-red-400">Lowest &mdash; sector hasn&apos;t turned yet</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-cyan-400">Confirmed</td>
+                    <td className="py-2 pr-3">Sector enters <span className="text-cyan-400">IMPROVING</span> + stealth accumulation badge</td>
+                    <td className="py-2 pr-3 text-green-400">Sweet spot</td>
+                    <td className="py-2 text-green-400">High &mdash; multiple signals confirming</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 font-medium text-green-400">Momentum</td>
+                    <td className="py-2 pr-3"><span className="text-cyan-400">IMPROVING</span> &rarr; <span className="text-green-400">LEADING</span> transition</td>
+                    <td className="py-2 pr-3 text-amber-400">Lower upside</td>
+                    <td className="py-2 text-green-400">Highest &mdash; trend confirmed by all</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Position Sizing by Conviction">
+            <p className="mb-2">Scale position size based on how many scanners confirm the setup:</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Scanner Passes</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Sector Quadrant</th>
+                    <th className="py-1.5 text-left font-medium">Position Size</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 text-green-400 font-medium">4/4 scanners pass</td>
+                    <td className="py-2 pr-3"><span className="text-cyan-400">IMPROVING</span> or <span className="text-green-400">LEADING</span></td>
+                    <td className="py-2 text-green-400 font-medium">Full position</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 text-amber-400 font-medium">3/4 scanners pass</td>
+                    <td className="py-2 pr-3"><span className="text-cyan-400">IMPROVING</span></td>
+                    <td className="py-2 text-amber-400 font-medium">Half position</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 text-red-400 font-medium">2/4 scanners pass</td>
+                    <td className="py-2 pr-3">Just entering <span className="text-cyan-400">IMPROVING</span></td>
+                    <td className="py-2 text-red-400 font-medium">Quarter position (speculative)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2">
+              Stocks in <span className="text-red-400">LAGGING</span> or <span className="text-amber-400">WEAKENING</span> sectors
+              should not receive new positions regardless of individual scanner scores.
+            </p>
+          </SubSection>
+
+          <SubSection title="Example Walkthrough: Semiconductors">
+            <div className="space-y-2">
+              <div className="rounded-md bg-cyan-500/10 border border-cyan-500/20 p-2">
+                <div className="font-semibold text-cyan-400 text-[11px]">Step 1: Sector Signal</div>
+                <div className="text-[10px] text-cyan-400/70">
+                  Semiconductors (SMH) enters IMPROVING quadrant. Acceleration: +88. Stealth accumulation: YES.
+                  The sector was beaten down but money flow is positive and breadth is diverging.
+                </div>
+              </div>
+              <div className="rounded-md bg-green-500/10 border border-green-500/20 p-2">
+                <div className="font-semibold text-green-400 text-[11px]">Step 2: Pre-Run Filter</div>
+                <div className="text-[10px] text-green-400/70">
+                  Run Pre-Run scanner &rarr; filter to Semiconductors. Find AMD (PRIORITY, score 18),
+                  AVGO (KEEP, score 15), QCOM (KEEP, score 14). These are the sector leaders with the
+                  strongest technical setups.
+                </div>
+              </div>
+              <div className="rounded-md bg-[#5ba3e6]/10 border border-[#5ba3e6]/20 p-2">
+                <div className="font-semibold text-[#5ba3e6] text-[11px]">Step 3: EW Cross-Check</div>
+                <div className="text-[10px] text-[#5ba3e6]/70">
+                  EW scanner shows AMD in Wave 2 position with deep fib retracement &mdash; ideal risk/reward
+                  entry. AVGO in Wave 4 &mdash; shallower pullback, higher confidence. Both confirm corrective
+                  wave + sector rotation alignment.
+                </div>
+              </div>
+              <div className="rounded-md bg-[#ec4899]/10 border border-[#ec4899]/20 p-2">
+                <div className="font-semibold text-[#ec4899] text-[11px]">Step 4: Confluence Confirmation</div>
+                <div className="text-[10px] text-[#ec4899]/70">
+                  Run Confluence scanner with &quot;Rotation Opportunities&quot; preset. AMD shows 4/4 passes,
+                  AVGO 3/4. Both flagged as STRONG signal. Enter full position in AMD, half in AVGO.
+                </div>
+              </div>
+            </div>
+          </SubSection>
+
+          <SubSection title="Setting Up Alerts">
+            <p>
+              The system sends a daily Telegram alert when sectors change quadrants. This runs automatically
+              after market close and only sends a message when there is a transition to report.
+            </p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>
+                <strong className="text-white">Rotation Starting</strong> (<span className="text-red-400">LAGGING</span> &rarr;{" "}
+                <span className="text-cyan-400">IMPROVING</span>) &mdash; Most actionable. A new sector is entering the
+                sweet spot. Start your Rotation Playbook immediately.
+              </li>
+              <li>
+                <strong className="text-white">Breakout Confirmed</strong> (<span className="text-cyan-400">IMPROVING</span> &rarr;{" "}
+                <span className="text-green-400">LEADING</span>) &mdash; Sector has fully turned. Add to existing
+                positions or enter with higher conviction.
+              </li>
+              <li>
+                <strong className="text-white">Momentum Fading</strong> (<span className="text-green-400">LEADING</span> &rarr;{" "}
+                <span className="text-amber-400">WEAKENING</span>) &mdash; Early warning. Tighten stops on holdings
+                in this sector. Do not add new positions.
+              </li>
+              <li>
+                <strong className="text-white">Rotation Out</strong> (<span className="text-amber-400">WEAKENING</span> &rarr;{" "}
+                <span className="text-red-400">LAGGING</span>) &mdash; Exit signal. Close remaining positions.
+                The sector has completed its rotation cycle.
+              </li>
+            </ul>
+          </SubSection>
+
+          <Tip>
+            The Rotation Playbook works best in environments with active rotation (high dispersion index on the
+            dashboard). When dispersion is low and all sectors move together, sector selection matters less &mdash;
+            focus on individual stock quality instead.
+          </Tip>
+        </Section>
+
+        {/* Section 8: Cross-Sector Pairs */}
         <Section
           id="cross-sector"
           title="Cross-Sector Pairs"

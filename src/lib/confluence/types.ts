@@ -138,4 +138,11 @@ export const CONFLUENCE_PRESETS: ConfluencePreset[] = [
     weights: { ew: 25, squeeze: 25, prerun: 25, sector: 25 },
     thresholds: { ew: 0.25, squeeze: 0.20, prerun: 0.25, sector: 0.25 },
   },
+  {
+    name: "Rotation Opportunities",
+    shortName: "Rotation",
+    description: "Stocks in IMPROVING sectors. Heavy sector weight to surface rotation plays early.",
+    weights: { ew: 20, squeeze: 15, prerun: 25, sector: 40 },
+    thresholds: { ew: 0.25, squeeze: 0.15, prerun: 0.30, sector: 0.50 },
+  },
 ];
