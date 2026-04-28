@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Clock } from "lucide-react";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Clock, FileDown, Copy, Check } from "lucide-react";
 import type {
   SectorRotationResult,
   SectorRotationScore,
@@ -22,6 +22,7 @@ import { loadScanResults } from "@/lib/prerun/storage";
 import { SECTOR_UNIVERSE, getSectorForSymbol } from "@/data/sector-universe";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { compositeColor, compositeTextColor } from "@/lib/color-utils";
+import { exportSectorsToExcel } from "@/lib/sector-rotation/export";
 
 // ── Color helpers ──
 
@@ -520,6 +521,7 @@ export default function SectorRotationPage() {
   const [sortMode, setSortMode] = useState<SortMode>("score");
   const [compareDate, setCompareDate] = useState<string | null>(null);
   const [history, setHistory] = useState<DailySnapshot[]>([]);
+  const [copiedToast, setCopiedToast] = useState(false);
 
   // Load history from localStorage
   useEffect(() => {
@@ -661,6 +663,21 @@ export default function SectorRotationPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  const handleExport = useCallback(() => {
+    if (data) exportSectorsToExcel(data);
+  }, [data]);
+
+  const copyWatchlist = useCallback(() => {
+    if (!data) return;
+    const tickers = data.topStocksToWatch
+      .flatMap((g) => g.stocks.map((s) => s.ticker))
+      .join(", ");
+    navigator.clipboard.writeText(tickers).then(() => {
+      setCopiedToast(true);
+      setTimeout(() => setCopiedToast(false), 2000);
+    });
+  }, [data]);
+
   if (loading && !data) {
     return (
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
@@ -705,14 +722,40 @@ export default function SectorRotationPage() {
             )}
           </div>
         </div>
-        <button
-          onClick={() => fetchData(true)}
-          disabled={loading}
-          className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+          >
+            <FileDown className="h-4 w-4" />
+            <span className="hidden sm:inline">Export</span>
+          </button>
+          <button
+            onClick={copyWatchlist}
+            className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+            title="Copy all top stock tickers to clipboard"
+          >
+            {copiedToast ? (
+              <>
+                <Check className="h-4 w-4 text-green-400" />
+                <span className="text-green-400 hidden sm:inline">Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-4 w-4" />
+                <span className="hidden sm:inline">Copy Tickers</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => fetchData(true)}
+            disabled={loading}
+            className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Panel 1: Rotation Status Banner */}

@@ -14,6 +14,9 @@ import {
   ExternalLink,
   ArrowUp,
   ArrowDown,
+  FileDown,
+  Save,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import type {
@@ -30,6 +33,13 @@ import {
   DEFAULT_THRESHOLDS,
 } from "@/lib/confluence/types";
 import { computeConfluenceScore, classifySignal } from "@/lib/confluence/scoring";
+import { exportConfluenceToExcel } from "@/lib/confluence/export";
+import {
+  saveConfluenceScan,
+  loadConfluenceScans,
+  deleteConfluenceScan,
+  type SavedConfluenceScan,
+} from "@/lib/confluence/storage";
 import { getConfluenceUniverse, getConfluenceTickerInfo } from "@/data/confluence-universe";
 import { getSectorForSymbol } from "@/data/sector-universe";
 import type { SectorRotationScore, SectorRotationResult } from "@/lib/sector-rotation/types";
@@ -161,6 +171,15 @@ export default function ConfluencePage() {
 
   // Export toast
   const [copiedToast, setCopiedToast] = useState(false);
+
+  // Saved scans
+  const [savedScans, setSavedScans] = useState<SavedConfluenceScan[]>([]);
+  const [saveName, setSaveName] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSavedScans(loadConfluenceScans());
+  }, []);
 
   // Cleanup abort on unmount
   useEffect(() => {
@@ -424,6 +443,35 @@ export default function ConfluencePage() {
     });
   }, [sorted]);
 
+  const handleExport = useCallback(() => {
+    if (sorted.length > 0) exportConfluenceToExcel(sorted);
+  }, [sorted]);
+
+  // Save/load scan handlers
+  const handleSaveScan = useCallback(() => {
+    const name = saveName.trim() || `Scan ${new Date().toLocaleString()}`;
+    const scan = saveConfluenceScan(name, weights, thresholds, [...signalFilter] as ConfluenceSignal[], sorted);
+    if (scan) {
+      setSavedScans(loadConfluenceScans());
+      setSaveName("");
+    }
+  }, [saveName, weights, thresholds, signalFilter, sorted]);
+
+  const handleLoadScan = useCallback(
+    (scan: SavedConfluenceScan) => {
+      setWeights(scan.weights);
+      setThresholds(scan.thresholds);
+      setSignalFilter(new Set(scan.signalFilters));
+    },
+    []
+  );
+
+  const handleDeleteScan = useCallback((id: string) => {
+    deleteConfluenceScan(id);
+    setSavedScans(loadConfluenceScans());
+    setDeleteConfirm(null);
+  }, []);
+
   return (
     <>
       <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
@@ -576,6 +624,70 @@ export default function ConfluencePage() {
                 </div>
           </SidebarSection>
 
+          {/* Saved Scans */}
+          <SidebarSection title="Saved Scans" sectionKey="saved" collapsed={collapsed.has("saved")} onToggle={toggleSection}>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                placeholder="Scan name…"
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                className="flex-1 rounded-md border border-[#2a2a2a] bg-[#141414] px-2 py-1 text-xs text-white placeholder-[#555] focus:border-[#ec4899]/50 focus:outline-none"
+              />
+              <button
+                onClick={handleSaveScan}
+                disabled={sorted.length === 0}
+                className="rounded-md border border-[#2a2a2a] px-2 py-1 text-xs text-[#a0a0a0] hover:text-[#ec4899] hover:border-[#ec4899]/30 transition-colors disabled:opacity-40"
+              >
+                <Save className="h-3 w-3" />
+              </button>
+            </div>
+            {savedScans.length === 0 ? (
+              <p className="text-[11px] text-[#555]">No saved scans yet.</p>
+            ) : (
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {savedScans.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between rounded-md border border-[#2a2a2a] bg-[#141414] px-2 py-1.5 text-xs"
+                  >
+                    <button
+                      onClick={() => handleLoadScan(s)}
+                      className="flex-1 text-left text-[#a0a0a0] hover:text-white truncate mr-2"
+                      title={`Load: ${s.name}\n${s.candidateCount} results • ${new Date(s.savedAt).toLocaleDateString()}`}
+                    >
+                      <span className="text-white">{s.name}</span>
+                      <span className="text-[#555] ml-1">({s.candidateCount})</span>
+                    </button>
+                    {deleteConfirm === s.id ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleDeleteScan(s.id)}
+                          className="text-red-400 hover:text-red-300 text-[10px]"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(null)}
+                          className="text-[#666] hover:text-white text-[10px]"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDeleteConfirm(s.id)}
+                        className="text-[#444] hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </SidebarSection>
+
           {/* Reset */}
           <button
             onClick={() => {
@@ -664,7 +776,14 @@ export default function ConfluencePage() {
               ))}
 
               {/* Export / Copy Watchlist */}
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={handleExport}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-[#a0a0a0] hover:text-white border border-[#2a2a2a] hover:border-[#444] transition-colors"
+                >
+                  <FileDown className="h-3 w-3" />
+                  <span className="hidden sm:inline">Export</span>
+                </button>
                 <button
                   onClick={copyWatchlist}
                   className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-[#a0a0a0] hover:text-white border border-[#2a2a2a] hover:border-[#444] transition-colors"
@@ -678,7 +797,7 @@ export default function ConfluencePage() {
                   ) : (
                     <>
                       <Copy className="h-3 w-3" />
-                      Copy Watchlist
+                      <span className="hidden sm:inline">Copy Watchlist</span>
                     </>
                   )}
                 </button>

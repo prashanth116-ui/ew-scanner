@@ -15,6 +15,8 @@ import {
   BookOpen,
   ListPlus,
   Check,
+  FileDown,
+  Copy,
 } from "lucide-react";
 import Link from "next/link";
 import { SQUEEZE_UNIVERSE } from "@/data/squeeze-universe";
@@ -34,6 +36,7 @@ import {
   loadSqueezeWatchlists,
   addToSqueezeWatchlist,
 } from "@/lib/squeeze-watchlists";
+import { exportSqueezeToExcel } from "@/lib/squeeze-export";
 import type {
   SqueezeData,
   ScoredSqueezeCandidate,
@@ -181,6 +184,9 @@ function SqueezePage() {
   // Watchlists (for add-to-watchlist)
   const [squeezeWatchlists, setSqueezeWatchlists] = useState<SqueezeWatchlist[]>([]);
   const [addedTicker, setAddedTicker] = useState<string | null>(null);
+
+  // Export / copy watchlist
+  const [copiedToast, setCopiedToast] = useState(false);
 
   // Load saved scans and watchlists on mount
   useEffect(() => {
@@ -549,6 +555,18 @@ function SqueezePage() {
     },
     [sortKey]
   );
+
+  const handleExport = useCallback(() => {
+    if (sorted.length > 0) exportSqueezeToExcel(sorted);
+  }, [sorted]);
+
+  const copyWatchlist = useCallback(() => {
+    const symbols = sorted.map((r) => r.ticker).join(", ");
+    navigator.clipboard.writeText(symbols).then(() => {
+      setCopiedToast(true);
+      setTimeout(() => setCopiedToast(false), 2000);
+    });
+  }, [sorted]);
 
   const SortHeader = ({
     label,
@@ -945,9 +963,9 @@ function SqueezePage() {
           </div>
         )}
 
-        {/* Enrich button */}
+        {/* Action bar: Enrich + Export + Copy */}
         {scored.length > 0 && !enriching && (
-          <div className="mb-4">
+          <div className="mb-4 flex items-center gap-2 flex-wrap">
             <button
               onClick={enrichWithEW}
               className="inline-flex items-center gap-2 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-xs font-medium text-[#a0a0a0] hover:text-[#5ba3e6] hover:border-[#5ba3e6]/30 transition-colors"
@@ -955,6 +973,32 @@ function SqueezePage() {
               <Zap className="h-3.5 w-3.5" />
               Enrich Top 20 with EW Wave Position
             </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={handleExport}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-[#a0a0a0] hover:text-white border border-[#2a2a2a] hover:border-[#444] transition-colors"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Export</span>
+              </button>
+              <button
+                onClick={copyWatchlist}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-[#a0a0a0] hover:text-white border border-[#2a2a2a] hover:border-[#444] transition-colors"
+                title="Copy all visible tickers to clipboard"
+              >
+                {copiedToast ? (
+                  <>
+                    <Check className="h-3 w-3 text-green-400" />
+                    <span className="text-green-400">Copied {sorted.length}</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3" />
+                    <span className="hidden sm:inline">Copy Watchlist</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
         {enriching && (

@@ -15,6 +15,7 @@ import {
   Check,
   FileDown,
   Sparkles,
+  Copy,
 } from "lucide-react";
 import Link from "next/link";
 import type {
@@ -124,6 +125,9 @@ function PreRunPage() {
   // Watchlist add feedback
   const [addedTicker, setAddedTicker] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
+
+  // Copy watchlist
+  const [copiedToast, setCopiedToast] = useState(false);
 
   // Seed watchlist on mount
   useEffect(() => {
@@ -399,6 +403,14 @@ function PreRunPage() {
   const handleExport = useCallback(() => {
     if (sorted.length === 0) return;
     exportPreRunToExcel(sorted);
+  }, [sorted]);
+
+  const copyWatchlist = useCallback(() => {
+    const symbols = sorted.map((r) => r.data.ticker).join(", ");
+    navigator.clipboard.writeText(symbols).then(() => {
+      setCopiedToast(true);
+      setTimeout(() => setCopiedToast(false), 2000);
+    });
   }, [sorted]);
 
   const sectorBuckets = useMemo(() => getSectorBuckets(), []);
@@ -778,6 +790,23 @@ function PreRunPage() {
               >
                 <FileDown className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Export</span>
+              </button>
+              <button
+                onClick={copyWatchlist}
+                className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+                title="Copy all visible tickers to clipboard"
+              >
+                {copiedToast ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-green-400" />
+                    <span className="text-green-400 hidden sm:inline">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Copy Tickers</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
