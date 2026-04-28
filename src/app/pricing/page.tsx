@@ -190,10 +190,17 @@ export default function PricingPage() {
             Get started with basic scanning
           </p>
           <div className="mt-4">
-            {currentTier === "free" ? (
+            {sub && currentTier === "free" ? (
               <span className="block rounded-md border border-[#2a2a2a] px-4 py-2 text-center text-sm text-[#a0a0a0]">
                 Current plan
               </span>
+            ) : !sub ? (
+              <Link
+                href="/"
+                className="block rounded-md border border-[#2a2a2a] px-4 py-2 text-center text-sm text-[#5ba3e6] hover:bg-[#1a1a1a]"
+              >
+                Get started
+              </Link>
             ) : (
               <span className="block rounded-md border border-[#2a2a2a] px-4 py-2 text-center text-sm text-[#555]">
                 —

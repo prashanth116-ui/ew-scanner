@@ -120,6 +120,14 @@ export default function EWScannerGuidePage() {
                 <span className="text-yellow-400"> yellow</span> = marginal, <span className="text-red-400">red</span> = weak.
                 For high-conviction setups, you want all 7 dots green (Decline, Direction, Duration, Recovery, Fib Zone, Volume, Structure).
               </p>
+              <p className="mt-2">
+                <strong className="text-white">Dots vs Enhanced Score:</strong> The 7 dots are binary pass/fail
+                checks for each signal dimension. The <strong className="text-white">20-point enhanced score</strong> is
+                a separate, more granular measure that weights each dimension differently (Fibonacci depth contributes
+                more than raw decline, for example). A stock can have 5/7 dots green but still score 16/20 if the
+                passing dots are the high-weight ones. Use dots for quick visual scanning; use the enhanced score
+                for ranking and comparison.
+              </p>
             </SubSection>
           </div>
         </Section>

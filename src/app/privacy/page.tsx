@@ -152,9 +152,9 @@ export default function PrivacyPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-white">10. Contact</h2>
         <p>
-          For privacy-related questions, contact us via the information on our{" "}
-          <a href="/about" className="text-[#5ba3e6] hover:underline">
-            About page
+          For privacy-related questions, contact us at{" "}
+          <a href="mailto:support@ewscanner.com" className="text-[#5ba3e6] hover:underline">
+            support@ewscanner.com
           </a>
           .
         </p>

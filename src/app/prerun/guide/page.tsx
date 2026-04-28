@@ -666,6 +666,14 @@ export default function PreRunGuidePage() {
             momentum modifier (&plusmn;1). The scanner compares each stock&apos;s 20-day
             return against its sector ETF.
           </p>
+          <p className="mt-1 text-xs text-[#666]">
+            <strong className="text-[#a0a0a0]">Note:</strong> These 11 buckets are
+            thematic groups built for multi-bagger screening, not the standard 13
+            GICS sectors. Some GICS sectors (e.g., Utilities, Real Estate) are
+            excluded because they rarely produce the explosive setups this scanner
+            targets, while others are split into sub-themes (e.g., Semiconductors
+            has 3 buckets for AI Optical, Packaging, and Power Semis).
+          </p>
         </Section>
 
         {/* Common Mistakes */}
@@ -723,6 +731,11 @@ export default function PreRunGuidePage() {
                   {webhookUrl}?secret=YOUR_TRADINGVIEW_WEBHOOK_SECRET
                 </code>
               </div>
+              <p className="mt-1 text-[10px] text-[#555]">
+                Replace <code className="text-[#5ba3e6]">YOUR_TRADINGVIEW_WEBHOOK_SECRET</code> with
+                the value of the <code className="text-[#5ba3e6]">TRADINGVIEW_WEBHOOK_SECRET</code> environment
+                variable configured in your Vercel project settings (Settings &rarr; Environment Variables).
+              </p>
             </div>
 
             <div>

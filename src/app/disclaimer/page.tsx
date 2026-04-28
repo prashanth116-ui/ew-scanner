@@ -112,6 +112,21 @@ export default function DisclaimerPage() {
           results have many inherent limitations including hindsight bias.
         </p>
       </section>
+
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold text-white">8. Contact</h2>
+        <p>
+          If you have questions about this disclaimer, contact us at{" "}
+          <a href="mailto:support@ewscanner.com" className="text-[#5ba3e6] hover:underline">
+            support@ewscanner.com
+          </a>{" "}
+          or visit our{" "}
+          <a href="/about" className="text-[#5ba3e6] hover:underline">
+            About page
+          </a>
+          .
+        </p>
+      </section>
     </article>
   );
 }

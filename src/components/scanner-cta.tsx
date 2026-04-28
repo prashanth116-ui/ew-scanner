@@ -10,7 +10,7 @@ const scanners = [
     href: "/",
     title: "EW Scanner",
     description:
-      "Algorithmic Elliott Wave counting with Fibonacci analysis and AI-powered deep analysis across 600+ stocks.",
+      "Algorithmic Elliott Wave counting with Fibonacci analysis and AI-powered deep analysis across 130+ curated stocks.",
     icon: Activity,
     color: "#5ba3e6",
   },
@@ -28,7 +28,7 @@ const scanners = [
     href: "/prerun",
     title: "Pre-Run Scanner",
     description:
-      "Multi-bagger candidates scored across 7 criteria — beaten-down stocks with structural catalysts.",
+      "Multi-bagger candidates scored across 11 criteria — beaten-down stocks with structural catalysts.",
     icon: TrendingUp,
     color: "#10b981",
   },

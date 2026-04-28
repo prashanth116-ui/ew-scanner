@@ -136,9 +136,9 @@ export default function TermsPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-white">11. Contact</h2>
         <p>
-          For questions about these Terms, contact us via the information on our{" "}
-          <a href="/about" className="text-[#5ba3e6] hover:underline">
-            About page
+          For questions about these Terms, contact us at{" "}
+          <a href="mailto:support@ewscanner.com" className="text-[#5ba3e6] hover:underline">
+            support@ewscanner.com
           </a>
           .
         </p>

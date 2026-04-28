@@ -7,6 +7,7 @@ const scannerLinks = [
   { href: "/squeeze", label: "Squeeze Screener" },
   { href: "/prerun", label: "Pre-Run Scanner" },
   { href: "/sectors", label: "Sector Rotation" },
+  { href: "/confluence", label: "Confluence Scanner" },
 ];
 
 const resourceLinks = [
@@ -15,6 +16,7 @@ const resourceLinks = [
   { href: "/squeeze/guide", label: "Squeeze Guide" },
   { href: "/prerun/guide", label: "Pre-Run Guide" },
   { href: "/sectors/guide", label: "Sector Rotation Guide" },
+  { href: "/confluence/guide", label: "Confluence Guide" },
   { href: "/learn", label: "Learn EW" },
   { href: "/pricing", label: "Pricing" },
 ];

@@ -678,12 +678,34 @@ export default function SectorRotationPage() {
     });
   }, [data]);
 
+  // Loading timeout — show retry after 90 seconds
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+  useEffect(() => {
+    if (!loading || data) {
+      setLoadingTimeout(false);
+      return;
+    }
+    const timer = setTimeout(() => setLoadingTimeout(true), 90_000);
+    return () => clearTimeout(timer);
+  }, [loading, data]);
+
   if (loading && !data) {
     return (
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">Calculating sector rotation...</p>
         <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 15 ETFs + batch quotes for ~900 stocks</p>
+        {loadingTimeout && (
+          <div className="mt-6">
+            <p className="text-xs text-amber-400">This is taking longer than expected.</p>
+            <button
+              onClick={() => { setLoadingTimeout(false); fetchData(true); }}
+              className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]"
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </div>
     );
   }

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Confluence Scanner",
+  title: "Confluence Guide",
   description:
-    "Highest conviction setups — stocks passing all 4 scanners simultaneously.",
+    "How four independent scanners combine into one high-conviction signal.",
 };
 
-export default function ConfluenceLayout({
+export default function ConfluenceGuideLayout({
   children,
 }: {
   children: React.ReactNode;

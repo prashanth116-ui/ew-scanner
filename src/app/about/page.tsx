@@ -27,7 +27,7 @@ const scanners = [
     href: "/squeeze",
     title: "Squeeze Screener",
     description:
-      "Screen 700+ stocks for short squeeze setups. Short interest, days to cover, float analysis, and Elliott Wave alignment scoring.",
+      "Screen 1,300+ stocks for short squeeze setups. Short interest, days to cover, float analysis, and Elliott Wave alignment scoring.",
     icon: Zap,
     features: [
       "5 preset strategies: GME-Style, Vol Ignition, Micro Float, Near Lows, Wide Net",
@@ -241,7 +241,7 @@ export default function AboutPage() {
                     <span className="font-medium text-white">Sector Rotation</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-[#a0a0a0]">Yahoo Finance daily bars (16 ETFs)</td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Yahoo Finance daily bars (15 ETFs)</td>
                 <td className="px-4 py-3">
                   <span className="rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-xs text-green-400">EOD</span>
                 </td>

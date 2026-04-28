@@ -421,9 +421,14 @@ export default function ConfluenceGuidePage() {
               desc="Emphasizes technical positioning (EW) and short squeeze setup. Best for finding beaten-down stocks with both wave support and short covering potential. Sector weight is low since squeeze plays can work against sector trends."
             />
             <PresetExplainer
-              name="Catalyst Driven"
+              name="Catalyst"
               config="Weights: EW 20, Squeeze 15, PreRun 40, Sector 25 | Thresholds: EW 0.30, Squeeze 0.20, PreRun 0.45, Sector 0.40"
               desc="Heavily weights Pre-Run catalysts (insider buying, earnings, beaten-down) and sector momentum. Best for event-driven setups where you want a clear 'why now' trigger plus macro support."
+            />
+            <PresetExplainer
+              name="Rotation Opportunities"
+              config="Weights: EW 20, Squeeze 15, PreRun 25, Sector 40 | Thresholds: EW 0.25, Squeeze 0.15, PreRun 0.30, Sector 0.50"
+              desc="Stocks in IMPROVING sectors. Heavy sector weight (40%) surfaces rotation plays early. High sector threshold ensures only strong-rotation sectors pass. Use this to find the next sector leaders before the crowd."
             />
             <PresetExplainer
               name="Wide Net"
