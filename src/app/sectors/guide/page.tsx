@@ -220,7 +220,7 @@ export default function SectorGuidePage() {
               </table>
             </div>
             <p className="mt-2 text-[10px] text-[#555]">
-              ~684 stocks classified across 13 GICS-based sectors. Each sector has a 1:1 ETF proxy.
+              ~1,378 stocks classified across 13 GICS-based sectors. Each sector has a 1:1 ETF proxy.
               Semiconductors and Biotech are split from Technology and Health Care respectively for finer granularity.
             </p>
           </SubSection>
@@ -261,6 +261,19 @@ export default function SectorGuidePage() {
               Scores are color-coded: <span className="text-green-400">green</span> &ge;67,{" "}
               <span className="text-amber-400">amber</span> 33&ndash;66, <span className="text-red-400">red</span> &lt;33.
             </p>
+            <p className="mt-2">
+              <strong className="text-white">Trend arrows</strong> reflect the 20-day price return of the sector ETF:{" "}
+              <span className="text-green-400">&uarr;</span> &gt;3%,{" "}
+              <span className="text-green-400">&nearr;</span> 1&ndash;3%,{" "}
+              <span className="text-[#a0a0a0]">&rarr;</span> &minus;1% to +1%,{" "}
+              <span className="text-red-400">&searr;</span> &minus;3% to &minus;1%,{" "}
+              <span className="text-red-400">&darr;</span> &lt;&minus;3%.
+              These show price <em>trend direction</em>, not acceleration.
+            </p>
+            <p className="mt-2">
+              <strong className="text-white">Unusual Volume</strong> is flagged when a sector ETF&apos;s latest volume exceeds 1.5&times;
+              its 20-day average &mdash; often an early signal of institutional rotation into or out of the sector.
+            </p>
           </SubSection>
 
           <SubSection title="Panel 3: RRG Chart">
@@ -276,8 +289,9 @@ export default function SectorGuidePage() {
               may predict upcoming rotation (see Leading Indicators section below).
             </p>
             <p>
-              <strong className="text-white">Stocks to Watch</strong> shows the top-ranked stocks within sectors that
-              are improving or showing stealth accumulation, scored by pre-run score, insider buys, and options flow.
+              <strong className="text-white">Stocks to Watch</strong> shows the top 5 stocks within up to 3 sectors that
+              are improving or showing stealth accumulation. Stocks are ranked by a weighted score: 40% pre-run score,
+              24% each for earnings and institutional quality, and 12% combined for insider buys and options flow.
               This panel requires a Pre-Run scan to have been run first.
             </p>
           </SubSection>
@@ -414,7 +428,7 @@ export default function SectorGuidePage() {
                   <td className="py-2 pr-3 font-medium text-white">Breadth</td>
                   <td className="py-2 pr-3">15%</td>
                   <td className="py-2 pr-3">% of sector stocks above their 50-day SMA (batch quotes) or 20-day SMA (pre-run)</td>
-                  <td className="py-2">Shows internal health. High breadth + declining ETF = bullish divergence. Uses batch Yahoo quotes for all ~684 stocks. Falls back to pre-run data or ETF proxy if quotes unavailable.</td>
+                  <td className="py-2">Shows internal health. High breadth + declining ETF = bullish divergence. Uses batch Yahoo quotes for all ~1,378 stocks. Falls back to pre-run data or ETF proxy if quotes unavailable.</td>
                 </tr>
                 <tr>
                   <td className="py-2 pr-3 font-medium text-white">Smart Money</td>
@@ -466,7 +480,7 @@ export default function SectorGuidePage() {
 
           <SubSection title="2. Breadth Divergence">
             <p>
-              <strong className="text-white">Signal:</strong> More than 50% of sector stocks are above their 20-day SMA AND the sector ETF&apos;s 20-day return is negative.
+              <strong className="text-white">Signal:</strong> More than 50% of sector stocks are above their 50-day SMA AND the sector ETF&apos;s 20-day return is negative.
             </p>
             <p>
               <strong className="text-white">What it means:</strong> The individual stocks are healthier than the ETF
@@ -517,13 +531,13 @@ export default function SectorGuidePage() {
                 <tbody className="text-[#c0c0c0]">
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-2 pr-3 font-medium text-green-400">LEADING</td>
-                    <td className="py-2 pr-3 text-green-400">Actively trade</td>
-                    <td className="py-2">Momentum + relative strength confirmed. These are the highest-probability setups. Ride winners, add on pullbacks to support.</td>
+                    <td className="py-2 pr-3 text-green-400">Trade (if score &ge; 60)</td>
+                    <td className="py-2">Momentum + relative strength confirmed. Actively trade when composite &ge; 60 and acceleration &gt; 0. If composite is below 60, <em>watch</em> rather than trade &mdash; relative strength alone isn&apos;t enough.</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-2 pr-3 font-medium text-cyan-400">IMPROVING</td>
-                    <td className="py-2 pr-3 text-cyan-400">Build positions early</td>
-                    <td className="py-2">Best risk/reward entry zone. Sector is turning before consensus. Start small, add as it moves toward Leading. Look for stealth accumulation signals.</td>
+                    <td className="py-2 pr-3 text-cyan-400">Build (if accelerating)</td>
+                    <td className="py-2">Best risk/reward entry zone when acceleration is positive. Start small, add as it moves toward Leading. If acceleration is flat or negative, <em>watch</em> and wait for confirmation.</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-2 pr-3 font-medium text-amber-400">WEAKENING</td>
@@ -532,8 +546,8 @@ export default function SectorGuidePage() {
                   </tr>
                   <tr>
                     <td className="py-2 pr-3 font-medium text-red-400">LAGGING</td>
-                    <td className="py-2 pr-3 text-red-400">Avoid entirely</td>
-                    <td className="py-2">Underperforming and getting worse. No new longs. Only revisit when acceleration turns positive (watch for Lagging &rarr; Improving transition).</td>
+                    <td className="py-2 pr-3 text-red-400">Avoid (watch if turning)</td>
+                    <td className="py-2">Underperforming and getting worse. No new longs. Exception: if acceleration turns positive and composite &ge; 40, it&apos;s worth watching for a Lagging &rarr; Improving transition.</td>
                   </tr>
                 </tbody>
               </table>
@@ -913,7 +927,7 @@ export default function SectorGuidePage() {
               </li>
               <li>
                 <strong className="text-white">Breadth data sources</strong> &mdash; Breadth uses a 3-tier cascade:
-                (1) batch quotes from Yahoo Finance (price vs 50d SMA for all ~684 stocks — best quality),
+                (1) batch quotes from Yahoo Finance (price vs 50d SMA for all ~1,378 stocks — best quality),
                 (2) Pre-Run scan data (price vs 20d SMA — good quality, limited to scanned stocks),
                 (3) ETF proxy (ETF close vs its own 20d SMA — rough estimate). Tier 1 is used by default
                 when the API returns stock quote data.

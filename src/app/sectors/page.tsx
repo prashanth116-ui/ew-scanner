@@ -694,7 +694,7 @@ export default function SectorRotationPage() {
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">Calculating sector rotation...</p>
-        <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 15 ETFs + batch quotes for ~900 stocks</p>
+        <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 13 ETFs + batch quotes for ~1,378 stocks</p>
         {loadingTimeout && (
           <div className="mt-6">
             <p className="text-xs text-amber-400">This is taking longer than expected.</p>

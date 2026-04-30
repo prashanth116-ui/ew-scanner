@@ -51,8 +51,8 @@ function calcAcceleration(closes: number[]): number {
   if (rocSeries.length < 6) return 0;
   const current = rocSeries[rocSeries.length - 1];
   const past = rocSeries[rocSeries.length - 6];
-  if (past === 0) return current > 0 ? 1 : current < 0 ? -1 : 0;
-  return ((current - past) / Math.abs(past)) * 100;
+  // Simple difference (change in ROC) — avoids near-zero denominator amplification
+  return current - past;
 }
 
 function calcMansfieldRS(sectorCloses: number[], spyCloses: number[]): number {
@@ -218,12 +218,14 @@ function calcRRG(
 // ── Normalization helpers ──
 
 function percentileRank(values: number[], target: number): number {
+  if (values.length === 0) return 50;
   const sorted = [...values].sort((a, b) => a - b);
   const below = sorted.filter((v) => v < target).length;
   return (below / sorted.length) * 100;
 }
 
 function clampNormalize(value: number, min: number, max: number): number {
+  if (max === min) return 50;
   const clamped = Math.max(min, Math.min(max, value));
   return ((clamped - min) / (max - min)) * 100;
 }
@@ -615,7 +617,7 @@ export async function calculateSectorRotation(
     }
   }
 
-  // Cross-sector pairs
+  // Cross-sector pairs — align by timestamp to avoid comparing different dates
   function pairAnalysis(
     numChart: ChartData | undefined,
     denChart: ChartData | undefined
@@ -623,10 +625,24 @@ export async function calculateSectorRotation(
     if (!numChart || !denChart || numChart.closes.length < 21 || denChart.closes.length < 21) {
       return { ratio: 0, trend: "N/A" };
     }
-    const denNow = denChart.closes[denChart.closes.length - 1];
-    const denPast = denChart.closes[denChart.closes.length - 21];
-    const currentRatio = denNow !== 0 ? numChart.closes[numChart.closes.length - 1] / denNow : 0;
-    const pastRatio = denPast !== 0 ? numChart.closes[numChart.closes.length - 21] / denPast : 0;
+    // Build timestamp-aligned close maps
+    const denMap = new Map<number, number>();
+    for (let i = 0; i < denChart.timestamps.length; i++) {
+      denMap.set(denChart.timestamps[i], denChart.closes[i]);
+    }
+    // Find aligned pairs (numerator timestamps that exist in denominator)
+    const aligned: { numClose: number; denClose: number }[] = [];
+    for (let i = 0; i < numChart.timestamps.length; i++) {
+      const denClose = denMap.get(numChart.timestamps[i]);
+      if (denClose !== undefined && denClose !== 0) {
+        aligned.push({ numClose: numChart.closes[i], denClose });
+      }
+    }
+    if (aligned.length < 21) return { ratio: 0, trend: "N/A" };
+    const now = aligned[aligned.length - 1];
+    const past = aligned[aligned.length - 21];
+    const currentRatio = now.numClose / now.denClose;
+    const pastRatio = past.numClose / past.denClose;
     const change = pastRatio !== 0 ? ((currentRatio - pastRatio) / pastRatio) * 100 : 0;
     let trend: string;
     if (change > 1) trend = "Rising (Risk-On)";

@@ -241,7 +241,7 @@ export default function AboutPage() {
                     <span className="font-medium text-white">Sector Rotation</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-[#a0a0a0]">Yahoo Finance daily bars (15 ETFs)</td>
+                <td className="px-4 py-3 text-[#a0a0a0]">Yahoo Finance daily bars (13 ETFs)</td>
                 <td className="px-4 py-3">
                   <span className="rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-xs text-green-400">EOD</span>
                 </td>

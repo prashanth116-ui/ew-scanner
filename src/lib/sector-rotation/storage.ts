@@ -1,6 +1,6 @@
 /**
  * Client-side localStorage cache for sector rotation data.
- * 24-hour TTL. Mirrors prerun/storage.ts pattern.
+ * 4-hour TTL. Mirrors prerun/storage.ts pattern.
  */
 
 import type { SectorRotationResult } from "./types";

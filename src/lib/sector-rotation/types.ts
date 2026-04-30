@@ -19,7 +19,7 @@ export interface SectorRotationScore {
   flowPriceDivergence: boolean;
   breadthDivergence: boolean;
   accelerationInflection: boolean;
-  breadthPct: number | null;   // % of stocks > 20d SMA (stock-level if >= 5, ETF proxy otherwise)
+  breadthPct: number | null;   // % of stocks > 50d SMA (stock-level if >= 5, ETF proxy otherwise)
 
   // Tier 3: Smart Money
   aggregateInsiderBuys: number;

@@ -6,9 +6,23 @@ import { logError } from "@/lib/error-logger";
 
 /**
  * Sector rotation alert cron — runs at 22:00 UTC weekdays.
- * Compares current quadrants vs yesterday's snapshot.
+ * Compares current quadrants vs previous snapshot.
  * Sends Telegram alert only when sectors change quadrants.
+ *
+ * State persistence (2-tier):
+ *   1. Module-level cache — survives across warm Vercel invocations (same instance)
+ *   2. SECTOR_ROTATION_PREVIOUS env var — cold-start fallback (manually seeded)
+ *
+ * Limitation: If the Vercel instance cold-starts AND the env var is stale,
+ * transitions may be missed for that day. Add Vercel KV for bulletproof persistence.
  */
+
+// Module-level cache — persists across warm invocations on the same instance
+let cachedPrevious: {
+  date: string;
+  sectors: { sector: string; quadrant: string }[];
+} | null = null;
+
 export async function GET(request: NextRequest) {
   // Verify Vercel Cron secret
   const cronSecret = process.env.CRON_SECRET;
@@ -24,16 +38,16 @@ export async function GET(request: NextRequest) {
     // 1. Fetch fresh sector data
     const current = await calculateSectorRotation();
 
-    // 2. Load previous snapshot from KV or env-stored state
-    //    For serverless cron, we store yesterday's quadrants in an env-parseable format.
-    //    Use SECTOR_ROTATION_PREVIOUS env var as JSON: { sectors: [{ sector, quadrant }] }
-    let previous: { date: string; sectors: { sector: string; quadrant: string }[] } | null = null;
-    const prevStr = process.env.SECTOR_ROTATION_PREVIOUS;
-    if (prevStr) {
-      try {
-        previous = JSON.parse(prevStr);
-      } catch {
-        // Invalid JSON — treat as no previous
+    // 2. Load previous snapshot (module cache first, env var fallback)
+    let previous = cachedPrevious;
+    if (!previous) {
+      const prevStr = process.env.SECTOR_ROTATION_PREVIOUS;
+      if (prevStr) {
+        try {
+          previous = JSON.parse(prevStr);
+        } catch {
+          // Invalid JSON — treat as no previous
+        }
       }
     }
 
@@ -57,8 +71,8 @@ export async function GET(request: NextRequest) {
 
     const transitions = detectTransitions(current, previousSnapshot);
 
-    // 4. Build the new "previous" state for next run
-    const newPrevious = {
+    // 4. Persist current state for next run (module-level cache)
+    cachedPrevious = {
       date: current.calculatedAt.slice(0, 10),
       sectors: current.sectors.map((s) => ({
         sector: s.sector,
@@ -94,7 +108,8 @@ export async function GET(request: NextRequest) {
         from: t.from,
         to: t.to,
       })),
-      currentQuadrants: newPrevious,
+      currentQuadrants: cachedPrevious,
+      stateSource: previous === cachedPrevious ? "cache" : previous ? "env" : "none",
     });
   } catch (err) {
     logError("sector-rotation/alert", err);
