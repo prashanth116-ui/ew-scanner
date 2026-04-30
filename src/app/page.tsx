@@ -384,7 +384,9 @@ function EWScannerPage() {
             }),
           });
           const labelData = await labelRes.json();
-          if (labelData.labels?.[ticker]) {
+          if (labelData.billing) {
+            setApiKeyMissing(true);
+          } else if (labelData.labels?.[ticker]) {
             setTickerLabel(labelData.labels[ticker]);
           }
         } catch {
@@ -582,7 +584,7 @@ function EWScannerPage() {
         });
 
         const labelData = await labelRes.json();
-        if (labelData.error?.includes("ANTHROPIC_API_KEY")) {
+        if (labelData.billing || labelData.error?.includes("ANTHROPIC_API_KEY")) {
           setApiKeyMissing(true);
         } else {
           setLabels(labelData.labels ?? {});
@@ -672,12 +674,18 @@ function EWScannerPage() {
         });
 
         const data = await res.json();
-        setDeepAnalysis(data.analysis ?? "No analysis returned.");
-        if (data.structured) {
-          setDeepStructured(data.structured as DeepAnalysisResult);
+        if (data.billing) {
+          setDeepAnalysis("AI analysis is temporarily unavailable \u2014 API credits need to be replenished. Scanning and scoring still work without AI.");
+        } else if (!res.ok) {
+          setDeepAnalysis(data.error ?? data.analysis ?? "Analysis unavailable.");
+        } else {
+          setDeepAnalysis(data.analysis ?? "No analysis returned.");
+          if (data.structured) {
+            setDeepStructured(data.structured as DeepAnalysisResult);
+          }
         }
       } catch {
-        setDeepAnalysis("Failed to generate analysis.");
+        setDeepAnalysis("Failed to generate analysis. Please try again.");
       }
       setDeepLoading(false);
     },
@@ -764,9 +772,9 @@ function EWScannerPage() {
         <div className="flex items-center gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
           <AlertTriangle className="h-5 w-5 shrink-0 text-yellow-400" />
           <div className="text-sm">
-            <p className="font-medium text-yellow-400">ANTHROPIC_API_KEY not configured</p>
+            <p className="font-medium text-yellow-400">AI features unavailable</p>
             <p className="text-yellow-400/70">
-              AI wave labeling and deep analysis are disabled. Scanning and scoring still work.
+              AI wave labeling and deep analysis are temporarily disabled (API key missing or credits exhausted). Scanning and scoring still work.
             </p>
           </div>
           <button onClick={() => setApiKeyMissing(false)} className="ml-auto shrink-0 p-1 text-yellow-400/50 hover:text-yellow-400">

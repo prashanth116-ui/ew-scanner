@@ -275,6 +275,16 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
   } catch (err) {
     logError("api/deep", err, { ticker: data.ticker });
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ analysis: `Error: ${message}` });
+
+    // Detect billing/credit errors for user-friendly messaging
+    const isBilling = message.includes("credit balance") || message.includes("billing") || message.includes("purchase credits");
+    if (isBilling) {
+      return NextResponse.json(
+        { error: "API credits exhausted", billing: true, analysis: "AI analysis is temporarily unavailable — API credits need to be replenished." },
+        { status: 402 }
+      );
+    }
+
+    return NextResponse.json({ analysis: `Analysis unavailable: ${message}` });
   }
 }

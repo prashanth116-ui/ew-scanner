@@ -172,6 +172,16 @@ ${chunkLines}`;
   } catch (err) {
     logError("api/label", err);
     const message = err instanceof Error ? err.message : "Unknown error";
+
+    // Detect billing/credit errors for user-friendly messaging
+    const isBilling = message.includes("credit balance") || message.includes("billing") || message.includes("purchase credits");
+    if (isBilling) {
+      return NextResponse.json(
+        { labels: {}, error: "API credits exhausted", billing: true },
+        { status: 402 }
+      );
+    }
+
     return NextResponse.json({ labels: {}, error: message });
   }
 }

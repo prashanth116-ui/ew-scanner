@@ -231,9 +231,16 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     logError("api/prerun/cron/nightly", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Cron failed" },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : "Cron failed";
+
+    const isBilling = message.includes("credit balance") || message.includes("billing") || message.includes("purchase credits");
+    if (isBilling) {
+      return NextResponse.json(
+        { error: "API credits exhausted", billing: true },
+        { status: 402 }
+      );
+    }
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

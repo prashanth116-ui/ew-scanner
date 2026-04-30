@@ -112,9 +112,16 @@ Reply with ONLY valid JSON (no code fences):
     }
   } catch (err) {
     logError("api/prerun/ai-score", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "AI scoring failed" },
-      { status: 502 }
-    );
+    const message = err instanceof Error ? err.message : "AI scoring failed";
+
+    const isBilling = message.includes("credit balance") || message.includes("billing") || message.includes("purchase credits");
+    if (isBilling) {
+      return NextResponse.json(
+        { error: "API credits exhausted", billing: true },
+        { status: 402 }
+      );
+    }
+
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }
