@@ -294,27 +294,40 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
   try {
     const client = new Anthropic();
 
-    // Retry with exponential backoff for transient overload errors
+    const MODELS = [
+      "claude-sonnet-4-5-20250929",
+      "claude-haiku-3-5-20241022",
+    ];
+
+    // Try primary model with retries, then fall back to secondary model
     let msg: Anthropic.Messages.Message | null = null;
-    const MAX_RETRIES = 3;
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        msg = await client.messages.create({
-          model: "claude-sonnet-4-5-20250929",
-          max_tokens: 800,
-          messages: [{ role: "user", content: prompt }],
-        });
-        break;
-      } catch (retryErr) {
-        const isOverloaded =
-          retryErr instanceof Error &&
-          (retryErr.message.includes("overloaded") || retryErr.message.includes("529"));
-        if (isOverloaded && attempt < MAX_RETRIES) {
-          await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
-          continue;
+    const MAX_RETRIES = 2;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          msg = await client.messages.create({
+            model,
+            max_tokens: 800,
+            messages: [{ role: "user", content: prompt }],
+          });
+          succeeded = true;
+          break;
+        } catch (retryErr) {
+          const isOverloaded =
+            retryErr instanceof Error &&
+            (retryErr.message.includes("overloaded") || retryErr.message.includes("529"));
+          if (isOverloaded && attempt < MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+            continue;
+          }
+          if (isOverloaded && model !== MODELS[MODELS.length - 1]) {
+            break; // try fallback model
+          }
+          throw retryErr;
         }
-        throw retryErr;
       }
+      if (succeeded) break;
     }
 
     if (!msg) throw new Error("Failed to get API response after retries");
