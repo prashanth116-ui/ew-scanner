@@ -58,7 +58,9 @@ export function applyModeFilters(
   switch (mode) {
     case "wave2":
       // Classic: significant decline, some recovery, Fib golden zone preferred
+      // Reject structural override stocks — stocks at ATH are not Wave 2 bottoms
       return candidates.filter((c) => {
+        if (c.trueAth != null) return false;
         if (c.declinePct < 15) return false;
         if (c.recoveryPct < 5) return false;
         return true;
@@ -66,7 +68,14 @@ export function applyModeFilters(
 
     case "wave4":
       // Shallow pullback: decline 10-40%, strong recovery (above 23.6% retracement)
+      // For structural stocks, check decline from trueAth (5-25% = valid Wave 4 of new impulse)
       return candidates.filter((c) => {
+        if (c.trueAth != null) {
+          const declineFromAth = c.trueAth > 0
+            ? ((c.trueAth - c.current) / c.trueAth) * 100
+            : 0;
+          return declineFromAth >= 5 && declineFromAth <= 25;
+        }
         if (c.declinePct < 10) return false;
         if (c.declinePct > 40) return false;
         const retrace = c.fibAnalysis?.retracementDepth ?? 0;
@@ -76,7 +85,9 @@ export function applyModeFilters(
 
     case "wave5":
       // Near ATH: high recovery, looking for divergence
+      // Accept structural override stocks — they're near ATH, which fits Wave 5 / exhaustion
       return candidates.filter((c) => {
+        if (c.trueAth != null) return true;
         if (c.recoveryPct < 40) return false;
         const retrace = c.fibAnalysis?.retracementDepth ?? 0;
         if (retrace < 0.786) return false;
@@ -85,7 +96,9 @@ export function applyModeFilters(
 
     case "breakout":
       // Breaking out: high recovery with volume confirmation
+      // Accept structural override stocks — they're breaking to new highs
       return candidates.filter((c) => {
+        if (c.trueAth != null) return true;
         if (c.recoveryPct < 25) return false;
         return true;
       });

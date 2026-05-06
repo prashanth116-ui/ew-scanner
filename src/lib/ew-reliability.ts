@@ -90,9 +90,17 @@ export function computeReliabilityScore(
     if (microStatus.targets.length > 0) breakdown.targetAvailability += 5;
   }
 
-  // 6. Structural override penalty (-10)
+  // 6. Structural override penalty (-20) + stale targets penalty (-10)
   if (candidate.trueAth != null) {
-    breakdown.structuralPenalty = -10;
+    breakdown.structuralPenalty = -20;
+
+    // Additional penalty when all wave targets are below current price (stale targets)
+    if (macroWc) {
+      const macroStatus = getWaveStatusInfo(macroWc, candidate.current);
+      if (macroStatus.targets.length > 0 && macroStatus.targets.every(t => t.price < candidate.current)) {
+        breakdown.structuralPenalty -= 10;
+      }
+    }
   }
 
   const raw =
@@ -105,8 +113,12 @@ export function computeReliabilityScore(
 
   const score = Math.max(0, Math.min(100, Math.round(raw)));
 
-  const label: ReliabilityResult["label"] =
+  // Cap structural override stocks at "Medium" — never "High"
+  let label: ReliabilityResult["label"] =
     score >= 70 ? "High" : score >= 40 ? "Medium" : "Low";
+  if (candidate.trueAth != null && label === "High") {
+    label = "Medium";
+  }
 
   return { score, label, breakdown };
 }

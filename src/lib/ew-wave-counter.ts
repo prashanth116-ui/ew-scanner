@@ -1067,6 +1067,64 @@ export function getWaveStatusInfo(wc: WaveCount, currentPrice: number): WaveStat
   return { status, statusLabel, currentWave, direction: dir ?? "up", targets };
 }
 
+// ── Forward Targets for Structural Override Stocks ──
+
+export interface ForwardTargets {
+  /** Retracement support levels below current price (from trueAth → priorTrough range) */
+  support: { label: string; price: number }[];
+  /** Fibonacci extension targets above the ATH */
+  extensions: { label: string; price: number }[];
+}
+
+/**
+ * Compute forward-looking Fibonacci targets for stocks at/near ATH.
+ * Used when structural override produces stale targets from a prior correction.
+ *
+ * - Support levels: 23.6%, 38.2%, 50%, 61.8% retracement of (trueAth - priorTrough)
+ * - Extension targets: 100%, 127.2%, 161.8% extension above trueAth
+ *
+ * Only includes support levels below currentPrice and extensions above currentPrice.
+ */
+export function computeForwardTargets(
+  trueAth: number,
+  priorTrough: number,
+  currentPrice: number
+): ForwardTargets {
+  const impulseRange = trueAth - priorTrough;
+  if (impulseRange <= 0) return { support: [], extensions: [] };
+
+  const retracementRatios = [
+    { ratio: 0.236, label: "23.6% support" },
+    { ratio: 0.382, label: "38.2% support" },
+    { ratio: 0.500, label: "50% support" },
+    { ratio: 0.618, label: "61.8% support" },
+  ];
+
+  const extensionRatios = [
+    { ratio: 1.0, label: "100% extension" },
+    { ratio: 1.272, label: "127.2% extension" },
+    { ratio: 1.618, label: "161.8% extension" },
+  ];
+
+  const support: { label: string; price: number }[] = [];
+  for (const { ratio, label } of retracementRatios) {
+    const price = trueAth - impulseRange * ratio;
+    if (price < currentPrice && price > 0) {
+      support.push({ label, price: Math.round(price * 100) / 100 });
+    }
+  }
+
+  const extensions: { label: string; price: number }[] = [];
+  for (const { ratio, label } of extensionRatios) {
+    const price = priorTrough + impulseRange * ratio;
+    if (price > currentPrice) {
+      extensions.push({ label, price: Math.round(price * 100) / 100 });
+    }
+  }
+
+  return { support, extensions };
+}
+
 // ── Multi-Timeframe Confirmation ──
 
 /**

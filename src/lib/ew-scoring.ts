@@ -205,9 +205,10 @@ export function scoreEnhanced(
     };
   }
 
-  // Run analyses
-  const volumeAnalysis = analyzeVolume(q.series, q.athIdx, q.lowIdx);
-  const momentumAnalysis = analyzeMomentum(q.series, q.athIdx, q.lowIdx);
+  // Run analyses — structural override stocks use recent-window mode
+  const recentOpts = q.trueAth != null ? { recentBars: 26 } : undefined;
+  const volumeAnalysis = analyzeVolume(q.series, q.athIdx, q.lowIdx, recentOpts);
+  const momentumAnalysis = analyzeMomentum(q.series, q.athIdx, q.lowIdx, recentOpts);
   const structureAnalysis = classifyStructure(q.series, q.athIdx, q.lowIdx);
 
   // V3: Run wave counter
@@ -247,13 +248,15 @@ export function scoreEnhanced(
   const structWeighted = structScore * weights.structure;
 
   // V3: Wave count quality score (0-5, weighted)
+  // Tighter calibration: score 50 (prev → 4) now → 3, requires 80+ for max score
   let waveCountScore = 0;
   if (waveCount) {
-    if (waveCount.isValid && waveCount.score >= 70) waveCountScore = 5;
-    else if (waveCount.isValid && waveCount.score >= 50) waveCountScore = 4;
-    else if (waveCount.isValid) waveCountScore = 3;
-    else if (waveCount.score >= 50) waveCountScore = 2;
-    else if (waveCount.score > 0) waveCountScore = 1;
+    if (waveCount.isValid && waveCount.score >= 80) waveCountScore = 5;
+    else if (waveCount.isValid && waveCount.score >= 65) waveCountScore = 4;
+    else if (waveCount.isValid && waveCount.score >= 50) waveCountScore = 3;
+    else if (waveCount.isValid) waveCountScore = 2;
+    else if (waveCount.score >= 50) waveCountScore = 1.5;
+    else if (waveCount.score > 0) waveCountScore = 0.5;
   }
   const waveCountWeighted = waveCountScore * weights.waveCount;
 

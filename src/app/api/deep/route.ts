@@ -240,10 +240,11 @@ export async function POST(request: NextRequest) {
 
   const hasWavePoints = data.wavePoints && data.wavePoints.length > 0;
 
-  // Forward-looking directive for completed patterns
+  // Forward-looking directive for completed patterns or structural override stocks
   let forwardContext = "";
   const pos = (data.waveCountPosition ?? "").toLowerCase();
-  if (pos.includes("beyond wave 5") || pos.includes("post-wave 5") || pos.includes("correction may be complete")) {
+  const isStructural = data.trueAth != null;
+  if (isStructural || pos.includes("beyond wave 5") || pos.includes("post-wave 5") || pos.includes("correction may be complete")) {
     forwardContext = `\nIMPORTANT: The algorithmic wave count shows a COMPLETED pattern (${data.waveCountPosition}). Your analysis must focus on what comes NEXT — not rehash what already happened. Specifically:
 - What is the likely next wave structure (new impulse cycle, corrective bounce, etc.)?
 - What are realistic UPSIDE targets for the recovery, using Fibonacci retracement levels of the prior decline?
@@ -258,7 +259,15 @@ export async function POST(request: NextRequest) {
     const trueLowLine = data.trueLow != null
       ? `\nThe post-ATH low was $${data.trueLow.toFixed(2)}${data.trueLowDate ? ` (${data.trueLowDate})` : ""} — a ${((data.trueAth - data.trueLow) / data.trueAth * 100).toFixed(1)}% decline from the new ATH.`
       : "";
-    structuralContext = `\nIMPORTANT: This stock recently reached a new all-time high of $${data.trueAth.toFixed(2)}${data.trueAthDate ? ` (${data.trueAthDate})` : ""}, surpassing its prior structural peak of $${data.ath.toFixed(2)}.${trueLowLine}\nThe analysis uses the previous structural correction ($${data.ath.toFixed(0)} to $${data.low.toFixed(0)}) as the wave reference frame. Current price at $${data.current.toFixed(2)} is above the prior peak, indicating extended impulse or new wave cycle.\n`;
+    structuralContext = `\nSTRUCTURAL OVERRIDE CONTEXT:
+This stock reached a new all-time high of $${data.trueAth.toFixed(2)}${data.trueAthDate ? ` (${data.trueAthDate})` : ""}, surpassing its prior structural peak of $${data.ath.toFixed(2)}.${trueLowLine}
+The wave count and targets below are from the PRIOR correction ($${data.ath.toFixed(0)} → $${data.low.toFixed(0)}), which has been FULLY RETRACED. That correction is complete — the stock has moved well beyond it.
+
+CRITICAL FOR STRUCTURAL OVERRIDE:
+- Any targets below the current price ($${data.current.toFixed(2)}) are SUPPORT LEVELS only — they are NOT future price targets.
+- "nextTarget" MUST be above the current price. Use the forward extension targets provided (100%, 127.2%, 161.8% extensions).
+- Focus your analysis on: where is this stock in the NEW impulse cycle that began from the prior correction low?
+- The prior correction wave count provides structural context (support levels, cycle rhythm) but NOT forward targets.\n`;
   }
 
   const prompt = `You are an expert Elliott Wave analyst. Provide a deep analysis for ${data.ticker} (${data.name}).
@@ -275,7 +284,7 @@ ${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisCon
 Timeframes: ${data.htf} (primary) / ${data.ltf} (sub-waves)
 ${hasWavePoints ? `
 CRITICAL: The wave points above are from algorithmic swing detection on actual price data. You MUST reference these exact prices in your analysis. Do NOT invent different wave prices. Your job is to INTERPRET the algorithmic wave count — explain what it means, assess confidence, provide targets and invalidation — not to re-count the waves with made-up prices.
-IMPORTANT: Use ONLY the prices and Fibonacci levels provided above. Do NOT calculate or estimate prices that aren't given. If the prior impulse start price is provided, use that exact value — do NOT invent a different starting price.${data.waveTargets?.length ? `
+${isStructural ? `NOTE: This is a structural override stock. The wave points are from the PRIOR completed correction — use them as historical context and support levels. Forward-looking extension targets are provided separately above. Use those for "nextTarget" (must be above current price). For "keyLevels", combine forward extension targets with prior wave points as support.` : `IMPORTANT: Use ONLY the prices and Fibonacci levels provided above. Do NOT calculate or estimate prices that aren't given. If the prior impulse start price is provided, use that exact value — do NOT invent a different starting price.`}${data.waveTargets?.length ? `
 TARGETS: The pre-computed targets above are from three analytical frameworks: primary (macro weekly), micro (daily), and alternate count. You MUST use these exact prices — do NOT calculate your own. For "nextTarget", pick the most relevant target above current price (for recovery/uptrend) or below (for correction/downtrend). Prefer micro targets for near-term outlook and primary targets for the bigger picture. For "keyLevels", use wave points and targets from all three sets. The "invalidation" level should be the wave start or the extreme that invalidates the count.` : ""}` : ""}
 
 Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:

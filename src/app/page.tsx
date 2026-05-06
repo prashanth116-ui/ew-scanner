@@ -46,7 +46,7 @@ import type {
 import { SCANNER_MODES, getModeConfig, applyModeFilters } from "@/lib/ew-scanner-modes";
 import { saveScan, loadScans, deleteScan, loadCustomUniverses } from "@/lib/ew-watchlist";
 import { loadWatchlists, addToWatchlist } from "@/lib/ew-watchlists";
-import { confirmMultiTimeframe, getWaveStatusInfo, countWaves } from "@/lib/ew-wave-counter";
+import { confirmMultiTimeframe, getWaveStatusInfo, countWaves, computeForwardTargets } from "@/lib/ew-wave-counter";
 import { computeReliabilityScore } from "@/lib/ew-reliability";
 import { EWSparkline } from "@/components/ew-sparkline";
 import { EWFibBar } from "@/components/ew-fib-bar";
@@ -674,7 +674,7 @@ function EWScannerPage() {
               price: w.price,
               date: w.timestamp && candidate.series
                 ? new Date(w.timestamp * 1000).toISOString().slice(0, 10)
-                : candidate.series
+                : candidate.series && w.index >= 0 && w.index < candidate.series.timestamps.length
                   ? new Date(candidate.series.timestamps[w.index] * 1000).toISOString().slice(0, 10)
                   : "unknown",
               type: w.type,
@@ -683,7 +683,14 @@ function EWScannerPage() {
             waveTargets: (() => {
               if (!candidate.waveCount) return undefined;
               const info = getWaveStatusInfo(candidate.waveCount, candidate.current);
-              return info.targets.length > 0 ? info.targets : undefined;
+              const targets = info.targets.length > 0 ? info.targets : undefined;
+              // Replace stale targets for structural override stocks
+              if (candidate.trueAth != null && targets && targets.every(t => t.price < candidate.current)) {
+                const fwd = computeForwardTargets(candidate.trueAth, candidate.low, candidate.current);
+                const forwardTargets = [...fwd.support, ...fwd.extensions];
+                return forwardTargets.length > 0 ? forwardTargets : targets;
+              }
+              return targets;
             })(),
             waveStartPrice: candidate.waveCount?.waveStart?.price,
             // Micro (daily) wave count
@@ -692,7 +699,7 @@ function EWScannerPage() {
               price: w.price,
               date: w.timestamp && candidate.dailySeries
                 ? new Date(w.timestamp * 1000).toISOString().slice(0, 10)
-                : candidate.dailySeries
+                : candidate.dailySeries && w.index >= 0 && w.index < candidate.dailySeries.timestamps.length
                   ? new Date(candidate.dailySeries.timestamps[w.index] * 1000).toISOString().slice(0, 10)
                   : "unknown",
               type: w.type,
@@ -701,7 +708,13 @@ function EWScannerPage() {
             microWaveTargets: (() => {
               if (!candidate.dailyWaveCount) return undefined;
               const info = getWaveStatusInfo(candidate.dailyWaveCount, candidate.current);
-              return info.targets.length > 0 ? info.targets : undefined;
+              const targets = info.targets.length > 0 ? info.targets : undefined;
+              if (candidate.trueAth != null && targets && targets.every(t => t.price < candidate.current)) {
+                const fwd = computeForwardTargets(candidate.trueAth, candidate.low, candidate.current);
+                const forwardTargets = [...fwd.support, ...fwd.extensions];
+                return forwardTargets.length > 0 ? forwardTargets : targets;
+              }
+              return targets;
             })(),
             microWaveStartPrice: candidate.dailyWaveCount?.waveStart?.price,
             // Alternate wave count
@@ -710,7 +723,7 @@ function EWScannerPage() {
               price: w.price,
               date: w.timestamp && candidate.series
                 ? new Date(w.timestamp * 1000).toISOString().slice(0, 10)
-                : candidate.series
+                : candidate.series && w.index >= 0 && w.index < candidate.series.timestamps.length
                   ? new Date(candidate.series.timestamps[w.index] * 1000).toISOString().slice(0, 10)
                   : "unknown",
               type: w.type,
@@ -718,7 +731,13 @@ function EWScannerPage() {
             alternateWaveTargets: (() => {
               if (!candidate.waveCount?.alternateCount) return undefined;
               const info = getWaveStatusInfo(candidate.waveCount.alternateCount, candidate.current);
-              return info.targets.length > 0 ? info.targets : undefined;
+              const targets = info.targets.length > 0 ? info.targets : undefined;
+              if (candidate.trueAth != null && targets && targets.every(t => t.price < candidate.current)) {
+                const fwd = computeForwardTargets(candidate.trueAth, candidate.low, candidate.current);
+                const forwardTargets = [...fwd.support, ...fwd.extensions];
+                return forwardTargets.length > 0 ? forwardTargets : targets;
+              }
+              return targets;
             })(),
             alternateWaveStartPrice: candidate.waveCount?.alternateCount?.waveStart?.price,
             fibExtensions: candidate.fibAnalysis?.extensions,
