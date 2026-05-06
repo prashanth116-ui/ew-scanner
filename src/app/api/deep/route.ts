@@ -46,6 +46,9 @@ interface DeepInput {
   alternatePosition?: string;
   fibExtensions?: { ratio: number; price: number; label: string }[];
   confluenceZones?: { price: number; levels: string[] }[];
+  // Pre-computed algorithmic targets from getWaveStatusInfo()
+  waveTargets?: { label: string; price: number }[];
+  waveStartPrice?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -154,6 +157,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Pre-computed algorithmic targets — source of truth for nextTarget/keyLevels
+  let targetContext = "";
+  if (data.waveTargets?.length) {
+    targetContext += `\n\nPRE-COMPUTED TARGETS (from algorithmic Fibonacci analysis — use these EXACT values):`;
+    for (const t of data.waveTargets) {
+      targetContext += `\n  ${t.label}: $${t.price.toFixed(2)}`;
+    }
+    if (data.waveStartPrice != null) {
+      targetContext += `\n  Wave start (p0): $${data.waveStartPrice.toFixed(2)}`;
+    }
+  }
+
   // Pre-ATH impulse context: gives LLM exact Fibonacci retracement of the prior impulse
   let impulseContext = "";
   if (data.preAthLow != null && data.preAthLow < data.ath) {
@@ -206,12 +221,13 @@ Price data:
 - Decline: ${data.declinePct.toFixed(1)}% over ${data.durationMonths.toFixed(0)} months
 - Recovery: ${data.recoveryPct.toFixed(1)}% from low
 - Mechanical score: ${data.score}/25
-${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${impulseContext}${waveCountContext}${extensionContext}${structuralContext}${forwardContext}
+${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${impulseContext}${waveCountContext}${extensionContext}${targetContext}${structuralContext}${forwardContext}
 
 Timeframes: ${data.htf} (primary) / ${data.ltf} (sub-waves)
 ${hasWavePoints ? `
 CRITICAL: The wave points above are from algorithmic swing detection on actual price data. You MUST reference these exact prices in your analysis. Do NOT invent different wave prices. Your job is to INTERPRET the algorithmic wave count — explain what it means, assess confidence, provide targets and invalidation — not to re-count the waves with made-up prices.
-IMPORTANT: Use ONLY the prices and Fibonacci levels provided above. Do NOT calculate or estimate prices that aren't given. If the prior impulse start price is provided, use that exact value — do NOT invent a different starting price.` : ""}
+IMPORTANT: Use ONLY the prices and Fibonacci levels provided above. Do NOT calculate or estimate prices that aren't given. If the prior impulse start price is provided, use that exact value — do NOT invent a different starting price.${data.waveTargets?.length ? `
+TARGETS: The "Pre-computed targets" above are mathematically derived from the wave points. You MUST use these exact prices for "nextTarget" and "keyLevels" — do NOT calculate your own. Pick the most relevant pre-computed target as "nextTarget" (must be above current price for recovery/uptrend, below for correction/downtrend). For "keyLevels", use the wave points and pre-computed targets directly. The "invalidation" level should be the wave start or the extreme that, if broken, invalidates the count.` : ""}` : ""}
 
 Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
 {

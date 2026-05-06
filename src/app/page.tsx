@@ -668,6 +668,12 @@ function EWScannerPage() {
               type: w.type,
             })),
             alternatePosition: candidate.waveCount?.alternateCount?.position,
+            waveTargets: (() => {
+              if (!candidate.waveCount) return undefined;
+              const info = getWaveStatusInfo(candidate.waveCount, candidate.current);
+              return info.targets.length > 0 ? info.targets : undefined;
+            })(),
+            waveStartPrice: candidate.waveCount?.waveStart?.price,
             fibExtensions: candidate.fibAnalysis?.extensions,
             confluenceZones: candidate.fibAnalysis?.confluenceZones,
           }),
