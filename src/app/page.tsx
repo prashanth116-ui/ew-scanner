@@ -47,6 +47,7 @@ import { SCANNER_MODES, getModeConfig, applyModeFilters } from "@/lib/ew-scanner
 import { saveScan, loadScans, deleteScan, loadCustomUniverses } from "@/lib/ew-watchlist";
 import { loadWatchlists, addToWatchlist } from "@/lib/ew-watchlists";
 import { confirmMultiTimeframe, getWaveStatusInfo, countWaves } from "@/lib/ew-wave-counter";
+import { computeReliabilityScore } from "@/lib/ew-reliability";
 import { EWSparkline } from "@/components/ew-sparkline";
 import { EWFibBar } from "@/components/ew-fib-bar";
 import { EWSectorHeatmap } from "@/components/ew-sector-heatmap";
@@ -192,6 +193,11 @@ function EWScannerPage() {
   const [deepStructured, setDeepStructured] = useState<DeepAnalysisResult | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
   const [deepTab, setDeepTab] = useState<"analysis" | "chart">("analysis");
+
+  const reliabilityScore = useMemo(() => {
+    if (!deepCandidate?.waveCount) return null;
+    return computeReliabilityScore(deepCandidate);
+  }, [deepCandidate]);
 
   const [sortBy, setSortBy] = useState<SortKey>("score");
   const [groupBy, setGroupBy] = useState<GroupKey>("none");
@@ -341,6 +347,8 @@ function EWScannerPage() {
         lowIdx: data.lowIdx,
         trueAth: data.trueAth,
         trueAthYear: data.trueAthYear,
+        trueLow: data.trueLow,
+        trueLowYear: data.trueLowYear,
         preAthLow: data.preAthLow,
         preAthLowYear: data.preAthLowYear,
       };
@@ -460,6 +468,8 @@ function EWScannerPage() {
             lowIdx: data.lowIdx as number | undefined,
             trueAth: data.trueAth as number | undefined,
             trueAthYear: data.trueAthYear as number | undefined,
+            trueLow: data.trueLow as number | undefined,
+            trueLowYear: data.trueLowYear as number | undefined,
             preAthLow: data.preAthLow as number | undefined,
             preAthLowYear: data.preAthLowYear as number | undefined,
           } as EnrichedQuoteInput;
@@ -648,6 +658,8 @@ function EWScannerPage() {
             // Structural fallback for stocks at/near ATH
             trueAth: candidate.trueAth,
             trueAthDate: candidate.trueAthYear ? String(candidate.trueAthYear) : undefined,
+            trueLow: candidate.trueLow,
+            trueLowDate: candidate.trueLowYear ? String(candidate.trueLowYear) : undefined,
             // Pre-ATH impulse start for Fibonacci context
             preAthLow: candidate.preAthLow,
             preAthLowYear: candidate.preAthLowYear ? String(candidate.preAthLowYear) : undefined,
@@ -1577,6 +1589,20 @@ function EWScannerPage() {
                   {deepCandidate?.trueAth != null && (
                     <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-400 border border-amber-500/30">
                       New ATH: ${deepCandidate.trueAth.toFixed(2)}
+                    </span>
+                  )}
+                  {reliabilityScore != null && (
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                        reliabilityScore.score >= 70
+                          ? "bg-green-500/20 text-green-400 border-green-500/30"
+                          : reliabilityScore.score >= 40
+                            ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                            : "bg-red-500/20 text-red-400 border-red-500/30"
+                      }`}
+                      title={`Reliability: ${reliabilityScore.score}% (${reliabilityScore.label})\n\nMacro quality: ${reliabilityScore.breakdown.macroQuality}/25\nMicro quality: ${reliabilityScore.breakdown.microQuality}/15\nWave validity: ${reliabilityScore.breakdown.waveValidity}/15\nCross-framework: ${reliabilityScore.breakdown.crossFramework}/20\nTarget availability: ${reliabilityScore.breakdown.targetAvailability}/15\nStructural penalty: ${reliabilityScore.breakdown.structuralPenalty}`}
+                    >
+                      Reliability: {reliabilityScore.score}%
                     </span>
                   )}
                 </div>

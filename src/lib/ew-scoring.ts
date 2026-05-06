@@ -120,6 +120,8 @@ export interface EnrichedQuoteInput {
   lowIdx?: number;
   trueAth?: number;
   trueAthYear?: number;
+  trueLow?: number;
+  trueLowYear?: number;
   preAthLow?: number;
   preAthLowYear?: number;
 }
@@ -196,6 +198,8 @@ export function scoreEnhanced(
       lowIdx: q.lowIdx,
       trueAth: q.trueAth,
       trueAthYear: q.trueAthYear,
+      trueLow: q.trueLow,
+      trueLowYear: q.trueLowYear,
       preAthLow: q.preAthLow,
       preAthLowYear: q.preAthLowYear,
     };
@@ -277,6 +281,8 @@ export function scoreEnhanced(
     lowIdx: q.lowIdx,
     trueAth: q.trueAth,
     trueAthYear: q.trueAthYear,
+    trueLow: q.trueLow,
+    trueLowYear: q.trueLowYear,
     preAthLow: q.preAthLow,
     preAthLowYear: q.preAthLowYear,
   };

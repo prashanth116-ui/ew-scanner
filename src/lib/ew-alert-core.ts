@@ -83,6 +83,8 @@ export async function fetchQuote(ticker: string): Promise<EnrichedQuoteInput | n
     // Structural fallback for stocks at/near ATH
     let trueAth: number | undefined;
     let trueAthYear: number | undefined;
+    let trueLow: number | undefined;
+    let trueLowYear: number | undefined;
 
     // Build clean series
     const cleanOpen: number[] = [], cleanHigh: number[] = [], cleanLow: number[] = [];
@@ -115,6 +117,8 @@ export async function fetchQuote(ticker: string): Promise<EnrichedQuoteInput | n
     if (structural) {
       trueAth = Math.round(athValue * 100) / 100;
       trueAthYear = toYear(timestamps[athIdx]);
+      trueLow = Math.round(lowValue * 100) / 100;
+      trueLowYear = toYear(cleanTs[cleanLowIdx] ?? timestamps[lowIdx]);
       // Replace with structural references (already in clean-array space)
       athValue = structural.peakPrice;
       lowValue = structural.troughPrice;
@@ -142,6 +146,8 @@ export async function fetchQuote(ticker: string): Promise<EnrichedQuoteInput | n
       lowIdx: cleanLowIdx,
       trueAth,
       trueAthYear,
+      trueLow,
+      trueLowYear,
     };
   } catch (err) {
     logError("fetchQuote", err, { ticker });

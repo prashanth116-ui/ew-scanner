@@ -29,6 +29,8 @@ export interface EWQuoteResult {
   lowIdx?: number;
   trueAth?: number;
   trueAthYear?: number;
+  trueLow?: number;
+  trueLowYear?: number;
   preAthLow?: number;
   preAthLowYear?: number;
 }
@@ -100,6 +102,8 @@ export async function fetchEWQuoteData(
   // Structural fallback for stocks at/near ATH
   let trueAth: number | undefined;
   let trueAthYear: number | undefined;
+  let trueLow: number | undefined;
+  let trueLowYear: number | undefined;
 
   const cleanHighsForStruct: number[] = [];
   const cleanLowsForStruct: number[] = [];
@@ -125,6 +129,8 @@ export async function fetchEWQuoteData(
   if (structural) {
     trueAth = Math.round(athValue * 100) / 100;
     trueAthYear = toYear(timestamps[athIdx]);
+    trueLow = Math.round(lowValue * 100) / 100;
+    trueLowYear = toYear(timestamps[lowIdx]);
     athValue = structural.peakPrice;
     athIdx = structCleanToRaw[structural.peakIdx];
     lowValue = structural.troughPrice;
@@ -141,6 +147,8 @@ export async function fetchEWQuoteData(
   if (trueAth != null) {
     response.trueAth = trueAth;
     response.trueAthYear = trueAthYear;
+    response.trueLow = trueLow;
+    response.trueLowYear = trueLowYear;
   }
   if (preAthLowValue < Infinity) {
     response.preAthLow = Math.round(preAthLowValue * 100) / 100;

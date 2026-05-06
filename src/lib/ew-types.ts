@@ -160,9 +160,11 @@ export interface EnhancedScoredCandidate {
   series?: PriceSeries;
   athIdx?: number;
   lowIdx?: number;
-  // Structural fallback: true ATH when analysis uses prior correction
+  // Structural fallback: true ATH/Low when analysis uses prior correction
   trueAth?: number;
   trueAthYear?: number;
+  trueLow?: number;
+  trueLowYear?: number;
   // Pre-ATH impulse start for Fibonacci analysis
   preAthLow?: number;
   preAthLowYear?: number;

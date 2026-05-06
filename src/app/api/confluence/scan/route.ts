@@ -120,6 +120,8 @@ async function fetchAndScoreEW(ticker: string): Promise<(ConfluenceEWResult & { 
       lowIdx: quoteData.lowIdx,
       trueAth: quoteData.trueAth,
       trueAthYear: quoteData.trueAthYear,
+      trueLow: quoteData.trueLow,
+      trueLowYear: quoteData.trueLowYear,
       preAthLow: quoteData.preAthLow,
       preAthLowYear: quoteData.preAthLowYear,
     },

@@ -426,6 +426,8 @@ function SqueezePage() {
             lowIdx: data.lowIdx,
             trueAth: data.trueAth,
             trueAthYear: data.trueAthYear,
+            trueLow: data.trueLow,
+            trueLowYear: data.trueLowYear,
             preAthLow: data.preAthLow,
             preAthLowYear: data.preAthLowYear,
           };

@@ -30,9 +30,11 @@ interface DeepInput {
   swingCount?: number;
   momentumScore?: number;
   scannerMode?: string;
-  // Structural fallback: true ATH when analysis uses prior correction
+  // Structural fallback: true ATH/Low when analysis uses prior correction
   trueAth?: number;
   trueAthDate?: string;
+  trueLow?: number;
+  trueLowDate?: string;
   // Pre-ATH impulse start for Fibonacci context
   preAthLow?: number;
   preAthLowYear?: string;
@@ -253,7 +255,10 @@ export async function POST(request: NextRequest) {
   // Structural fallback context for stocks at/near ATH
   let structuralContext = "";
   if (data.trueAth != null) {
-    structuralContext = `\nIMPORTANT: This stock recently reached a new all-time high of $${data.trueAth.toFixed(2)}${data.trueAthDate ? ` (${data.trueAthDate})` : ""}, surpassing its prior structural peak of $${data.ath.toFixed(2)}. The analysis uses the previous structural correction ($${data.ath.toFixed(0)} to $${data.low.toFixed(0)}) as the wave reference frame. Current price at $${data.current.toFixed(2)} is above the prior peak, indicating extended impulse or new wave cycle.\n`;
+    const trueLowLine = data.trueLow != null
+      ? `\nThe post-ATH low was $${data.trueLow.toFixed(2)}${data.trueLowDate ? ` (${data.trueLowDate})` : ""} — a ${((data.trueAth - data.trueLow) / data.trueAth * 100).toFixed(1)}% decline from the new ATH.`
+      : "";
+    structuralContext = `\nIMPORTANT: This stock recently reached a new all-time high of $${data.trueAth.toFixed(2)}${data.trueAthDate ? ` (${data.trueAthDate})` : ""}, surpassing its prior structural peak of $${data.ath.toFixed(2)}.${trueLowLine}\nThe analysis uses the previous structural correction ($${data.ath.toFixed(0)} to $${data.low.toFixed(0)}) as the wave reference frame. Current price at $${data.current.toFixed(2)} is above the prior peak, indicating extended impulse or new wave cycle.\n`;
   }
 
   const prompt = `You are an expert Elliott Wave analyst. Provide a deep analysis for ${data.ticker} (${data.name}).

@@ -40,6 +40,8 @@ export async function GET(request: NextRequest) {
     if (quoteData.trueAth != null) {
       baseResponse.trueAth = quoteData.trueAth;
       baseResponse.trueAthYear = quoteData.trueAthYear;
+      baseResponse.trueLow = quoteData.trueLow;
+      baseResponse.trueLowYear = quoteData.trueLowYear;
     }
     if (quoteData.preAthLow != null) {
       baseResponse.preAthLow = quoteData.preAthLow;
