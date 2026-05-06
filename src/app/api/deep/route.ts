@@ -296,7 +296,7 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
 
     const MODELS = [
       "claude-sonnet-4-5-20250929",
-      "claude-haiku-3-5-20241022",
+      "claude-3-5-haiku-20241022",
     ];
 
     // Try primary model with retries, then fall back to secondary model
