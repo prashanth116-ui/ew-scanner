@@ -106,6 +106,18 @@ export function countWaves(
     if (allCandidates.length > 1) best.alternateCount = allCandidates[1];
   }
 
+  // Apply quality multipliers to reduce scores for stale/irrelevant patterns
+  if (best) {
+    const wavePoints: SwingPoint[] = best.waves.map(w => ({ index: w.index, price: w.price, type: w.type }));
+    best.score = adjustScoreForQuality(best.score, wavePoints, series.close, series.timestamps);
+    if (best.alternateCount) {
+      const altPoints: SwingPoint[] = best.alternateCount.waves.map(w => ({ index: w.index, price: w.price, type: w.type }));
+      best.alternateCount.score = adjustScoreForQuality(
+        best.alternateCount.score, altPoints, series.close, series.timestamps
+      );
+    }
+  }
+
   return best;
 }
 
@@ -228,14 +240,29 @@ export function countCorrectiveWaves(
     }));
 
     const lastPrice = closes[closes.length - 1];
+    const lastIdx = closes.length - 1;
     let position = "Corrective structure";
     if (direction === "up") {
       if (lastPrice < pC.price) position = "Beyond Wave C — correction may be extending";
-      else if (lastPrice < pB.price) position = "In Wave C decline";
+      else if (lastPrice < pB.price) {
+        // Distinguish: falling TOWARD C vs recovering FROM C
+        // If we are temporally past Wave C's bar AND price is above C, correction completed
+        if (lastIdx > pC.index && lastPrice > pC.price) {
+          position = "A-B-C correction may be complete";
+        } else {
+          position = "In Wave C decline";
+        }
+      }
       else position = "A-B-C correction may be complete";
     } else {
       if (lastPrice > pC.price) position = "Beyond Wave C — correction may be extending";
-      else if (lastPrice > pB.price) position = "In Wave C rally";
+      else if (lastPrice > pB.price) {
+        if (lastIdx > pC.index && lastPrice < pC.price) {
+          position = "A-B-C correction may be complete";
+        } else {
+          position = "In Wave C rally";
+        }
+      }
       else position = "A-B-C correction may be complete";
     }
 
@@ -664,6 +691,84 @@ function fibProximityScore(actual: number, targets: number[]): number {
   return Math.max(0, 1 - minDist / 0.2);
 }
 
+/**
+ * Apply quality multipliers to raw wave count score.
+ * Reduces score for stale, disproportionate, or irrelevant patterns
+ * without harming recent, well-formed counts.
+ */
+function adjustScoreForQuality(
+  rawScore: number,
+  waves: SwingPoint[],
+  closes: number[],
+  seriesTimestamps: number[] | undefined
+): number {
+  let multiplier = 1.0;
+
+  // Factor 1: Recency — penalize patterns far from current time
+  if (waves.length > 0) {
+    const lastWaveIdx = Math.max(...waves.map(w => w.index));
+    const currentIdx = closes.length - 1;
+    const totalBars = closes.length;
+    const barsSincePattern = currentIdx - lastWaveIdx;
+    const fractionOld = barsSincePattern / totalBars;
+    // Pattern using last 20% of data = 1.0, older = decay
+    if (fractionOld > 0.5) multiplier *= 0.6;
+    else if (fractionOld > 0.3) multiplier *= 0.8;
+
+    // Additionally check absolute age via timestamps
+    if (seriesTimestamps && seriesTimestamps[lastWaveIdx] && seriesTimestamps[currentIdx]) {
+      const monthsOld = (seriesTimestamps[currentIdx] - seriesTimestamps[lastWaveIdx]) / (30 * 24 * 3600);
+      if (monthsOld > 24) multiplier *= 0.5;       // 2+ years: severe
+      else if (monthsOld > 12) multiplier *= 0.7;  // 1-2 years: moderate
+      else if (monthsOld > 6) multiplier *= 0.85;  // 6-12 months: mild
+    }
+  }
+
+  // Factor 2: Proportionality — penalize absurdly short waves
+  if (waves.length >= 2) {
+    const waveDurations: number[] = [];
+    for (let i = 1; i < waves.length; i++) {
+      waveDurations.push(waves[i].index - waves[i - 1].index);
+    }
+    const minDuration = Math.min(...waveDurations);
+    if (minDuration <= 1) multiplier *= 0.7;       // 1-bar wave = noise
+    else if (minDuration <= 2) multiplier *= 0.85; // 2-bar wave = suspect
+  }
+
+  // Factor 3: Relevance — penalize when current price is far beyond pattern range
+  if (waves.length >= 2) {
+    const prices = waves.map(w => w.price);
+    const patternHigh = Math.max(...prices);
+    const patternLow = Math.min(...prices);
+    const patternRange = patternHigh - patternLow;
+    const lastPrice = closes[closes.length - 1];
+    if (patternRange > 0) {
+      const distanceBeyond = lastPrice > patternHigh
+        ? (lastPrice - patternHigh) / patternRange
+        : lastPrice < patternLow
+          ? (patternLow - lastPrice) / patternRange
+          : 0;
+      if (distanceBeyond > 2.0) multiplier *= 0.5;
+      else if (distanceBeyond > 1.0) multiplier *= 0.7;
+      else if (distanceBeyond > 0.5) multiplier *= 0.85;
+    }
+  }
+
+  // Factor 4: Complexity — very sparse labeled points over a large span
+  // suggests the pattern may be oversimplified
+  if (waves.length >= 3) {
+    const firstIdx = Math.min(...waves.map(w => w.index));
+    const lastIdx = Math.max(...waves.map(w => w.index));
+    const span = lastIdx - firstIdx;
+    if (span > 0) {
+      const pointDensity = waves.length / span;
+      if (pointDensity < 0.05) multiplier *= 0.8;  // very sparse
+    }
+  }
+
+  return Math.max(0, Math.min(100, Math.round(rawScore * multiplier)));
+}
+
 // ── Helpers ──
 
 /** Build alternating high-low sequence starting with given type.
@@ -837,7 +942,11 @@ export function getWaveStatusInfo(wc: WaveCount, currentPrice: number): WaveStat
     }
   } else if (hasAllFive || isABC) {
     // Check for completed/likely complete correction before defaulting to in_progress
-    if (isABC && pos.includes("may be complete")) {
+    if (isABC && pos.includes("extending")) {
+      // "Beyond Wave C — correction may be extending" means correction went DEEPER, not done
+      status = "in_progress";
+      statusLabel = "Correction Extending";
+    } else if (isABC && pos.includes("may be complete")) {
       status = "completed";
       statusLabel = "Likely Complete";
     } else if (isABC && (pos.includes("complete") || pos.includes("beyond"))) {
