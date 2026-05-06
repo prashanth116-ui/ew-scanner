@@ -684,9 +684,10 @@ function EWScannerPage() {
               if (!candidate.waveCount) return undefined;
               const info = getWaveStatusInfo(candidate.waveCount, candidate.current);
               const targets = info.targets.length > 0 ? info.targets : undefined;
-              // Replace stale targets for structural override stocks
-              if (candidate.trueAth != null && targets && targets.every(t => t.price < candidate.current)) {
-                const fwd = computeForwardTargets(candidate.trueAth, candidate.low, candidate.current);
+              // Replace stale targets (all below current price) with forward recovery targets
+              if (targets && targets.every(t => t.price < candidate.current)) {
+                const ath = candidate.trueAth ?? candidate.ath;
+                const fwd = computeForwardTargets(ath, candidate.low, candidate.current);
                 const forwardTargets = [...fwd.support, ...fwd.extensions];
                 return forwardTargets.length > 0 ? forwardTargets : targets;
               }
@@ -709,8 +710,9 @@ function EWScannerPage() {
               if (!candidate.dailyWaveCount) return undefined;
               const info = getWaveStatusInfo(candidate.dailyWaveCount, candidate.current);
               const targets = info.targets.length > 0 ? info.targets : undefined;
-              if (candidate.trueAth != null && targets && targets.every(t => t.price < candidate.current)) {
-                const fwd = computeForwardTargets(candidate.trueAth, candidate.low, candidate.current);
+              if (targets && targets.every(t => t.price < candidate.current)) {
+                const ath = candidate.trueAth ?? candidate.ath;
+                const fwd = computeForwardTargets(ath, candidate.low, candidate.current);
                 const forwardTargets = [...fwd.support, ...fwd.extensions];
                 return forwardTargets.length > 0 ? forwardTargets : targets;
               }
@@ -732,8 +734,9 @@ function EWScannerPage() {
               if (!candidate.waveCount?.alternateCount) return undefined;
               const info = getWaveStatusInfo(candidate.waveCount.alternateCount, candidate.current);
               const targets = info.targets.length > 0 ? info.targets : undefined;
-              if (candidate.trueAth != null && targets && targets.every(t => t.price < candidate.current)) {
-                const fwd = computeForwardTargets(candidate.trueAth, candidate.low, candidate.current);
+              if (targets && targets.every(t => t.price < candidate.current)) {
+                const ath = candidate.trueAth ?? candidate.ath;
+                const fwd = computeForwardTargets(ath, candidate.low, candidate.current);
                 const forwardTargets = [...fwd.support, ...fwd.extensions];
                 return forwardTargets.length > 0 ? forwardTargets : targets;
               }

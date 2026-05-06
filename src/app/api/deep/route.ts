@@ -240,6 +240,19 @@ export async function POST(request: NextRequest) {
 
   const hasWavePoints = data.wavePoints && data.wavePoints.length > 0;
 
+  // Explicit warning when no algorithmic wave count exists — prevents LLM fabrication
+  let noWaveCountWarning = "";
+  if (!hasWavePoints) {
+    noWaveCountWarning = `
+IMPORTANT — NO ALGORITHMIC WAVE COUNT:
+No wave count was detected for this stock (insufficient swing structure in the data window).
+- Do NOT invent or fabricate wave labels, wave numbers, or specific wave price levels.
+- You may describe the price action in terms of trends, retracements, and support/resistance.
+- "confidence" MUST be "medium" or "low" — never "high" without a validated wave count.
+- Base your analysis on the actual price data provided (ATH, low, current, decline %, recovery %).
+- For "wavePosition", describe the price action pattern (e.g., "Recovery from correction low") rather than asserting specific Elliott Wave labels.`;
+  }
+
   // Forward-looking directive for completed patterns or structural override stocks
   let forwardContext = "";
   const pos = (data.waveCountPosition ?? "").toLowerCase();
@@ -279,7 +292,7 @@ Price data:
 - Decline: ${data.declinePct.toFixed(1)}% over ${data.durationMonths.toFixed(0)} months
 - Recovery: ${data.recoveryPct.toFixed(1)}% from low
 - Mechanical score: ${data.score}/25
-${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${impulseContext}${waveCountContext}${microWaveContext}${extensionContext}${targetContext}${structuralContext}${forwardContext}
+${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${impulseContext}${noWaveCountWarning}${waveCountContext}${microWaveContext}${extensionContext}${targetContext}${structuralContext}${forwardContext}
 
 Timeframes: ${data.htf} (primary) / ${data.ltf} (sub-waves)
 ${hasWavePoints ? `
@@ -361,6 +374,20 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
     // Try JSON parse
     try {
       const parsed = JSON.parse(text);
+
+      // Fix 2: Validate nextTarget is above current price
+      if (parsed.nextTarget != null && parsed.nextTarget <= data.current) {
+        const upsideLevel = parsed.keyLevels
+          ?.filter((l: { price: number }) => l.price > data.current)
+          ?.sort((a: { price: number }, b: { price: number }) => a.price - b.price)[0];
+        parsed.nextTarget = upsideLevel?.price ?? null;
+      }
+
+      // Fix 4: Cap confidence when no algorithmic wave count exists
+      if (!data.wavePoints?.length && parsed.confidence === "high") {
+        parsed.confidence = "medium";
+      }
+
       return NextResponse.json({ analysis: parsed.summary ?? text, structured: parsed });
     } catch {
       // Fall back to wrapping raw text in summary field
