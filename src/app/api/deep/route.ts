@@ -293,11 +293,31 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
 
   try {
     const client = new Anthropic();
-    const msg = await client.messages.create({
-      model: "claude-sonnet-4-5-20250929",
-      max_tokens: 800,
-      messages: [{ role: "user", content: prompt }],
-    });
+
+    // Retry with exponential backoff for transient overload errors
+    let msg: Anthropic.Messages.Message | null = null;
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        msg = await client.messages.create({
+          model: "claude-sonnet-4-5-20250929",
+          max_tokens: 800,
+          messages: [{ role: "user", content: prompt }],
+        });
+        break;
+      } catch (retryErr) {
+        const isOverloaded =
+          retryErr instanceof Error &&
+          (retryErr.message.includes("overloaded") || retryErr.message.includes("529"));
+        if (isOverloaded && attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+          continue;
+        }
+        throw retryErr;
+      }
+    }
+
+    if (!msg) throw new Error("Failed to get API response after retries");
 
     const rawText =
       msg.content[0].type === "text" ? msg.content[0].text : "";
@@ -347,6 +367,15 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
       return NextResponse.json(
         { error: "API credits exhausted", billing: true, analysis: "AI analysis is temporarily unavailable — API credits need to be replenished." },
         { status: 402 }
+      );
+    }
+
+    // Detect overload errors
+    const isOverloaded = message.includes("overloaded") || message.includes("529");
+    if (isOverloaded) {
+      return NextResponse.json(
+        { error: "API temporarily overloaded", analysis: "AI analysis is temporarily unavailable — the API is experiencing high traffic. Please try again in a minute." },
+        { status: 503 }
       );
     }
 
