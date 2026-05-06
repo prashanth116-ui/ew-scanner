@@ -49,6 +49,15 @@ interface DeepInput {
   // Pre-computed algorithmic targets from getWaveStatusInfo()
   waveTargets?: { label: string; price: number }[];
   waveStartPrice?: number;
+  // Micro (daily) wave count
+  microWavePoints?: { label: string; price: number; date: string; type: string }[];
+  microWavePosition?: string;
+  microWaveTargets?: { label: string; price: number }[];
+  microWaveStartPrice?: number;
+  // Alternate wave count
+  alternateWavePoints?: { label: string; price: number; date: string; type: string }[];
+  alternateWaveTargets?: { label: string; price: number }[];
+  alternateWaveStartPrice?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -133,12 +142,29 @@ export async function POST(request: NextRequest) {
     waveCountContext += `\n- Position: ${data.waveCountPosition ?? "unknown"}`;
     waveCountContext += `\n- Valid: ${data.waveCountValid ? "yes" : "no"} (quality score: ${data.waveCountScore ?? 0}/100)`;
     if (data.waveCountViolations?.length) waveCountContext += `\n- Rule violations: ${data.waveCountViolations.join(", ")}`;
-    if (data.alternatePosition) waveCountContext += `\n- Alternate interpretation: ${data.alternatePosition}`;
+    if (data.alternateWavePoints?.length) {
+      waveCountContext += `\n\nALTERNATE WAVE COUNT:`;
+      for (const wp of data.alternateWavePoints) {
+        waveCountContext += `\n  Wave ${wp.label}: $${wp.price.toFixed(2)} (${wp.date}, swing ${wp.type})`;
+      }
+      if (data.alternatePosition) waveCountContext += `\n- Position: ${data.alternatePosition}`;
+    } else if (data.alternatePosition) {
+      waveCountContext += `\n- Alternate interpretation: ${data.alternatePosition}`;
+    }
   } else if (data.waveCountPosition) {
     waveCountContext += `\nAlgorithmic wave counting:`;
     waveCountContext += `\n- Position: ${data.waveCountPosition}`;
     waveCountContext += `\n- Valid: ${data.waveCountValid ? "yes" : "no"} (score: ${data.waveCountScore ?? 0}/100)`;
     if (data.waveLabels) waveCountContext += `\n- Wave labels: ${data.waveLabels}`;
+  }
+
+  let microWaveContext = "";
+  if (data.microWavePoints?.length) {
+    microWaveContext += `\n\nMICRO WAVE COUNT (Daily timeframe — intermediate degree):`;
+    for (const wp of data.microWavePoints) {
+      microWaveContext += `\n  Wave ${wp.label}: $${wp.price.toFixed(2)} (${wp.date}, swing ${wp.type})`;
+    }
+    if (data.microWavePosition) microWaveContext += `\n- Position: ${data.microWavePosition}`;
   }
 
   let extensionContext = "";
@@ -166,6 +192,24 @@ export async function POST(request: NextRequest) {
     }
     if (data.waveStartPrice != null) {
       targetContext += `\n  Wave start (p0): $${data.waveStartPrice.toFixed(2)}`;
+    }
+  }
+  if (data.microWaveTargets?.length) {
+    targetContext += `\n\nMICRO TARGETS (Daily wave count — intermediate degree):`;
+    for (const t of data.microWaveTargets) {
+      targetContext += `\n  ${t.label}: $${t.price.toFixed(2)}`;
+    }
+    if (data.microWaveStartPrice != null) {
+      targetContext += `\n  Micro wave start: $${data.microWaveStartPrice.toFixed(2)}`;
+    }
+  }
+  if (data.alternateWaveTargets?.length) {
+    targetContext += `\n\nALTERNATE COUNT TARGETS (alternate interpretation):`;
+    for (const t of data.alternateWaveTargets) {
+      targetContext += `\n  ${t.label}: $${t.price.toFixed(2)}`;
+    }
+    if (data.alternateWaveStartPrice != null) {
+      targetContext += `\n  Alternate wave start: $${data.alternateWaveStartPrice.toFixed(2)}`;
     }
   }
 
@@ -221,13 +265,13 @@ Price data:
 - Decline: ${data.declinePct.toFixed(1)}% over ${data.durationMonths.toFixed(0)} months
 - Recovery: ${data.recoveryPct.toFixed(1)}% from low
 - Mechanical score: ${data.score}/25
-${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${impulseContext}${waveCountContext}${extensionContext}${targetContext}${structuralContext}${forwardContext}
+${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${impulseContext}${waveCountContext}${microWaveContext}${extensionContext}${targetContext}${structuralContext}${forwardContext}
 
 Timeframes: ${data.htf} (primary) / ${data.ltf} (sub-waves)
 ${hasWavePoints ? `
 CRITICAL: The wave points above are from algorithmic swing detection on actual price data. You MUST reference these exact prices in your analysis. Do NOT invent different wave prices. Your job is to INTERPRET the algorithmic wave count — explain what it means, assess confidence, provide targets and invalidation — not to re-count the waves with made-up prices.
 IMPORTANT: Use ONLY the prices and Fibonacci levels provided above. Do NOT calculate or estimate prices that aren't given. If the prior impulse start price is provided, use that exact value — do NOT invent a different starting price.${data.waveTargets?.length ? `
-TARGETS: The "Pre-computed targets" above are mathematically derived from the wave points. You MUST use these exact prices for "nextTarget" and "keyLevels" — do NOT calculate your own. Pick the most relevant pre-computed target as "nextTarget" (must be above current price for recovery/uptrend, below for correction/downtrend). For "keyLevels", use the wave points and pre-computed targets directly. The "invalidation" level should be the wave start or the extreme that, if broken, invalidates the count.` : ""}` : ""}
+TARGETS: The pre-computed targets above are from three analytical frameworks: primary (macro weekly), micro (daily), and alternate count. You MUST use these exact prices — do NOT calculate your own. For "nextTarget", pick the most relevant target above current price (for recovery/uptrend) or below (for correction/downtrend). Prefer micro targets for near-term outlook and primary targets for the bigger picture. For "keyLevels", use wave points and targets from all three sets. The "invalidation" level should be the wave start or the extreme that invalidates the count.` : ""}` : ""}
 
 Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
 {

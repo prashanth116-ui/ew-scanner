@@ -674,6 +674,41 @@ function EWScannerPage() {
               return info.targets.length > 0 ? info.targets : undefined;
             })(),
             waveStartPrice: candidate.waveCount?.waveStart?.price,
+            // Micro (daily) wave count
+            microWavePoints: candidate.dailyWaveCount?.waves.map((w) => ({
+              label: w.label,
+              price: w.price,
+              date: w.timestamp && candidate.dailySeries
+                ? new Date(w.timestamp * 1000).toISOString().slice(0, 10)
+                : candidate.dailySeries
+                  ? new Date(candidate.dailySeries.timestamps[w.index] * 1000).toISOString().slice(0, 10)
+                  : "unknown",
+              type: w.type,
+            })),
+            microWavePosition: candidate.dailyWaveCount?.position,
+            microWaveTargets: (() => {
+              if (!candidate.dailyWaveCount) return undefined;
+              const info = getWaveStatusInfo(candidate.dailyWaveCount, candidate.current);
+              return info.targets.length > 0 ? info.targets : undefined;
+            })(),
+            microWaveStartPrice: candidate.dailyWaveCount?.waveStart?.price,
+            // Alternate wave count
+            alternateWavePoints: candidate.waveCount?.alternateCount?.waves.map((w) => ({
+              label: w.label,
+              price: w.price,
+              date: w.timestamp && candidate.series
+                ? new Date(w.timestamp * 1000).toISOString().slice(0, 10)
+                : candidate.series
+                  ? new Date(candidate.series.timestamps[w.index] * 1000).toISOString().slice(0, 10)
+                  : "unknown",
+              type: w.type,
+            })),
+            alternateWaveTargets: (() => {
+              if (!candidate.waveCount?.alternateCount) return undefined;
+              const info = getWaveStatusInfo(candidate.waveCount.alternateCount, candidate.current);
+              return info.targets.length > 0 ? info.targets : undefined;
+            })(),
+            alternateWaveStartPrice: candidate.waveCount?.alternateCount?.waveStart?.price,
             fibExtensions: candidate.fibAnalysis?.extensions,
             confluenceZones: candidate.fibAnalysis?.confluenceZones,
           }),
