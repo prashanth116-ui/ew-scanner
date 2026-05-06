@@ -203,6 +203,19 @@ const UNIVERSES_DEF = {
   ],
 };
 
-export const UNIVERSES: Record<string, TickerInfo[]> = UNIVERSES_DEF;
-export type UniverseKey = keyof typeof UNIVERSES_DEF;
+// Build deduplicated "All" universe from all sector lists
+const allTickers = Object.values(UNIVERSES_DEF).flat();
+const seen = new Set<string>();
+const ALL_UNIVERSE: TickerInfo[] = [];
+for (const t of allTickers) {
+  if (!seen.has(t.symbol)) {
+    seen.add(t.symbol);
+    ALL_UNIVERSE.push(t);
+  }
+}
+
+const UNIVERSES_WITH_ALL = { All: ALL_UNIVERSE, ...UNIVERSES_DEF };
+
+export const UNIVERSES: Record<string, TickerInfo[]> = UNIVERSES_WITH_ALL;
+export type UniverseKey = keyof typeof UNIVERSES_WITH_ALL;
 export const UNIVERSE_KEYS = Object.keys(UNIVERSES) as UniverseKey[];
