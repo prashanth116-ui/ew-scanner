@@ -355,9 +355,9 @@ function WatchlistContent() {
                     const g = item.latestGates;
                     if (!s || !g) return null;
                     if (!g.gate1 || !g.gate2 || !g.gate3) return "DISCARD";
-                    if (s.finalScore >= 15 && item.latestData?.daysToEarnings != null && item.latestData.daysToEarnings <= 14) return "PRIORITY";
-                    if (s.finalScore >= 15) return "KEEP";
-                    if (s.finalScore >= 11) return "WATCH";
+                    if (s.finalScore >= 19 && item.latestData?.daysToEarnings != null && item.latestData.daysToEarnings <= 14) return "PRIORITY";
+                    if (s.finalScore >= 19) return "KEEP";
+                    if (s.finalScore >= 14) return "WATCH";
                     return "DISCARD";
                   })();
                   const displayVerdict = liveVerdict ?? item.verdict;

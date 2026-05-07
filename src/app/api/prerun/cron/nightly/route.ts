@@ -180,9 +180,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter to qualifying candidates (gates pass + score >= 11)
+    // Filter to qualifying candidates (gates pass + score >= 14)
     const qualifying = results.filter(
-      (r) => r.gates.gate1 && r.gates.gate3 && r.scores.finalScore >= 11
+      (r) => r.gates.gate1 && r.gates.gate2 && r.gates.gate3 && r.scores.finalScore >= 14
     );
 
     qualifying.sort((a, b) => b.scores.finalScore - a.scores.finalScore);

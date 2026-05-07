@@ -191,8 +191,8 @@ export function scoreM(data: PreRunStockData): number {
   if (above21 === null || above50 === null) return 0;
 
   // Score 2: Above both EMAs AND crossed above within last 20 days
-  if (above21 && above50 && crossedRecently) return 2;
-  // Score 1: Above one EMA, or above both but crossover was >20 days ago
+  if (above21 && above50 && crossedRecently === true) return 2;
+  // Score 1: Above one EMA, or above both but crossover was >20 days ago (or crossover data missing)
   if (above21 || above50) return 1;
   // Score 0: Below both
   return 0;
@@ -206,9 +206,9 @@ export function scoreN(data: PreRunStockData): number {
   if (nearTop === null && contracting === null) return 0;
 
   // Score 2: Both conditions met — coiling near resistance with declining volatility
-  if (nearTop && contracting) return 2;
-  // Score 1: One condition met
-  if (nearTop || contracting) return 1;
+  if (nearTop === true && contracting === true) return 2;
+  // Score 1: One condition confirmed true (null doesn't count)
+  if (nearTop === true || contracting === true) return 1;
   return 0;
 }
 

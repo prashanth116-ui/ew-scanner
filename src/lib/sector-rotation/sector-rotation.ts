@@ -677,7 +677,7 @@ export async function calculateSectorRotation(
           ((r.data.putCallRatio ?? 1) < 0.7 ? 10 : 0) * 0.1;
 
         const reasons: string[] = [];
-        if (r.scores.finalScore >= 15) reasons.push("High score");
+        if (r.scores.finalScore >= 19) reasons.push("High score");
         if ((r.data.insiderBuys90d ?? 0) > 0) reasons.push("Insider buying");
         if ((r.data.putCallRatio ?? 1) < 0.7) reasons.push("Bullish options flow");
         if ((r.data.relativeStrength20d ?? 0) > 0) reasons.push("RS leader");
