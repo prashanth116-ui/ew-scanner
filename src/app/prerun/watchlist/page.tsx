@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Trash2,
   Save,
   RefreshCw,
@@ -89,6 +90,49 @@ interface EditState {
   notes: string;
 }
 
+// ── Sort types ──
+
+type SortKey = "ticker" | "price" | "pctAth" | "shortFloat" | "earnings" | "score" | "verdict" | "stopLoss" | "risk" | "added";
+type SortDir = "asc" | "desc";
+
+const VERDICT_ORDER: Record<PreRunVerdict, number> = { PRIORITY: 0, KEEP: 1, WATCH: 2, DISCARD: 3 };
+const RISK_ORDER: Record<PreRunRisk, number> = { VERY_HIGH: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+// ── Sort header component ──
+
+function SortHeader({
+  label,
+  sortKey_,
+  currentKey,
+  dir,
+  onSort,
+  align,
+}: {
+  label: string;
+  sortKey_: SortKey;
+  currentKey: SortKey;
+  dir: SortDir;
+  onSort: (key: SortKey) => void;
+  align?: "right";
+}) {
+  const active = currentKey === sortKey_;
+  return (
+    <th
+      className={`px-3 py-3 font-medium text-[#666] cursor-pointer select-none hover:text-[#a0a0a0] transition-colors ${align === "right" ? "text-right" : ""}`}
+      onClick={() => onSort(sortKey_)}
+    >
+      <span className="inline-flex items-center gap-0.5">
+        {label}
+        {active && (
+          dir === "asc"
+            ? <ChevronUp className="h-3 w-3 text-[#5ba3e6]" />
+            : <ChevronDown className="h-3 w-3 text-[#5ba3e6]" />
+        )}
+      </span>
+    </th>
+  );
+}
+
 // ── Main content component ──
 
 function WatchlistContent() {
@@ -99,6 +143,8 @@ function WatchlistContent() {
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("score");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // Load watchlist and alerts on mount
   useEffect(() => {
@@ -269,6 +315,72 @@ function WatchlistContent() {
 
   const unreadAlerts = alerts.filter((a) => !a.isRead);
 
+  const toggleSort = useCallback((key: SortKey) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return key;
+      }
+      setSortDir(key === "ticker" ? "asc" : "desc");
+      return key;
+    });
+  }, []);
+
+  const sortedItems = [...items].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    const getVerdict = (item: PreRunWatchlistItem): PreRunVerdict => {
+      const s = item.latestScores;
+      const g = item.latestGates;
+      if (!s || !g) return item.verdict;
+      if (!g.gate1 || !g.gate2 || !g.gate3) return "DISCARD";
+      if (s.finalScore >= 19 && item.latestData?.daysToEarnings != null && item.latestData.daysToEarnings <= 14) return "PRIORITY";
+      if (s.finalScore >= 19) return "KEEP";
+      if (s.finalScore >= 14) return "WATCH";
+      return "DISCARD";
+    };
+
+    switch (sortKey) {
+      case "ticker":
+        return dir * a.ticker.localeCompare(b.ticker);
+      case "price": {
+        const ap = a.latestData?.currentPrice ?? -Infinity;
+        const bp = b.latestData?.currentPrice ?? -Infinity;
+        return dir * (ap - bp);
+      }
+      case "pctAth": {
+        const aa = a.latestData?.pctFromAth ?? -Infinity;
+        const ba = b.latestData?.pctFromAth ?? -Infinity;
+        return dir * (aa - ba);
+      }
+      case "shortFloat": {
+        const as_ = a.latestData?.shortFloat ?? -Infinity;
+        const bs = b.latestData?.shortFloat ?? -Infinity;
+        return dir * (as_ - bs);
+      }
+      case "earnings": {
+        const ae = a.latestData?.daysToEarnings ?? Infinity;
+        const be = b.latestData?.daysToEarnings ?? Infinity;
+        return dir * (ae - be);
+      }
+      case "score": {
+        const asc = a.latestScores?.finalScore ?? -Infinity;
+        const bsc = b.latestScores?.finalScore ?? -Infinity;
+        return dir * (asc - bsc);
+      }
+      case "verdict": {
+        return dir * (VERDICT_ORDER[getVerdict(a)] - VERDICT_ORDER[getVerdict(b)]);
+      }
+      case "stopLoss":
+        return dir * (a.stopLoss - b.stopLoss);
+      case "risk":
+        return dir * (RISK_ORDER[a.riskLevel] - RISK_ORDER[b.riskLevel]);
+      case "added":
+        return dir * (new Date(a.addedAt).getTime() - new Date(b.addedAt).getTime());
+      default:
+        return 0;
+    }
+  });
+
   return (
     <div className="min-h-screen bg-[#0f0f0f] px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -327,21 +439,21 @@ function WatchlistContent() {
               <thead>
                 <tr className="border-b border-[#2a2a2a] bg-[#0f0f0f]">
                   <th className="w-8 px-2 py-3"></th>
-                  <th className="px-3 py-3 font-medium text-[#666]">Ticker</th>
+                  <SortHeader label="Ticker" sortKey_="ticker" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                   <th className="px-3 py-3 font-medium text-[#666]">Company</th>
-                  <th className="px-3 py-3 font-medium text-[#666] text-right">Price</th>
-                  <th className="px-3 py-3 font-medium text-[#666] text-right">% ATH</th>
-                  <th className="px-3 py-3 font-medium text-[#666] text-right">Short%</th>
-                  <th className="px-3 py-3 font-medium text-[#666] text-right">Earnings</th>
-                  <th className="px-3 py-3 font-medium text-[#666] text-right">Score</th>
-                  <th className="px-3 py-3 font-medium text-[#666]">Verdict</th>
-                  <th className="px-3 py-3 font-medium text-[#666] text-right">Stop Loss</th>
-                  <th className="px-3 py-3 font-medium text-[#666]">Risk</th>
+                  <SortHeader label="Price" sortKey_="price" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                  <SortHeader label="% ATH" sortKey_="pctAth" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                  <SortHeader label="Short%" sortKey_="shortFloat" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                  <SortHeader label="Earnings" sortKey_="earnings" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                  <SortHeader label="Score" sortKey_="score" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                  <SortHeader label="Verdict" sortKey_="verdict" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                  <SortHeader label="Stop Loss" sortKey_="stopLoss" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                  <SortHeader label="Risk" sortKey_="risk" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                   <th className="px-3 py-3 font-medium text-[#666]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2a2a2a]">
-                {items.map((item) => {
+                {sortedItems.map((item) => {
                   const isExpanded = expanded.has(item.id);
                   const es = editStates[item.id];
                   const price = item.latestData?.currentPrice ?? null;
