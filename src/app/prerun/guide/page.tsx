@@ -196,7 +196,7 @@ function QuickReferenceCard() {
           {/* Criteria Table */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
-              11 Criteria (max 24 pts + sector modifier)
+              15 Criteria (max 32 pts + sector modifier)
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -223,6 +223,10 @@ function QuickReferenceCard() {
                     { l: "I", name: "Options Flow", max: 2, s0: "P/C >1.0", s1: "P/C 0.5-1.0", s2: "P/C <0.5 (bullish)" },
                     { l: "J", name: "Rel. Strength vs Sector", max: 2, s0: "Under by >5%", s1: "Within 5%", s2: "Over by >5%" },
                     { l: "K", name: "Breakout Proximity", max: 2, s0: ">10% below resist", s1: "5-10% below", s2: "<5% (coiling)" },
+                    { l: "L", name: "Higher Lows", max: 2, s0: "No HL pattern", s1: "2 of 3 swing lows higher", s2: "3 consecutive higher lows" },
+                    { l: "M", name: "EMA Reclaim", max: 2, s0: "Below both EMAs", s1: "Above one EMA", s2: "Above 21+50 EMA, crossed <20d" },
+                    { l: "N", name: "Range Coil", max: 2, s0: "No coiling", s1: "Near top OR ATR contracting", s2: "Near top + ATR contracting" },
+                    { l: "O", name: "Failed Breakdown Recovery", max: 2, s0: "No breakdown event", s1: "Wick test + held", s2: "Broke below + recovered <3 bars" },
                   ].map((c) => (
                     <tr key={c.l} className="border-b border-[#2a2a2a]/50">
                       <td className="py-1.5 pr-2">
@@ -265,19 +269,19 @@ function QuickReferenceCard() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div className="rounded-md border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-center">
                 <p className="text-[10px] font-bold text-purple-400">PRIORITY</p>
-                <p className="text-xs text-[#c0c0c0]">&ge;15 + earn &lt;14d</p>
+                <p className="text-xs text-[#c0c0c0]">&ge;19 + earn &lt;14d</p>
               </div>
               <div className="rounded-md border border-green-500/20 bg-green-500/5 px-3 py-2 text-center">
                 <p className="text-[10px] font-bold text-green-400">KEEP</p>
-                <p className="text-xs text-[#c0c0c0]">&ge;15</p>
+                <p className="text-xs text-[#c0c0c0]">&ge;19</p>
               </div>
               <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-center">
                 <p className="text-[10px] font-bold text-amber-400">WATCH</p>
-                <p className="text-xs text-[#c0c0c0]">&ge;11</p>
+                <p className="text-xs text-[#c0c0c0]">&ge;14</p>
               </div>
               <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-center">
                 <p className="text-[10px] font-bold text-red-400">DISCARD</p>
-                <p className="text-xs text-[#c0c0c0]">&lt;11 or gate fail</p>
+                <p className="text-xs text-[#c0c0c0]">&lt;14 or gate fail</p>
               </div>
             </div>
           </div>
@@ -401,12 +405,14 @@ export default function PreRunGuidePage() {
           </div>
         </Section>
 
-        {/* 11 Criteria */}
-        <Section icon={Layers} title="Layer 2: Eleven Criteria (max 24 Points + Sector Modifier)">
+        {/* 15 Criteria */}
+        <Section icon={Layers} title="Layer 2: Fifteen Criteria (max 32 Points + Sector Modifier)">
           <p>
             Each criterion scores 0-2 (B and C expanded to 0-3 for higher
-            predictive weight). Total possible: 24 points + sector momentum
-            modifier (&plusmn;1). Criteria A, B, C are highest weight.
+            predictive weight). Total possible: 32 points + sector momentum
+            modifier (&plusmn;1). Criteria A, B, C are highest weight. Criteria L-O
+            power the &ldquo;Stage 1&rarr;2 / base breakout&rdquo; preset for identifying
+            stocks transitioning from accumulation to markup.
           </p>
           <div className="space-y-3 pt-2">
             <CriterionRow
@@ -499,11 +505,45 @@ export default function PreRunGuidePage() {
               score1="5-10% below resistance. Getting close."
               score0="More than 10% below resistance. Not ready yet."
             />
+            <CriterionRow
+              letter="L"
+              label="Higher Lows"
+              weight="MEDIUM"
+              score2="Last 3 swing lows are each higher than the prior. Clear upward structure within the base."
+              score1="2 of last 3 swing lows are higher. Partial structure forming."
+              score0="No higher lows pattern or lower lows present. Base not constructive."
+            />
+            <CriterionRow
+              letter="M"
+              label="EMA Reclaim"
+              weight="MEDIUM"
+              score2="Price above both 21 EMA and 50 EMA, having crossed above within last 20 trading days."
+              score1="Above one EMA (21 or 50), or above both but crossover was more than 20 days ago."
+              score0="Price below both the 21 EMA and 50 EMA. Still in downtrend."
+            />
+            <CriterionRow
+              letter="N"
+              label="Range Coil / Tight Closes Near Top"
+              weight="MEDIUM"
+              score2="Last 5 closes in upper 25% of 13-week range AND daily ATR contracting (5d ATR < 20d ATR)."
+              score1="Closes near top of range OR ATR contracting, but not both."
+              score0="Closes scattered across range, no coiling evidence."
+            />
+            <CriterionRow
+              letter="O"
+              label="Failed Breakdown Recovery"
+              weight="MEDIUM"
+              score2="Price broke below 50-day SMA within last 20 days but recovered above it within 3 candles — and held."
+              score1="Price tested but didn't close below 50-day SMA (wick only), and recovered."
+              score0="No failed breakdown, or breakdown occurred and has not recovered."
+            />
           </div>
           <p className="mt-3 text-xs text-[#666]">
             <strong className="text-[#a0a0a0]">Time decay:</strong> Bases older than 2 years (104 weeks) have score A halved — dead money that&apos;s been dead too long loses energy.
             <br />
             <strong className="text-[#a0a0a0]">Sector modifier:</strong> +1 if sector ETF 20d return &gt; +5% (tailwind), -1 if &lt; -5% (headwind).
+            <br />
+            <strong className="text-[#a0a0a0]">Stage 1&rarr;2 / Base breakout:</strong> Criteria L-O are designed to identify stocks transitioning from Stage 1 (accumulation/base) to Stage 2 (markup). The &ldquo;Pre-Run Base&rdquo; preset enforces A=2, F&ge;1, J&ge;1, K&ge;1 to surface only stocks with confirmed base + volume + relative strength + proximity to breakout.
           </p>
         </Section>
 
@@ -515,7 +555,7 @@ export default function PreRunGuidePage() {
                 PRIORITY
               </span>
               <span className="text-sm text-[#c0c0c0]">
-                Score ≥15 + earnings within 14 days + all gates pass. Highest
+                Score ≥19 + earnings within 14 days + all gates pass. Highest
                 probability window — hard catalyst imminent.
               </span>
             </div>
@@ -524,7 +564,7 @@ export default function PreRunGuidePage() {
                 KEEP
               </span>
               <span className="text-sm text-[#c0c0c0]">
-                Score ≥15 + all gates pass. Strong setup, actively track and
+                Score ≥19 + all gates pass. Strong setup, actively track and
                 size a position.
               </span>
             </div>
@@ -533,7 +573,7 @@ export default function PreRunGuidePage() {
                 WATCH
               </span>
               <span className="text-sm text-[#c0c0c0]">
-                Score 11-14 + all gates pass. Interesting but needs more
+                Score 14-18 + all gates pass. Interesting but needs more
                 confirmation. Monitor for improvement.
               </span>
             </div>
@@ -542,7 +582,7 @@ export default function PreRunGuidePage() {
                 DISCARD
               </span>
               <span className="text-sm text-[#c0c0c0]">
-                Score &lt;11 OR any gate fails. Does not meet criteria. Move on.
+                Score &lt;14 OR any gate fails. Does not meet criteria. Move on.
               </span>
             </div>
           </div>
@@ -602,8 +642,8 @@ export default function PreRunGuidePage() {
               <tbody className="text-[#c0c0c0]">
                 <tr className="border-b border-[#2a2a2a]/50">
                   <td className="py-1.5 pr-3 font-medium text-white">Yahoo Finance</td>
-                  <td className="py-1.5 pr-3">A, E, F, G, I, J, K</td>
-                  <td className="py-1.5">Quote summary, 3mo chart, institutional %, float shares, options chain (P/C ratio)</td>
+                  <td className="py-1.5 pr-3">A, E, F, G, I, J, K, L, M, N, O</td>
+                  <td className="py-1.5">Quote summary, 3mo chart (OHLC for EMA, swing lows, ATR, SMA50), institutional %, float shares, options chain</td>
                 </tr>
                 <tr className="border-b border-[#2a2a2a]/50">
                   <td className="py-1.5 pr-3 font-medium text-white">Finnhub</td>

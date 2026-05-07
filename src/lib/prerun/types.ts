@@ -219,9 +219,9 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 11 },
   },
   {
-    name: "Stage 1→2",
-    shortName: "Stage 1→2",
-    description: "Big base → EMA reclaim → coiling near breakout. ARM, DELL, NBIS, DOCN structure.",
+    name: "Pre-Run Base",
+    shortName: "Pre-Run Base",
+    description: "Stage 1→2 / base breakout. Big base → EMA reclaim → coiling near breakout. ARM, DELL, NBIS, DOCN structure.",
     filters: { minPctFromAth: 35, minShortFloat: 5, minScore: 11, verdict: "All", sectorBucket: "All" },
     criteriaFilters: [
       { criterion: "A", min: 2 },
