@@ -1,8 +1,8 @@
 /**
  * Pre-Run scoring engine.
- * 3 hard gates + 11 criteria (A-K) with weighted scoring.
- * B and C expanded to 0-3. All others 0-2. Max raw = 24.
- * Sector momentum modifier: +1/0/-1. Final max ~25.
+ * 3 hard gates + 15 criteria (A-O) with weighted scoring.
+ * B and C expanded to 0-3. All others 0-2. Max raw = 32.
+ * Sector momentum modifier: +1/0/-1. Final max ~33.
  */
 
 import type {
@@ -173,6 +173,52 @@ export function scoreK(data: PreRunStockData): number {
   return 0;                    // >10% below resistance
 }
 
+/** Criterion L: Higher Lows (0-2). Swing low structure within base. */
+export function scoreL(data: PreRunStockData): number {
+  const count = data.higherLowsCount;
+  if (count === null) return 0;
+  if (count >= 3) return 2;  // All 3 swing lows are higher — clear upward structure
+  if (count >= 2) return 1;  // 2 of 3 swing lows higher — partial structure
+  return 0;
+}
+
+/** Criterion M: EMA Reclaim (0-2). Price reclaiming key moving averages. */
+export function scoreM(data: PreRunStockData): number {
+  const above21 = data.aboveEma21;
+  const above50 = data.aboveEma50;
+  const crossedRecently = data.emaCrossoverWithin20d;
+
+  if (above21 === null || above50 === null) return 0;
+
+  // Score 2: Above both EMAs AND crossed above within last 20 days
+  if (above21 && above50 && crossedRecently) return 2;
+  // Score 1: Above one EMA, or above both but crossover was >20 days ago
+  if (above21 || above50) return 1;
+  // Score 0: Below both
+  return 0;
+}
+
+/** Criterion N: Range Coil / Tight Closes Near Top (0-2). */
+export function scoreN(data: PreRunStockData): number {
+  const nearTop = data.closesNearRangeTop;
+  const contracting = data.atrContracting;
+
+  if (nearTop === null && contracting === null) return 0;
+
+  // Score 2: Both conditions met — coiling near resistance with declining volatility
+  if (nearTop && contracting) return 2;
+  // Score 1: One condition met
+  if (nearTop || contracting) return 1;
+  return 0;
+}
+
+/** Criterion O: Failed Breakdown Recovery (0-2). */
+export function scoreO(data: PreRunStockData): number {
+  const score = data.failedBreakdownRecovery;
+  if (score === null) return 0;
+  return Math.max(0, Math.min(2, score));
+}
+
 /** Sector momentum modifier: +1 if sector ETF 20d return > +5%, -1 if < -5%. */
 export function calcSectorModifier(data: PreRunStockData): number {
   const sectorRet = data.sectorReturn20d;
@@ -217,18 +263,22 @@ export function scorePreRun(
   const sI = scoreI(data);
   const sJ = scoreJ(data);
   const sK = scoreK(data);
+  const sL = scoreL(data);
+  const sM = scoreM(data);
+  const sN = scoreN(data);
+  const sO = scoreO(data);
   const sMod = calcSectorModifier(data);
 
-  const totalScore = sA + sB + sC + sD + sE + sF + sG + sH + sI + sJ + sK + sMod;
+  const totalScore = sA + sB + sC + sD + sE + sF + sG + sH + sI + sJ + sK + sL + sM + sN + sO + sMod;
   const finalScore = gatesPass ? totalScore : 0;
 
   let verdict: PreRunVerdict = "DISCARD";
   if (gatesPass) {
-    if (finalScore >= 15 && data.daysToEarnings !== null && data.daysToEarnings <= 14) {
+    if (finalScore >= 19 && data.daysToEarnings !== null && data.daysToEarnings <= 14) {
       verdict = "PRIORITY";
-    } else if (finalScore >= 15) {
+    } else if (finalScore >= 19) {
       verdict = "KEEP";
-    } else if (finalScore >= 11) {
+    } else if (finalScore >= 14) {
       verdict = "WATCH";
     }
   }
@@ -251,6 +301,10 @@ export function scorePreRun(
       scoreI: sI,
       scoreJ: sJ,
       scoreK: sK,
+      scoreL: sL,
+      scoreM: sM,
+      scoreN: sN,
+      scoreO: sO,
       sectorModifier: sMod,
       totalScore,
       finalScore,

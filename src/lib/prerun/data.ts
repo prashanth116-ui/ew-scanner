@@ -359,6 +359,209 @@ export function calcSMA(closes: number[], period: number): number | null {
   return slice.reduce((a, b) => a + b, 0) / period;
 }
 
+/** Calculate EMA from closes. Returns array of EMA values (same length as input). */
+function calcEMA(closes: number[], period: number): number[] {
+  if (closes.length === 0) return [];
+  const k = 2 / (period + 1);
+  const ema: number[] = [closes[0]];
+  for (let i = 1; i < closes.length; i++) {
+    ema.push(closes[i] * k + ema[i - 1] * (1 - k));
+  }
+  return ema;
+}
+
+/** Calculate True Range for a single bar. */
+function calcTR(high: number, low: number, prevClose: number): number {
+  return Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+}
+
+/** Calculate ATR array from OHLC data. */
+function calcATRArray(highs: number[], lows: number[], closes: number[], period: number): number[] {
+  if (closes.length < 2) return [];
+  const trs: number[] = [highs[0] - lows[0]];
+  for (let i = 1; i < closes.length; i++) {
+    trs.push(calcTR(highs[i], lows[i], closes[i - 1]));
+  }
+  // Simple moving average of TR for ATR
+  const atr: number[] = [];
+  for (let i = 0; i < trs.length; i++) {
+    if (i < period - 1) {
+      atr.push(0);
+    } else {
+      const slice = trs.slice(i - period + 1, i + 1);
+      atr.push(slice.reduce((a, b) => a + b, 0) / period);
+    }
+  }
+  return atr;
+}
+
+/** Detect swing lows from lows array. A swing low at index i requires
+ *  lows[i] < lows[i-1] && lows[i] < lows[i+1] (simple pivot). */
+function findSwingLows(lows: number[]): { index: number; value: number }[] {
+  const swings: { index: number; value: number }[] = [];
+  for (let i = 2; i < lows.length - 2; i++) {
+    if (lows[i] < lows[i - 1] && lows[i] < lows[i - 2] &&
+        lows[i] < lows[i + 1] && lows[i] < lows[i + 2]) {
+      swings.push({ index: i, value: lows[i] });
+    }
+  }
+  return swings;
+}
+
+/** Count how many of the last 3 swing lows are higher than the prior. */
+function calcHigherLowsCount(lows: number[]): number {
+  const swings = findSwingLows(lows);
+  if (swings.length < 2) return 0;
+  // Take last 3 swing lows
+  const recent = swings.slice(-3);
+  let count = 0;
+  for (let i = 1; i < recent.length; i++) {
+    if (recent[i].value > recent[i - 1].value) count++;
+  }
+  return count;
+}
+
+/** Compute EMA reclaim data from closes. */
+function calcEmaReclaimData(closes: number[]): {
+  aboveEma21: boolean;
+  aboveEma50: boolean;
+  crossoverWithin20d: boolean;
+} {
+  if (closes.length < 50) {
+    return { aboveEma21: false, aboveEma50: false, crossoverWithin20d: false };
+  }
+
+  const ema21 = calcEMA(closes, 21);
+  const ema50 = calcEMA(closes, 50);
+  const lastIdx = closes.length - 1;
+  const currentPrice = closes[lastIdx];
+
+  const aboveEma21 = currentPrice > ema21[lastIdx];
+  const aboveEma50 = currentPrice > ema50[lastIdx];
+
+  // Check if price crossed above both EMAs within last 20 trading days
+  let crossoverWithin20d = false;
+  if (aboveEma21 && aboveEma50) {
+    const lookback = Math.min(20, lastIdx);
+    for (let i = lastIdx - lookback; i <= lastIdx; i++) {
+      // Check if price was below either EMA at this point
+      if (closes[i] <= ema21[i] || closes[i] <= ema50[i]) {
+        crossoverWithin20d = true;
+        break;
+      }
+    }
+  }
+
+  return { aboveEma21, aboveEma50, crossoverWithin20d };
+}
+
+/** Compute range coil data from chart. */
+function calcRangeCoilData(closes: number[], highs: number[], lows: number[]): {
+  closesNearTop: boolean;
+  atrContracting: boolean;
+} {
+  if (closes.length < 20) {
+    return { closesNearTop: false, atrContracting: false };
+  }
+
+  // 13-week range (65 trading days, or use full available data up to that)
+  const rangeLen = Math.min(65, closes.length);
+  const rangeHighs = highs.slice(-rangeLen);
+  const rangeLows = lows.slice(-rangeLen);
+  const rangeHigh = Math.max(...rangeHighs);
+  const rangeLow = Math.min(...rangeLows.filter((l) => l > 0));
+  const rangeSize = rangeHigh - rangeLow;
+
+  // Last 5 closes in upper 25% of range
+  let closesNearTop = false;
+  if (rangeSize > 0) {
+    const threshold = rangeLow + rangeSize * 0.75; // upper 25%
+    const last5 = closes.slice(-5);
+    closesNearTop = last5.every((c) => c >= threshold);
+  }
+
+  // ATR contraction: 5-day ATR < 20-day ATR
+  const atrFull = calcATRArray(highs, lows, closes, 1); // individual TRs
+  let atrContracting = false;
+  if (atrFull.length >= 20) {
+    const last5TR = atrFull.slice(-5);
+    const last20TR = atrFull.slice(-20);
+    const atr5 = last5TR.reduce((a, b) => a + b, 0) / 5;
+    const atr20 = last20TR.reduce((a, b) => a + b, 0) / 20;
+    atrContracting = atr5 < atr20;
+  }
+
+  return { closesNearTop, atrContracting };
+}
+
+/** Compute failed breakdown recovery score from chart data. */
+function calcFailedBreakdownRecovery(closes: number[], lows: number[], highs: number[]): number {
+  if (closes.length < 50) return 0;
+
+  const sma50Arr: number[] = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (i < 49) {
+      sma50Arr.push(0);
+    } else {
+      const slice = closes.slice(i - 49, i + 1);
+      sma50Arr.push(slice.reduce((a, b) => a + b, 0) / 50);
+    }
+  }
+
+  const lastIdx = closes.length - 1;
+  const lookback = Math.min(20, lastIdx - 49);
+  const currentPrice = closes[lastIdx];
+  const currentSma50 = sma50Arr[lastIdx];
+
+  // Only relevant if currently above SMA50
+  if (currentPrice <= currentSma50) return 0;
+
+  // Scan last 20 days for breakdown events
+  for (let i = lastIdx - lookback; i <= lastIdx - 1; i++) {
+    if (i < 49) continue;
+    const sma50 = sma50Arr[i];
+
+    // Check for close below SMA50 (full breakdown)
+    if (closes[i] < sma50) {
+      // Check recovery within 3 bars
+      let recovered = false;
+      for (let j = i + 1; j <= Math.min(i + 3, lastIdx); j++) {
+        if (closes[j] > sma50Arr[j]) {
+          recovered = true;
+          break;
+        }
+      }
+      if (recovered) {
+        // Verify it held above since recovery
+        let held = true;
+        const recoveryEnd = Math.min(i + 3, lastIdx);
+        for (let j = recoveryEnd + 1; j <= lastIdx; j++) {
+          if (closes[j] < sma50Arr[j]) {
+            held = false;
+            break;
+          }
+        }
+        if (held) return 2;
+      }
+    }
+
+    // Check for wick-only test (low went below SMA50 but close stayed above)
+    if (lows[i] < sma50 && closes[i] >= sma50) {
+      // Verify price held above since
+      let held = true;
+      for (let j = i + 1; j <= lastIdx; j++) {
+        if (closes[j] < sma50Arr[j]) {
+          held = false;
+          break;
+        }
+      }
+      if (held) return 1;
+    }
+  }
+
+  return 0;
+}
+
 /** Calculate volume accumulation pattern. */
 function calcVolumeAccumulation(
   closes: number[],
@@ -699,6 +902,34 @@ export async function fetchPreRunData(
       ? ((1 - currentPrice / allTimeHigh) * 100)
       : null;
 
+  // Phase 3: Stage 1→2 criteria computed from 3mo chart
+  let higherLowsCount: number | null = null;
+  let aboveEma21: boolean | null = null;
+  let aboveEma50: boolean | null = null;
+  let emaCrossoverWithin20d: boolean | null = null;
+  let closesNearRangeTop: boolean | null = null;
+  let atrContracting: boolean | null = null;
+  let failedBreakdownRecovery: number | null = null;
+
+  if (chart3mo && chart3mo.closes.length >= 20) {
+    // L: Higher Lows
+    higherLowsCount = calcHigherLowsCount(chart3mo.lows);
+
+    // M: EMA Reclaim
+    const emaData = calcEmaReclaimData(chart3mo.closes);
+    aboveEma21 = emaData.aboveEma21;
+    aboveEma50 = emaData.aboveEma50;
+    emaCrossoverWithin20d = emaData.crossoverWithin20d;
+
+    // N: Range Coil
+    const coilData = calcRangeCoilData(chart3mo.closes, chart3mo.highs, chart3mo.lows);
+    closesNearRangeTop = coilData.closesNearTop;
+    atrContracting = coilData.atrContracting;
+
+    // O: Failed Breakdown Recovery
+    failedBreakdownRecovery = calcFailedBreakdownRecovery(chart3mo.closes, chart3mo.lows, chart3mo.highs);
+  }
+
   return {
     ticker: ticker.toUpperCase(),
     companyName:
@@ -731,6 +962,14 @@ export async function fetchPreRunData(
     floatTurnover20d,
     quarterlyRevenue,
     earningsBeatStreak,
+    // Phase 3: Stage 1→2 criteria
+    higherLowsCount,
+    aboveEma21,
+    aboveEma50,
+    emaCrossoverWithin20d,
+    closesNearRangeTop,
+    atrContracting,
+    failedBreakdownRecovery,
     lastUpdated: new Date().toISOString(),
   };
 }

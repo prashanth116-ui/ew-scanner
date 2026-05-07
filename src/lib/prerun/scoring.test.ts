@@ -32,6 +32,13 @@ function makeData(overrides: Partial<PreRunStockData> = {}): PreRunStockData {
     floatTurnover20d: null,
     quarterlyRevenue: null,
     earningsBeatStreak: null,
+    higherLowsCount: null,
+    aboveEma21: null,
+    aboveEma50: null,
+    emaCrossoverWithin20d: null,
+    closesNearRangeTop: null,
+    atrContracting: null,
+    failedBreakdownRecovery: null,
     lastUpdated: new Date().toISOString(),
     ...overrides,
   };

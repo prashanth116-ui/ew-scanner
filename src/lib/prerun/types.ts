@@ -33,6 +33,14 @@ export interface PreRunStockData {
   // Phase 2: Revenue + earnings enhancement
   quarterlyRevenue: { period: string; value: number }[] | null; // Last 4-8 quarters from SEC EDGAR
   earningsBeatStreak: number | null;       // Consecutive earnings beats (actual > estimate)
+  // Phase 3: Stage 1→2 criteria (L, M, N, O)
+  higherLowsCount: number | null;          // L: How many of last 3 swing lows are higher (0-3)
+  aboveEma21: boolean | null;              // M: Is price currently above 21 EMA
+  aboveEma50: boolean | null;              // M: Is price currently above 50 EMA
+  emaCrossoverWithin20d: boolean | null;   // M: Did price cross above both EMAs within last 20 trading days
+  closesNearRangeTop: boolean | null;      // N: Are last 5 closes in upper 25% of 13-week range
+  atrContracting: boolean | null;          // N: Is 5-day ATR < 20-day ATR
+  failedBreakdownRecovery: number | null;  // O: 0=none, 1=wick test only, 2=broke below + recovered in 3 bars
   lastUpdated: string;
 }
 
@@ -54,13 +62,17 @@ export interface PreRunScores {
   scoreI: number; // Options flow / put-call skew (0-2)
   scoreJ: number; // Relative strength vs sector (0-2)
   scoreK: number; // Breakout proximity (0-2)
+  scoreL: number; // Higher lows (0-2)
+  scoreM: number; // EMA reclaim (0-2)
+  scoreN: number; // Range coil / tight closes near top (0-2)
+  scoreO: number; // Failed breakdown recovery (0-2)
   sectorModifier: number; // +1/0/-1 based on sector momentum
-  totalScore: number; // Sum of A-K + sector modifier (max 24 + modifier)
+  totalScore: number; // Sum of A-O + sector modifier (max 32 + modifier)
   finalScore: number; // 0 if any gate fails, else totalScore
 }
 
 /** Maximum possible raw score (before sector modifier). */
-export const MAX_SCORE = 24;
+export const MAX_SCORE = 32;
 
 export interface PreRunResult {
   data: PreRunStockData;
@@ -160,11 +172,17 @@ export const DEFAULT_PRERUN_FILTERS: PreRunFilters = {
   verdict: "All",
 };
 
+export interface PreRunCriteriaFilter {
+  criterion: string; // "A" | "B" | ... | "O"
+  min: number;       // minimum score for this criterion
+}
+
 export interface PreRunPreset {
   name: string;
   shortName: string;
   description: string;
   filters: Partial<PreRunFilters>;
+  criteriaFilters?: PreRunCriteriaFilter[];
   recommended?: boolean;
 }
 
@@ -199,5 +217,17 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     shortName: "Wide Net",
     description: "Relaxed filters, score ≥11. Good for initial screening.",
     filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 11 },
+  },
+  {
+    name: "Stage 1→2",
+    shortName: "Stage 1→2",
+    description: "Big base → EMA reclaim → coiling near breakout. ARM, DELL, NBIS, DOCN structure.",
+    filters: { minPctFromAth: 35, minShortFloat: 5, minScore: 11, verdict: "All", sectorBucket: "All" },
+    criteriaFilters: [
+      { criterion: "A", min: 2 },
+      { criterion: "F", min: 1 },
+      { criterion: "J", min: 1 },
+      { criterion: "K", min: 1 },
+    ],
   },
 ];

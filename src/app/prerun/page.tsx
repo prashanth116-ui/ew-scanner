@@ -22,6 +22,7 @@ import type {
   PreRunResult,
   PreRunFilters,
   SavedPreRunScan,
+  PreRunCriteriaFilter,
 } from "@/lib/prerun/types";
 import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE } from "@/lib/prerun/types";
 import {
@@ -93,6 +94,9 @@ function PreRunPage() {
   const [earningsWithin, setEarningsWithin] = useState(DEFAULT_PRERUN_FILTERS.earningsWithin);
   const [verdictFilter, setVerdictFilter] = useState(DEFAULT_PRERUN_FILTERS.verdict);
 
+  // Criteria-level filters (from presets like Stage 1→2)
+  const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
+
   // Scan state
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState("");
@@ -156,6 +160,13 @@ function PreRunPage() {
     [minPctFromAth, minShortFloat, maxMarketCap, minScore, sectorBucket, earningsWithin, verdictFilter]
   );
 
+  // Helper to get a criterion score by letter
+  const getCriterionScore = useCallback((scores: typeof rawResults[0]["scores"], criterion: string): number => {
+    const key = `score${criterion}` as keyof typeof scores;
+    const val = scores[key];
+    return typeof val === "number" ? val : 0;
+  }, []);
+
   // Filter + sort results
   const filtered = useMemo(() => {
     return rawResults.filter((r) => {
@@ -170,9 +181,13 @@ function PreRunPage() {
         const sector = getSectorForTicker(ticker);
         if (sector !== filters.sectorBucket) return false;
       }
+      // Criteria-level filters (e.g., Stage 1→2 preset)
+      for (const cf of criteriaFilters) {
+        if (getCriterionScore(r.scores, cf.criterion) < cf.min) return false;
+      }
       return true;
     });
-  }, [rawResults, filters]);
+  }, [rawResults, filters, criteriaFilters, getCriterionScore]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -371,6 +386,7 @@ function PreRunPage() {
     setSectorBucket(f.sectorBucket);
     setEarningsWithin(f.earningsWithin);
     setVerdictFilter(f.verdict);
+    setCriteriaFilters(preset.criteriaFilters ?? []);
   }, []);
 
   // Add to watchlist
@@ -563,6 +579,7 @@ function PreRunPage() {
                   setSectorBucket(DEFAULT_PRERUN_FILTERS.sectorBucket);
                   setEarningsWithin(DEFAULT_PRERUN_FILTERS.earningsWithin);
                   setVerdictFilter(DEFAULT_PRERUN_FILTERS.verdict);
+                  setCriteriaFilters([]);
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >
@@ -570,6 +587,22 @@ function PreRunPage() {
               </button>
             </div>
         </SidebarSection>
+
+        {/* Active criteria filters indicator */}
+        {criteriaFilters.length > 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-[#5ba3e6]/20 bg-[#5ba3e6]/5 px-3 py-2">
+            <Zap className="h-3 w-3 text-[#5ba3e6] shrink-0" />
+            <span className="text-[10px] text-[#5ba3e6]">
+              Criteria gates: {criteriaFilters.map((cf) => `${cf.criterion}≥${cf.min}`).join(", ")}
+            </span>
+            <button
+              onClick={() => setCriteriaFilters([])}
+              className="ml-auto text-[#5ba3e6]/50 hover:text-[#5ba3e6]"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
 
         {/* Scan / Cancel */}
         <div className="flex gap-2">
@@ -853,7 +886,7 @@ function PreRunPage() {
             </h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
               Screen {getTickersForSector("All").length} stocks across {sectorBuckets.length} sectors
-              for multi-bagger setups. Scores 11 criteria through 3 hard gates with pattern matching.
+              for multi-bagger setups. Scores 15 criteria through 3 hard gates with pattern matching.
             </p>
             <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
@@ -861,7 +894,7 @@ function PreRunPage() {
                 <p className="text-[10px] text-[#666]">Stocks</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
-                <p className="text-2xl font-bold text-[#10b981]">11</p>
+                <p className="text-2xl font-bold text-[#10b981]">15</p>
                 <p className="text-[10px] text-[#666]">Score Criteria</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
@@ -924,10 +957,10 @@ function ResultCard({
   const g = result.gates;
   const isPriority = result.verdict === "PRIORITY";
 
-  const criteriaLabels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"] as const;
-  const criteriaValues = [s.scoreA, s.scoreB, s.scoreC, s.scoreD, s.scoreE, s.scoreF, s.scoreG, s.scoreH, s.scoreI, s.scoreJ, s.scoreK];
-  const criteriaMaxes = [2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2];
-  const criteriaNames = ["Base", "SI", "Catalyst", "Earnings", "Coverage", "Volume", "Index", "Insider", "Options", "RelStr", "Breakout"];
+  const criteriaLabels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"] as const;
+  const criteriaValues = [s.scoreA, s.scoreB, s.scoreC, s.scoreD, s.scoreE, s.scoreF, s.scoreG, s.scoreH, s.scoreI, s.scoreJ, s.scoreK, s.scoreL, s.scoreM, s.scoreN, s.scoreO];
+  const criteriaMaxes = [2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
+  const criteriaNames = ["Base", "SI", "Catalyst", "Earnings", "Coverage", "Volume", "Index", "Insider", "Options", "RelStr", "Breakout", "HigherLows", "EMAReclaim", "RangeCoil", "FailedBD"];
 
   return (
     <div
