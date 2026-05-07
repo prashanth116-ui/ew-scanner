@@ -24,6 +24,36 @@ function fetchWithTimeout(url: string, init: RequestInit, ms = 15000): Promise<R
     .finally(() => clearTimeout(timer));
 }
 
+/** Retry wrapper: retries on timeout/5xx with exponential backoff. */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  { timeout = 15000, retries = 2, baseDelay = 1000 } = {}
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetchWithTimeout(url, init, timeout);
+      // Retry on 429 (rate limit) and 5xx (server errors)
+      if (res.status === 429 || res.status >= 500) {
+        if (attempt < retries) {
+          const delay = baseDelay * Math.pow(2, attempt);
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+      }
+      return res;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
 function extractRaw(val: unknown): number | null {
   if (val == null) return null;
   if (typeof val === "number") return val;
@@ -42,18 +72,27 @@ async function fetchYahooSummary(
   if (!auth) return null;
 
   const url = `${YAHOO_SUMMARY}/${encodeURIComponent(ticker)}?modules=${modules.join(",")}&crumb=${encodeURIComponent(auth.crumb)}`;
-  let res = await fetchWithTimeout(url, {
-    headers: { "User-Agent": UA, Cookie: auth.cookie },
-  });
+  let res: Response;
+  try {
+    res = await fetchWithRetry(url, {
+      headers: { "User-Agent": UA, Cookie: auth.cookie },
+    });
+  } catch {
+    return null;
+  }
 
   if (res.status === 401) {
     invalidateCrumbCache();
     const retryAuth = await getYahooCrumb();
     if (!retryAuth) return null;
     const retryUrl = `${YAHOO_SUMMARY}/${encodeURIComponent(ticker)}?modules=${modules.join(",")}&crumb=${encodeURIComponent(retryAuth.crumb)}`;
-    res = await fetchWithTimeout(retryUrl, {
-      headers: { "User-Agent": UA, Cookie: retryAuth.cookie },
-    });
+    try {
+      res = await fetchWithRetry(retryUrl, {
+        headers: { "User-Agent": UA, Cookie: retryAuth.cookie },
+      });
+    } catch {
+      return null;
+    }
   }
 
   if (!res.ok) return null;
@@ -82,9 +121,14 @@ export async function fetchYahooChart(
   if (!auth) return null;
 
   const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&crumb=${encodeURIComponent(auth.crumb)}`;
-  const res = await fetchWithTimeout(url, {
-    headers: { "User-Agent": UA, Cookie: auth.cookie },
-  });
+  let res: Response;
+  try {
+    res = await fetchWithRetry(url, {
+      headers: { "User-Agent": UA, Cookie: auth.cookie },
+    });
+  } catch {
+    return null;
+  }
   if (!res.ok) return null;
 
   const data = await res.json();
@@ -132,7 +176,7 @@ async function fetchFinnhubEarnings(
 
   try {
     const url = `https://finnhub.io/api/v1/calendar/earnings?symbol=${encodeURIComponent(ticker)}&from=${from}&to=${to}&token=${key}`;
-    const res = await fetchWithTimeout(url, {});
+    const res = await fetchWithRetry(url, {}, { retries: 2, baseDelay: 1500 });
     if (!res.ok) return null;
 
     const data = (await res.json()) as {
@@ -156,7 +200,7 @@ async function fetchFinnhubInsiderTransactions(
 
   try {
     const url = `https://finnhub.io/api/v1/stock/insider-transactions?symbol=${encodeURIComponent(ticker)}&token=${key}`;
-    const res = await fetchWithTimeout(url, {});
+    const res = await fetchWithRetry(url, {}, { retries: 2, baseDelay: 1500 });
     if (!res.ok) return 0;
 
     const data = (await res.json()) as {
@@ -194,7 +238,7 @@ async function fetchFinnhubEarningsSurprises(
 
   try {
     const url = `https://finnhub.io/api/v1/stock/earnings?symbol=${encodeURIComponent(ticker)}&token=${key}`;
-    const res = await fetchWithTimeout(url, {});
+    const res = await fetchWithRetry(url, {}, { retries: 2, baseDelay: 1500 });
     if (!res.ok) return 0;
 
     const data = (await res.json()) as {
@@ -232,7 +276,7 @@ async function fetchYahooPutCallRatio(
 
   try {
     const url = `https://query1.finance.yahoo.com/v7/finance/options/${encodeURIComponent(ticker)}?crumb=${encodeURIComponent(auth.crumb)}`;
-    const res = await fetchWithTimeout(url, {
+    const res = await fetchWithRetry(url, {
       headers: { "User-Agent": UA, Cookie: auth.cookie },
     });
     if (!res.ok) return null;
@@ -269,11 +313,16 @@ async function fetchSECQuarterlyRevenue(
 ): Promise<{ period: string; value: number }[] | null> {
   try {
     // Step 1: Get CIK from SEC company tickers mapping
-    const tickerMapRes = await fetchWithTimeout(
-      "https://www.sec.gov/files/company_tickers.json",
-      { headers: { "User-Agent": SEC_UA } },
-      10000
-    );
+    let tickerMapRes: Response;
+    try {
+      tickerMapRes = await fetchWithRetry(
+        "https://www.sec.gov/files/company_tickers.json",
+        { headers: { "User-Agent": SEC_UA } },
+        { timeout: 10000, retries: 2, baseDelay: 2000 }
+      );
+    } catch {
+      return null;
+    }
     if (!tickerMapRes.ok) return null;
 
     const tickerMap = (await tickerMapRes.json()) as Record<
@@ -292,11 +341,16 @@ async function fetchSECQuarterlyRevenue(
 
     // Step 2: Fetch company facts
     const factsUrl = `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`;
-    const factsRes = await fetchWithTimeout(
-      factsUrl,
-      { headers: { "User-Agent": SEC_UA } },
-      10000
-    );
+    let factsRes: Response;
+    try {
+      factsRes = await fetchWithRetry(
+        factsUrl,
+        { headers: { "User-Agent": SEC_UA } },
+        { timeout: 10000, retries: 2, baseDelay: 2000 }
+      );
+    } catch {
+      return null;
+    }
     if (!factsRes.ok) return null;
 
     const facts = (await factsRes.json()) as {
@@ -662,9 +716,14 @@ export async function fetchBatchQuotes(
   ): Promise<Record<string, unknown>[]> {
     const symbolStr = batch.map((s) => encodeURIComponent(s)).join(",");
     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolStr}&crumb=${encodeURIComponent(crumb)}`;
-    const res = await fetchWithTimeout(url, {
-      headers: { "User-Agent": UA, Cookie: cookie },
-    });
+    let res: Response;
+    try {
+      res = await fetchWithRetry(url, {
+        headers: { "User-Agent": UA, Cookie: cookie },
+      });
+    } catch {
+      return [];
+    }
     if (!res.ok) {
       console.error(`[fetchBatchQuotes] HTTP ${res.status} for batch of ${batch.length} symbols`);
       if (res.status === 401) hadAuth401 = true;
@@ -732,7 +791,7 @@ export async function fetchBatchQuotes(
 // ── Sector ETF chart cache (shared across tickers in same scan) ──
 
 const sectorChartCache = new Map<string, { closes: number[]; ts: number }>();
-const SECTOR_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const SECTOR_CACHE_TTL = 30 * 60 * 1000; // 30 minutes (reduces score variance between runs)
 
 async function fetchSectorETFReturn(sectorETF: string): Promise<number | null> {
   const cached = sectorChartCache.get(sectorETF);
