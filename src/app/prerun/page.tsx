@@ -1033,7 +1033,24 @@ function ResultCard({
         </div>
       </div>
 
-      {/* Score dots (A-K) */}
+      {/* Base Quality Score badge (A + K + F) */}
+      {(() => {
+        const baseScore = s.scoreA + s.scoreK + s.scoreF;
+        const baseMax = 6; // A:2 + K:2 + F:2
+        const baseColor = baseScore >= 5 ? "text-green-400 border-green-500/30 bg-green-500/10"
+          : baseScore >= 3 ? "text-amber-400 border-amber-500/30 bg-amber-500/10"
+          : "text-[#666] border-[#2a2a2a] bg-[#0f0f0f]";
+        return (
+          <div className="flex items-center gap-2 mb-3">
+            <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-medium ${baseColor}`}>
+              Base Quality: {baseScore}/{baseMax}
+            </span>
+            <span className="text-[9px] text-[#555]">A:{s.scoreA} + K:{s.scoreK} + F:{s.scoreF}</span>
+          </div>
+        );
+      })()}
+
+      {/* Score dots (A-O) */}
       <div className="flex flex-wrap items-center gap-1 mb-3">
         {criteriaLabels.map((label, i) => (
           <div key={label} className="flex flex-col items-center gap-0.5" title={`${criteriaNames[i]}: ${criteriaValues[i]}/${criteriaMaxes[i]}`}>
