@@ -1,3 +1,5 @@
+import { SQUEEZE_UNIVERSE } from "./squeeze-universe";
+
 export interface TickerInfo {
   symbol: string;
   name: string;
@@ -203,7 +205,7 @@ const UNIVERSES_DEF = {
   ],
 };
 
-// Build deduplicated "All" universe from all sector lists
+// Build deduplicated "Blue Chips" universe from sector lists
 const allTickers = Object.values(UNIVERSES_DEF).flat();
 const seen = new Set<string>();
 const ALL_UNIVERSE: TickerInfo[] = [];
@@ -214,7 +216,7 @@ for (const t of allTickers) {
   }
 }
 
-const UNIVERSES_WITH_ALL = { All: ALL_UNIVERSE, ...UNIVERSES_DEF };
+const UNIVERSES_WITH_ALL = { "Blue Chips": ALL_UNIVERSE, Full: SQUEEZE_UNIVERSE as TickerInfo[], ...UNIVERSES_DEF };
 
 export const UNIVERSES: Record<string, TickerInfo[]> = UNIVERSES_WITH_ALL;
 export type UniverseKey = keyof typeof UNIVERSES_WITH_ALL;

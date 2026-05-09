@@ -48,7 +48,7 @@ import { SidebarSection } from "@/components/sidebar-section";
 import { PresetList } from "@/components/preset-list";
 
 const BATCH_SIZE = 10;
-const BATCH_DELAY = 300;
+const BATCH_DELAY = 2000;
 
 type SortKey = "score" | "pctFromAth" | "shortFloat" | "earnings";
 type SortDir = "asc" | "desc";

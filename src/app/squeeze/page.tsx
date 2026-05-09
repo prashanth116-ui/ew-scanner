@@ -487,7 +487,7 @@ function SqueezePage() {
   // ── Save / Load / Delete ──
   const handleSave = useCallback(() => {
     const name = saveName.trim() || `Squeeze ${new Date().toLocaleDateString()}`;
-    saveSqueezeScan(name, "All", filters, scored);
+    saveSqueezeScan(name, "Blue Chips", filters, scored);
     setSavedScans(loadSqueezeScans());
     setSaveName("");
   }, [saveName, filters, scored]);

@@ -839,6 +839,7 @@ export const SQUEEZE_UNIVERSE: SqueezeTickerInfo[] = [
   { symbol: "MPW", name: "Medical Properties Trust" },
   { symbol: "MPWR", name: "Monolithic Power" },
   { symbol: "MRCY", name: "Mercury Systems" },
+  { symbol: "MRAM", name: "Everspin Technologies" },
   { symbol: "MRK", name: "Merck" },
   { symbol: "MRNA", name: "Moderna" },
   { symbol: "MRO", name: "Marathon Oil" },

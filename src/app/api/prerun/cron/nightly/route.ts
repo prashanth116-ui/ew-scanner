@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
-import { getAllPreRunTickers } from "@/data/prerun-universe";
+import { getAllSectorSymbols } from "@/data/sector-universe";
 import { sendTelegramMessage } from "@/lib/ew-telegram";
 import type { PreRunResult } from "@/lib/prerun/types";
 import { MAX_SCORE } from "@/lib/prerun/types";
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tickers = getAllPreRunTickers();
+    const tickers = getAllSectorSymbols();
     const results: PreRunResult[] = [];
 
     for (let i = 0; i < tickers.length; i += BATCH_SIZE) {

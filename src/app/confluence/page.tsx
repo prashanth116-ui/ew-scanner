@@ -51,7 +51,7 @@ import { PresetList } from "@/components/preset-list";
 import { ScoreBar } from "@/components/score-bar";
 
 const BATCH_SIZE = 10;
-const BATCH_DELAY = 1200;
+const BATCH_DELAY = 3000;
 
 type SortKey = "confluence" | "ew" | "squeeze" | "prerun" | "sector" | "pass";
 type SortDir = "asc" | "desc";

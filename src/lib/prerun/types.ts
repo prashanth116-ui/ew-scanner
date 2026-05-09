@@ -164,7 +164,7 @@ export interface PreRunFilters {
 
 export const DEFAULT_PRERUN_FILTERS: PreRunFilters = {
   minPctFromAth: 40,
-  minShortFloat: 8,
+  minShortFloat: 5,
   maxMarketCap: 0,
   minScore: 11,
   sectorBucket: "All",
@@ -222,7 +222,7 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     name: "Pre-Run Base",
     shortName: "Pre-Run Base",
     description: "Stage 1→2 / base breakout. Big base → EMA reclaim → coiling near breakout. ARM, DELL, NBIS, DOCN structure.",
-    filters: { minPctFromAth: 35, minShortFloat: 5, minScore: 11, verdict: "All", sectorBucket: "All" },
+    filters: { minPctFromAth: 30, minShortFloat: 5, minScore: 11, verdict: "All", sectorBucket: "All" },
     criteriaFilters: [
       { criterion: "A", min: 2 },
       { criterion: "F", min: 1 },

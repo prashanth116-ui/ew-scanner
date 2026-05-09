@@ -61,6 +61,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "MCHP", name: "Microchip Technology" },
       { symbol: "MKSI", name: "MKS Instruments" },
       { symbol: "MPWR", name: "Monolithic Power" },
+      { symbol: "MRAM", name: "Everspin Technologies" },
       { symbol: "MRVL", name: "Marvell Technology" },
       { symbol: "MTSI", name: "MACOM Technology" },
       { symbol: "MU", name: "Micron Technology" },

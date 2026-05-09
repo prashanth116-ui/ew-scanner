@@ -9,7 +9,7 @@ const BATCH_SIZE = 10;
 const BATCH_DELAY = 1000; // 1s between batches for rate limiting
 
 export async function POST(request: NextRequest) {
-  const rl = rateLimit(`prerun-scan:${getClientKey(request)}`, 10, 60_000);
+  const rl = rateLimit(`prerun-scan:${getClientKey(request)}`, 30, 60_000);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded" },
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as { tickers: string[] };
-    const tickers = validateTickers(body.tickers).slice(0, 800);
+    const tickers = validateTickers(body.tickers).slice(0, 1500);
     if (!tickers.length) {
       return NextResponse.json({ error: "tickers array required (valid A-Z tickers)" }, { status: 400 });
     }
