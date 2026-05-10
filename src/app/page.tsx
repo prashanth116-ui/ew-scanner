@@ -1862,16 +1862,16 @@ function EWScannerPage() {
                     );
                   })()}
 
-                  {/* Target & Invalidation */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {deepStructured.nextTarget && (
-                      <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3">
-                        <p className="text-[10px] uppercase tracking-wider text-[#666]">Next Target</p>
-                        <p className="mt-1 text-lg font-bold text-green-400">
-                          ${deepStructured.nextTarget.toFixed(2)}
+                  {/* Targets & Invalidation */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {(deepStructured.nextTargets?.length ? deepStructured.nextTargets : deepStructured.nextTarget ? [{ label: "Target", price: deepStructured.nextTarget }] : []).map((t, i) => (
+                      <div key={i} className={`rounded-lg border p-3 ${i === 0 ? "border-green-500/20 bg-green-500/5" : "border-emerald-500/15 bg-emerald-500/[0.03]"}`}>
+                        <p className="text-[10px] uppercase tracking-wider text-[#666]">{t.label}</p>
+                        <p className={`mt-1 text-lg font-bold ${i === 0 ? "text-green-400" : "text-emerald-400/80"}`}>
+                          ${t.price.toFixed(2)}
                         </p>
                       </div>
-                    )}
+                    ))}
                     {deepStructured.invalidation && (
                       <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
                         <p className="text-[10px] uppercase tracking-wider text-[#666]">Invalidation</p>
@@ -2091,15 +2091,36 @@ function CandidateCard({
             <span className="text-purple-300">{c.waveCount.position}</span>
           </div>
         )}
-        {c.fibAnalysis?.extensions && c.fibAnalysis.extensions.length > 0 && (
-          <div className="flex items-start gap-2 text-xs">
-            <span className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full bg-blue-400" />
-            <span className="text-[#a0a0a0]">
-              <span className="text-[#c0c0c0]">Targets:</span>{" "}
-              {c.fibAnalysis.extensions.slice(0, 3).map((e) => `$${e.price.toFixed(0)}`).join(", ")}
-            </span>
-          </div>
-        )}
+        {(() => {
+          // Collect all upside targets from fib extensions + wave targets
+          const allTargets: { label: string; price: number }[] = [];
+          if (c.fibAnalysis?.extensions) {
+            for (const e of c.fibAnalysis.extensions) {
+              if (e.price > c.current) allTargets.push({ label: e.label, price: e.price });
+            }
+          }
+          // De-duplicate by price (within $0.50)
+          const unique = allTargets.filter((t, i) =>
+            !allTargets.slice(0, i).some((u) => Math.abs(u.price - t.price) < 0.5)
+          );
+          unique.sort((a, b) => a.price - b.price);
+          const next2 = unique.slice(0, 2);
+          if (next2.length === 0) return null;
+          return (
+            <div className="flex items-start gap-2 text-xs">
+              <span className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full bg-green-400" />
+              <span className="text-[#a0a0a0]">
+                {next2.map((t, i) => (
+                  <span key={i}>
+                    {i > 0 && <span className="text-[#555]"> → </span>}
+                    <span className="text-green-400 font-mono">${t.price.toFixed(2)}</span>
+                    <span className="text-[#666] ml-0.5">({t.label})</span>
+                  </span>
+                ))}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* EW Label */}
         {labels[c.ticker] ? (
@@ -2360,13 +2381,35 @@ function CompactTable({
                               <span className="text-[#a0a0a0]">{c.waveCount.waves.map((w) => w.label).join("-")} ({c.waveCount.score}/100)</span>
                             </div>
                           )}
-                          {c.fibAnalysis?.extensions && c.fibAnalysis.extensions.length > 0 && (
-                            <div className="flex items-center gap-2">
-                              <span className="inline-block h-2 w-2 rounded-full bg-blue-400" />
-                              <span className="text-[#c0c0c0]">Targets:</span>
-                              <span className="text-[#a0a0a0]">{c.fibAnalysis.extensions.slice(0, 3).map((e) => `$${e.price.toFixed(0)}`).join(", ")}</span>
-                            </div>
-                          )}
+                          {(() => {
+                            const tgts: { label: string; price: number }[] = [];
+                            if (c.fibAnalysis?.extensions) {
+                              for (const e of c.fibAnalysis.extensions) {
+                                if (e.price > c.current) tgts.push({ label: e.label, price: e.price });
+                              }
+                            }
+                            const uq = tgts.filter((t, i) =>
+                              !tgts.slice(0, i).some((u) => Math.abs(u.price - t.price) < 0.5)
+                            );
+                            uq.sort((a, b) => a.price - b.price);
+                            const n2 = uq.slice(0, 2);
+                            if (n2.length === 0) return null;
+                            return (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block h-2 w-2 rounded-full bg-green-400" />
+                                <span className="text-[#c0c0c0]">Targets:</span>
+                                <span className="text-[#a0a0a0]">
+                                  {n2.map((t, i) => (
+                                    <span key={i}>
+                                      {i > 0 && " → "}
+                                      <span className="font-mono text-green-400">${t.price.toFixed(2)}</span>
+                                      <span className="text-[#666] ml-0.5">({t.label})</span>
+                                    </span>
+                                  ))}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
                         {/* Center: prices */}
                         <div className="flex gap-4 text-center text-xs">

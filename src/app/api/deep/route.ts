@@ -375,12 +375,16 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
     try {
       const parsed = JSON.parse(text);
 
-      // Fix 2: Validate nextTarget is above current price
-      if (parsed.nextTarget != null && parsed.nextTarget <= data.current) {
-        const upsideLevel = parsed.keyLevels
-          ?.filter((l: { price: number }) => l.price > data.current)
-          ?.sort((a: { price: number }, b: { price: number }) => a.price - b.price)[0];
-        parsed.nextTarget = upsideLevel?.price ?? null;
+      // Fix 2: nextTarget(s) = nearest key levels above current price
+      // AI sometimes picks a distant target (e.g. ATH) instead of the closest one
+      const upsideLevels = (parsed.keyLevels as { label: string; price: number }[] | undefined)
+        ?.filter((l) => l.price > data.current)
+        ?.sort((a, b) => a.price - b.price) ?? [];
+      if (upsideLevels.length > 0) {
+        parsed.nextTarget = upsideLevels[0].price;
+        parsed.nextTargets = upsideLevels.slice(0, 2);
+      } else if (parsed.nextTarget != null && parsed.nextTarget <= data.current) {
+        parsed.nextTarget = null;
       }
 
       // Fix 4: Cap confidence when no algorithmic wave count exists

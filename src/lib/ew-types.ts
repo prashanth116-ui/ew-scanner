@@ -116,6 +116,7 @@ export interface DeepAnalysisResult {
   primaryCount: string;
   alternateCount: string;
   nextTarget: number | null;
+  nextTargets?: { label: string; price: number }[];
   invalidation: number | null;
   keyLevels: { label: string; price: number }[];
   riskLevel: "Low" | "Medium" | "High";
