@@ -2092,7 +2092,7 @@ function CandidateCard({
           </div>
         )}
         {(() => {
-          // Collect all upside targets from fib extensions + wave recovery + forward targets
+          // Collect all upside targets from fib extensions + wave recovery + ATH retracement
           const allTargets: { label: string; price: number }[] = [];
           if (c.fibAnalysis?.extensions) {
             for (const e of c.fibAnalysis.extensions) {
@@ -2106,12 +2106,16 @@ function CandidateCard({
               if (t.price > c.current * 1.005) allTargets.push(t);
             }
           }
-          // Forward targets from ATH/low (always merge — fills gaps between wave and extension)
+          // Fibonacci retracement levels from low toward ATH (recovery targets)
           {
             const ath = c.trueAth ?? c.ath;
-            const fwd = computeForwardTargets(ath, c.low, c.current);
-            for (const t of [...fwd.support, ...fwd.extensions]) {
-              if (t.price > c.current * 1.005) allTargets.push(t);
+            const lo = c.trueLow ?? c.low;
+            const rng = ath - lo;
+            if (rng > 0) {
+              for (const [r, lbl] of [[0.382, "38.2%"], [0.5, "50%"], [0.618, "61.8%"]] as const) {
+                const p = lo + rng * r;
+                if (p > c.current * 1.005) allTargets.push({ label: `${lbl} retracement`, price: Math.round(p * 100) / 100 });
+              }
             }
           }
           // De-duplicate by price (within 0.5%)
@@ -2128,6 +2132,7 @@ function CandidateCard({
                 {next2.map((t, i) => (
                   <span key={i}>
                     {i > 0 && <span className="text-[#555]"> → </span>}
+                    <span className="text-[#c0c0c0]">T{i + 1}:</span>{" "}
                     <span className="text-green-400 font-mono">${t.price.toFixed(2)}</span>
                     <span className="text-[#666] ml-0.5">({t.label})</span>
                   </span>
@@ -2411,9 +2416,13 @@ function CompactTable({
                             }
                             {
                               const ath = c.trueAth ?? c.ath;
-                              const fwd = computeForwardTargets(ath, c.low, c.current);
-                              for (const t of [...fwd.support, ...fwd.extensions]) {
-                                if (t.price > c.current * 1.005) tgts.push(t);
+                              const lo = c.trueLow ?? c.low;
+                              const rng = ath - lo;
+                              if (rng > 0) {
+                                for (const [r, lbl] of [[0.382, "38.2%"], [0.5, "50%"], [0.618, "61.8%"]] as const) {
+                                  const p = lo + rng * r;
+                                  if (p > c.current * 1.005) tgts.push({ label: `${lbl} retracement`, price: Math.round(p * 100) / 100 });
+                                }
                               }
                             }
                             tgts.sort((a, b) => a.price - b.price);
@@ -2425,11 +2434,11 @@ function CompactTable({
                             return (
                               <div className="flex items-center gap-2">
                                 <span className="inline-block h-2 w-2 rounded-full bg-green-400" />
-                                <span className="text-[#c0c0c0]">Targets:</span>
                                 <span className="text-[#a0a0a0]">
                                   {n2.map((t, i) => (
                                     <span key={i}>
                                       {i > 0 && " → "}
+                                      <span className="text-[#c0c0c0]">T{i + 1}:</span>{" "}
                                       <span className="font-mono text-green-400">${t.price.toFixed(2)}</span>
                                       <span className="text-[#666] ml-0.5">({t.label})</span>
                                     </span>
