@@ -35,6 +35,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
   ],
   sectors: [
     { href: "/sectors", label: "Dashboard" },
+    { href: "/rotation", label: "Rotation Tracker" },
     { href: "/sectors/guide", label: "Guide" },
   ],
   confluence: [
@@ -45,7 +46,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
 
 function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" {
   if (pathname.startsWith("/confluence")) return "confluence";
-  if (pathname.startsWith("/sectors")) return "sectors";
+  if (pathname.startsWith("/sectors") || pathname.startsWith("/rotation")) return "sectors";
   if (pathname.startsWith("/prerun")) return "prerun";
   if (pathname.startsWith("/squeeze")) return "squeeze";
   return "ew";
@@ -62,6 +63,7 @@ export function Nav() {
     if (href === "/squeeze") return pathname === "/squeeze";
     if (href === "/prerun") return pathname === "/prerun";
     if (href === "/sectors") return pathname === "/sectors";
+    if (href === "/rotation") return pathname === "/rotation";
     if (href === "/confluence") return pathname === "/confluence";
     return pathname.startsWith(href);
   };
