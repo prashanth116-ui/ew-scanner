@@ -17,6 +17,8 @@ import "server-only";
 import type {
   RotationSignalState,
   RotationEvent,
+  RotationHealthSignals,
+  RRGQuadrant,
   RotationStockPerformance,
   ActiveRotationDetail,
   RotationPatternStats,
@@ -46,18 +48,115 @@ function computeSMASeries(values: number[], period: number): (number | null)[] {
   return result;
 }
 
+// ── Health signal computation (Acceleration, CMF, RRG Quadrant) ──
+
+/** Change in 20d ROC over 6 bars — positive = momentum accelerating. */
+function calcAcceleration(closes: number[]): number {
+  if (closes.length < 26) return 0;
+  const rocSeries: number[] = [];
+  for (let i = 20; i < closes.length; i++) {
+    const past = closes[i - 20];
+    if (!past || past === 0) {
+      rocSeries.push(0);
+    } else {
+      rocSeries.push(((closes[i] - past) / past) * 100);
+    }
+  }
+  if (rocSeries.length < 6) return 0;
+  return rocSeries[rocSeries.length - 1] - rocSeries[rocSeries.length - 6];
+}
+
+/** Chaikin Money Flow over `period` bars — positive = buying pressure. */
+function calcCMF(
+  highs: number[],
+  lows: number[],
+  closes: number[],
+  volumes: number[],
+  period = 20
+): number {
+  const len = Math.min(highs.length, lows.length, closes.length, volumes.length);
+  if (len < period) return 0;
+
+  let mfvSum = 0;
+  let volSum = 0;
+  for (let i = len - period; i < len; i++) {
+    const hl = highs[i] - lows[i];
+    const mfm = hl !== 0 ? ((closes[i] - lows[i]) - (highs[i] - closes[i])) / hl : 0;
+    mfvSum += mfm * volumes[i];
+    volSum += volumes[i];
+  }
+  return volSum !== 0 ? mfvSum / volSum : 0;
+}
+
+/** RRG quadrant: RS-Ratio (10d/30d SMA of sector/SPY ratio) vs RS-Momentum. */
+function calcRRGQuadrant(
+  sectorCloses: number[],
+  spyCloses: number[]
+): { quadrant: RRGQuadrant; rsRatio: number; rsMomentum: number } {
+  const len = Math.min(sectorCloses.length, spyCloses.length);
+  if (len < 31) return { quadrant: "LAGGING", rsRatio: 100, rsMomentum: 0 };
+
+  const sc = sectorCloses.slice(-len);
+  const sp = spyCloses.slice(-len);
+
+  const drs: number[] = [];
+  for (let i = 0; i < len; i++) {
+    drs.push(sp[i] !== 0 ? sc[i] / sp[i] : 0);
+  }
+
+  const end = drs.length;
+  const sma10 = drs.slice(end - 10, end).reduce((a, b) => a + b, 0) / 10;
+  const sma30 = drs.slice(end - 30, end).reduce((a, b) => a + b, 0) / 30;
+  const rsRatio = sma30 !== 0 ? (sma10 / sma30) * 100 : 100;
+
+  let prevRsRatio = 100;
+  if (end >= 32) {
+    const prevSma10 = drs.slice(end - 11, end - 1).reduce((a, b) => a + b, 0) / 10;
+    const prevSma30 = drs.slice(end - 31, end - 1).reduce((a, b) => a + b, 0) / 30;
+    prevRsRatio = prevSma30 !== 0 ? (prevSma10 / prevSma30) * 100 : 100;
+  }
+  const rsMomentum = rsRatio - prevRsRatio;
+
+  let quadrant: RRGQuadrant;
+  if (rsRatio >= 100 && rsMomentum >= 0) quadrant = "LEADING";
+  else if (rsRatio >= 100 && rsMomentum < 0) quadrant = "WEAKENING";
+  else if (rsRatio < 100 && rsMomentum < 0) quadrant = "LAGGING";
+  else quadrant = "IMPROVING";
+
+  return { quadrant, rsRatio, rsMomentum };
+}
+
+/** Compute health signals for a sector from its aligned bar data. */
+function computeHealthSignals(aligned: AlignedBar[]): RotationHealthSignals {
+  const closes = aligned.map((b) => b.etfClose);
+  const highs = aligned.map((b) => b.etfHigh);
+  const lows = aligned.map((b) => b.etfLow);
+  const volumes = aligned.map((b) => b.etfVolume);
+  const spyCloses = aligned.map((b) => b.spyClose);
+
+  const acceleration = Math.round(calcAcceleration(closes) * 100) / 100;
+  const cmf20 = Math.round(calcCMF(highs, lows, closes, volumes, 20) * 1000) / 1000;
+  const { quadrant } = calcRRGQuadrant(closes, spyCloses);
+
+  return { acceleration, cmf20, quadrant };
+}
+
 // ── RS series computation ──
 
 interface AlignedBar {
   date: string; // YYYY-MM-DD
   timestamp: number;
   etfClose: number;
+  etfHigh: number;
+  etfLow: number;
   etfVolume: number;
   spyClose: number;
 }
 
 function alignSeries(
   etfCloses: number[],
+  etfHighs: number[],
+  etfLows: number[],
   etfVolumes: number[],
   etfTimestamps: number[],
   spyCloses: number[],
@@ -78,6 +177,8 @@ function alignSeries(
         date,
         timestamp: etfTimestamps[i],
         etfClose: etfCloses[i],
+        etfHigh: etfHighs[i],
+        etfLow: etfLows[i],
         etfVolume: etfVolumes[i],
         spyClose: spyClose,
       });
@@ -145,7 +246,8 @@ function detectRotationEvents(
   sectorId: string,
   sectorName: string,
   etf: string,
-  dailySignals: DailySignal[]
+  dailySignals: DailySignal[],
+  health: RotationHealthSignals
 ): RotationEvent[] {
   if (dailySignals.length < 6) return [];
 
@@ -176,10 +278,8 @@ function detectRotationEvents(
         if (belowThresholdStreak >= 3) {
           // Rotation ended 3 days ago
           const endIdx = i - 2;
-          const startDay = dailySignals[currentStart];
-          const endDay = dailySignals[endIdx];
           events.push(
-            buildEvent(sectorId, sectorName, etf, dailySignals, currentStart, endIdx)
+            buildEvent(sectorId, sectorName, etf, dailySignals, currentStart, endIdx, health)
           );
           currentStart = null;
           belowThresholdStreak = 0;
@@ -199,7 +299,8 @@ function detectRotationEvents(
         etf,
         dailySignals,
         currentStart,
-        null // active — no end
+        null, // active — no end
+        health
       )
     );
   }
@@ -213,7 +314,8 @@ function buildEvent(
   etf: string,
   dailySignals: DailySignal[],
   startIdx: number,
-  endIdx: number | null
+  endIdx: number | null,
+  health: RotationHealthSignals
 ): RotationEvent {
   const startDay = dailySignals[startIdx];
   const lastIdx = endIdx ?? dailySignals.length - 1;
@@ -243,6 +345,7 @@ function buildEvent(
     etfPriceNow: endDay.close,
     etfPerformancePct: Math.round(perfPct * 100) / 100,
     signals: endDay.signals,
+    health,
     signalHistory: history,
   };
 }
@@ -392,6 +495,8 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     // Align ETF and SPY timestamps
     const aligned = alignSeries(
       chart.closes,
+      chart.highs,
+      chart.lows,
       chart.volumes,
       chart.timestamps,
       spyChart.closes,
@@ -404,12 +509,16 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     const dailySignals = computeDailySignals(aligned);
     if (dailySignals.length < 6) continue;
 
+    // Compute health signals (acceleration, CMF, RRG quadrant)
+    const health = computeHealthSignals(aligned);
+
     // Detect rotation events
     const events = detectRotationEvents(
       sector.id,
       sector.displayName,
       sector.etf,
-      dailySignals
+      dailySignals,
+      health
     );
 
     allEvents.push(...events);

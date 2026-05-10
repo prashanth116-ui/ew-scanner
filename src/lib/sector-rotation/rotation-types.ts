@@ -10,6 +10,14 @@ export interface RotationSignalState {
   signalCount: number; // 0-3
 }
 
+export type RRGQuadrant = "LEADING" | "WEAKENING" | "LAGGING" | "IMPROVING";
+
+export interface RotationHealthSignals {
+  acceleration: number; // change in 20d ROC — positive = gaining steam, negative = fading
+  cmf20: number; // Chaikin Money Flow 20d — positive = inflow, negative = outflow
+  quadrant: RRGQuadrant; // RRG classification vs SPY
+}
+
 export interface RotationEvent {
   sectorId: string;
   sectorName: string;
@@ -21,6 +29,7 @@ export interface RotationEvent {
   etfPriceNow: number;
   etfPerformancePct: number;
   signals: RotationSignalState; // current signal state
+  health: RotationHealthSignals; // rotation conviction signals
   signalHistory: { date: string; signalCount: number; close: number }[];
 }
 

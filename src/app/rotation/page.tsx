@@ -17,6 +17,7 @@ import type {
   RotationEvent,
   RotationPatternStats,
   RotationStockPerformance,
+  RRGQuadrant,
 } from "@/lib/sector-rotation/rotation-types";
 
 // ── localStorage cache (4-hour TTL) ──
@@ -144,6 +145,49 @@ function perfBg(pct: number): string {
   return "bg-red-500/10";
 }
 
+// ── Quadrant + health helpers ──
+
+function quadrantBadge(q: RRGQuadrant): { label: string; className: string } {
+  switch (q) {
+    case "LEADING":
+      return { label: "LEADING", className: "bg-green-500/15 text-green-400 border-green-500/30" };
+    case "WEAKENING":
+      return { label: "WEAKENING", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+    case "LAGGING":
+      return { label: "LAGGING", className: "bg-red-500/15 text-red-400 border-red-500/30" };
+    case "IMPROVING":
+      return { label: "IMPROVING", className: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" };
+  }
+}
+
+function accelColor(val: number): string {
+  if (val > 1) return "text-green-400";
+  if (val > 0) return "text-green-400/70";
+  if (val > -1) return "text-red-400/70";
+  return "text-red-400";
+}
+
+function cmfColor(val: number): string {
+  if (val > 0.1) return "text-green-400";
+  if (val > 0) return "text-green-400/70";
+  if (val > -0.1) return "text-red-400/70";
+  return "text-red-400";
+}
+
+function accelLabel(val: number): string {
+  if (val > 1) return "Accelerating";
+  if (val > 0) return "Gaining";
+  if (val > -1) return "Slowing";
+  return "Fading";
+}
+
+function cmfLabel(val: number): string {
+  if (val > 0.1) return "Strong Inflow";
+  if (val > 0) return "Mild Inflow";
+  if (val > -0.1) return "Mild Outflow";
+  return "Strong Outflow";
+}
+
 // ── Section 1: Active Rotation Cards ──
 
 function ActiveRotationCards({
@@ -180,12 +224,33 @@ function ActiveRotationCards({
                 <h3 className="font-semibold text-white">
                   {r.event.sectorName}
                 </h3>
-                <span className="text-xs text-[#888]">{r.event.etf}</span>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span className="text-xs text-[#888]">{r.event.etf}</span>
+                  <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${quadrantBadge(r.event.health.quadrant).className}`}>
+                    {quadrantBadge(r.event.health.quadrant).label}
+                  </span>
+                </div>
               </div>
               <span className={`text-lg font-bold ${perfColor(r.event.etfPerformancePct)}`}>
                 {r.event.etfPerformancePct > 0 ? "+" : ""}
                 {r.event.etfPerformancePct.toFixed(1)}%
               </span>
+            </div>
+
+            {/* Health signals */}
+            <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[#888]">Momentum</span>
+                <span className={accelColor(r.event.health.acceleration)}>
+                  {accelLabel(r.event.health.acceleration)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#888]">Money Flow</span>
+                <span className={cmfColor(r.event.health.cmf20)}>
+                  {cmfLabel(r.event.health.cmf20)}
+                </span>
+              </div>
             </div>
 
             <div className="mt-3 flex items-center gap-2 text-xs text-[#888]">
@@ -574,17 +639,32 @@ function RecentlyEndedList({ events }: { events: RotationEvent[] }) {
           key={`${e.sectorId}-${i}`}
           className="flex items-center justify-between rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3"
         >
-          <div>
-            <span className="font-medium text-white">{e.sectorName}</span>
-            <span className="ml-2 text-xs text-[#888]">{e.etf}</span>
-            <span className="ml-3 text-xs text-[#666]">
+          <div className="flex items-center gap-3">
+            <div>
+              <span className="font-medium text-white">{e.sectorName}</span>
+              <span className="ml-2 text-xs text-[#888]">{e.etf}</span>
+              <span className={`ml-2 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${quadrantBadge(e.health.quadrant).className}`}>
+                {e.health.quadrant}
+              </span>
+            </div>
+            <span className="text-xs text-[#666]">
               {e.startDate} — {e.endDate} ({e.daysActive}d)
             </span>
           </div>
-          <span className={`font-semibold ${perfColor(e.etfPerformancePct)}`}>
-            {e.etfPerformancePct > 0 ? "+" : ""}
-            {e.etfPerformancePct.toFixed(1)}%
-          </span>
+          <div className="flex items-center gap-4">
+            <div className="hidden text-xs sm:flex sm:gap-3">
+              <span className={accelColor(e.health.acceleration)}>
+                Accel: {e.health.acceleration > 0 ? "+" : ""}{e.health.acceleration.toFixed(2)}
+              </span>
+              <span className={cmfColor(e.health.cmf20)}>
+                CMF: {e.health.cmf20 > 0 ? "+" : ""}{e.health.cmf20.toFixed(3)}
+              </span>
+            </div>
+            <span className={`font-semibold ${perfColor(e.etfPerformancePct)}`}>
+              {e.etfPerformancePct > 0 ? "+" : ""}
+              {e.etfPerformancePct.toFixed(1)}%
+            </span>
+          </div>
         </div>
       ))}
     </div>
