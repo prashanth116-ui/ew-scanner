@@ -10,6 +10,11 @@ import { SQUEEZE_UNIVERSE } from "./squeeze-universe";
 // structurally compatible with TickerInfo (sector? is optional).
 const _universe: TickerInfo[] = SQUEEZE_UNIVERSE;
 
+// O(1) ticker lookup map — built once at module load
+const _tickerMap = new Map<string, TickerInfo>(
+  _universe.map((t) => [t.symbol, t])
+);
+
 export function getConfluenceUniverse(): TickerInfo[] {
   return _universe;
 }
@@ -19,5 +24,5 @@ export function getConfluenceUniverseSymbols(): string[] {
 }
 
 export function getConfluenceTickerInfo(symbol: string): TickerInfo | undefined {
-  return _universe.find((t) => t.symbol === symbol);
+  return _tickerMap.get(symbol);
 }

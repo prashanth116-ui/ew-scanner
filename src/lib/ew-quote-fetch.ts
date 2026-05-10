@@ -6,7 +6,7 @@
 import "server-only";
 
 import { findStructuralReferences } from "./ew-structural";
-import { fetchWithRetry } from "@/lib/yahoo-utils";
+import { fetchWithRetry, getCachedChart, setCachedChart } from "@/lib/yahoo-utils";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
 const UA =
@@ -46,22 +46,33 @@ export async function fetchEWQuoteData(
 ): Promise<EWQuoteResult | null> {
   const { detail = true } = options;
 
-  const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?interval=1wk&range=5y&includePrePost=false`;
-  let res: Response;
-  try {
-    res = await fetchWithRetry(
-      url,
-      { headers: { "User-Agent": UA } },
-      { timeout: 15000, retries: 1 }
-    );
-  } catch {
-    return null;
+  // Check chart cache first (shared with Pre-Run via yahoo-utils)
+  const cached = getCachedChart(ticker, "5y", "1wk");
+  let data: Record<string, unknown>;
+
+  if (cached) {
+    data = cached as Record<string, unknown>;
+  } else {
+    const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?interval=1wk&range=5y&includePrePost=false`;
+    let res: Response;
+    try {
+      res = await fetchWithRetry(
+        url,
+        { headers: { "User-Agent": UA } },
+        { timeout: 15000, retries: 1 }
+      );
+    } catch {
+      return null;
+    }
+
+    if (!res.ok) return null;
+
+    data = await res.json();
+    setCachedChart(ticker, "5y", "1wk", data);
   }
 
-  if (!res.ok) return null;
-
-  const data = await res.json();
-  const result = data?.chart?.result?.[0];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = (data as any)?.chart?.result?.[0];
   if (!result) return null;
 
   const timestamps: number[] = result.timestamp ?? [];

@@ -61,9 +61,9 @@ const HTF_OPTIONS = ["Monthly", "Weekly"] as const;
 const LTF_OPTIONS = ["Daily", "4H", "1H"] as const;
 
 const BATCH_SIZE = 10;
-const BATCH_DELAY = 300;
+const BATCH_DELAY = 500;
 const LABEL_TOP_N = 30;
-const LABEL_MIN_SCORE = 0.5; // 50% normalized score
+const LABEL_MIN_SCORE = 0.65; // 65% normalized score — cuts ~40% of AI label calls
 
 type SortKey = "score" | "decline" | "recovery" | "sector" | "confidence";
 type GroupKey = "none" | "sector" | "confidence";
@@ -319,9 +319,9 @@ function EWScannerPage() {
     setTickerError(null);
 
     try {
-      // Fetch quote
+      // Fetch quote with MTF daily data for single-ticker search
       const res = await fetch(
-        `/api/quote?ticker=${encodeURIComponent(ticker)}&detail=1`,
+        `/api/quote?ticker=${encodeURIComponent(ticker)}&detail=1&mtf=1`,
         { signal }
       );
       if (!res.ok) {
@@ -358,6 +358,7 @@ function EWScannerPage() {
         trueLowYear: data.trueLowYear,
         preAthLow: data.preAthLow,
         preAthLowYear: data.preAthLowYear,
+        dailySeries: data.dailySeries as PriceSeries | undefined,
       };
 
       const scored = scoreBatchEnhanced([quote], {
@@ -447,10 +448,14 @@ function EWScannerPage() {
     }
     const total = tickers.length;
     const quotes: EnrichedQuoteInput[] = [];
+    let fetchFailures = 0;
 
     for (let i = 0; i < total; i += BATCH_SIZE) {
       const batch = tickers.slice(i, i + BATCH_SIZE);
-      setProgress(`Fetching ${Math.min(i + BATCH_SIZE, total)}/${total}...`);
+      const fetched = Math.min(i + BATCH_SIZE, total);
+      const failRate = fetched > 0 ? fetchFailures / fetched : 0;
+      const failWarning = failRate > 0.25 ? ` \u26a0 ${Math.round(failRate * 100)}% failing` : "";
+      setProgress(`Fetching ${fetched}/${total}...${failWarning}`);
 
       const settled = await Promise.allSettled(
         batch.map(async (t) => {
@@ -486,6 +491,8 @@ function EWScannerPage() {
       for (const r of settled) {
         if (r.status === "fulfilled" && r.value) {
           quotes.push(r.value);
+        } else {
+          fetchFailures++;
         }
       }
 
@@ -495,7 +502,7 @@ function EWScannerPage() {
     }
 
     if (!quotes.length) {
-      setProgress("No data returned. Try again.");
+      setProgress("No data returned. Yahoo may be down — try again later.");
       setScanning(false);
       return;
     }
@@ -571,7 +578,7 @@ function EWScannerPage() {
       const skipped = modeFilteredCandidates.length - labelCandidates.length;
       setProgress(
         `${modeFilteredCandidates.length} candidates found. Labeling top ${labelCandidates.length}...` +
-        (skipped > 0 ? ` (${skipped} below 50% skipped)` : "")
+        (skipped > 0 ? ` (${skipped} below 65% skipped)` : "")
       );
       setLabeling(true);
 

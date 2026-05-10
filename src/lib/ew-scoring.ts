@@ -8,8 +8,9 @@ import type {
   ConfidenceTier,
   ScannerMode,
   WaveCount,
+  MTFConfirmation,
 } from "./ew-types";
-import { countWaves } from "./ew-wave-counter";
+import { countWaves, confirmMultiTimeframe } from "./ew-wave-counter";
 import { analyzeFibonacciEnhanced } from "./ew-fibonacci";
 import { analyzeVolume } from "./ew-volume";
 import { analyzeMomentum } from "./ew-momentum";
@@ -124,6 +125,7 @@ export interface EnrichedQuoteInput {
   trueLowYear?: number;
   preAthLow?: number;
   preAthLowYear?: number;
+  dailySeries?: PriceSeries;
 }
 
 interface EnhancedScoringParams extends ScoringParams {
@@ -271,6 +273,29 @@ export function scoreEnhanced(
   const correctionVolumeDryUp = detectCorrectionVolumeDryUp(q.series!, waveCount);
   const wave3Target = projectWave3Target(waveCount);
 
+  // Multi-timeframe confirmation (when daily data is available)
+  let mtfConfirmation: MTFConfirmation | undefined;
+  let dailyWaveCount: WaveCount | undefined;
+  if (q.dailySeries && q.dailySeries.close.length > 50 && waveCount) {
+    try {
+      // Find ATH and low on daily series for wave counting
+      let dAthIdx = 0;
+      let dAthVal = -Infinity;
+      for (let i = 0; i < q.dailySeries.high.length; i++) {
+        if (q.dailySeries.high[i] > dAthVal) { dAthVal = q.dailySeries.high[i]; dAthIdx = i; }
+      }
+      let dLowIdx = dAthIdx;
+      let dLowVal = Infinity;
+      for (let i = dAthIdx; i < q.dailySeries.low.length; i++) {
+        if (q.dailySeries.low[i] < dLowVal) { dLowVal = q.dailySeries.low[i]; dLowIdx = i; }
+      }
+      mtfConfirmation = confirmMultiTimeframe(waveCount, q.dailySeries, dAthIdx, dLowIdx);
+      dailyWaveCount = countWaves(q.dailySeries, dAthIdx, dLowIdx, "intermediate") ?? undefined;
+    } catch {
+      // MTF is non-critical
+    }
+  }
+
   return {
     ...base,
     sector: q.sector,
@@ -283,6 +308,9 @@ export function scoreEnhanced(
     momentumAnalysis,
     structureAnalysis,
     waveCount: waveCount ?? undefined,
+    mtfConfirmation,
+    dailyWaveCount,
+    dailySeries: q.dailySeries,
     correctionVolumeDryUp,
     wave3Target,
     series: q.series,

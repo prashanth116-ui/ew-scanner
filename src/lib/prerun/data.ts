@@ -8,7 +8,7 @@ import "server-only";
 import type { PreRunStockData } from "./types";
 import { getYahooCrumb, invalidateCrumbCache } from "../squeeze-fetch";
 import { getSectorForTicker, getSectorETF } from "@/data/prerun-universe";
-import { fetchWithRetry, extractRaw } from "@/lib/yahoo-utils";
+import { fetchWithRetry, extractRaw, getCachedChart, setCachedChart } from "@/lib/yahoo-utils";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -72,21 +72,32 @@ export async function fetchYahooChart(
   lows: number[];
   timestamps: number[];
 } | null> {
-  const auth = await getYahooCrumb();
-  if (!auth) return null;
+  // Check shared chart cache (avoids duplicate 5y weekly fetches in confluence)
+  const cached = getCachedChart(ticker, range, interval);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let data: any;
 
-  const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&crumb=${encodeURIComponent(auth.crumb)}`;
-  let res: Response;
-  try {
-    res = await fetchWithRetry(url, {
-      headers: { "User-Agent": UA, Cookie: auth.cookie },
-    });
-  } catch {
-    return null;
+  if (cached) {
+    data = cached;
+  } else {
+    const auth = await getYahooCrumb();
+    if (!auth) return null;
+
+    const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&crumb=${encodeURIComponent(auth.crumb)}`;
+    let res: Response;
+    try {
+      res = await fetchWithRetry(url, {
+        headers: { "User-Agent": UA, Cookie: auth.cookie },
+      });
+    } catch {
+      return null;
+    }
+    if (!res.ok) return null;
+
+    data = await res.json();
+    setCachedChart(ticker, range, interval, data);
   }
-  if (!res.ok) return null;
 
-  const data = await res.json();
   const chart = (data as {
     chart?: {
       result?: {
@@ -379,10 +390,10 @@ async function fetchSECQuarterlyRevenue(
   }
 }
 
-/** Calculate SMA from closes. */
-export function calcSMA(closes: number[], period: number): number | null {
-  if (closes.length < period) return null;
-  const slice = closes.slice(-period);
+/** Calculate SMA of the last `period` values. Works on any numeric array. */
+export function calcSMA(values: number[], period: number): number | null {
+  if (values.length < period) return null;
+  const slice = values.slice(-period);
   return slice.reduce((a, b) => a + b, 0) / period;
 }
 

@@ -40,6 +40,7 @@ import {
   deleteConfluenceScan,
   type SavedConfluenceScan,
 } from "@/lib/confluence/storage";
+import { saveScanSnapshot, computeSignalPersistence, type SignalPersistence } from "@/lib/confluence/history";
 import { getConfluenceUniverse, getConfluenceTickerInfo } from "@/data/confluence-universe";
 import { getSectorForSymbol } from "@/data/sector-universe";
 import type { SectorRotationScore, SectorRotationResult, RRGQuadrant } from "@/lib/sector-rotation/types";
@@ -184,6 +185,9 @@ export default function ConfluencePage() {
     setSavedScans(loadConfluenceScans());
   }, []);
 
+  // Signal persistence from previous scan
+  const [persistence, setPersistence] = useState<SignalPersistence | null>(null);
+
   // Cleanup abort on unmount
   useEffect(() => {
     return () => {
@@ -281,6 +285,18 @@ export default function ConfluencePage() {
 
     return results;
   }, [rawResults, sectorMap, weights, thresholds]);
+
+  // Save scan snapshot & compute persistence when scan finishes
+  const prevScanningRef = useRef(false);
+  useEffect(() => {
+    if (prevScanningRef.current && !scanning && confluenceResults.length > 0) {
+      // Compute persistence before saving (compares against last saved snapshot)
+      setPersistence(computeSignalPersistence(confluenceResults));
+      // Save current scan as a new snapshot
+      saveScanSnapshot(confluenceResults);
+    }
+    prevScanningRef.current = scanning;
+  }, [scanning, confluenceResults]);
 
   // Filter & sort
   const filtered = useMemo(() => {
@@ -843,6 +859,21 @@ export default function ConfluencePage() {
                 <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">Weak</p>
                 <p className="text-lg font-bold text-[#a0a0a0]">{stats.weak}</p>
               </div>
+            </div>
+          )}
+
+          {/* Signal persistence from previous scan */}
+          {persistence && !scanning && (
+            <div className="mb-4 rounded-lg border border-purple-500/20 bg-purple-500/5 px-4 py-2.5 flex items-center gap-4 text-xs">
+              <span className="text-purple-400 font-medium">Signal Persistence:</span>
+              <span className="text-white">{persistence.persisted}/{persistence.total} strong signals persisted</span>
+              <span className="text-[#a0a0a0]">({(persistence.rate * 100).toFixed(0)}%)</span>
+              {persistence.upgraded > 0 && (
+                <span className="text-green-400">+{persistence.upgraded} new</span>
+              )}
+              {persistence.downgraded > 0 && (
+                <span className="text-red-400">-{persistence.downgraded} dropped</span>
+              )}
             </div>
           )}
 

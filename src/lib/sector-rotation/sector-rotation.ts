@@ -66,7 +66,7 @@ function calcMansfieldRS(sectorCloses: number[], spyCloses: number[]): number {
     drs.push(sp[i] !== 0 ? sc[i] / sp[i] : 0);
   }
 
-  const sma200 = drs.slice(-200).reduce((a, b) => a + b, 0) / 200;
+  const sma200 = calcSMA(drs, 200) ?? 0;
   if (sma200 === 0) return 0;
   return 100 * (drs[drs.length - 1] / sma200 - 1);
 }
@@ -490,7 +490,8 @@ export async function calculateSectorRotation(
     // Unusual volume (from ETF chart — always available)
     let unusualVolume = false;
     if (chart.volumes.length >= 21) {
-      const avgVol20 = chart.volumes.slice(-21, -1).reduce((a, b) => a + b, 0) / 20;
+      const prevVols = chart.volumes.slice(-21, -1);
+      const avgVol20 = calcSMA(prevVols, 20) ?? 0;
       const todayVol = chart.volumes[chart.volumes.length - 1];
       unusualVolume = avgVol20 > 0 && todayVol > 1.5 * avgVol20;
     }
@@ -712,20 +713,31 @@ export async function calculateSectorRotation(
     const sectorStocks = preRunBySector.get(sector.sector) ?? [];
     if (sectorStocks.length === 0) continue;
 
+    // Compute RS percentile ranking within sector peers
+    const sectorRSValues = sectorStocks
+      .filter((r) => r.data.relativeStrength20d !== null)
+      .map((r) => r.data.relativeStrength20d!);
+
     const ranked = sectorStocks
       .map((r) => {
+        const rsPercentile = sectorRSValues.length >= 3
+          ? percentileRank(sectorRSValues, r.data.relativeStrength20d ?? 0)
+          : null;
+
         const score =
           r.scores.finalScore * 0.4 +
           r.scores.scoreJ * 0.2 * 12 +
           r.scores.scoreK * 0.2 * 12 +
           ((r.data.insiderBuys90d ?? 0) > 0 ? 10 : 0) * 0.1 +
-          ((r.data.putCallRatio ?? 1) < 0.7 ? 10 : 0) * 0.1;
+          ((r.data.putCallRatio ?? 1) < 0.7 ? 10 : 0) * 0.1 +
+          (rsPercentile !== null && rsPercentile >= 80 ? 3 : 0); // Bonus for top 20% RS
 
         const reasons: string[] = [];
         if (r.scores.finalScore >= 19) reasons.push("High score");
         if ((r.data.insiderBuys90d ?? 0) > 0) reasons.push("Insider buying");
         if ((r.data.putCallRatio ?? 1) < 0.7) reasons.push("Bullish options flow");
-        if ((r.data.relativeStrength20d ?? 0) > 0) reasons.push("RS leader");
+        if (rsPercentile !== null && rsPercentile >= 80) reasons.push(`Top ${Math.round(100 - rsPercentile)}% RS`);
+        else if ((r.data.relativeStrength20d ?? 0) > 0) reasons.push("RS leader");
         if ((r.data.pctFromBaseHigh ?? 100) < 10) reasons.push("Near breakout");
 
         return { ticker: r.data.ticker, score: Math.round(score * 10) / 10, reasons };

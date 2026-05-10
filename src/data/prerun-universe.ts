@@ -33,7 +33,7 @@ export function getSectorETF(sector: string): string {
 }
 
 export function getAllPreRunTickers(): string[] {
-  return _allTickers;
+  return [..._allTickers];
 }
 
 export function getTickersForSector(sector: string): string[] {
