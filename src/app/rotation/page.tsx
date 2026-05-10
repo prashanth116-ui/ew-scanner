@@ -22,7 +22,7 @@ import type {
 
 // ── localStorage cache (4-hour TTL) ──
 
-const CACHE_KEY = "ew-rotation-tracker-v1";
+const CACHE_KEY = "ew-rotation-tracker-v2";
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 
 function loadCached(): RotationTrackerResult | null {
@@ -145,6 +145,14 @@ function perfBg(pct: number): string {
   return "bg-red-500/10";
 }
 
+// ── Safe health accessor (guards against stale cached data missing health) ──
+
+const DEFAULT_HEALTH = { acceleration: 0, cmf20: 0, quadrant: "LAGGING" as RRGQuadrant };
+
+function getHealth(event: RotationEvent) {
+  return event.health ?? DEFAULT_HEALTH;
+}
+
 // ── Quadrant + health helpers ──
 
 function quadrantBadge(q: RRGQuadrant): { label: string; className: string } {
@@ -211,6 +219,7 @@ function ActiveRotationCards({
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {rotations.map((r) => {
         const isExpanded = expandedId === r.event.sectorId;
+        const h = getHealth(r.event);
         return (
           <button
             key={r.event.sectorId}
@@ -226,8 +235,8 @@ function ActiveRotationCards({
                 </h3>
                 <div className="mt-0.5 flex items-center gap-2">
                   <span className="text-xs text-[#888]">{r.event.etf}</span>
-                  <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${quadrantBadge(r.event.health.quadrant).className}`}>
-                    {quadrantBadge(r.event.health.quadrant).label}
+                  <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${quadrantBadge(h.quadrant).className}`}>
+                    {quadrantBadge(h.quadrant).label}
                   </span>
                 </div>
               </div>
@@ -241,14 +250,14 @@ function ActiveRotationCards({
             <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-[#888]">Momentum</span>
-                <span className={accelColor(r.event.health.acceleration)}>
-                  {accelLabel(r.event.health.acceleration)}
+                <span className={accelColor(h.acceleration)}>
+                  {accelLabel(h.acceleration)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[#888]">Money Flow</span>
-                <span className={cmfColor(r.event.health.cmf20)}>
-                  {cmfLabel(r.event.health.cmf20)}
+                <span className={cmfColor(h.cmf20)}>
+                  {cmfLabel(h.cmf20)}
                 </span>
               </div>
             </div>
@@ -634,7 +643,9 @@ function RecentlyEndedList({ events }: { events: RotationEvent[] }) {
 
   return (
     <div className="space-y-2">
-      {events.map((e, i) => (
+      {events.map((e, i) => {
+        const h = getHealth(e);
+        return (
         <div
           key={`${e.sectorId}-${i}`}
           className="flex items-center justify-between rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3"
@@ -643,8 +654,8 @@ function RecentlyEndedList({ events }: { events: RotationEvent[] }) {
             <div>
               <span className="font-medium text-white">{e.sectorName}</span>
               <span className="ml-2 text-xs text-[#888]">{e.etf}</span>
-              <span className={`ml-2 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${quadrantBadge(e.health.quadrant).className}`}>
-                {e.health.quadrant}
+              <span className={`ml-2 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${quadrantBadge(h.quadrant).className}`}>
+                {h.quadrant}
               </span>
             </div>
             <span className="text-xs text-[#666]">
@@ -653,11 +664,11 @@ function RecentlyEndedList({ events }: { events: RotationEvent[] }) {
           </div>
           <div className="flex items-center gap-4">
             <div className="hidden text-xs sm:flex sm:gap-3">
-              <span className={accelColor(e.health.acceleration)}>
-                Accel: {e.health.acceleration > 0 ? "+" : ""}{e.health.acceleration.toFixed(2)}
+              <span className={accelColor(h.acceleration)}>
+                Accel: {h.acceleration > 0 ? "+" : ""}{h.acceleration.toFixed(2)}
               </span>
-              <span className={cmfColor(e.health.cmf20)}>
-                CMF: {e.health.cmf20 > 0 ? "+" : ""}{e.health.cmf20.toFixed(3)}
+              <span className={cmfColor(h.cmf20)}>
+                CMF: {h.cmf20 > 0 ? "+" : ""}{h.cmf20.toFixed(3)}
               </span>
             </div>
             <span className={`font-semibold ${perfColor(e.etfPerformancePct)}`}>
@@ -666,7 +677,8 @@ function RecentlyEndedList({ events }: { events: RotationEvent[] }) {
             </span>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
