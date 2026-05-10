@@ -163,6 +163,7 @@ export interface EnhancedScoredCandidate {
   // Quant enrichment
   correctionVolumeDryUp?: boolean;
   wave3Target?: number | null;
+  wavePositionMatch?: boolean;
   // Structural fallback: true ATH/Low when analysis uses prior correction
   trueAth?: number;
   trueAthYear?: number;

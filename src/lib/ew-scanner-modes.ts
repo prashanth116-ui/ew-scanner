@@ -48,28 +48,55 @@ export function getModeConfig(mode: ScannerMode): ModeConfig {
 }
 
 /**
+ * Keywords for matching wave counter position strings to scanner modes.
+ * Matched case-insensitively via includes() against WaveCount.position.
+ */
+const MODE_WAVE_POSITIONS: Record<ScannerMode, string[]> = {
+  wave2: ["wave 2", "wave c", "a-b-c correction may be complete"],
+  wave4: ["wave 4"],
+  wave5: ["wave 5", "beyond wave 5"],
+  breakout: ["wave 3", "post-wave 5"],
+};
+
+/**
+ * Check if a wave counter position string matches the given scanner mode.
+ */
+export function isWavePositionMatch(
+  position: string | undefined,
+  mode: ScannerMode
+): boolean {
+  if (!position) return false;
+  const lower = position.toLowerCase();
+  return MODE_WAVE_POSITIONS[mode].some((kw) => lower.includes(kw));
+}
+
+/**
  * Apply mode-specific filters to scored candidates.
- * Returns only candidates that pass the mode's criteria.
+ * Returns only candidates that pass the mode's criteria,
+ * annotated with wavePositionMatch for two-tier sorting.
  */
 export function applyModeFilters(
   candidates: EnhancedScoredCandidate[],
   mode: ScannerMode
 ): EnhancedScoredCandidate[] {
+  let filtered: EnhancedScoredCandidate[];
+
   switch (mode) {
     case "wave2":
       // Classic: significant decline, some recovery, Fib golden zone preferred
       // Reject structural override stocks — stocks at ATH are not Wave 2 bottoms
-      return candidates.filter((c) => {
+      filtered = candidates.filter((c) => {
         if (c.trueAth != null) return false;
         if (c.declinePct < 15) return false;
         if (c.recoveryPct < 5) return false;
         return true;
       });
+      break;
 
     case "wave4":
       // Shallow pullback: decline 10-40%, strong recovery (above 23.6% retracement)
       // For structural stocks, check decline from trueAth (5-25% = valid Wave 4 of new impulse)
-      return candidates.filter((c) => {
+      filtered = candidates.filter((c) => {
         if (c.trueAth != null) {
           const declineFromAth = c.trueAth > 0
             ? ((c.trueAth - c.current) / c.trueAth) * 100
@@ -82,28 +109,36 @@ export function applyModeFilters(
         if (retrace < 0.236) return false;
         return true;
       });
+      break;
 
     case "wave5":
       // Near ATH: high recovery, looking for divergence
       // Accept structural override stocks — they're near ATH, which fits Wave 5 / exhaustion
-      return candidates.filter((c) => {
+      filtered = candidates.filter((c) => {
         if (c.trueAth != null) return true;
         if (c.recoveryPct < 40) return false;
         const retrace = c.fibAnalysis?.retracementDepth ?? 0;
         if (retrace < 0.786) return false;
         return true;
       });
+      break;
 
     case "breakout":
       // Breaking out: high recovery with volume confirmation
       // Accept structural override stocks — they're breaking to new highs
-      return candidates.filter((c) => {
+      filtered = candidates.filter((c) => {
         if (c.trueAth != null) return true;
         if (c.recoveryPct < 25) return false;
         return true;
       });
+      break;
 
     default:
-      return candidates;
+      filtered = candidates;
   }
+
+  return filtered.map((c) => ({
+    ...c,
+    wavePositionMatch: isWavePositionMatch(c.waveCount?.position, mode),
+  }));
 }

@@ -273,6 +273,11 @@ function EWScannerPage() {
 
   // Sort
   const sorted = useMemo(() => [...modeFiltered].sort((a, b) => {
+    // Primary: wave position matches first
+    const aMatch = a.wavePositionMatch ? 1 : 0;
+    const bMatch = b.wavePositionMatch ? 1 : 0;
+    if (aMatch !== bMatch) return bMatch - aMatch;
+    // Secondary: user-selected sort
     switch (sortBy) {
       case "score": return b.enhancedNormalized - a.enhancedNormalized;
       case "decline": return b.declinePct - a.declinePct;
@@ -285,6 +290,8 @@ function EWScannerPage() {
       default: return 0;
     }
   }), [modeFiltered, sortBy]);
+
+  const waveMatchCount = useMemo(() => sorted.filter((c) => c.wavePositionMatch).length, [sorted]);
 
   // Group
   const grouped = useMemo(() => groupCandidates(sorted, groupBy), [sorted, groupBy]);
@@ -1268,6 +1275,11 @@ function EWScannerPage() {
                   <span className="text-[#a0a0a0]">
                     <span className="font-bold text-white">{results.length - modeFiltered.length}</span> filtered
                   </span>
+                  {waveMatchCount > 0 && (
+                    <span className="text-[#a0a0a0]">
+                      <span className="font-bold text-purple-400">{waveMatchCount}</span> EW match
+                    </span>
+                  )}
                   {labeling && (
                     <span className="flex items-center gap-1 text-[#5ba3e6]">
                       <Loader2 className="h-3 w-3 animate-spin" />
@@ -1518,26 +1530,37 @@ function EWScannerPage() {
                   </h3>
                 )}
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {items.map((c, idx) => (
-                    <CandidateCard
-                      key={c.ticker}
-                      c={c}
-                      idx={idx}
-                      labels={labels}
-                      labeling={labeling}
-                      minDecline={minDecline}
-                      minMonths={minMonths}
-                      minRecovery={minRecovery}
-                      getDot={getDot}
-                      dotCss={dotCss}
-                      scoreTextColor={scoreTextColor}
-                      scoreBgColor={scoreBgColor}
-                      confidenceBadge={confidenceBadge}
-                      fmtYear={fmtYear}
-                      runDeep={runDeep}
-                      mode={mode}
-                    />
-                  ))}
+                  {items.map((c, idx) => {
+                    const itemMatchCount = items.filter((i) => i.wavePositionMatch).length;
+                    return (
+                      <Fragment key={c.ticker}>
+                        {idx === itemMatchCount && itemMatchCount > 0 && itemMatchCount < items.length && (
+                          <div className="col-span-full flex items-center gap-3 py-2">
+                            <div className="h-px flex-1 bg-purple-500/30" />
+                            <span className="text-xs text-purple-400/70">Other results</span>
+                            <div className="h-px flex-1 bg-purple-500/30" />
+                          </div>
+                        )}
+                        <CandidateCard
+                          c={c}
+                          idx={idx}
+                          labels={labels}
+                          labeling={labeling}
+                          minDecline={minDecline}
+                          minMonths={minMonths}
+                          minRecovery={minRecovery}
+                          getDot={getDot}
+                          dotCss={dotCss}
+                          scoreTextColor={scoreTextColor}
+                          scoreBgColor={scoreBgColor}
+                          confidenceBadge={confidenceBadge}
+                          fmtYear={fmtYear}
+                          runDeep={runDeep}
+                          mode={mode}
+                        />
+                      </Fragment>
+                    );
+                  })}
                 </div>
               </div>
             ))
@@ -1982,6 +2005,11 @@ function CandidateCard({
           >
             {c.confidenceTier}
           </span>
+          {c.wavePositionMatch && (
+            <span className="rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-medium text-purple-400">
+              EW Match
+            </span>
+          )}
           {c.mtfConfirmation && (
             <span
               className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${
@@ -2227,11 +2255,24 @@ function CompactTable({
           </tr>
         </thead>
         <tbody>
-          {items.map((c, idx) => {
+          {(() => {
+            const tblMatchCount = items.filter((i) => i.wavePositionMatch).length;
+            return items.map((c, idx) => {
             const pct = Math.round(c.enhancedNormalized * 100);
             const isExpanded = expanded.has(c.ticker);
             return (
               <Fragment key={c.ticker}>
+                {idx === tblMatchCount && tblMatchCount > 0 && tblMatchCount < items.length && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-1.5">
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-purple-500/30" />
+                        <span className="text-[10px] text-purple-400/70">Other results</span>
+                        <div className="h-px flex-1 bg-purple-500/30" />
+                      </div>
+                    </td>
+                  </tr>
+                )}
                 <tr
                   onClick={() => toggleExpand(c.ticker)}
                   className="ew-card-in cursor-pointer border-b border-[#2a2a2a] bg-[#1a1a1a] transition-colors hover:bg-[#222]"
@@ -2240,6 +2281,9 @@ function CompactTable({
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       <ChevronRight className={`h-3 w-3 shrink-0 text-[#555] transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                      {c.wavePositionMatch && (
+                        <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-purple-500" title="EW wave position match" />
+                      )}
                       <span className="font-bold text-white">{c.ticker}</span>
                       <span className="hidden truncate text-[#666] sm:inline">{c.name}</span>
                     </div>
@@ -2357,7 +2401,8 @@ function CompactTable({
                 )}
               </Fragment>
             );
-          })}
+          });
+          })()}
         </tbody>
       </table>
     </div>
