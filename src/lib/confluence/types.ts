@@ -73,6 +73,7 @@ export interface ConfluenceResult {
   squeezeResult: ConfluenceSqueezeResult | null;
   prerunResult: ConfluencePreRunResult | null;
   sectorResult: ConfluenceSectorResult | null;
+  trending?: boolean;
 }
 
 /** Raw result from the API (before sector merge + client-side scoring). */

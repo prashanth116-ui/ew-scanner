@@ -18,6 +18,7 @@ export function computeConfluenceScore(
   sectorNorm: number | null,
   weights: ConfluenceWeights,
   thresholds: ConfluenceThresholds,
+  trending?: boolean,
 ): ConfluenceScores {
   const ew = ewNorm ?? 0;
   const squeeze = squeezeNorm ?? 0;
@@ -25,9 +26,14 @@ export function computeConfluenceScore(
   const sector = sectorNorm ?? 0;
 
   const totalWeight = weights.ew + weights.squeeze + weights.prerun + weights.sector;
-  const confluenceScore = totalWeight > 0
+  let confluenceScore = totalWeight > 0
     ? (ew * weights.ew + squeeze * weights.squeeze + prerun * weights.prerun + sector * weights.sector) / totalWeight
     : 0;
+
+  // Trending bonus: 5% boost (capped at 1.0) for stocks improving vs previous scan
+  if (trending) {
+    confluenceScore = Math.min(1.0, confluenceScore * 1.05);
+  }
 
   let passCount = 0;
   if (ewNorm !== null && ew >= thresholds.ew) passCount++;

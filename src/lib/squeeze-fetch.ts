@@ -6,6 +6,7 @@
 import "server-only";
 
 import type { SqueezeData } from "./ew-types";
+import { extractRaw } from "@/lib/yahoo-utils";
 
 const YAHOO_SUMMARY =
   "https://query1.finance.yahoo.com/v10/finance/quoteSummary";
@@ -65,15 +66,6 @@ export function invalidateCrumbCache(): void {
   crumbFetchedAt = 0;
 }
 
-function extractRaw(val: unknown): number | null {
-  if (val == null) return null;
-  if (typeof val === "number") return val;
-  if (typeof val === "object" && "raw" in (val as Record<string, unknown>)) {
-    return (val as { raw: number }).raw;
-  }
-  return null;
-}
-
 function parseSqueezeData(
   ticker: string,
   data: Record<string, unknown>
@@ -108,6 +100,7 @@ function parseSqueezeData(
     fiftyTwoWeekHigh: extractRaw(detail.fiftyTwoWeekHigh),
     heldPercentInsiders: extractRaw(stats.heldPercentInsiders),
     heldPercentInstitutions: extractRaw(stats.heldPercentInstitutions),
+    sma50: extractRaw(detail.fiftyDayAverage),
   };
 }
 
@@ -138,4 +131,58 @@ export async function fetchSqueezeData(
   if (!res.ok) return null;
   const data = await res.json();
   return parseSqueezeData(ticker, data);
+}
+
+/**
+ * Fetch SEC Failures-to-Deliver (FTD) share count for a ticker.
+ * SEC publishes pipe-delimited text files twice monthly (~2 week lag).
+ * Returns total FTD shares across all settlement dates in the file, or null on failure.
+ */
+export async function fetchSECFtdShares(ticker: string): Promise<number | null> {
+  const SEC_UA = "EW-Scanner admin@ew-scanner.app";
+  const now = new Date();
+
+  // Try current month first, then previous month (SEC files have ~2 week lag)
+  const months = [
+    { y: now.getFullYear(), m: now.getMonth() + 1 },
+    { y: now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear(), m: now.getMonth() === 0 ? 12 : now.getMonth() },
+  ];
+
+  for (const { y, m } of months) {
+    const half1 = `cnsfails${y}${String(m).padStart(2, "0")}a.txt`;
+    const half2 = `cnsfails${y}${String(m).padStart(2, "0")}b.txt`;
+
+    for (const filename of [half2, half1]) {
+      try {
+        const url = `https://www.sec.gov/files/data/fails-deliver-data/${filename}`;
+        const res = await fetch(url, {
+          headers: { "User-Agent": SEC_UA },
+        });
+        if (!res.ok) continue;
+
+        const text = await res.text();
+        const upperTicker = ticker.toUpperCase();
+        let totalShares = 0;
+        let found = false;
+
+        for (const line of text.split("\n")) {
+          const fields = line.split("|");
+          // Format: SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE
+          if (fields.length >= 4 && fields[2]?.trim().toUpperCase() === upperTicker) {
+            const qty = parseInt(fields[3], 10);
+            if (!isNaN(qty) && qty > 0) {
+              totalShares += qty;
+              found = true;
+            }
+          }
+        }
+
+        if (found) return totalShares;
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return null;
 }

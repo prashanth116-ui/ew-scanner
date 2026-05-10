@@ -9,19 +9,46 @@ import { logError } from "@/lib/error-logger";
  * Compares current quadrants vs previous snapshot.
  * Sends Telegram alert only when sectors change quadrants.
  *
- * State persistence (2-tier):
+ * State persistence (3-tier):
  *   1. Module-level cache — survives across warm Vercel invocations (same instance)
- *   2. SECTOR_ROTATION_PREVIOUS env var — cold-start fallback (manually seeded)
+ *   2. Vercel KV — persists across cold starts (optional, requires @vercel/kv + KV_REST_API_URL)
+ *   3. SECTOR_ROTATION_PREVIOUS env var — manual fallback
  *
- * Limitation: If the Vercel instance cold-starts AND the env var is stale,
- * transitions may be missed for that day. Add Vercel KV for bulletproof persistence.
+ * If KV is not configured, behavior is identical to the previous 2-tier system.
  */
 
-// Module-level cache — persists across warm invocations on the same instance
-let cachedPrevious: {
+interface PreviousState {
   date: string;
   sectors: { sector: string; quadrant: string }[];
-} | null = null;
+}
+
+const KV_KEY = "sector-rotation:previous";
+const KV_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
+
+// Module-level cache — persists across warm invocations on the same instance
+let cachedPrevious: PreviousState | null = null;
+
+/** Try to load state from Vercel KV. Returns null if KV not configured or unavailable. */
+async function loadFromKV(): Promise<PreviousState | null> {
+  if (!process.env.KV_REST_API_URL) return null;
+  try {
+    const { kv } = await import("@vercel/kv");
+    return await kv.get<PreviousState>(KV_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Try to persist state to Vercel KV. Silently fails if KV not configured. */
+async function saveToKV(state: PreviousState): Promise<void> {
+  if (!process.env.KV_REST_API_URL) return;
+  try {
+    const { kv } = await import("@vercel/kv");
+    await kv.set(KV_KEY, state, { ex: KV_TTL });
+  } catch {
+    // Non-critical — module cache still works
+  }
+}
 
 export async function GET(request: NextRequest) {
   // Verify Vercel Cron secret
@@ -38,13 +65,21 @@ export async function GET(request: NextRequest) {
     // 1. Fetch fresh sector data
     const current = await calculateSectorRotation();
 
-    // 2. Load previous snapshot (module cache first, env var fallback)
+    // 2. Load previous snapshot (3-tier: module cache → KV → env var)
     let previous = cachedPrevious;
+    let stateSource = "cache";
+
+    if (!previous) {
+      previous = await loadFromKV();
+      stateSource = previous ? "kv" : "none";
+    }
+
     if (!previous) {
       const prevStr = process.env.SECTOR_ROTATION_PREVIOUS;
       if (prevStr) {
         try {
           previous = JSON.parse(prevStr);
+          stateSource = "env";
         } catch {
           // Invalid JSON — treat as no previous
         }
@@ -71,7 +106,7 @@ export async function GET(request: NextRequest) {
 
     const transitions = detectTransitions(current, previousSnapshot);
 
-    // 4. Persist current state for next run (module-level cache)
+    // 4. Persist current state for next run (module cache + KV)
     cachedPrevious = {
       date: current.calculatedAt.slice(0, 10),
       sectors: current.sectors.map((s) => ({
@@ -79,6 +114,9 @@ export async function GET(request: NextRequest) {
         quadrant: s.quadrant,
       })),
     };
+
+    // Non-blocking KV persist
+    saveToKV(cachedPrevious).catch(() => {});
 
     // 5. Send Telegram alert if transitions found
     let sent = false;
@@ -109,7 +147,7 @@ export async function GET(request: NextRequest) {
         to: t.to,
       })),
       currentQuadrants: cachedPrevious,
-      stateSource: previous === cachedPrevious ? "cache" : previous ? "env" : "none",
+      stateSource,
     });
   } catch (err) {
     logError("sector-rotation/alert", err);

@@ -160,6 +160,9 @@ export interface EnhancedScoredCandidate {
   series?: PriceSeries;
   athIdx?: number;
   lowIdx?: number;
+  // Quant enrichment
+  correctionVolumeDryUp?: boolean;
+  wave3Target?: number | null;
   // Structural fallback: true ATH/Low when analysis uses prior correction
   trueAth?: number;
   trueAthYear?: number;
@@ -250,6 +253,9 @@ export interface SqueezeData {
   // Optional EW enrichment
   ewPosition?: string;
   ewConfidence?: string;
+  // Optional enrichment for FTD / SMA
+  ftdShares?: number | null;
+  sma50?: number | null;
 }
 
 export interface SqueezeComponentScores {
@@ -259,6 +265,7 @@ export interface SqueezeComponentScores {
   volumeSurge: number; // 0-15
   near52wLow: number; // 0-15
   ewAlignment: number; // 0-15
+  ftdPressure: number; // 0-15
 }
 
 export type SqueezeTier = "high" | "medium" | "low";

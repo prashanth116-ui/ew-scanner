@@ -73,9 +73,11 @@ function scoreVolumeSurge(ratio: number | null): number {
 
 // Near 52-week low: 0-15 pts
 // At low = 15, within 10% = 12, within 20% = 8, within 30% = 4, above = 0
+// Base-forming penalty: if score >= 12 and price < sma50 (freefall), subtract 5
 function scoreNear52wLow(
   price: number | null,
-  low52w: number | null
+  low52w: number | null,
+  sma50?: number | null
 ): { score: number; nearLowPct: number | null } {
   if (price == null || low52w == null || low52w <= 0) {
     return { score: 0, nearLowPct: null };
@@ -86,7 +88,24 @@ function scoreNear52wLow(
   else if (pctAbove <= 10) score = 12;
   else if (pctAbove <= 20) score = 8;
   else if (pctAbove <= 30) score = 4;
+
+  // Base-forming penalty: near 52w low but below SMA50 = likely freefall, not basing
+  if (score >= 12 && sma50 != null && sma50 > 0 && price < sma50) {
+    score = Math.max(0, score - 5);
+  }
+
   return { score, nearLowPct: Math.round(pctAbove * 10) / 10 };
+}
+
+// FTD pressure: 0-15 pts based on FTD shares as % of float
+function scoreFtdPressure(ftdShares: number | null | undefined, floatShares: number | null): number {
+  if (ftdShares == null || ftdShares <= 0 || floatShares == null || floatShares <= 0) return 0;
+  const pctOfFloat = (ftdShares / floatShares) * 100;
+  if (pctOfFloat >= 1.0) return 15;   // >= 1% of float in FTDs — extreme pressure
+  if (pctOfFloat >= 0.5) return 12;
+  if (pctOfFloat >= 0.2) return 8;
+  if (pctOfFloat >= 0.1) return 4;
+  return 0;
 }
 
 // EW alignment: 0-15 pts
@@ -111,8 +130,11 @@ export function computeSqueezeScore(data: SqueezeData): ScoredSqueezeCandidate {
 
   const { score: near52wScore, nearLowPct } = scoreNear52wLow(
     data.currentPrice,
-    data.fiftyTwoWeekLow
+    data.fiftyTwoWeekLow,
+    data.sma50
   );
+
+  const ftdScore = scoreFtdPressure(data.ftdShares, data.floatShares);
 
   const components: SqueezeComponentScores = {
     siPercent: scoreSiPercent(data.shortPercentOfFloat),
@@ -121,6 +143,7 @@ export function computeSqueezeScore(data: SqueezeData): ScoredSqueezeCandidate {
     volumeSurge: scoreVolumeSurge(volumeRatio),
     near52wLow: near52wScore,
     ewAlignment: scoreEwAlignment(data.ewPosition),
+    ftdPressure: ftdScore,
   };
 
   const squeezeScore = Math.round(
@@ -129,7 +152,8 @@ export function computeSqueezeScore(data: SqueezeData): ScoredSqueezeCandidate {
     components.floatSize +
     components.volumeSurge +
     components.near52wLow +
-    components.ewAlignment
+    components.ewAlignment +
+    components.ftdPressure
   );
 
   return {

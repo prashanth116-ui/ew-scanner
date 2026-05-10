@@ -6,6 +6,7 @@
 import "server-only";
 
 import { findStructuralReferences } from "./ew-structural";
+import { fetchWithRetry } from "@/lib/yahoo-utils";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
 const UA =
@@ -46,9 +47,16 @@ export async function fetchEWQuoteData(
   const { detail = true } = options;
 
   const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?interval=1wk&range=5y&includePrePost=false`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA },
-  });
+  let res: Response;
+  try {
+    res = await fetchWithRetry(
+      url,
+      { headers: { "User-Agent": UA } },
+      { timeout: 15000, retries: 1 }
+    );
+  } catch {
+    return null;
+  }
 
   if (!res.ok) return null;
 

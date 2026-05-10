@@ -1,8 +1,8 @@
 /**
  * Pre-Run scoring engine.
- * 3 hard gates + 15 criteria (A-O) with weighted scoring.
- * B and C expanded to 0-3. All others 0-2. Max raw = 32.
- * Sector momentum modifier: +1/0/-1. Final max ~33.
+ * 3 hard gates + 17 criteria (A-Q) with weighted scoring.
+ * B and C expanded to 0-3. All others 0-2. Max raw = 36.
+ * Sector momentum modifier: +1/0/-1. Final max ~37.
  */
 
 import type {
@@ -219,6 +219,31 @@ export function scoreO(data: PreRunStockData): number {
   return Math.max(0, Math.min(2, score));
 }
 
+/** Criterion P: Earnings revision momentum (0-2).
+ *  Analysts upgrading = bullish consensus shift not yet priced in. */
+export function scoreP(data: PreRunStockData): number {
+  const trend = data.analystRevisionTrend;
+  if (trend === null) return 0;
+  if (trend > 0) return 2;   // Improving — analysts upgrading
+  if (trend === 0) return 1; // Stable
+  return 0;                   // Declining
+}
+
+/** Criterion Q: Short squeeze probability (0-2).
+ *  Composite signal: SI% + float turnover + insider buys + bullish options. */
+export function scoreQ(data: PreRunStockData): number {
+  let signals = 0;
+  const si = data.shortFloat ?? 0;
+  if (si >= 15) signals++;
+  if ((data.floatTurnover20d ?? 0) >= 0.8) signals++;
+  if ((data.insiderBuys90d ?? 0) >= 1) signals++;
+  if (data.putCallRatio !== null && data.putCallRatio < 0.7) signals++;
+
+  if (signals >= 3) return 2;
+  if (signals >= 2) return 1;
+  return 0;
+}
+
 /** Sector momentum modifier: +1 if sector ETF 20d return > +5%, -1 if < -5%. */
 export function calcSectorModifier(data: PreRunStockData): number {
   const sectorRet = data.sectorReturn20d;
@@ -267,9 +292,11 @@ export function scorePreRun(
   const sM = scoreM(data);
   const sN = scoreN(data);
   const sO = scoreO(data);
+  const sP = scoreP(data);
+  const sQ = scoreQ(data);
   const sMod = calcSectorModifier(data);
 
-  const totalScore = sA + sB + sC + sD + sE + sF + sG + sH + sI + sJ + sK + sL + sM + sN + sO + sMod;
+  const totalScore = sA + sB + sC + sD + sE + sF + sG + sH + sI + sJ + sK + sL + sM + sN + sO + sP + sQ + sMod;
   const finalScore = gatesPass ? totalScore : 0;
 
   let verdict: PreRunVerdict = "DISCARD";
@@ -305,6 +332,8 @@ export function scorePreRun(
       scoreM: sM,
       scoreN: sN,
       scoreO: sO,
+      scoreP: sP,
+      scoreQ: sQ,
       sectorModifier: sMod,
       totalScore,
       finalScore,

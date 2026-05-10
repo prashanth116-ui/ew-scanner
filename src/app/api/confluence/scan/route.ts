@@ -11,6 +11,25 @@ import { autoScorePreRun } from "@/lib/prerun/scoring";
 import type { ConfluenceScanResult, ConfluenceEWResult, ConfluenceSqueezeResult, ConfluencePreRunResult } from "@/lib/confluence/types";
 
 const MAX_BATCH = 10;
+const FETCH_TIMEOUT = 15000;
+
+/** Create a timeout promise that rejects after ms. */
+function timeout<T>(ms: number): Promise<T> {
+  return new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
+  );
+}
+
+/** Internal result types with _-prefixed transport fields. */
+interface InternalEWResult extends ConfluenceEWResult {
+  _price?: number;
+}
+interface InternalSqueezeResult extends ConfluenceSqueezeResult {
+  _name?: string;
+}
+interface InternalPreRunResult extends ConfluencePreRunResult {
+  _name?: string;
+}
 
 export async function POST(request: NextRequest) {
   const rl = rateLimit(`confluence-scan:${getClientKey(request)}`, 10, 60_000);
@@ -37,8 +56,8 @@ export async function POST(request: NextRequest) {
       tickers.map(async (ticker): Promise<ConfluenceScanResult | null> => {
         // Run all 3 per-ticker fetches in parallel
         const [ewSettled, squeezeSettled, prerunSettled] = await Promise.allSettled([
-          fetchAndScoreEW(ticker),
-          fetchAndScoreSqueeze(ticker),
+          Promise.race([fetchAndScoreEW(ticker), timeout<InternalEWResult | null>(FETCH_TIMEOUT)]),
+          Promise.race([fetchAndScoreSqueeze(ticker), timeout<InternalSqueezeResult | null>(FETCH_TIMEOUT)]),
           fetchAndScorePreRun(ticker),
         ]);
 
@@ -51,20 +70,38 @@ export async function POST(request: NextRequest) {
 
         // Determine company name from whichever source has it
         const name =
-          (squeezeRaw as ConfluenceSqueezeResult & { _name?: string })?._name ??
-          (prerunRaw as ConfluencePreRunResult & { _name?: string })?._name ??
+          (squeezeRaw as InternalSqueezeResult | null)?._name ??
+          (prerunRaw as InternalPreRunResult | null)?._name ??
           ticker;
 
-        // Extract price before stripping internal fields
-        const price = (ewRaw as ConfluenceEWResult & { _price?: number })?._price;
+        // Extract and strip internal fields via destructuring
+        let ewResult: ConfluenceEWResult | null = null;
+        if (ewRaw) {
+          const { _price: _, ...ew } = ewRaw as InternalEWResult;
+          ewResult = ew;
+        }
+
+        let squeezeResult: ConfluenceSqueezeResult | null = null;
+        if (squeezeRaw) {
+          const { _name: _, ...sq } = squeezeRaw as InternalSqueezeResult;
+          squeezeResult = sq;
+        }
+
+        let prerunResult: ConfluencePreRunResult | null = null;
+        if (prerunRaw) {
+          const { _name: _, ...pr } = prerunRaw as InternalPreRunResult;
+          prerunResult = pr;
+        }
+
+        const price = (ewRaw as InternalEWResult | null)?._price;
 
         return {
           ticker,
           name,
           price,
-          ewResult: ewRaw ? stripInternal(ewRaw) : null,
-          squeezeResult: squeezeRaw ? stripInternal(squeezeRaw) : null,
-          prerunResult: prerunRaw ? stripInternal(prerunRaw) : null,
+          ewResult,
+          squeezeResult,
+          prerunResult,
         };
       })
     );
@@ -85,24 +122,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/** Strip internal _-prefixed fields before sending to client. */
-function stripInternal<T>(obj: T): T {
-  if (obj && typeof obj === "object") {
-    const cleaned: Record<string, unknown> = {};
-    let hasInternal = false;
-    for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
-      if (key.startsWith("_")) {
-        hasInternal = true;
-      } else {
-        cleaned[key] = val;
-      }
-    }
-    return hasInternal ? (cleaned as T) : obj;
-  }
-  return obj;
-}
-
-async function fetchAndScoreEW(ticker: string): Promise<(ConfluenceEWResult & { _price?: number }) | null> {
+async function fetchAndScoreEW(ticker: string): Promise<InternalEWResult | null> {
   const quoteData = await fetchEWQuoteData(ticker, { detail: true });
   if (!quoteData) return null;
 
@@ -138,7 +158,7 @@ async function fetchAndScoreEW(ticker: string): Promise<(ConfluenceEWResult & { 
   };
 }
 
-async function fetchAndScoreSqueeze(ticker: string): Promise<(ConfluenceSqueezeResult & { _name?: string }) | null> {
+async function fetchAndScoreSqueeze(ticker: string): Promise<InternalSqueezeResult | null> {
   const data = await fetchSqueezeData(ticker);
   if (!data) return null;
 
@@ -154,7 +174,7 @@ async function fetchAndScoreSqueeze(ticker: string): Promise<(ConfluenceSqueezeR
   };
 }
 
-async function fetchAndScorePreRun(ticker: string): Promise<(ConfluencePreRunResult & { _name?: string }) | null> {
+async function fetchAndScorePreRun(ticker: string): Promise<InternalPreRunResult | null> {
   const data = await fetchPreRunData(ticker);
   if (!data) return null;
 

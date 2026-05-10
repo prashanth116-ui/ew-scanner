@@ -42,6 +42,7 @@ export interface SectorRotationScore {
 
   // RRG trail (historical positions, oldest first, current last)
   rrgTrail: { rsRatio: number; rsMomentum: number }[];
+  rotationVelocity: number;
 }
 
 export interface SectorRotationResult {
@@ -61,4 +62,5 @@ export interface SectorRotationResult {
   }[];
   /** Per-stock quote data from batch fetch (price vs 50d SMA). */
   stockQuotes: Record<string, { price: number; sma50: number | null; pctFromSma50: number | null }>;
+  correlationBreak: boolean;
 }

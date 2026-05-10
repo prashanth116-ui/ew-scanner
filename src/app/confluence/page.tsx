@@ -86,8 +86,8 @@ function generateWhyThisStock(r: ConfluenceResult): string {
   const parts: string[] = [];
 
   if (r.ewResult) {
-    if (r.scores.ewNormalized >= 0.6) parts.push("strong EW wave setup");
-    else if (r.scores.ewNormalized >= 0.4) parts.push("favorable EW positioning");
+    if (r.scores.ewNormalized >= DEFAULT_THRESHOLDS.ew * 1.5) parts.push("strong EW wave setup");
+    else if (r.scores.ewNormalized >= DEFAULT_THRESHOLDS.ew) parts.push("favorable EW positioning");
     if (r.ewResult.wavePosition) {
       const wp = r.ewResult.wavePosition.toLowerCase();
       if (wp.length < 40) parts.push(wp);
@@ -96,8 +96,8 @@ function generateWhyThisStock(r: ConfluenceResult): string {
   }
 
   if (r.squeezeResult) {
-    if (r.scores.squeezeNormalized >= 0.6) parts.push("high short squeeze potential");
-    else if (r.scores.squeezeNormalized >= 0.3) parts.push("elevated short interest");
+    if (r.scores.squeezeNormalized >= DEFAULT_THRESHOLDS.squeeze * 2) parts.push("high short squeeze potential");
+    else if (r.scores.squeezeNormalized >= DEFAULT_THRESHOLDS.squeeze) parts.push("elevated short interest");
     if (r.squeezeResult.shortPercentOfFloat != null) {
       const si = r.squeezeResult.shortPercentOfFloat * (r.squeezeResult.shortPercentOfFloat < 1 ? 100 : 1);
       if (si > 10) parts.push(`${si.toFixed(0)}% SI`);
@@ -201,9 +201,25 @@ export default function ConfluencePage() {
     return map;
   }, [sectorData]);
 
+  // Previous scan scores from localStorage (for trending detection)
+  const prevScoresRef = useRef<Map<string, number>>(new Map());
+
+  // Load previous confluence scores from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ew-confluence-prev-scores");
+      if (saved) {
+        const parsed = JSON.parse(saved) as Record<string, number>;
+        prevScoresRef.current = new Map(Object.entries(parsed));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   // Compute confluence results from raw scan results + sector data
   const confluenceResults: ConfluenceResult[] = useMemo(() => {
-    return rawResults.map((r) => {
+    const results = rawResults.map((r) => {
       const sector = getSectorForSymbol(r.ticker);
       const sectorInfo = sectorMap.get(sector) ?? null;
 
@@ -212,9 +228,16 @@ export default function ConfluencePage() {
       const prerunNorm = r.prerunResult ? r.prerunResult.finalScore / 24 : null;
       const sectorNorm = sectorInfo ? sectorInfo.compositeScore / 100 : null;
 
+      // Trending: compare to previous scan
+      const prevScore = prevScoresRef.current.get(r.ticker);
+      const trending = prevScore != null
+        ? (ewNorm ?? 0) + (squeezeNorm ?? 0) + (prerunNorm ?? 0) > prevScore
+        : undefined;
+
       const scores = computeConfluenceScore(
         ewNorm, squeezeNorm, prerunNorm, sectorNorm,
         weights, thresholds,
+        trending,
       );
 
       const signal = classifySignal(scores);
@@ -236,8 +259,27 @@ export default function ConfluencePage() {
           quadrant: sectorInfo.quadrant,
           trend: sectorInfo.trend,
         } : null,
+        trending: trending === true ? true : undefined,
       };
     });
+
+    // Save current raw scores for next comparison
+    if (results.length > 0) {
+      const scoreMap: Record<string, number> = {};
+      for (const r of rawResults) {
+        const ewN = r.ewResult ? r.ewResult.enhancedNormalized : 0;
+        const sqN = r.squeezeResult ? r.squeezeResult.squeezeScore / 100 : 0;
+        const prN = r.prerunResult ? r.prerunResult.finalScore / 24 : 0;
+        scoreMap[r.ticker] = ewN + sqN + prN;
+      }
+      try {
+        localStorage.setItem("ew-confluence-prev-scores", JSON.stringify(scoreMap));
+      } catch {
+        // ignore storage errors
+      }
+    }
+
+    return results;
   }, [rawResults, sectorMap, weights, thresholds]);
 
   // Filter & sort

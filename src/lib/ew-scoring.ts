@@ -267,6 +267,10 @@ export function scoreEnhanced(
   const safeTotalRaw = Number.isFinite(totalRaw) ? totalRaw : 0;
   const enhancedNormalized = Math.min(safeTotalRaw / ENHANCED_MAX, 1);
 
+  // Quant enrichment
+  const correctionVolumeDryUp = detectCorrectionVolumeDryUp(q.series!, waveCount);
+  const wave3Target = projectWave3Target(waveCount);
+
   return {
     ...base,
     sector: q.sector,
@@ -279,6 +283,8 @@ export function scoreEnhanced(
     momentumAnalysis,
     structureAnalysis,
     waveCount: waveCount ?? undefined,
+    correctionVolumeDryUp,
+    wave3Target,
     series: q.series,
     athIdx: q.athIdx,
     lowIdx: q.lowIdx,
@@ -333,4 +339,77 @@ export function assignConfidenceTier(normalized: number): ConfidenceTier {
   if (normalized >= 0.75) return "high";
   if (normalized >= 0.5) return "probable";
   return "speculative";
+}
+
+/**
+ * Detect correction volume dry-up at wave 2/4 zones.
+ * Compares avg volume at correction zones vs prior impulse wave.
+ * If correction volume < 50% of impulse volume -> true (high-probability reversal).
+ */
+export function detectCorrectionVolumeDryUp(
+  series: PriceSeries,
+  waveCount: WaveCount | null | undefined
+): boolean {
+  if (!waveCount || !waveCount.isValid || !series.volume) return false;
+
+  const vols = series.volume;
+  const len = vols.length;
+  if (len < 20) return false;
+
+  // Use wave position to identify correction zones
+  const pos = waveCount.position?.toLowerCase() ?? "";
+  const isCorrection = pos.includes("2") || pos.includes("4") || pos.includes("correction");
+  if (!isCorrection) return false;
+
+  // Compare recent 5 bars (correction zone) vs prior 10 bars (impulse)
+  const correctionEnd = len;
+  const correctionStart = Math.max(0, correctionEnd - 5);
+  const impulseEnd = correctionStart;
+  const impulseStart = Math.max(0, impulseEnd - 10);
+
+  if (impulseEnd - impulseStart < 5) return false;
+
+  let corrVol = 0;
+  for (let i = correctionStart; i < correctionEnd; i++) corrVol += vols[i];
+  corrVol /= (correctionEnd - correctionStart);
+
+  let impVol = 0;
+  for (let i = impulseStart; i < impulseEnd; i++) impVol += vols[i];
+  impVol /= (impulseEnd - impulseStart);
+
+  return impVol > 0 && corrVol < impVol * 0.5;
+}
+
+/**
+ * Project wave 3 target using wave 1 length x 1.618 from wave 2 low.
+ * Returns price target or null if wave structure is insufficient.
+ */
+export function projectWave3Target(
+  waveCount: WaveCount | null | undefined
+): number | null {
+  if (!waveCount || !waveCount.isValid) return null;
+
+  const waves = waveCount.waves;
+  if (!waves || waves.length < 2) return null;
+
+  // Need wave 1 start (waveStart), wave 1 end, and wave 2 end
+  const wave1End = waves.find((w) => w.label === "1");
+  const wave2End = waves.find((w) => w.label === "2");
+
+  if (!wave1End || !wave2End) return null;
+
+  // Wave 1 start is the waveStart (p0) of the count
+  const wave1Start = waveCount.waveStart;
+  if (!wave1Start) return null;
+
+  const wave1Length = Math.abs(wave1End.price - wave1Start.price);
+  if (wave1Length <= 0) return null;
+
+  // Wave 3 target = wave 2 price + (wave 1 length * 1.618)
+  const isUptrend = wave1End.price > wave1Start.price;
+  const target = isUptrend
+    ? wave2End.price + wave1Length * 1.618
+    : wave2End.price - wave1Length * 1.618;
+
+  return Math.round(target * 100) / 100;
 }

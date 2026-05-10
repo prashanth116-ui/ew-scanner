@@ -41,6 +41,7 @@ export interface PreRunStockData {
   closesNearRangeTop: boolean | null;      // N: Are last 5 closes in upper 25% of 13-week range
   atrContracting: boolean | null;          // N: Is 5-day ATR < 20-day ATR
   failedBreakdownRecovery: number | null;  // O: 0=none, 1=wick test only, 2=broke below + recovered in 3 bars
+  analystRevisionTrend: number | null;     // P: Analyst estimate revision direction (-1/0/+1)
   lastUpdated: string;
 }
 
@@ -66,13 +67,15 @@ export interface PreRunScores {
   scoreM: number; // EMA reclaim (0-2)
   scoreN: number; // Range coil / tight closes near top (0-2)
   scoreO: number; // Failed breakdown recovery (0-2)
+  scoreP: number; // Earnings revision momentum (0-2)
+  scoreQ: number; // Short squeeze probability (0-2)
   sectorModifier: number; // +1/0/-1 based on sector momentum
-  totalScore: number; // Sum of A-O + sector modifier (max 32 + modifier)
+  totalScore: number; // Sum of A-Q + sector modifier (max 36 + modifier)
   finalScore: number; // 0 if any gate fails, else totalScore
 }
 
 /** Maximum possible raw score (before sector modifier). */
-export const MAX_SCORE = 32;
+export const MAX_SCORE = 36;
 
 export interface PreRunResult {
   data: PreRunStockData;

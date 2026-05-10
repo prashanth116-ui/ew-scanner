@@ -78,8 +78,8 @@ Reply with ONLY valid JSON (no code fences):
 
     const client = new Anthropic();
     const msg = await client.messages.create({
-      model: "claude-sonnet-4-5-20250929",
-      max_tokens: 300,
+      model: process.env.CLAUDE_MODEL ?? "claude-sonnet-4-5-20250929",
+      max_tokens: 250,
       messages: [{ role: "user", content: prompt }],
     });
 

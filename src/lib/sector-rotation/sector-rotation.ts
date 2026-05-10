@@ -95,6 +95,7 @@ function calcCMF(
 /**
  * Count how many of the last `lookback` rolling CMF values are positive.
  * Each value is a 20-bar CMF ending at that bar.
+ * Optimized: precomputes MFV and volume arrays once, then uses sliding window sums.
  */
 function calcRollingCMFPositiveCount(
   highs: number[],
@@ -107,18 +108,33 @@ function calcRollingCMFPositiveCount(
   const len = Math.min(highs.length, lows.length, closes.length, volumes.length);
   if (len < period + lookback) return 0;
 
+  // Precompute MFV (money flow volume) for each bar once
+  const mfv = new Float64Array(len);
+  for (let i = 0; i < len; i++) {
+    const hl = highs[i] - lows[i];
+    const mfm = hl !== 0 ? ((closes[i] - lows[i]) - (highs[i] - closes[i])) / hl : 0;
+    mfv[i] = mfm * volumes[i];
+  }
+
+  // Compute initial window sums for the most recent position
+  const startEnd = len;
+  let mfvSum = 0;
+  let volSum = 0;
+  for (let i = startEnd - period; i < startEnd; i++) {
+    mfvSum += mfv[i];
+    volSum += volumes[i];
+  }
+
   let positiveCount = 0;
-  for (let offset = 0; offset < lookback; offset++) {
+  if (volSum !== 0 && mfvSum / volSum > 0) positiveCount++;
+
+  // Slide the window backwards for remaining lookback positions
+  for (let offset = 1; offset < lookback; offset++) {
     const end = len - offset;
     if (end < period) break;
-    let mfvSum = 0;
-    let volSum = 0;
-    for (let i = end - period; i < end; i++) {
-      const hl = highs[i] - lows[i];
-      const mfm = hl !== 0 ? ((closes[i] - lows[i]) - (highs[i] - closes[i])) / hl : 0;
-      mfvSum += mfm * volumes[i];
-      volSum += volumes[i];
-    }
+    // Remove bar that just left the window (was at `end`), add bar entering at `end - period`
+    mfvSum = mfvSum - mfv[end] + mfv[end - period];
+    volSum = volSum - volumes[end] + volumes[end - period];
     if (volSum !== 0 && mfvSum / volSum > 0) positiveCount++;
   }
   return positiveCount;
@@ -213,6 +229,21 @@ function calcRRG(
   }
 
   return { rsRatio, rsMomentum, quadrant, trail };
+}
+
+/**
+ * Rotation velocity: total Euclidean distance between consecutive RRG trail points.
+ * Higher = faster sector rotation movement. Trail has 5 points (oldest first).
+ */
+function calcRotationVelocity(trail: { rsRatio: number; rsMomentum: number }[]): number {
+  if (trail.length < 2) return 0;
+  let totalDist = 0;
+  for (let i = 1; i < trail.length; i++) {
+    const dx = trail[i].rsRatio - trail[i - 1].rsRatio;
+    const dy = (trail[i].rsMomentum - trail[i - 1].rsMomentum) * 1000; // Scale momentum to RS-Ratio magnitude
+    totalDist += Math.sqrt(dx * dx + dy * dy);
+  }
+  return Math.round(totalDist * 100) / 100;
 }
 
 // ── Normalization helpers ──
@@ -577,8 +608,14 @@ export async function calculateSectorRotation(
         rsRatio: Math.round(pt.rsRatio * 100) / 100,
         rsMomentum: Math.round(pt.rsMomentum * 10000) / 10000,
       })),
+      rotationVelocity: 0, // Will be computed after mapping
     };
   });
+
+  // Compute rotation velocity for each sector (Euclidean distance across RRG trail)
+  for (const s of scoredSectors) {
+    s.rotationVelocity = calcRotationVelocity(s.rrgTrail);
+  }
 
   scoredSectors.sort((a, b) => b.compositeScore - a.compositeScore);
 
@@ -656,6 +693,14 @@ export async function calculateSectorRotation(
     xlkXlu: pairAnalysis(charts.get("XLK"), charts.get("XLU")),
   };
 
+  // Inter-market correlation break: XLY/XLP and XLK/XLU signal opposite risk regimes
+  const xlyXlpRiskOn = crossSectorPairs.xlyXlp.trend.includes("Risk-On");
+  const xlyXlpRiskOff = crossSectorPairs.xlyXlp.trend.includes("Risk-Off");
+  const xlkXluRiskOn = crossSectorPairs.xlkXlu.trend.includes("Risk-On");
+  const xlkXluRiskOff = crossSectorPairs.xlkXlu.trend.includes("Risk-Off");
+  const correlationBreak =
+    (xlyXlpRiskOn && xlkXluRiskOff) || (xlyXlpRiskOff && xlkXluRiskOn);
+
   // Top stocks to watch
   const topStocksToWatch: SectorRotationResult["topStocksToWatch"] = [];
   const watchSectors = scoredSectors.filter(
@@ -712,6 +757,7 @@ export async function calculateSectorRotation(
     crossSectorPairs,
     topStocksToWatch,
     stockQuotes,
+    correlationBreak,
   };
 
   cachedResult = { data: result, ts: Date.now() };

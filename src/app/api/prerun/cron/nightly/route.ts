@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
-import { fetchPreRunData } from "@/lib/prerun/data";
+import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
 import { getAllSectorSymbols } from "@/data/sector-universe";
 import { sendTelegramMessage } from "@/lib/ew-telegram";
@@ -116,8 +116,8 @@ Reply with ONLY valid JSON (no code fences):
 {"suggestedScore": 0 | 1 | 2, "reasoning": "Brief 1-2 sentence explanation"}`;
 
       const msg = await client.messages.create({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 200,
+        model: process.env.CLAUDE_MODEL ?? "claude-sonnet-4-5-20250929",
+        max_tokens: 250,
         messages: [{ role: "user", content: prompt }],
       });
 
@@ -157,6 +157,9 @@ export async function GET(request: NextRequest) {
   try {
     const tickers = getAllSectorSymbols();
     const results: PreRunResult[] = [];
+
+    // Pre-warm sector ETF cache — avoids 14 serial fetches during scan
+    await prefetchSectorETFs();
 
     for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
       const batch = tickers.slice(i, i + BATCH_SIZE);

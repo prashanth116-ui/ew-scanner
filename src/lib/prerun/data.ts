@@ -8,6 +8,7 @@ import "server-only";
 import type { PreRunStockData } from "./types";
 import { getYahooCrumb, invalidateCrumbCache } from "../squeeze-fetch";
 import { getSectorForTicker, getSectorETF } from "@/data/prerun-universe";
+import { fetchWithRetry, extractRaw } from "@/lib/yahoo-utils";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -16,52 +17,6 @@ const YAHOO_SUMMARY =
   "https://query1.finance.yahoo.com/v10/finance/quoteSummary";
 const YAHOO_CHART =
   "https://query1.finance.yahoo.com/v8/finance/chart";
-
-function fetchWithTimeout(url: string, init: RequestInit, ms = 15000): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  return fetch(url, { ...init, signal: controller.signal })
-    .finally(() => clearTimeout(timer));
-}
-
-/** Retry wrapper: retries on timeout/5xx with exponential backoff. */
-async function fetchWithRetry(
-  url: string,
-  init: RequestInit,
-  { timeout = 15000, retries = 2, baseDelay = 1000 } = {}
-): Promise<Response> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetchWithTimeout(url, init, timeout);
-      // Retry on 429 (rate limit) and 5xx (server errors)
-      if (res.status === 429 || res.status >= 500) {
-        if (attempt < retries) {
-          const delay = baseDelay * Math.pow(2, attempt);
-          await new Promise((r) => setTimeout(r, delay));
-          continue;
-        }
-      }
-      return res;
-    } catch (err) {
-      lastError = err;
-      if (attempt < retries) {
-        const delay = baseDelay * Math.pow(2, attempt);
-        await new Promise((r) => setTimeout(r, delay));
-      }
-    }
-  }
-  throw lastError;
-}
-
-function extractRaw(val: unknown): number | null {
-  if (val == null) return null;
-  if (typeof val === "number") return val;
-  if (typeof val === "object" && "raw" in (val as Record<string, unknown>)) {
-    return (val as { raw: number }).raw;
-  }
-  return null;
-}
 
 /** Fetch quoteSummary modules from Yahoo Finance. */
 async function fetchYahooSummary(
@@ -307,28 +262,46 @@ async function fetchYahooPutCallRatio(
   }
 }
 
+// ── SEC ticker map cache (avoids ~1,390 HTTP calls per full scan) ──
+let secTickerMapCache: {
+  data: Record<string, { cik_str: number; ticker: string; title: string }>;
+  ts: number;
+} | null = null;
+const SEC_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+async function getSecTickerMap(): Promise<Record<
+  string,
+  { cik_str: number; ticker: string; title: string }
+> | null> {
+  if (secTickerMapCache && Date.now() - secTickerMapCache.ts < SEC_CACHE_TTL) {
+    return secTickerMapCache.data;
+  }
+  try {
+    const res = await fetchWithRetry(
+      "https://www.sec.gov/files/company_tickers.json",
+      { headers: { "User-Agent": SEC_UA } },
+      { timeout: 10000, retries: 2, baseDelay: 2000 }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as Record<
+      string,
+      { cik_str: number; ticker: string; title: string }
+    >;
+    secTickerMapCache = { data, ts: Date.now() };
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 /** Fetch quarterly revenue from SEC EDGAR XBRL API. */
 async function fetchSECQuarterlyRevenue(
   ticker: string
 ): Promise<{ period: string; value: number }[] | null> {
   try {
-    // Step 1: Get CIK from SEC company tickers mapping
-    let tickerMapRes: Response;
-    try {
-      tickerMapRes = await fetchWithRetry(
-        "https://www.sec.gov/files/company_tickers.json",
-        { headers: { "User-Agent": SEC_UA } },
-        { timeout: 10000, retries: 2, baseDelay: 2000 }
-      );
-    } catch {
-      return null;
-    }
-    if (!tickerMapRes.ok) return null;
-
-    const tickerMap = (await tickerMapRes.json()) as Record<
-      string,
-      { cik_str: number; ticker: string; title: string }
-    >;
+    // Step 1: Get CIK from cached SEC company tickers mapping
+    const tickerMap = await getSecTickerMap();
+    if (!tickerMap) return null;
 
     let cik: string | null = null;
     for (const entry of Object.values(tickerMap)) {
@@ -736,11 +709,16 @@ export async function fetchBatchQuotes(
     );
   }
 
-  // First attempt
+  // First attempt — sequential with 150ms inter-batch delay to avoid Yahoo rate limiting
   const { crumb, cookie } = auth;
-  const batchResults = await Promise.allSettled(
-    batches.map((batch) => fetchBatch(batch, crumb, cookie))
-  );
+  const batchResults: PromiseSettledResult<Record<string, unknown>[]>[] = [];
+  for (let i = 0; i < batches.length; i++) {
+    const r = await Promise.allSettled([fetchBatch(batches[i], crumb, cookie)]);
+    batchResults.push(r[0]);
+    if (i < batches.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
 
   for (const r of batchResults) {
     if (r.status !== "fulfilled") continue;
@@ -788,8 +766,11 @@ export async function fetchBatchQuotes(
   return results;
 }
 
-// ── Sector ETF chart cache (shared across tickers in same scan) ──
-
+/**
+ * Sector ETF chart cache — Pre-Run-specific, NOT shared with `sector-rotation.ts`.
+ * The sector-rotation module fetches 1y daily data with OHLCV; this caches only 3mo closes
+ * for computing 20d sector returns (score J). Different granularity, different purpose.
+ */
 const sectorChartCache = new Map<string, { closes: number[]; ts: number }>();
 const SECTOR_CACHE_TTL = 30 * 60 * 1000; // 30 minutes (reduces score variance between runs)
 
@@ -804,6 +785,31 @@ async function fetchSectorETFReturn(sectorETF: string): Promise<number | null> {
 
   sectorChartCache.set(sectorETF, { closes: chart.closes, ts: Date.now() });
   return calc20dReturn(chart.closes);
+}
+
+/** Pre-warm the sector ETF cache by fetching all 14 sector ETFs in parallel.
+ *  Call once before the batch scan loop to avoid per-stock serial fetches.
+ *  Saves ~14 sequential Yahoo chart requests during scan. */
+export async function prefetchSectorETFs(): Promise<void> {
+  const etfs = [
+    "SMH", "IGV", "XBI", "XLV", "XLF", "XLY", "XLC",
+    "XLI", "XLP", "XLE", "XLU", "XLRE", "XLB", "SPY",
+  ];
+  const uncached = etfs.filter((e) => {
+    const c = sectorChartCache.get(e);
+    return !c || Date.now() - c.ts >= SECTOR_CACHE_TTL;
+  });
+  if (uncached.length === 0) return;
+
+  const results = await Promise.allSettled(
+    uncached.map((etf) => fetchYahooChart(etf, "3mo", "1d"))
+  );
+  for (let i = 0; i < uncached.length; i++) {
+    const r = results[i];
+    if (r.status === "fulfilled" && r.value) {
+      sectorChartCache.set(uncached[i], { closes: r.value.closes, ts: Date.now() });
+    }
+  }
 }
 
 /** Main function: fetch all data for a single ticker. */
@@ -890,10 +896,25 @@ export async function fetchPreRunData(
   // Analyst count
   const trendEntries = (trend.trend ?? []) as { period?: string; strongBuy?: number; buy?: number; hold?: number; sell?: number; strongSell?: number }[];
   let analystCount: number | null = null;
+  let analystRevisionTrend: number | null = null;
   if (trendEntries.length > 0) {
     const current = trendEntries[0];
     analystCount = (current.strongBuy ?? 0) + (current.buy ?? 0) +
       (current.hold ?? 0) + (current.sell ?? 0) + (current.strongSell ?? 0);
+
+    // P: Analyst revision trend — compare current vs previous period consensus
+    if (trendEntries.length >= 2) {
+      const prev = trendEntries[1];
+      const curBullish = (current.strongBuy ?? 0) + (current.buy ?? 0);
+      const prevBullish = (prev.strongBuy ?? 0) + (prev.buy ?? 0);
+      const curBearish = (current.sell ?? 0) + (current.strongSell ?? 0);
+      const prevBearish = (prev.sell ?? 0) + (prev.strongSell ?? 0);
+      const curNet = curBullish - curBearish;
+      const prevNet = prevBullish - prevBearish;
+      if (curNet > prevNet) analystRevisionTrend = 1;       // Improving
+      else if (curNet < prevNet) analystRevisionTrend = -1;  // Declining
+      else analystRevisionTrend = 0;                        // Stable
+    }
   }
 
   // Earnings date
@@ -1029,6 +1050,7 @@ export async function fetchPreRunData(
     closesNearRangeTop,
     atrContracting,
     failedBreakdownRecovery,
+    analystRevisionTrend,
     lastUpdated: new Date().toISOString(),
   };
 }
