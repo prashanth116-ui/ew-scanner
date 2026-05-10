@@ -7,6 +7,7 @@ import { sendTelegramMessage } from "@/lib/ew-telegram";
 import type { PreRunResult } from "@/lib/prerun/types";
 import { MAX_SCORE } from "@/lib/prerun/types";
 import { calculateSectorRotation, formatSectorRotationTelegram } from "@/lib/sector-rotation/sector-rotation";
+import { recordSignalBatch } from "@/lib/supabase/persistence";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 1100; // Respect Finnhub 60/min rate limit
@@ -200,6 +201,18 @@ export async function GET(request: NextRequest) {
     } catch (rotErr) {
       logError("api/prerun/cron/nightly/rotation", rotErr);
     }
+
+    // Record qualifying signals to Supabase (fire-and-forget)
+    const today = new Date().toISOString().slice(0, 10);
+    const signalRecords = qualifying.map((r) => ({
+      scanner: "prerun" as const,
+      ticker: r.data.ticker,
+      signal_date: today,
+      price_at_signal: r.data.currentPrice ?? 0,
+      signal_strength: r.verdict,
+      score: r.scores.finalScore,
+    }));
+    recordSignalBatch(signalRecords).catch(() => {});
 
     // Send Telegram summary
     const botToken = process.env.TELEGRAM_BOT_TOKEN;

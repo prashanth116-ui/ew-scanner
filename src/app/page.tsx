@@ -56,6 +56,8 @@ import { EWUniverseBuilder } from "@/components/ew-universe-builder";
 import { EWAlertConfig } from "@/components/ew-alert-config";
 import { useDebounce } from "@/lib/use-debounce";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
+import { recordSignals, fetchClientHitRates, type HitRateEntry } from "@/lib/signal-client";
+import { checkTargetResistance } from "@/lib/ew-resistance";
 
 const HTF_OPTIONS = ["Monthly", "Weekly"] as const;
 const LTF_OPTIONS = ["Daily", "4H", "1H"] as const;
@@ -214,6 +216,9 @@ function EWScannerPage() {
   // Collapsible left panel sections (stores collapsed section keys)
   const { collapsed, toggleSection } = useCollapsibleSections();
 
+  // Hit rates from Supabase
+  const [hitRates, setHitRates] = useState<HitRateEntry[]>([]);
+
   // Single-ticker search
   const [tickerSearch, setTickerSearch] = useState("");
   const [tickerSearching, setTickerSearching] = useState(false);
@@ -239,6 +244,11 @@ function EWScannerPage() {
     // Clear param from URL
     router.replace("/", { scroll: false });
   }, [searchParams, router]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch hit rates when mode changes
+  useEffect(() => {
+    fetchClientHitRates("ew", mode).then(setHitRates).catch(() => {});
+  }, [mode]);
 
   // Update slider defaults when mode changes
   const handleModeChange = useCallback((newMode: ScannerMode) => {
@@ -620,6 +630,32 @@ function EWScannerPage() {
     }
 
     if (signal.aborted) return;
+
+    // Record signals to Supabase (fire-and-forget)
+    const today = new Date().toISOString().slice(0, 10);
+    const signalsToRecord = modeFilteredCandidates
+      .filter((c) => c.enhancedNormalized >= 0.5)
+      .slice(0, 50)
+      .map((c) => {
+        const ath = c.trueAth ?? c.ath;
+        const fwd = computeForwardTargets(ath, c.low, c.current);
+        const allTargets = [...fwd.support, ...fwd.extensions];
+        return {
+          scanner: "ew" as const,
+          ticker: c.ticker,
+          signal_date: today,
+          price_at_signal: c.current,
+          mode,
+          signal_strength: c.confidenceTier,
+          score: c.enhancedNormalized,
+          target1: allTargets[0]?.price,
+          target2: allTargets[1]?.price,
+          target3: allTargets[2]?.price,
+          invalidation: c.low * 0.95,
+        };
+      });
+    recordSignals(signalsToRecord);
+
     setProgress("");
     setScanning(false);
   }, [universe, htf, ltf, minDecline, minMonths, minRecovery, mode]);
@@ -1287,6 +1323,16 @@ function EWScannerPage() {
                       <span className="font-bold text-purple-400">{waveMatchCount}</span> EW match
                     </span>
                   )}
+                  {hitRates.length > 0 && (() => {
+                    const r30 = hitRates.find((h) => h.period_days === 30);
+                    if (!r30 || r30.total_signals < 5) return null;
+                    return (
+                      <span className="text-[#a0a0a0]" title={`Based on ${r30.total_signals} signals tracked over 30 days`}>
+                        Hit rate: <span className="font-bold text-green-400">{Math.round(r30.hit_rate * 100)}%</span>
+                        <span className="text-[#666] ml-1">(n={r30.total_signals})</span>
+                      </span>
+                    );
+                  })()}
                   {labeling && (
                     <span className="flex items-center gap-1 text-[#5ba3e6]">
                       <Loader2 className="h-3 w-3 animate-spin" />
@@ -1864,14 +1910,22 @@ function EWScannerPage() {
 
                   {/* Targets & Invalidation */}
                   <div className="grid grid-cols-3 gap-3">
-                    {(deepStructured.nextTargets?.length ? deepStructured.nextTargets : deepStructured.nextTarget ? [{ label: "Target", price: deepStructured.nextTarget }] : []).map((t, i) => (
+                    {(deepStructured.nextTargets?.length ? deepStructured.nextTargets : deepStructured.nextTarget ? [{ label: "Target", price: deepStructured.nextTarget }] : []).map((t, i) => {
+                      const resistance = deepCandidate?.series?.close
+                        ? checkTargetResistance(t.price, deepCandidate.series.close, deepCandidate.series.volume)
+                        : null;
+                      return (
                       <div key={`target-${t.label}-${t.price}`} className={`rounded-lg border p-3 ${i === 0 ? "border-green-500/20 bg-green-500/5" : "border-emerald-500/15 bg-emerald-500/[0.03]"}`}>
                         <p className="text-[10px] uppercase tracking-wider text-[#666]">{t.label}</p>
-                        <p className={`mt-1 text-lg font-bold ${i === 0 ? "text-green-400" : "text-emerald-400/80"}`}>
+                        <p className={`mt-1 text-lg font-bold ${resistance?.isNearResistance ? "text-amber-400" : i === 0 ? "text-green-400" : "text-emerald-400/80"}`}>
                           ${t.price.toFixed(2)}
+                          {resistance?.isNearResistance && (
+                            <span className="ml-1 text-xs font-normal text-amber-400/70">(resistance)</span>
+                          )}
                         </p>
                       </div>
-                    ))}
+                      );
+                    })}
                     {deepStructured.invalidation && (
                       <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
                         <p className="text-[10px] uppercase tracking-wider text-[#666]">Invalidation</p>

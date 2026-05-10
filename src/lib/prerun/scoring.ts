@@ -347,3 +347,40 @@ export function scorePreRun(
 export function autoScorePreRun(data: PreRunStockData): PreRunResult {
   return scorePreRun(data, true, 1, suggestScoreG(data));
 }
+
+/**
+ * Sector quadrant momentum gate.
+ * Augments existing sector modifier with rotation quadrant data.
+ * @param quadrant - Sector's current RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING)
+ * @returns Score adjustment: +2 (LEADING/IMPROVING), -1 (WEAKENING), -2 (LAGGING)
+ */
+export function sectorQuadrantGate(
+  quadrant: string | null | undefined
+): number {
+  if (!quadrant) return 0;
+  switch (quadrant) {
+    case "LEADING":
+    case "IMPROVING":
+      return 2;
+    case "WEAKENING":
+      return -1;
+    case "LAGGING":
+      return -2;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Dynamic Gate 1 calibration.
+ * Adjusts the pctFromAth threshold based on the universe's median drawdown.
+ * In bear markets (high median drawdown), raise threshold so only deeply discounted stocks pass.
+ * @param medianPctFromAth - Median pctFromAth of the scanned universe
+ * @returns Adjusted gate1 threshold (default 40)
+ */
+export function dynamicGate1Threshold(medianPctFromAth: number | null): number {
+  const BASE_THRESHOLD = 40;
+  if (medianPctFromAth == null) return BASE_THRESHOLD;
+  // If median drawdown is high (bear market), raise threshold
+  return Math.max(30, medianPctFromAth + 15);
+}

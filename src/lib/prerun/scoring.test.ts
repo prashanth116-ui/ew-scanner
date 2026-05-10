@@ -39,6 +39,7 @@ function makeData(overrides: Partial<PreRunStockData> = {}): PreRunStockData {
     closesNearRangeTop: null,
     atrContracting: null,
     failedBreakdownRecovery: null,
+    analystRevisionTrend: null,
     lastUpdated: new Date().toISOString(),
     ...overrides,
   };

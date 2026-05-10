@@ -45,6 +45,8 @@ import type {
   SqueezeWatchlist,
 } from "@/lib/ew-types";
 import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-scoring";
+import { computeSITrend, type SITrendDirection } from "@/lib/squeeze-scoring";
+import { recordSignals, fetchClientHitRates, type HitRateEntry } from "@/lib/signal-client";
 import { useDebounce } from "@/lib/use-debounce";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 import { formatM, formatNum, formatDate } from "@/lib/format-utils";
@@ -340,6 +342,22 @@ function SqueezePage() {
         await new Promise((r) => setTimeout(r, BATCH_DELAY));
       }
     }
+
+    // Record high-tier squeeze signals (fire-and-forget)
+    const today = new Date().toISOString().slice(0, 10);
+    const scored = scoreSqueezeBatch(results, DEFAULT_SQUEEZE_FILTERS);
+    const toRecord = scored
+      .filter((s) => s.tier === "high" || s.tier === "medium")
+      .slice(0, 50)
+      .map((s) => ({
+        scanner: "squeeze" as const,
+        ticker: s.ticker,
+        signal_date: today,
+        price_at_signal: s.currentPrice ?? 0,
+        signal_strength: s.tier,
+        score: s.squeezeScore,
+      }));
+    recordSignals(toRecord);
 
     setScanning(false);
     setProgress("");

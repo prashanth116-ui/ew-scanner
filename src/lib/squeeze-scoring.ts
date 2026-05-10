@@ -5,6 +5,7 @@ import type {
   SqueezeComponentScores,
   SqueezeTier,
 } from "./ew-types";
+import { computeVolumeAcceleration, type VolumeAccelResult } from "./squeeze-volume-accel";
 
 export const DEFAULT_SQUEEZE_FILTERS: SqueezeFilters = {
   minSiPercent: 5,
@@ -120,6 +121,44 @@ function getTier(score: number): SqueezeTier {
   if (score >= 65) return "high";
   if (score >= 40) return "medium";
   return "low";
+}
+
+export type SITrendDirection = "up" | "down" | "flat";
+
+/**
+ * Compute SI% trend direction from historical data points.
+ * @param siValues - SI% values ordered oldest → newest (min 2 entries)
+ * @returns Trend direction and scoring adjustment
+ */
+export function computeSITrend(
+  siValues: number[]
+): { direction: SITrendDirection; adjustment: number } {
+  if (siValues.length < 2) return { direction: "flat", adjustment: 0 };
+
+  // Use last 3 entries (or fewer if unavailable)
+  const recent = siValues.slice(-3);
+
+  // Simple slope: compare last vs first
+  const slope = recent[recent.length - 1] - recent[0];
+
+  if (slope > 1) return { direction: "up", adjustment: 5 };   // SI increasing → more pressure → +5
+  if (slope < -1) return { direction: "down", adjustment: -5 }; // SI decreasing → less pressure → -5
+  return { direction: "flat", adjustment: 0 };
+}
+
+/**
+ * Score volume acceleration for squeeze candidate.
+ * @param dailyVolumes - Recent daily volume data (60+ days preferred)
+ * @returns Score 0-10 and result data
+ */
+export function scoreVolumeAcceleration(
+  dailyVolumes: number[] | undefined
+): { score: number; result: VolumeAccelResult | null } {
+  if (!dailyVolumes || dailyVolumes.length < 15) {
+    return { score: 0, result: null };
+  }
+  const result = computeVolumeAcceleration(dailyVolumes);
+  return { score: result?.score ?? 0, result };
 }
 
 export function computeSqueezeScore(data: SqueezeData): ScoredSqueezeCandidate {

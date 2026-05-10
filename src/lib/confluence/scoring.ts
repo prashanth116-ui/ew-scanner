@@ -60,3 +60,15 @@ export function classifySignal(scores: ConfluenceScores): ConfluenceSignal {
   if (scores.passCount >= 2) return "weak";
   return "none";
 }
+
+/**
+ * Temporal alignment bonus.
+ * If 3+ sub-scanner signals are all fresh (< 7 days old), boost score by 10%.
+ * @param signalAges - Array of ages in days for each non-null scanner signal
+ */
+export function computeTemporalBonus(signalAges: number[]): number {
+  if (signalAges.length < 3) return 0;
+  const freshCount = signalAges.filter((age) => age <= 7).length;
+  if (freshCount >= 3) return 0.10; // +10% bonus for fresh alignment
+  return 0;
+}

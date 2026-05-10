@@ -11,6 +11,14 @@
     {
       "path": "/api/sector-rotation/alert",
       "schedule": "0 22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/outcomes",
+      "schedule": "30 22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/targets",
+      "schedule": "*/15 13-21 * * 1-5"
     }
   ]
 }

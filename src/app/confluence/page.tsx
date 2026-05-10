@@ -41,6 +41,8 @@ import {
   type SavedConfluenceScan,
 } from "@/lib/confluence/storage";
 import { saveScanSnapshot, computeSignalPersistence, type SignalPersistence } from "@/lib/confluence/history";
+import { detectConflicts, type ConflictWarning } from "@/lib/confluence/conflict";
+import { recordSignals, fetchClientHitRates, type HitRateEntry } from "@/lib/signal-client";
 import { getConfluenceUniverse, getConfluenceTickerInfo } from "@/data/confluence-universe";
 import { getSectorForSymbol } from "@/data/sector-universe";
 import type { SectorRotationScore, SectorRotationResult, RRGQuadrant } from "@/lib/sector-rotation/types";
@@ -188,6 +190,17 @@ export default function ConfluencePage() {
   // Signal persistence from previous scan
   const [persistence, setPersistence] = useState<SignalPersistence | null>(null);
 
+  // Hit rates from Supabase
+  const [hitRates, setHitRates] = useState<HitRateEntry[]>([]);
+
+  // Conflict warnings per ticker
+  const [conflicts, setConflicts] = useState<Map<string, ConflictWarning[]>>(new Map());
+
+  // Fetch hit rates on mount
+  useEffect(() => {
+    fetchClientHitRates("confluence").then(setHitRates).catch(() => {});
+  }, []);
+
   // Cleanup abort on unmount
   useEffect(() => {
     return () => {
@@ -294,6 +307,29 @@ export default function ConfluencePage() {
       setPersistence(computeSignalPersistence(confluenceResults));
       // Save current scan as a new snapshot
       saveScanSnapshot(confluenceResults);
+
+      // Detect conflicts for each result
+      const conflictMap = new Map<string, ConflictWarning[]>();
+      for (const r of confluenceResults) {
+        const c = detectConflicts(r);
+        if (c.length > 0) conflictMap.set(r.ticker, c);
+      }
+      setConflicts(conflictMap);
+
+      // Record strong/moderate signals to Supabase (fire-and-forget)
+      const today = new Date().toISOString().slice(0, 10);
+      const toRecord = confluenceResults
+        .filter((r) => r.signal === "strong" || r.signal === "moderate")
+        .slice(0, 50)
+        .map((r) => ({
+          scanner: "confluence" as const,
+          ticker: r.ticker,
+          signal_date: today,
+          price_at_signal: r.price ?? 0,
+          signal_strength: r.signal,
+          score: r.scores.confluenceScore,
+        }));
+      recordSignals(toRecord);
     }
     prevScanningRef.current = scanning;
   }, [scanning, confluenceResults]);
@@ -877,6 +913,26 @@ export default function ConfluencePage() {
             </div>
           )}
 
+          {/* Hit rate + conflict summary */}
+          {!scanning && confluenceResults.length > 0 && (hitRates.length > 0 || conflicts.size > 0) && (
+            <div className="mb-4 flex items-center gap-4 text-xs">
+              {hitRates.length > 0 && (() => {
+                const r30 = hitRates.find((h) => h.period_days === 30);
+                if (!r30 || r30.total_signals < 5) return null;
+                return (
+                  <span className="rounded border border-green-500/20 bg-green-500/5 px-2 py-1 text-green-400">
+                    30d hit rate: {Math.round(r30.hit_rate * 100)}% (n={r30.total_signals})
+                  </span>
+                );
+              })()}
+              {conflicts.size > 0 && (
+                <span className="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1 text-amber-400">
+                  {conflicts.size} conflict{conflicts.size !== 1 ? "s" : ""} detected
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Action bar: sort pills + export */}
           {sorted.length > 0 && (
             <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -962,6 +1018,7 @@ export default function ConfluencePage() {
                   expanded={expandedTicker === result.ticker}
                   onToggle={() => setExpandedTicker(expandedTicker === result.ticker ? null : result.ticker)}
                   thresholds={thresholds}
+                  conflicts={conflicts.get(result.ticker)}
                 />
               ))}
             </div>
@@ -1054,12 +1111,14 @@ function ResultRow({
   expanded,
   onToggle,
   thresholds,
+  conflicts,
 }: {
   result: ConfluenceResult;
   rank: number;
   expanded: boolean;
   onToggle: () => void;
   thresholds: ConfluenceThresholds;
+  conflicts?: ConflictWarning[];
 }) {
   const s = result.scores;
   const [expandedPanel, setExpandedPanel] = useState<string | null>(null);
@@ -1080,6 +1139,11 @@ function ResultRow({
               <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${SIGNAL_COLORS[result.signal]}`}>
                 {SIGNAL_LABELS[result.signal]}
               </span>
+              {conflicts && conflicts.length > 0 && (
+                <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[8px] text-amber-400" title={conflicts.map((c) => c.description).join("; ")}>
+                  Conflict
+                </span>
+              )}
             </div>
             {expanded ? <ChevronDown className="h-4 w-4 text-[#555]" /> : <ChevronRight className="h-4 w-4 text-[#555]" />}
           </div>
