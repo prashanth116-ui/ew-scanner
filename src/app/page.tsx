@@ -2092,18 +2092,33 @@ function CandidateCard({
           </div>
         )}
         {(() => {
-          // Collect all upside targets from fib extensions + wave targets
+          // Collect all upside targets from fib extensions + wave recovery + forward targets
           const allTargets: { label: string; price: number }[] = [];
           if (c.fibAnalysis?.extensions) {
             for (const e of c.fibAnalysis.extensions) {
-              if (e.price > c.current) allTargets.push({ label: e.label, price: e.price });
+              if (e.price > c.current * 1.005) allTargets.push({ label: e.label, price: e.price });
             }
           }
-          // De-duplicate by price (within $0.50)
+          // Wave counter recovery/extension targets
+          if (c.waveCount) {
+            const wInfo = getWaveStatusInfo(c.waveCount, c.current);
+            for (const t of wInfo.targets) {
+              if (t.price > c.current * 1.005) allTargets.push(t);
+            }
+          }
+          // Forward targets from ATH/low (always merge — fills gaps between wave and extension)
+          {
+            const ath = c.trueAth ?? c.ath;
+            const fwd = computeForwardTargets(ath, c.low, c.current);
+            for (const t of [...fwd.support, ...fwd.extensions]) {
+              if (t.price > c.current * 1.005) allTargets.push(t);
+            }
+          }
+          // De-duplicate by price (within 0.5%)
+          allTargets.sort((a, b) => a.price - b.price);
           const unique = allTargets.filter((t, i) =>
-            !allTargets.slice(0, i).some((u) => Math.abs(u.price - t.price) < 0.5)
+            !allTargets.slice(0, i).some((u) => Math.abs(u.price - t.price) / t.price < 0.005)
           );
-          unique.sort((a, b) => a.price - b.price);
           const next2 = unique.slice(0, 2);
           if (next2.length === 0) return null;
           return (
@@ -2385,13 +2400,26 @@ function CompactTable({
                             const tgts: { label: string; price: number }[] = [];
                             if (c.fibAnalysis?.extensions) {
                               for (const e of c.fibAnalysis.extensions) {
-                                if (e.price > c.current) tgts.push({ label: e.label, price: e.price });
+                                if (e.price > c.current * 1.005) tgts.push({ label: e.label, price: e.price });
                               }
                             }
+                            if (c.waveCount) {
+                              const wInfo = getWaveStatusInfo(c.waveCount, c.current);
+                              for (const t of wInfo.targets) {
+                                if (t.price > c.current * 1.005) tgts.push(t);
+                              }
+                            }
+                            {
+                              const ath = c.trueAth ?? c.ath;
+                              const fwd = computeForwardTargets(ath, c.low, c.current);
+                              for (const t of [...fwd.support, ...fwd.extensions]) {
+                                if (t.price > c.current * 1.005) tgts.push(t);
+                              }
+                            }
+                            tgts.sort((a, b) => a.price - b.price);
                             const uq = tgts.filter((t, i) =>
-                              !tgts.slice(0, i).some((u) => Math.abs(u.price - t.price) < 0.5)
+                              !tgts.slice(0, i).some((u) => Math.abs(u.price - t.price) / t.price < 0.005)
                             );
-                            uq.sort((a, b) => a.price - b.price);
                             const n2 = uq.slice(0, 2);
                             if (n2.length === 0) return null;
                             return (
