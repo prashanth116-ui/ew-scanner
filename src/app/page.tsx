@@ -2123,17 +2123,17 @@ function CandidateCard({
           const unique = allTargets.filter((t, i) =>
             !allTargets.slice(0, i).some((u) => Math.abs(u.price - t.price) / t.price < 0.005)
           );
-          const next2 = unique.slice(0, 2);
-          if (next2.length === 0) return null;
+          const next3 = unique.slice(0, 3);
+          if (next3.length === 0) return null;
           return (
             <div className="flex items-start gap-2 text-xs">
               <span className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full bg-green-400" />
               <span className="text-[#a0a0a0]">
-                {next2.map((t, i) => (
+                {next3.map((t, i) => (
                   <span key={i}>
                     {i > 0 && <span className="text-[#555]"> → </span>}
                     <span className="text-[#c0c0c0]">T{i + 1}:</span>{" "}
-                    <span className="text-green-400 font-mono">${t.price.toFixed(2)}</span>
+                    <span className={`font-mono ${i < 2 ? "text-green-400" : "text-green-400/60"}`}>${t.price.toFixed(2)}</span>
                     <span className="text-[#666] ml-0.5">({t.label})</span>
                   </span>
                 ))}
@@ -2429,17 +2429,17 @@ function CompactTable({
                             const uq = tgts.filter((t, i) =>
                               !tgts.slice(0, i).some((u) => Math.abs(u.price - t.price) / t.price < 0.005)
                             );
-                            const n2 = uq.slice(0, 2);
-                            if (n2.length === 0) return null;
+                            const n3 = uq.slice(0, 3);
+                            if (n3.length === 0) return null;
                             return (
                               <div className="flex items-center gap-2">
                                 <span className="inline-block h-2 w-2 rounded-full bg-green-400" />
                                 <span className="text-[#a0a0a0]">
-                                  {n2.map((t, i) => (
+                                  {n3.map((t, i) => (
                                     <span key={i}>
                                       {i > 0 && " → "}
                                       <span className="text-[#c0c0c0]">T{i + 1}:</span>{" "}
-                                      <span className="font-mono text-green-400">${t.price.toFixed(2)}</span>
+                                      <span className={`font-mono ${i < 2 ? "text-green-400" : "text-green-400/60"}`}>${t.price.toFixed(2)}</span>
                                       <span className="text-[#666] ml-0.5">({t.label})</span>
                                     </span>
                                   ))}
