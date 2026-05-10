@@ -212,7 +212,7 @@ export async function GET(request: NextRequest) {
       signal_strength: r.verdict,
       score: r.scores.finalScore,
     }));
-    recordSignalBatch(signalRecords).catch(() => {});
+    await recordSignalBatch(signalRecords).catch(() => {});
 
     // Send Telegram summary
     const botToken = process.env.TELEGRAM_BOT_TOKEN;

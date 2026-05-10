@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       fetchMacroRegime().catch(() => null),
     ]);
 
-    // Persist sector snapshots (fire-and-forget)
+    // Persist sector snapshots (await to ensure completion before Vercel kills function)
     const today = new Date().toISOString().slice(0, 10);
     const snapshots = result.sectors.map((s) => ({
       snapshot_date: today,
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       momentum_score: s.compositeScore,
       breadth_pct: s.breadthPct ?? undefined,
     }));
-    recordSectorSnapshotBatch(snapshots).catch(() => {});
+    await recordSectorSnapshotBatch(snapshots).catch(() => {});
 
     return NextResponse.json({
       ...result,
