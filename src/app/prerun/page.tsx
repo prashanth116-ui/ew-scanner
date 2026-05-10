@@ -723,7 +723,7 @@ function PreRunPage() {
         {scanning && (
           <div className="mb-4">
             <div className="flex items-center justify-between text-xs text-[#a0a0a0] mb-1">
-              <span>{progress}</span>
+              <span>{progress}{totalCount > 200 && scannedCount > 0 && scannedCount < totalCount ? ` (~${Math.ceil(((totalCount - scannedCount) / BATCH_SIZE) * (BATCH_DELAY / 1000) / 60)}min left)` : ""}</span>
               <span>
                 {scannedCount}/{totalCount}
               </span>

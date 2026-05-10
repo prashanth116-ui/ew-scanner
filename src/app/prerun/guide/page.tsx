@@ -671,48 +671,95 @@ export default function PreRunGuidePage() {
           </p>
         </Section>
 
-        {/* Sector Buckets */}
-        <Section icon={Zap} title="Sector Buckets">
+        {/* Universe & Sector Buckets */}
+        <Section icon={Zap} title="Universe &amp; Sector Buckets">
           <p>
-            The scan universe is organized into 11 sector buckets. Each bucket
-            represents a structural theme where multi-bagger setups tend to
-            cluster.
+            The scan universe covers <strong className="text-white">~1,390 stocks</strong> sourced
+            from the squeeze universe (S&amp;P 500 + S&amp;P 400 MidCap + S&amp;P 600 SmallCap highlights).
+            Each stock is mapped to one of 13 GICS sectors, with unmapped stocks in an &ldquo;Other&rdquo; bucket.
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {[
-              { name: "AI Optical/Connectivity Semis", etf: "SMH" },
-              { name: "Advanced Packaging/Test", etf: "SMH" },
-              { name: "SiC/GaN Power Semis", etf: "SMH" },
-              { name: "Beaten-Down Cloud/SaaS", etf: "IGV" },
-              { name: "Beaten-Down Biotech", etf: "XBI" },
-              { name: "Energy/LNG Turnarounds", etf: "XLE" },
-              { name: "Nuclear/Power Neoclouds", etf: "ICLN" },
-              { name: "Rare Earth/Critical Minerals", etf: "XME" },
-              { name: "EV/Hydrogen Turnarounds", etf: "IDRV" },
-              { name: "High Short Interest", etf: "IWM" },
-              { name: "Rental/Travel", etf: "PEJ" },
-            ].map((b) => (
-              <div
-                key={b.name}
-                className="rounded border border-[#2a2a2a] bg-[#141414] px-3 py-2"
-              >
-                <p className="text-xs text-[#a0a0a0]">{b.name}</p>
-                <p className="text-[10px] text-[#5ba3e6]">ETF: {b.etf}</p>
-              </div>
-            ))}
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2a2a2a] text-[#666]">
+                  <th className="py-1.5 pr-3 text-left font-medium">Sector</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Stocks</th>
+                  <th className="py-1.5 text-left font-medium">Benchmark ETF</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#c0c0c0]">
+                {[
+                  { name: "Semiconductors", count: "~76", etf: "SMH" },
+                  { name: "Software & Cloud", count: "~172", etf: "IGV" },
+                  { name: "Biotech", count: "~78", etf: "XBI" },
+                  { name: "Health Care", count: "~117", etf: "XLV" },
+                  { name: "Financials", count: "~174", etf: "XLF" },
+                  { name: "Consumer Discretionary", count: "~174", etf: "XLY" },
+                  { name: "Communication Services", count: "~62", etf: "XLC" },
+                  { name: "Industrials", count: "~206", etf: "XLI" },
+                  { name: "Consumer Staples", count: "~62", etf: "XLP" },
+                  { name: "Energy", count: "~68", etf: "XLE" },
+                  { name: "Utilities", count: "~45", etf: "XLU" },
+                  { name: "Real Estate", count: "~78", etf: "XLRE" },
+                  { name: "Materials", count: "~67", etf: "XLB" },
+                  { name: "Other", count: "~700", etf: "SPY" },
+                ].map((b) => (
+                  <tr key={b.name} className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{b.name}</td>
+                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{b.count}</td>
+                    <td className="py-1.5">{b.etf}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           <p className="mt-2 text-xs text-[#666]">
             Sector ETFs power criterion J (relative strength) and the sector
             momentum modifier (&plusmn;1). The scanner compares each stock&apos;s 20-day
-            return against its sector ETF.
+            return against its sector ETF. Stocks in &ldquo;Other&rdquo; use SPY as the benchmark.
           </p>
-          <p className="mt-1 text-xs text-[#666]">
-            <strong className="text-[#a0a0a0]">Note:</strong> These 11 buckets are
-            thematic groups built for multi-bagger screening, not the standard 13
-            GICS sectors. Some GICS sectors (e.g., Utilities, Real Estate) are
-            excluded because they rarely produce the explosive setups this scanner
-            targets, while others are split into sub-themes (e.g., Semiconductors
-            has 3 buckets for AI Optical, Packaging, and Power Semis).
+        </Section>
+
+        {/* Presets */}
+        <Section icon={Target} title="Presets at a Glance">
+          <p>
+            Presets configure filters and criteria thresholds in one click. Select a preset from the sidebar to apply.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2a2a2a] text-[#666]">
+                  <th className="py-1.5 pr-3 text-left font-medium">Preset</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">ATH%</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">SI%</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Score</th>
+                  <th className="py-1.5 text-left font-medium">Best For</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#c0c0c0]">
+                {[
+                  { name: "SNDK", ath: "40%", si: "15%", score: "15", use: "Classic multi-bagger: deep base + high SI + catalyst" },
+                  { name: "Earnings", ath: "--", si: "--", score: "15", use: "PRIORITY stocks with earnings within 14 days" },
+                  { name: "Semis", ath: "--", si: "--", score: "11", use: "All semiconductor stocks in the universe" },
+                  { name: "Software", ath: "--", si: "--", score: "11", use: "All Software & Cloud stocks (~170)" },
+                  { name: "High SI", ath: "0%", si: "20%", score: "11", use: "Maximum squeeze fuel, any ATH discount" },
+                  { name: "Wide Net", ath: "0%", si: "0%", score: "11", use: "Relaxed filters for initial screening" },
+                  { name: "Pre-Run Base", ath: "30%", si: "5%", score: "11", use: "Stage 1\u21922: base + EMA reclaim + coiling (A\u22652, F/J/K\u22651)" },
+                ].map((p) => (
+                  <tr key={p.name} className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{p.name}</td>
+                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{p.ath}</td>
+                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{p.si}</td>
+                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{p.score}</td>
+                    <td className="py-1.5">{p.use}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-[#666]">
+            <strong className="text-[#a0a0a0]">Default filters:</strong> 40% from ATH, 5% SI, score &ge;11.
+            Presets override only the values shown &mdash; unspecified filters use defaults.
           </p>
         </Section>
 

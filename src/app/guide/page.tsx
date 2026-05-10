@@ -5,6 +5,8 @@ import { Activity, Target, TrendingUp, AlertTriangle, Zap, Search, BarChart3 } f
 
 const SECTIONS = [
   { id: "how-it-works", label: "How It Works" },
+  { id: "universes", label: "Universes" },
+  { id: "presets", label: "Presets" },
   { id: "reading-cards", label: "Reading Cards" },
   { id: "wave2-bottoms", label: "W2 Bottoms" },
   { id: "wave4-pullback", label: "W4 Pullback" },
@@ -85,6 +87,79 @@ export default function EWScannerGuidePage() {
             all four layers, then ranked. The confidence tier (high / probable / speculative) tells you
             at a glance how many signals align.
           </p>
+        </Section>
+
+        {/* Universes */}
+        <Section id="universes" title="Universes" icon={<BarChart3 className="h-5 w-5 text-[#5ba3e6]" />}>
+          <p>
+            Choose a universe to control the scan scope. Smaller universes scan faster; larger ones cast a wider net.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2a2a2a] text-[#666]">
+                  <th className="py-1.5 pr-3 text-left font-medium">Universe</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Stocks</th>
+                  <th className="py-1.5 text-left font-medium">Description</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#c0c0c0]">
+                {[
+                  { name: "Blue Chips", count: "~135", desc: "Deduplicated top holdings from SP500, NDX, Biotech, Energy, Financials, Consumer" },
+                  { name: "Full", count: "~1,390", desc: "Entire squeeze universe — S&P 500 + S&P 400 MidCap + S&P 600 SmallCap highlights" },
+                  { name: "SP500", count: "50", desc: "Top 50 S&P 500 names by market cap" },
+                  { name: "NDX", count: "40", desc: "Top 40 Nasdaq-100 names (tech-heavy)" },
+                  { name: "Biotech", count: "24", desc: "Large-cap biotech and healthcare" },
+                  { name: "Energy", count: "20", desc: "Large-cap energy producers and services" },
+                  { name: "Financials", count: "25", desc: "Large-cap banks, payments, and insurance" },
+                  { name: "Consumer", count: "25", desc: "Large-cap consumer discretionary and staples" },
+                ].map((u) => (
+                  <tr key={u.name} className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{u.name}</td>
+                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{u.count}</td>
+                    <td className="py-1.5">{u.desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+
+        {/* Presets */}
+        <Section id="presets" title="Presets at a Glance" icon={<Zap className="h-5 w-5 text-yellow-400" />}>
+          <p>
+            Presets configure the scanner mode, timeframes, and filter thresholds in one click.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2a2a2a] text-[#666]">
+                  <th className="py-1.5 pr-3 text-left font-medium">Preset</th>
+                  <th className="py-1.5 pr-3 text-left font-medium">Mode</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Min Decline</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Recovery</th>
+                  <th className="py-1.5 text-left font-medium">Best For</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#c0c0c0]">
+                {[
+                  { name: "Deep Value", mode: "W2 Bottom", decline: "40%", recovery: "10%", use: "Classic golden zone bottoms. Highest conviction, fewest results." },
+                  { name: "Pullback", mode: "W4 Pullback", decline: "15%", recovery: "20%", use: "Shallow dips in strong uptrends. Best in trending markets." },
+                  { name: "Topping", mode: "W5 Exhaust", decline: "5%", recovery: "80%", use: "Near-ATH exhaustion signals. Use for exit timing, not entries." },
+                  { name: "Breakout", mode: "Breakout", decline: "20%", recovery: "40%", use: "Recovered most of decline with volume. New impulse starting." },
+                  { name: "Wide Net", mode: "W2 Bottom", decline: "25%", recovery: "5%", use: "Catches early recoveries. More results, lower avg quality." },
+                ].map((p) => (
+                  <tr key={p.name} className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{p.name}</td>
+                    <td className="py-1.5 pr-3 whitespace-nowrap">{p.mode}</td>
+                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{p.decline}</td>
+                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{p.recovery}</td>
+                    <td className="py-1.5">{p.use}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Section>
 
         {/* What to Look For */}

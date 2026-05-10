@@ -207,6 +207,12 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     filters: { sectorBucket: "Semiconductors", minScore: 11 },
   },
   {
+    name: "Sector Scan: Software",
+    shortName: "Software",
+    description: "Scans all Software & Cloud stocks. Largest sector bucket (~170 stocks).",
+    filters: { sectorBucket: "Software & Cloud", minScore: 11 },
+  },
+  {
     name: "High SI",
     shortName: "High SI",
     description: "Min 20% short float, any ATH discount. Maximum squeeze fuel.",
@@ -222,7 +228,7 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     name: "Pre-Run Base",
     shortName: "Pre-Run Base",
     description: "Stage 1→2 / base breakout. Big base → EMA reclaim → coiling near breakout. ARM, DELL, NBIS, DOCN structure.",
-    filters: { minPctFromAth: 30, minShortFloat: 5, minScore: 11, verdict: "All", sectorBucket: "All" },
+    filters: { minPctFromAth: 30, minScore: 11, verdict: "All", sectorBucket: "All" },
     criteriaFilters: [
       { criterion: "A", min: 2 },
       { criterion: "F", min: 1 },
