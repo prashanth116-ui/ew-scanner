@@ -1812,7 +1812,7 @@ function EWScannerPage() {
                                   const isHit = targetArrow === "↑" ? deepCandidate.current >= t.price : deepCandidate.current <= t.price;
                                   const isApproaching = !isHit && pctAway <= 0.02;
                                   return (
-                                    <div key={i} className="flex justify-between text-[11px]">
+                                    <div key={`${t.label}-${t.price}`} className="flex justify-between text-[11px]">
                                       <span className={tgtC}>{t.label}</span>
                                       <span className={`font-mono ${isHit ? "text-green-400" : isApproaching ? "text-yellow-400" : "text-[#e6e6e6]"}`}>
                                         ${t.price.toFixed(2)}{isHit ? " ✓" : ""}
@@ -1865,7 +1865,7 @@ function EWScannerPage() {
                   {/* Targets & Invalidation */}
                   <div className="grid grid-cols-3 gap-3">
                     {(deepStructured.nextTargets?.length ? deepStructured.nextTargets : deepStructured.nextTarget ? [{ label: "Target", price: deepStructured.nextTarget }] : []).map((t, i) => (
-                      <div key={i} className={`rounded-lg border p-3 ${i === 0 ? "border-green-500/20 bg-green-500/5" : "border-emerald-500/15 bg-emerald-500/[0.03]"}`}>
+                      <div key={`target-${t.label}-${t.price}`} className={`rounded-lg border p-3 ${i === 0 ? "border-green-500/20 bg-green-500/5" : "border-emerald-500/15 bg-emerald-500/[0.03]"}`}>
                         <p className="text-[10px] uppercase tracking-wider text-[#666]">{t.label}</p>
                         <p className={`mt-1 text-lg font-bold ${i === 0 ? "text-green-400" : "text-emerald-400/80"}`}>
                           ${t.price.toFixed(2)}
@@ -1887,8 +1887,8 @@ function EWScannerPage() {
                     <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
                       <p className="mb-2 text-[10px] uppercase tracking-wider text-[#666]">Confluence Zones</p>
                       <div className="space-y-1">
-                        {deepCandidate.fibAnalysis.confluenceZones.map((z, i) => (
-                          <div key={i} className="flex justify-between text-xs">
+                        {deepCandidate.fibAnalysis.confluenceZones.map((z) => (
+                          <div key={`zone-${z.price}`} className="flex justify-between text-xs">
                             <span className="text-[#5ba3e6]">{z.levels.join(" + ")}</span>
                             <span className="font-mono text-[#e6e6e6]">${z.price.toFixed(2)}</span>
                           </div>
@@ -1902,8 +1902,8 @@ function EWScannerPage() {
                     <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
                       <p className="mb-2 text-[10px] uppercase tracking-wider text-[#666]">Key Levels</p>
                       <div className="grid grid-cols-2 gap-2">
-                        {deepStructured.keyLevels.map((kl, i) => (
-                          <div key={i} className="flex justify-between text-xs">
+                        {deepStructured.keyLevels.map((kl) => (
+                          <div key={`kl-${kl.label}-${kl.price}`} className="flex justify-between text-xs">
                             <span className="text-[#a0a0a0]">{kl.label}</span>
                             <span className="font-mono text-[#e6e6e6]">${kl.price.toFixed(2)}</span>
                           </div>

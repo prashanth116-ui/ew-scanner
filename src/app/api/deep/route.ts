@@ -375,18 +375,42 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
     try {
       const parsed = JSON.parse(text);
 
-      // Fix 2: nextTarget(s) = nearest key levels above current price
+      // Fix 1: Coerce critical fields to prevent UI crashes on malformed LLM output
+      if (parsed.nextTarget != null) parsed.nextTarget = Number(parsed.nextTarget) || null;
+      if (parsed.invalidation != null) parsed.invalidation = Number(parsed.invalidation) || null;
+      if (!Array.isArray(parsed.keyLevels)) parsed.keyLevels = [];
+      parsed.keyLevels = parsed.keyLevels.filter(
+        (kl: unknown) => kl && typeof kl === "object" && typeof (kl as { price: number }).price === "number"
+      );
+
+      // Fix 2: nextTarget(s) = nearest key levels — direction-aware
       // AI sometimes picks a distant target (e.g. ATH) instead of the closest one
       // Filter out structural reference labels (wave start, invalidation, support)
       const structuralPatterns = /\b(wave start|invalidation|support|p0|wave [a-c] low|wave [a-c] high|alternate wave [a-c])\b/i;
-      const upsideLevels = (parsed.keyLevels as { label: string; price: number }[] | undefined)
-        ?.filter((l) => l.price > data.current * 1.005 && !structuralPatterns.test(l.label))
-        ?.sort((a, b) => a.price - b.price) ?? [];
-      if (upsideLevels.length > 0) {
-        parsed.nextTarget = upsideLevels[0].price;
-        parsed.nextTargets = upsideLevels.slice(0, 2);
-      } else if (parsed.nextTarget != null && parsed.nextTarget <= data.current) {
-        parsed.nextTarget = null;
+      const pos = (data.waveCountPosition ?? "").toLowerCase();
+      const isBearish = (pos.includes("wave 3") || pos.includes("wave 5") || pos.includes("wave c")) &&
+        (pos.includes("down") || pos.includes("decline") || pos.includes("bearish"));
+
+      if (!isBearish) {
+        // Bullish/recovery: find nearest upside levels
+        const upsideLevels = (parsed.keyLevels as { label: string; price: number }[])
+          .filter((l) => l.price > data.current * 1.005 && !structuralPatterns.test(l.label))
+          .sort((a, b) => a.price - b.price);
+        if (upsideLevels.length > 0) {
+          parsed.nextTarget = upsideLevels[0].price;
+          parsed.nextTargets = upsideLevels.slice(0, 2);
+        } else if (parsed.nextTarget != null && parsed.nextTarget <= data.current) {
+          parsed.nextTarget = null;
+        }
+      } else if (parsed.nextTarget != null && parsed.nextTarget >= data.current) {
+        // Bearish: ensure target is below current price
+        const downsideLevels = (parsed.keyLevels as { label: string; price: number }[])
+          .filter((l) => l.price < data.current * 0.995 && !structuralPatterns.test(l.label))
+          .sort((a, b) => b.price - a.price);
+        if (downsideLevels.length > 0) {
+          parsed.nextTarget = downsideLevels[0].price;
+          parsed.nextTargets = downsideLevels.slice(0, 2);
+        }
       }
 
       // Fix 4: Cap confidence when no algorithmic wave count exists

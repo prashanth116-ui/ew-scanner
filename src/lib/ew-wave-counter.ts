@@ -1117,7 +1117,7 @@ export function computeForwardTargets(
   const extensions: { label: string; price: number }[] = [];
   for (const { ratio, label } of extensionRatios) {
     const price = priorTrough + impulseRange * ratio;
-    if (price > currentPrice) {
+    if (price > currentPrice && price > 0) {
       extensions.push({ label, price: Math.round(price * 100) / 100 });
     }
   }

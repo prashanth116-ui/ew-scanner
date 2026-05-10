@@ -94,6 +94,11 @@ export async function fetchEWQuoteData(
     }
   }
 
+  // Guard: if all highs were null, athValue is still -Infinity — no valid data
+  if (athValue === -Infinity) {
+    return null;
+  }
+
   // Find lowest low BEFORE ATH (impulse start for Fibonacci)
   let preAthLowIdx = 0;
   let preAthLowValue = Infinity;

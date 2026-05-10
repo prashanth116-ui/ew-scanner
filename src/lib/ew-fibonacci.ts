@@ -129,7 +129,7 @@ export function findFibConfluence(
   const allLevels: { price: number; label: string }[] = [
     ...extensions.map((e) => ({ price: e.price, label: `Ext ${e.label}` })),
     ...retracements.map((r) => ({ price: r.price, label: `Ret ${r.label}` })),
-  ];
+  ].filter((l) => l.price > 0);
 
   if (allLevels.length < 2) return [];
 

@@ -61,7 +61,7 @@ export function scoreCandidate(
 
   const declinePct = q.ath > 0 ? ((q.ath - q.low) / q.ath) * 100 : 0;
   const monthsDecline = Math.max(0, (q.lowYear - q.athYear) * 12);
-  const recoveryPct = q.low > 0 ? ((q.current - q.low) / q.low) * 100 : 0;
+  const recoveryPct = q.low > 0 ? Math.max(0, ((q.current - q.low) / q.low) * 100) : 0;
 
   let score = 0;
 
