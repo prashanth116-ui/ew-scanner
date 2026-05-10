@@ -377,8 +377,10 @@ Reply with ONLY valid JSON (no code fences, no markdown) in this exact format:
 
       // Fix 2: nextTarget(s) = nearest key levels above current price
       // AI sometimes picks a distant target (e.g. ATH) instead of the closest one
+      // Filter out structural reference labels (wave start, invalidation, support)
+      const structuralPatterns = /\b(wave start|invalidation|support|p0|wave [a-c] low|wave [a-c] high|alternate wave [a-c])\b/i;
       const upsideLevels = (parsed.keyLevels as { label: string; price: number }[] | undefined)
-        ?.filter((l) => l.price > data.current)
+        ?.filter((l) => l.price > data.current * 1.005 && !structuralPatterns.test(l.label))
         ?.sort((a, b) => a.price - b.price) ?? [];
       if (upsideLevels.length > 0) {
         parsed.nextTarget = upsideLevels[0].price;
