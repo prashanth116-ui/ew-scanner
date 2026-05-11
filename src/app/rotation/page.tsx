@@ -960,6 +960,7 @@ function StockPerformanceTable({
   const [actionFilter, setActionFilter] = useState<Set<string>>(new Set());
   const [sma50Filter, setSma50Filter] = useState<"all" | "above" | "below">("all");
   const [rsAccelFilter, setRsAccelFilter] = useState<"all" | "positive" | "negative">("all");
+  const [volFilter, setVolFilter] = useState<"all" | "above" | "below">("all");
 
   const sectorAvgPct =
     detail.stocks.length > 0
@@ -979,7 +980,7 @@ function StockPerformanceTable({
     return ORDER.filter(a => actions.has(a));
   }, [detail.stocks, sectorAvgPct, lifecycle]);
 
-  const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all";
+  const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all";
 
   function toggleAction(label: string) {
     setActionFilter(prev => {
@@ -994,6 +995,7 @@ function StockPerformanceTable({
     setActionFilter(new Set());
     setSma50Filter("all");
     setRsAccelFilter("all");
+    setVolFilter("all");
   }
 
   const sorted = useMemo(() => {
@@ -1001,7 +1003,8 @@ function StockPerformanceTable({
       const cat = categorizeStock(s, sectorAvgPct);
       const stockAction = computeStockAction(cat, lifecycle);
       const vsEtf = s.performancePct - etfPerfPct;
-      return { stock: s, cat, stockAction, vsEtf };
+      const isTurnaroundSetup = !s.aboveSma50 && (s.rsAcceleration ?? 0) > 0 && s.volumeVsAvg >= 1.2;
+      return { stock: s, cat, stockAction, vsEtf, isTurnaroundSetup };
     });
     // Filter
     if (actionFilter.size > 0) {
@@ -1011,6 +1014,8 @@ function StockPerformanceTable({
     else if (sma50Filter === "below") copy = copy.filter(item => !item.stock.aboveSma50);
     if (rsAccelFilter === "positive") copy = copy.filter(item => (item.stock.rsAcceleration ?? 0) > 0);
     else if (rsAccelFilter === "negative") copy = copy.filter(item => (item.stock.rsAcceleration ?? 0) < 0);
+    if (volFilter === "above") copy = copy.filter(item => item.stock.volumeVsAvg >= 1.2);
+    else if (volFilter === "below") copy = copy.filter(item => item.stock.volumeVsAvg < 1.2);
     // Sort
     copy.sort((a, b) => {
       let av: string | number;
@@ -1034,7 +1039,7 @@ function StockPerformanceTable({
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return copy;
-  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter]);
+  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter]);
 
   if (detail.stocks.length === 0) {
     return (
@@ -1100,6 +1105,15 @@ function StockPerformanceTable({
           <option value="positive">Positive (catching up)</option>
           <option value="negative">Negative (fading)</option>
         </select>
+        <select
+          value={volFilter}
+          onChange={e => setVolFilter(e.target.value as "all" | "above" | "below")}
+          className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
+        >
+          <option value="all">Volume: All</option>
+          <option value="above">Above Avg (&ge;1.2x)</option>
+          <option value="below">Below Avg</option>
+        </select>
         {hasActiveFilter && (
           <button
             onClick={resetFilters}
@@ -1163,14 +1177,21 @@ function StockPerformanceTable({
           </tr>
         </thead>
         <tbody>
-          {sorted.map(({ stock: s, stockAction, vsEtf }) => {
+          {sorted.map(({ stock: s, stockAction, vsEtf, isTurnaroundSetup }) => {
             return (
               <tr
                 key={s.symbol}
-                className={`border-b border-[#1a1a1a] transition-colors hover:bg-[#1a1a1a] ${stockAction.rowBg}`}
+                className={`border-b border-[#1a1a1a] transition-colors hover:bg-[#1a1a1a] ${
+                  isTurnaroundSetup ? "border-l-2 border-l-amber-400 bg-amber-500/5" : stockAction.rowBg
+                }`}
               >
                 <td className="px-3 py-2 font-mono font-semibold text-white">
-                  {s.symbol}
+                  <span>{s.symbol}</span>
+                  {isTurnaroundSetup && (
+                    <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                      Turnaround
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-[#ccc]">{s.name}</td>
                 <td className="px-3 py-2 text-center">
