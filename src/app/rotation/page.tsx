@@ -10,6 +10,10 @@ import {
   AlertTriangle,
   TrendingUp,
   TrendingDown,
+  ArrowUpCircle,
+  Plus,
+  Shield,
+  LogOut,
 } from "lucide-react";
 import type {
   RotationTrackerResult,
@@ -546,6 +550,170 @@ function stockCategoryBadge(cat: StockCategory): { label: string; className: str
   }
 }
 
+// ── Strategy Overlay: Action Signal ──
+
+type ActionSignal = {
+  action: "ENTER" | "ADD ON PULLBACK" | "HOLD — TIGHTEN STOPS" | "EXIT";
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  icon: "enter" | "add" | "hold" | "exit";
+  description: string;
+};
+
+function computeActionSignal(
+  lifecycle: LifecycleStage,
+  conviction: ConvictionResult,
+  regimeAlignment: "aligned" | "headwind" | "neutral"
+): ActionSignal {
+  // EXIT: exhausting lifecycle, or EXIT conviction, or headwind + LOW conviction
+  if (
+    lifecycle === "EXHAUSTING" ||
+    conviction.level === "EXIT" ||
+    (regimeAlignment === "headwind" && conviction.level === "LOW")
+  ) {
+    const reason =
+      lifecycle === "EXHAUSTING"
+        ? "Rotation exhausting — momentum fading"
+        : conviction.level === "EXIT"
+          ? "Exit signals triggered — conviction collapsed"
+          : "Regime headwind with low conviction";
+    return {
+      action: "EXIT",
+      color: "text-red-400",
+      bgColor: "bg-red-500/10",
+      borderColor: "border-red-500/30",
+      icon: "exit",
+      description: reason,
+    };
+  }
+
+  // HOLD: LATE lifecycle, or MATURING + LOW conviction, or headwind + MODERATE
+  if (
+    lifecycle === "LATE" ||
+    (lifecycle === "MATURING" && conviction.level === "LOW") ||
+    (regimeAlignment === "headwind" && conviction.level === "MODERATE")
+  ) {
+    const reason =
+      lifecycle === "LATE"
+        ? "Extended rotation — protect gains"
+        : regimeAlignment === "headwind"
+          ? "Regime headwind — reduce exposure"
+          : "Maturing with weakening conviction";
+    return {
+      action: "HOLD — TIGHTEN STOPS",
+      color: "text-amber-400",
+      bgColor: "bg-amber-500/10",
+      borderColor: "border-amber-500/30",
+      icon: "hold",
+      description: reason,
+    };
+  }
+
+  // ADD ON PULLBACK: MATURING + MODERATE+ conviction + not headwind
+  if (
+    lifecycle === "MATURING" &&
+    (conviction.level === "MODERATE" || conviction.level === "HIGH") &&
+    regimeAlignment !== "headwind"
+  ) {
+    const reason =
+      regimeAlignment === "aligned"
+        ? "Established trend with regime support — add on dips"
+        : "Established trend — add on pullbacks";
+    return {
+      action: "ADD ON PULLBACK",
+      color: "text-cyan-400",
+      bgColor: "bg-cyan-500/10",
+      borderColor: "border-cyan-500/30",
+      icon: "add",
+      description: reason,
+    };
+  }
+
+  // ENTER: EARLY + HIGH/MODERATE conviction + not headwind
+  if (
+    lifecycle === "EARLY" &&
+    (conviction.level === "HIGH" || conviction.level === "MODERATE") &&
+    regimeAlignment !== "headwind"
+  ) {
+    const reason =
+      regimeAlignment === "aligned"
+        ? "Early rotation with high conviction and regime alignment"
+        : "New rotation with strong conviction — consider entry";
+    return {
+      action: "ENTER",
+      color: "text-green-400",
+      bgColor: "bg-green-500/10",
+      borderColor: "border-green-500/30",
+      icon: "enter",
+      description: reason,
+    };
+  }
+
+  // Fallback: HOLD for anything else (EARLY + LOW, etc.)
+  return {
+    action: "HOLD — TIGHTEN STOPS",
+    color: "text-amber-400",
+    bgColor: "bg-amber-500/10",
+    borderColor: "border-amber-500/30",
+    icon: "hold",
+    description: "Mixed signals — wait for clarity",
+  };
+}
+
+function ActionIcon({ icon, className }: { icon: ActionSignal["icon"]; className?: string }) {
+  switch (icon) {
+    case "enter":
+      return <ArrowUpCircle className={className} />;
+    case "add":
+      return <Plus className={className} />;
+    case "hold":
+      return <Shield className={className} />;
+    case "exit":
+      return <LogOut className={className} />;
+  }
+}
+
+// ── Strategy Overlay: Stock Action ──
+
+type StockAction = {
+  label: string;
+  rowBg: string;
+  badgeClass: string;
+  sortOrder: number;
+};
+
+function computeStockAction(
+  category: StockCategory,
+  lifecycle: LifecycleStage
+): StockAction {
+  if (category === "avoid") {
+    if (lifecycle === "EXHAUSTING") {
+      return { label: "Exit", rowBg: "bg-red-500/8", badgeClass: "bg-red-500/15 text-red-400", sortOrder: 5 };
+    }
+    return { label: "Avoid", rowBg: "bg-red-500/5", badgeClass: "bg-red-500/15 text-red-400", sortOrder: 4 };
+  }
+  if (category === "leader") {
+    if (lifecycle === "EARLY" || lifecycle === "MATURING") {
+      return { label: "Ride", rowBg: "bg-green-500/8", badgeClass: "bg-green-500/15 text-green-400", sortOrder: 1 };
+    }
+    if (lifecycle === "LATE") {
+      return { label: "Take Profit", rowBg: "bg-amber-500/8", badgeClass: "bg-amber-500/15 text-amber-400", sortOrder: 2 };
+    }
+    // EXHAUSTING
+    return { label: "Exit", rowBg: "bg-red-500/8", badgeClass: "bg-red-500/15 text-red-400", sortOrder: 5 };
+  }
+  // catch-up
+  if (lifecycle === "EARLY" || lifecycle === "MATURING") {
+    return { label: "Entry Candidate", rowBg: "bg-cyan-500/8", badgeClass: "bg-cyan-500/15 text-cyan-400", sortOrder: 0 };
+  }
+  if (lifecycle === "LATE") {
+    return { label: "Watch", rowBg: "", badgeClass: "bg-[#2a2a2a] text-[#888]", sortOrder: 3 };
+  }
+  // EXHAUSTING
+  return { label: "Avoid", rowBg: "bg-red-500/5", badgeClass: "bg-red-500/15 text-red-400", sortOrder: 4 };
+}
+
 // ── Enhancement #6: Historical Projection ──
 
 function HistoricalProjection({
@@ -622,6 +790,7 @@ function ActiveRotationCards({
         const conviction = computeConviction(r.event);
         const exitWarnings = computeExitWarnings(r.event);
         const regimeAlignment = regime ? isRegimeAligned(r.event.sectorName, regime) : "neutral";
+        const actionSignal = computeActionSignal(lifecycle, conviction, regimeAlignment);
 
         return (
           <button
@@ -629,10 +798,17 @@ function ActiveRotationCards({
             onClick={() => onExpand(isExpanded ? null : r.event.sectorId)}
             className={`rounded-lg border-l-4 ${
               lifecycle === "EXHAUSTING" ? "border-red-500" : lifecycle === "LATE" ? "border-amber-500" : "border-green-500"
-            } bg-[#1a1a1a] p-4 text-left transition-colors hover:bg-[#222] ${
+            } bg-[#1a1a1a] text-left transition-colors hover:bg-[#222] overflow-hidden ${
               isExpanded ? "ring-1 ring-green-500/30" : ""
             }`}
           >
+            {/* Enhancement A: Action Signal Banner */}
+            <div className={`flex items-center gap-2 px-4 py-1.5 ${actionSignal.bgColor} border-b ${actionSignal.borderColor}`}>
+              <ActionIcon icon={actionSignal.icon} className={`h-3.5 w-3.5 ${actionSignal.color}`} />
+              <span className={`text-xs font-semibold ${actionSignal.color}`}>{actionSignal.action}</span>
+            </div>
+
+            <div className="p-4">
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-semibold text-white">
@@ -736,6 +912,7 @@ function ActiveRotationCards({
                 <ChevronDown className="h-3 w-3" />
               )}
             </div>
+            </div>{/* close p-4 wrapper */}
           </button>
         );
       })}
@@ -745,12 +922,14 @@ function ActiveRotationCards({
 
 // ── Section 2: Stock Performance Table (sortable + categorized) ──
 
-type StockSortKey = "symbol" | "name" | "type" | "priceAtRotationStart" | "priceNow" | "performancePct" | "aboveSma50" | "volumeVsAvg";
+type StockSortKey = "symbol" | "name" | "action" | "priceAtRotationStart" | "priceNow" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg";
 
 function StockPerformanceTable({
   detail,
+  lifecycle,
 }: {
   detail: ActiveRotationDetail;
+  lifecycle: LifecycleStage;
 }) {
   const [sortKey, setSortKey] = useState<StockSortKey>("performancePct");
   const [sortAsc, setSortAsc] = useState(false);
@@ -760,18 +939,24 @@ function StockPerformanceTable({
       ? detail.stocks.reduce((s, st) => s + st.performancePct, 0) / detail.stocks.length
       : 0;
 
+  const etfPerfPct = detail.event.etfPerformancePct;
+
   const sorted = useMemo(() => {
-    const copy = detail.stocks.map((s) => ({
-      stock: s,
-      cat: categorizeStock(s, sectorAvgPct),
-    }));
+    const copy = detail.stocks.map((s) => {
+      const cat = categorizeStock(s, sectorAvgPct);
+      const stockAction = computeStockAction(cat, lifecycle);
+      const vsEtf = s.performancePct - etfPerfPct;
+      return { stock: s, cat, stockAction, vsEtf };
+    });
     copy.sort((a, b) => {
       let av: string | number;
       let bv: string | number;
-      if (sortKey === "type") {
-        const order: Record<StockCategory, number> = { leader: 0, "catch-up": 1, avoid: 2 };
-        av = order[a.cat];
-        bv = order[b.cat];
+      if (sortKey === "action") {
+        av = a.stockAction.sortOrder;
+        bv = b.stockAction.sortOrder;
+      } else if (sortKey === "vsEtf") {
+        av = a.vsEtf;
+        bv = b.vsEtf;
       } else if (sortKey === "aboveSma50") {
         av = a.stock.aboveSma50 ? 1 : 0;
         bv = b.stock.aboveSma50 ? 1 : 0;
@@ -785,7 +970,7 @@ function StockPerformanceTable({
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return copy;
-  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc]);
+  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct]);
 
   if (detail.stocks.length === 0) {
     return (
@@ -820,8 +1005,8 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("name")}>
               Name<SortArrow col="name" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("type")}>
-              Type<SortArrow col="type" />
+            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("action")}>
+              Action<SortArrow col="action" />
             </th>
             <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("priceAtRotationStart")}>
               Start Price<SortArrow col="priceAtRotationStart" />
@@ -832,6 +1017,9 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("performancePct")}>
               % Change<SortArrow col="performancePct" />
             </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("vsEtf")}>
+              vs ETF<SortArrow col="vsEtf" />
+            </th>
             <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("aboveSma50")}>
               &gt;50MA<SortArrow col="aboveSma50" />
             </th>
@@ -841,20 +1029,19 @@ function StockPerformanceTable({
           </tr>
         </thead>
         <tbody>
-          {sorted.map(({ stock: s, cat }) => {
-            const catBadge = stockCategoryBadge(cat);
+          {sorted.map(({ stock: s, stockAction, vsEtf }) => {
             return (
               <tr
                 key={s.symbol}
-                className={`border-b border-[#1a1a1a] transition-colors hover:bg-[#1a1a1a] ${perfBg(s.performancePct)}`}
+                className={`border-b border-[#1a1a1a] transition-colors hover:bg-[#1a1a1a] ${stockAction.rowBg}`}
               >
                 <td className="px-3 py-2 font-mono font-semibold text-white">
                   {s.symbol}
                 </td>
                 <td className="px-3 py-2 text-[#ccc]">{s.name}</td>
                 <td className="px-3 py-2 text-center">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${catBadge.className}`}>
-                    {catBadge.label}
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${stockAction.badgeClass}`}>
+                    {stockAction.label}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-right text-[#888]">
@@ -866,6 +1053,9 @@ function StockPerformanceTable({
                 <td className={`px-3 py-2 text-right font-semibold ${perfColor(s.performancePct)}`}>
                   {s.performancePct > 0 ? "+" : ""}
                   {s.performancePct.toFixed(1)}%
+                </td>
+                <td className={`px-3 py-2 text-right font-mono text-xs ${vsEtf >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {vsEtf >= 0 ? "+" : ""}{vsEtf.toFixed(1)}%
                 </td>
                 <td className="px-3 py-2 text-center">
                   <span
@@ -882,6 +1072,60 @@ function StockPerformanceTable({
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ── Enhancement D: Strategy Summary Bar ──
+
+function StrategySummaryBar({
+  detail,
+  lifecycle,
+  actionSignal,
+}: {
+  detail: ActiveRotationDetail;
+  lifecycle: LifecycleStage;
+  actionSignal: ActionSignal;
+}) {
+  const sectorAvgPct =
+    detail.stocks.length > 0
+      ? detail.stocks.reduce((s, st) => s + st.performancePct, 0) / detail.stocks.length
+      : 0;
+
+  let leaders = 0;
+  let entryCandidates = 0;
+  let avoidCount = 0;
+
+  for (const s of detail.stocks) {
+    const cat = categorizeStock(s, sectorAvgPct);
+    const action = computeStockAction(cat, lifecycle);
+    if (action.label === "Ride" || action.label === "Take Profit") leaders++;
+    else if (action.label === "Entry Candidate") entryCandidates++;
+    else if (action.label === "Avoid" || action.label === "Exit") avoidCount++;
+  }
+
+  return (
+    <div className={`border-b ${actionSignal.borderColor} ${actionSignal.bgColor} px-4 py-3`}>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+        <div className="flex items-center gap-2">
+          <ActionIcon icon={actionSignal.icon} className={`h-4 w-4 ${actionSignal.color}`} />
+          <span className={`text-sm font-semibold ${actionSignal.color}`}>{actionSignal.action}</span>
+          <span className="text-xs text-[#888]">— {actionSignal.description}</span>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-[#888]">
+          {leaders > 0 && <span>Leaders: <span className="text-green-400 font-medium">{leaders}</span></span>}
+          {entryCandidates > 0 && <span>Entry Candidates: <span className="text-cyan-400 font-medium">{entryCandidates}</span></span>}
+          {avoidCount > 0 && <span>Avoid: <span className="text-red-400 font-medium">{avoidCount}</span></span>}
+          <span className="text-[#666]">|</span>
+          <span>
+            ETF ({detail.event.etf}){" "}
+            <span className={perfColor(detail.event.etfPerformancePct)}>
+              {detail.event.etfPerformancePct > 0 ? "+" : ""}{detail.event.etfPerformancePct.toFixed(1)}%
+            </span>
+            {" "}since rotation start
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1389,17 +1633,24 @@ export default function RotationTrackerPage() {
           </section>
 
           {/* Section 2: Stock Performance (expanded) */}
-          {expandedDetail && (
-            <section className="rounded-lg border border-[#2a2a2a] bg-[#111]">
-              <div className="border-b border-[#2a2a2a] px-4 py-3">
-                <h2 className="font-semibold text-white">
-                  {expandedDetail.event.sectorName} — Top Stocks Since Rotation
-                  Start ({expandedDetail.event.startDate})
-                </h2>
-              </div>
-              <StockPerformanceTable detail={expandedDetail} />
-            </section>
-          )}
+          {expandedDetail && (() => {
+            const lc = computeLifecycleStage(expandedDetail.event);
+            const conv = computeConviction(expandedDetail.event);
+            const ra = data.regime ? isRegimeAligned(expandedDetail.event.sectorName, data.regime) : "neutral";
+            const as_ = computeActionSignal(lc, conv, ra);
+            return (
+              <section className="rounded-lg border border-[#2a2a2a] bg-[#111] overflow-hidden">
+                <div className="border-b border-[#2a2a2a] px-4 py-3">
+                  <h2 className="font-semibold text-white">
+                    {expandedDetail.event.sectorName} — Top Stocks Since Rotation
+                    Start ({expandedDetail.event.startDate})
+                  </h2>
+                </div>
+                <StrategySummaryBar detail={expandedDetail} lifecycle={lc} actionSignal={as_} />
+                <StockPerformanceTable detail={expandedDetail} lifecycle={lc} />
+              </section>
+            );
+          })()}
 
           {/* Recently Ended */}
           {data.recentlyEndedRotations.length > 0 && (
