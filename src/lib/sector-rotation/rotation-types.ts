@@ -65,10 +65,45 @@ export interface RotationPatternStats {
   }[];
 }
 
+// ── Enhancement types ──
+
+export type LifecycleStage = "EARLY" | "MATURING" | "LATE" | "EXHAUSTING";
+export type ConvictionLevel = "HIGH" | "MODERATE" | "LOW" | "EXIT";
+export type StockCategory = "leader" | "catch-up" | "avoid";
+
+export interface ConvictionResult {
+  level: ConvictionLevel;
+  score: number;
+  reason: string;
+}
+
+export interface RegimeData {
+  regime: "RISK_ON" | "RISK_OFF" | "INFLATIONARY" | "MIXED";
+  vix: number;
+  vixSlope: "rising" | "falling" | "flat";
+  yield10y: number;
+  dxy: number;
+  dxyTrend: "rising" | "falling" | "flat";
+  favoredSectors: string[];
+  avoidSectors: string[];
+}
+
+export interface PairSignalData {
+  pair: string;
+  zScore: number;
+  isExtreme: boolean;
+  signal: "extreme_risk_on" | "extreme_risk_off" | "normal";
+}
+
 export interface RotationTrackerResult {
   calculatedAt: string;
   activeRotations: ActiveRotationDetail[];
   recentlyEndedRotations: RotationEvent[]; // ended within last 10 trading days
   patternStats: RotationPatternStats[];
   allEvents: RotationEvent[]; // for timeline visualization
+  regime?: RegimeData | null;
+  pairSignals?: {
+    xlyXlp: PairSignalData | null;
+    xlkXlu: PairSignalData | null;
+  } | null;
 }

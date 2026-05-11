@@ -18,11 +18,17 @@ import type {
   RotationPatternStats,
   RotationStockPerformance,
   RRGQuadrant,
+  LifecycleStage,
+  ConvictionLevel,
+  ConvictionResult,
+  RegimeData,
+  PairSignalData,
+  StockCategory,
 } from "@/lib/sector-rotation/rotation-types";
 
 // ── localStorage cache (4-hour TTL) ──
 
-const CACHE_KEY = "ew-rotation-tracker-v2";
+const CACHE_KEY = "ew-rotation-tracker-v3";
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 
 function loadCached(): RotationTrackerResult | null {
@@ -196,16 +202,407 @@ function cmfLabel(val: number): string {
   return "Strong Outflow";
 }
 
-// ── Section 1: Active Rotation Cards ──
+// ── Enhancement #1: Lifecycle Stage ──
+
+function computeLifecycleStage(event: RotationEvent): LifecycleStage {
+  const h = getHealth(event);
+  if (
+    event.daysActive > 30 ||
+    (h.acceleration < 0 && (h.quadrant === "WEAKENING" || h.quadrant === "LAGGING"))
+  ) {
+    return "EXHAUSTING";
+  }
+  if (event.daysActive <= 5) return "EARLY";
+  if (event.daysActive <= 15) return "MATURING";
+  return "LATE";
+}
+
+function lifecycleBadge(stage: LifecycleStage): { className: string; guidance: string } {
+  switch (stage) {
+    case "EARLY":
+      return {
+        className: "bg-green-500/15 text-green-400 border-green-500/30",
+        guidance: "New rotation — consider entry",
+      };
+    case "MATURING":
+      return {
+        className: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+        guidance: "Established trend — add on pullbacks",
+      };
+    case "LATE":
+      return {
+        className: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+        guidance: "Extended — tighten stops, reduce size",
+      };
+    case "EXHAUSTING":
+      return {
+        className: "bg-red-500/15 text-red-400 border-red-500/30",
+        guidance: "Fading — consider exit or avoid new entries",
+      };
+  }
+}
+
+// ── Enhancement #2: Conviction Score ──
+
+function computeConviction(event: RotationEvent): ConvictionResult {
+  const h = getHealth(event);
+  let score = 0;
+  const factors: string[] = [];
+
+  // Quadrant (0-3)
+  if (h.quadrant === "LEADING") { score += 3; factors.push("leading quadrant"); }
+  else if (h.quadrant === "IMPROVING") { score += 2; factors.push("improving quadrant"); }
+  else if (h.quadrant === "WEAKENING") { score += 0; factors.push("weakening quadrant"); }
+  else { score -= 1; factors.push("lagging quadrant"); }
+
+  // Acceleration (-1 to +2)
+  if (h.acceleration > 1) { score += 2; factors.push("strong acceleration"); }
+  else if (h.acceleration > 0) { score += 1; }
+  else { score -= 1; factors.push("negative acceleration"); }
+
+  // CMF (-1 to +2)
+  if (h.cmf20 > 0.1) { score += 2; factors.push("strong inflow"); }
+  else if (h.cmf20 > 0) { score += 1; }
+  else { score -= 1; factors.push("money outflow"); }
+
+  // Signal trend (-1 to +1)
+  const hist = event.signalHistory ?? [];
+  if (hist.length >= 3) {
+    const recent = hist.slice(-3);
+    const trending = recent[2].signalCount >= recent[0].signalCount;
+    if (trending) { score += 1; }
+    else { score -= 1; factors.push("signals declining"); }
+  }
+
+  let level: ConvictionLevel;
+  if (score >= 6) level = "HIGH";
+  else if (score >= 3) level = "MODERATE";
+  else if (score >= 0) level = "LOW";
+  else level = "EXIT";
+
+  const topFactor = factors[0] ?? "mixed signals";
+  const reason = `${level} conviction: ${topFactor}${factors.length > 1 ? ` + ${factors.slice(1).join(", ")}` : ""}`;
+
+  return { level, score, reason };
+}
+
+function convictionBadge(level: ConvictionLevel): string {
+  switch (level) {
+    case "HIGH":
+      return "bg-green-500/15 text-green-400 border-green-500/30";
+    case "MODERATE":
+      return "bg-cyan-500/15 text-cyan-400 border-cyan-500/30";
+    case "LOW":
+      return "bg-amber-500/15 text-amber-400 border-amber-500/30";
+    case "EXIT":
+      return "bg-red-500/15 text-red-400 border-red-500/30";
+  }
+}
+
+// ── Enhancement #3: Signal Sparkline + Exit Warnings ──
+
+function SignalSparkline({ history }: { history: { date: string; signalCount: number }[] }) {
+  if (history.length < 2) return null;
+
+  const W = 80;
+  const H = 24;
+  const pad = 2;
+  const maxSig = 3;
+  const points = history.map((h, i) => {
+    const x = pad + (i / (history.length - 1)) * (W - 2 * pad);
+    const y = H - pad - (h.signalCount / maxSig) * (H - 2 * pad);
+    return `${x},${y}`;
+  });
+
+  return (
+    <svg width={W} height={H} className="inline-block" aria-label="Signal history">
+      <polyline
+        points={points.join(" ")}
+        fill="none"
+        stroke="#5ba3e6"
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function computeExitWarnings(event: RotationEvent): string[] {
+  const warnings: string[] = [];
+  const h = getHealth(event);
+  const hist = event.signalHistory ?? [];
+
+  // Signal count drop
+  if (hist.length >= 5) {
+    const recent = hist.slice(-3);
+    const prior = hist.slice(-5, -2);
+    const recentAvg = recent.reduce((s, h) => s + h.signalCount, 0) / recent.length;
+    const priorAvg = prior.reduce((s, h) => s + h.signalCount, 0) / prior.length;
+    if (recentAvg < priorAvg - 0.5) {
+      warnings.push("Signal strength declining");
+    }
+  }
+
+  // Negative acceleration
+  if (h.acceleration < -1) {
+    warnings.push("Momentum fading sharply");
+  }
+
+  // Weak quadrant
+  if (h.quadrant === "WEAKENING" || h.quadrant === "LAGGING") {
+    warnings.push(`Quadrant: ${h.quadrant}`);
+  }
+
+  return warnings;
+}
+
+// ── Enhancement #4: Macro Regime Banner ──
+
+const REGIME_SECTOR_DISPLAY_MAP: Record<string, string[]> = {
+  "Technology": ["Semiconductors", "Software & Cloud"],
+  "Health Care": ["Health Care", "Biotech"],
+  "Consumer Discretionary": ["Consumer Discretionary"],
+  "Consumer Staples": ["Consumer Staples"],
+  "Communication Services": ["Communication Services"],
+  "Financials": ["Financials"],
+  "Industrials": ["Industrials"],
+  "Energy": ["Energy"],
+  "Materials": ["Materials"],
+  "Utilities": ["Utilities"],
+  "Real Estate": ["Real Estate"],
+};
+
+function isRegimeAligned(sectorName: string, regime: RegimeData): "aligned" | "headwind" | "neutral" {
+  for (const favored of regime.favoredSectors) {
+    const mapped = REGIME_SECTOR_DISPLAY_MAP[favored] ?? [favored];
+    if (mapped.includes(sectorName)) return "aligned";
+  }
+  for (const avoid of regime.avoidSectors) {
+    const mapped = REGIME_SECTOR_DISPLAY_MAP[avoid] ?? [avoid];
+    if (mapped.includes(sectorName)) return "headwind";
+  }
+  return "neutral";
+}
+
+function regimeColor(regime: RegimeData["regime"]): string {
+  switch (regime) {
+    case "RISK_ON": return "text-green-400";
+    case "RISK_OFF": return "text-red-400";
+    case "INFLATIONARY": return "text-amber-400";
+    case "MIXED": return "text-[#888]";
+  }
+}
+
+function regimeBorderColor(regime: RegimeData["regime"]): string {
+  switch (regime) {
+    case "RISK_ON": return "border-green-500/30";
+    case "RISK_OFF": return "border-red-500/30";
+    case "INFLATIONARY": return "border-amber-500/30";
+    case "MIXED": return "border-[#333]";
+  }
+}
+
+function RegimeBanner({ regime }: { regime: RegimeData }) {
+  return (
+    <div className={`rounded-lg border ${regimeBorderColor(regime.regime)} bg-[#1a1a1a] p-4`}>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div>
+          <span className="text-xs text-[#888]">Regime</span>
+          <div className={`text-sm font-semibold ${regimeColor(regime.regime)}`}>
+            {regime.regime.replace("_", " ")}
+          </div>
+        </div>
+        <div>
+          <span className="text-xs text-[#888]">VIX</span>
+          <div className={`text-sm font-medium ${regime.vix > 25 ? "text-red-400" : regime.vix < 18 ? "text-green-400" : "text-amber-400"}`}>
+            {regime.vix.toFixed(1)}
+            <span className="ml-1 text-[10px] text-[#666]">{regime.vixSlope}</span>
+          </div>
+        </div>
+        <div>
+          <span className="text-xs text-[#888]">10Y Yield</span>
+          <div className="text-sm font-medium text-[#ccc]">{regime.yield10y.toFixed(2)}%</div>
+        </div>
+        <div>
+          <span className="text-xs text-[#888]">USD (DXY)</span>
+          <div className="text-sm font-medium text-[#ccc]">
+            {regime.dxy.toFixed(1)}
+            <span className="ml-1 text-[10px] text-[#666]">{regime.dxyTrend}</span>
+          </div>
+        </div>
+        {regime.favoredSectors.length > 0 && (
+          <div>
+            <span className="text-xs text-[#888]">Favored</span>
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {regime.favoredSectors.map((s) => (
+                <span key={s} className="rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] text-green-400">
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {regime.avoidSectors.length > 0 && (
+          <div>
+            <span className="text-xs text-[#888]">Avoid</span>
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {regime.avoidSectors.map((s) => (
+                <span key={s} className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400">
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Enhancement #7: Pair Z-Score Bar ──
+
+function PairZScoreBar({
+  pairSignals,
+}: {
+  pairSignals: { xlyXlp: PairSignalData | null; xlkXlu: PairSignalData | null };
+}) {
+  const pairs = [pairSignals.xlyXlp, pairSignals.xlkXlu].filter(
+    (p): p is PairSignalData => p !== null
+  );
+  if (pairs.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-4 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3">
+      {pairs.map((p) => {
+        const absZ = Math.abs(p.zScore);
+        const barWidth = Math.min(100, (absZ / 3) * 100);
+        const isPositive = p.zScore >= 0;
+        const signalLabel =
+          p.signal === "extreme_risk_on"
+            ? "Risk-On Extreme"
+            : p.signal === "extreme_risk_off"
+              ? "Risk-Off Extreme"
+              : "Neutral";
+        const signalColor =
+          p.signal === "extreme_risk_on"
+            ? "text-green-400"
+            : p.signal === "extreme_risk_off"
+              ? "text-red-400"
+              : "text-[#888]";
+
+        return (
+          <div key={p.pair} className="flex-1 min-w-[200px]">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-[#ccc]">{p.pair}</span>
+              <span className={signalColor}>{signalLabel}</span>
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <div className="relative h-2 flex-1 rounded-full bg-[#222]">
+                <div
+                  className={`absolute top-0 h-2 rounded-full ${
+                    p.isExtreme
+                      ? isPositive
+                        ? "bg-green-500"
+                        : "bg-red-500"
+                      : "bg-[#5ba3e6]"
+                  }`}
+                  style={{
+                    width: `${barWidth}%`,
+                    left: isPositive ? "50%" : `${50 - barWidth}%`,
+                  }}
+                />
+                <div className="absolute left-1/2 top-0 h-2 w-px bg-[#444]" />
+              </div>
+              <span className={`text-xs font-mono ${p.isExtreme ? (isPositive ? "text-green-400" : "text-red-400") : "text-[#888]"}`}>
+                {p.zScore > 0 ? "+" : ""}{p.zScore.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Enhancement #5: Stock Categorization ──
+
+function categorizeStock(
+  stock: RotationStockPerformance,
+  sectorAvgPct: number
+): StockCategory {
+  if (!stock.aboveSma50) return "avoid";
+  if (stock.performancePct > sectorAvgPct && stock.volumeVsAvg >= 1.0) return "leader";
+  return "catch-up";
+}
+
+function stockCategoryBadge(cat: StockCategory): { label: string; className: string } {
+  switch (cat) {
+    case "leader":
+      return { label: "Leader", className: "bg-green-500/15 text-green-400" };
+    case "catch-up":
+      return { label: "Catch-up", className: "bg-cyan-500/15 text-cyan-400" };
+    case "avoid":
+      return { label: "Avoid", className: "bg-red-500/15 text-red-400" };
+  }
+}
+
+// ── Enhancement #6: Historical Projection ──
+
+function HistoricalProjection({
+  event,
+  patternStats,
+}: {
+  event: RotationEvent;
+  patternStats: RotationPatternStats[];
+}) {
+  const stats = patternStats.find((s) => s.sectorId === event.sectorId);
+  if (!stats || stats.totalRotations < 2) return null;
+
+  const completedCount = stats.history.length;
+  if (completedCount === 0) return null;
+
+  const pctThroughDuration =
+    stats.avgDurationDays > 0
+      ? Math.round((event.daysActive / stats.avgDurationDays) * 100)
+      : 0;
+  const pctThroughReturn =
+    stats.avgPerformancePct !== 0
+      ? Math.round((event.etfPerformancePct / stats.avgPerformancePct) * 100)
+      : 0;
+  const isPastAvgDuration = event.daysActive > stats.avgDurationDays;
+
+  return (
+    <div className="mt-2 rounded-md bg-[#151515] px-3 py-2 text-[11px] text-[#999]">
+      <span className="text-[#666]">Based on {completedCount} prior rotations:</span>{" "}
+      avg {stats.avgDurationDays}d (you&apos;re at {event.daysActive}d —{" "}
+      <span className={isPastAvgDuration ? "text-red-400" : "text-green-400/70"}>
+        {pctThroughDuration}%
+      </span>
+      ), avg return{" "}
+      {stats.avgPerformancePct > 0 ? "+" : ""}{stats.avgPerformancePct.toFixed(1)}% (you&apos;re at{" "}
+      {event.etfPerformancePct > 0 ? "+" : ""}{event.etfPerformancePct.toFixed(1)}% —{" "}
+      <span className={pctThroughReturn > 100 ? "text-green-400" : "text-[#999]"}>
+        {pctThroughReturn}% of historical
+      </span>
+      )
+    </div>
+  );
+}
+
+// ── Section 1: Active Rotation Cards (enhanced) ──
 
 function ActiveRotationCards({
   rotations,
   onExpand,
   expandedId,
+  regime,
+  patternStats,
 }: {
   rotations: ActiveRotationDetail[];
   onExpand: (id: string | null) => void;
   expandedId: string | null;
+  regime: RegimeData | null | undefined;
+  patternStats: RotationPatternStats[];
 }) {
   if (rotations.length === 0) {
     return (
@@ -220,11 +617,19 @@ function ActiveRotationCards({
       {rotations.map((r) => {
         const isExpanded = expandedId === r.event.sectorId;
         const h = getHealth(r.event);
+        const lifecycle = computeLifecycleStage(r.event);
+        const lcBadge = lifecycleBadge(lifecycle);
+        const conviction = computeConviction(r.event);
+        const exitWarnings = computeExitWarnings(r.event);
+        const regimeAlignment = regime ? isRegimeAligned(r.event.sectorName, regime) : "neutral";
+
         return (
           <button
             key={r.event.sectorId}
             onClick={() => onExpand(isExpanded ? null : r.event.sectorId)}
-            className={`rounded-lg border-l-4 border-green-500 bg-[#1a1a1a] p-4 text-left transition-colors hover:bg-[#222] ${
+            className={`rounded-lg border-l-4 ${
+              lifecycle === "EXHAUSTING" ? "border-red-500" : lifecycle === "LATE" ? "border-amber-500" : "border-green-500"
+            } bg-[#1a1a1a] p-4 text-left transition-colors hover:bg-[#222] ${
               isExpanded ? "ring-1 ring-green-500/30" : ""
             }`}
           >
@@ -233,11 +638,25 @@ function ActiveRotationCards({
                 <h3 className="font-semibold text-white">
                   {r.event.sectorName}
                 </h3>
-                <div className="mt-0.5 flex items-center gap-2">
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                   <span className="text-xs text-[#888]">{r.event.etf}</span>
                   <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${quadrantBadge(h.quadrant).className}`}>
                     {quadrantBadge(h.quadrant).label}
                   </span>
+                  {/* Enhancement #1: Lifecycle badge */}
+                  <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${lcBadge.className}`}>
+                    {lifecycle}
+                  </span>
+                  {/* Enhancement #4: Regime alignment */}
+                  {regime && regimeAlignment !== "neutral" && (
+                    <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+                      regimeAlignment === "aligned"
+                        ? "bg-green-500/10 text-green-400 border-green-500/30"
+                        : "bg-red-500/10 text-red-400 border-red-500/30"
+                    }`}>
+                      {regimeAlignment === "aligned" ? "Regime Aligned" : "Regime Headwind"}
+                    </span>
+                  )}
                 </div>
               </div>
               <span className={`text-lg font-bold ${perfColor(r.event.etfPerformancePct)}`}>
@@ -246,8 +665,18 @@ function ActiveRotationCards({
               </span>
             </div>
 
+            {/* Enhancement #2: Conviction score */}
+            <div className="mt-2 flex items-center gap-2">
+              <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${convictionBadge(conviction.level)}`}>
+                {conviction.level}
+              </span>
+              <span className="text-[10px] text-[#666] leading-tight">
+                {conviction.reason}
+              </span>
+            </div>
+
             {/* Health signals */}
-            <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-[#888]">Momentum</span>
                 <span className={accelColor(h.acceleration)}>
@@ -262,7 +691,21 @@ function ActiveRotationCards({
               </div>
             </div>
 
-            <div className="mt-3 flex items-center gap-2 text-xs text-[#888]">
+            {/* Enhancement #3: Signal sparkline + exit warnings */}
+            <div className="mt-2 flex items-center gap-2">
+              <SignalSparkline history={r.event.signalHistory ?? []} />
+              {exitWarnings.length > 0 && (
+                <div className="flex items-center gap-1 text-[10px] text-amber-400">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{exitWarnings[0]}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Enhancement #1: Lifecycle guidance */}
+            <div className="mt-1 text-[10px] text-[#666] italic">{lcBadge.guidance}</div>
+
+            <div className="mt-2 flex items-center gap-2 text-xs text-[#888]">
               <span>Started {r.event.startDate}</span>
               <span className="text-[#555]">|</span>
               <span>{r.event.daysActive}d active</span>
@@ -283,6 +726,9 @@ function ActiveRotationCards({
               />
             </div>
 
+            {/* Enhancement #6: Historical projection */}
+            <HistoricalProjection event={r.event} patternStats={patternStats} />
+
             <div className="mt-2 flex items-center justify-end text-xs text-[#666]">
               {isExpanded ? (
                 <ChevronUp className="h-3 w-3" />
@@ -297,13 +743,50 @@ function ActiveRotationCards({
   );
 }
 
-// ── Section 2: Stock Performance Table ──
+// ── Section 2: Stock Performance Table (sortable + categorized) ──
+
+type StockSortKey = "symbol" | "name" | "type" | "priceAtRotationStart" | "priceNow" | "performancePct" | "aboveSma50" | "volumeVsAvg";
 
 function StockPerformanceTable({
   detail,
 }: {
   detail: ActiveRotationDetail;
 }) {
+  const [sortKey, setSortKey] = useState<StockSortKey>("performancePct");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const sectorAvgPct =
+    detail.stocks.length > 0
+      ? detail.stocks.reduce((s, st) => s + st.performancePct, 0) / detail.stocks.length
+      : 0;
+
+  const sorted = useMemo(() => {
+    const copy = detail.stocks.map((s) => ({
+      stock: s,
+      cat: categorizeStock(s, sectorAvgPct),
+    }));
+    copy.sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+      if (sortKey === "type") {
+        const order: Record<StockCategory, number> = { leader: 0, "catch-up": 1, avoid: 2 };
+        av = order[a.cat];
+        bv = order[b.cat];
+      } else if (sortKey === "aboveSma50") {
+        av = a.stock.aboveSma50 ? 1 : 0;
+        bv = b.stock.aboveSma50 ? 1 : 0;
+      } else {
+        av = a.stock[sortKey];
+        bv = b.stock[sortKey];
+      }
+      if (typeof av === "string" && typeof bv === "string") {
+        return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    });
+    return copy;
+  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc]);
+
   if (detail.stocks.length === 0) {
     return (
       <p className="py-4 text-center text-sm text-[#888]">
@@ -312,52 +795,91 @@ function StockPerformanceTable({
     );
   }
 
+  function handleSort(key: StockSortKey) {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(key);
+      setSortAsc(key === "symbol" || key === "name");
+    }
+  }
+
+  function SortArrow({ col }: { col: StockSortKey }) {
+    if (sortKey !== col) return <span className="ml-1 text-[#444]">&uarr;&darr;</span>;
+    return <span className="ml-1 text-[#5ba3e6]">{sortAsc ? "\u25B2" : "\u25BC"}</span>;
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[#2a2a2a] text-left text-xs text-[#888]">
-            <th className="px-3 py-2">Symbol</th>
-            <th className="px-3 py-2">Name</th>
-            <th className="px-3 py-2 text-right">Start Price</th>
-            <th className="px-3 py-2 text-right">Current</th>
-            <th className="px-3 py-2 text-right">% Change</th>
-            <th className="px-3 py-2 text-center">&gt;50MA</th>
-            <th className="px-3 py-2 text-right">Vol vs Avg</th>
+            <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("symbol")}>
+              Symbol<SortArrow col="symbol" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("name")}>
+              Name<SortArrow col="name" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("type")}>
+              Type<SortArrow col="type" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("priceAtRotationStart")}>
+              Start Price<SortArrow col="priceAtRotationStart" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("priceNow")}>
+              Current<SortArrow col="priceNow" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("performancePct")}>
+              % Change<SortArrow col="performancePct" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("aboveSma50")}>
+              &gt;50MA<SortArrow col="aboveSma50" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("volumeVsAvg")}>
+              Vol vs Avg<SortArrow col="volumeVsAvg" />
+            </th>
           </tr>
         </thead>
         <tbody>
-          {detail.stocks.map((s) => (
-            <tr
-              key={s.symbol}
-              className={`border-b border-[#1a1a1a] transition-colors hover:bg-[#1a1a1a] ${perfBg(s.performancePct)}`}
-            >
-              <td className="px-3 py-2 font-mono font-semibold text-white">
-                {s.symbol}
-              </td>
-              <td className="px-3 py-2 text-[#ccc]">{s.name}</td>
-              <td className="px-3 py-2 text-right text-[#888]">
-                ${s.priceAtRotationStart.toFixed(2)}
-              </td>
-              <td className="px-3 py-2 text-right text-white">
-                ${s.priceNow.toFixed(2)}
-              </td>
-              <td className={`px-3 py-2 text-right font-semibold ${perfColor(s.performancePct)}`}>
-                {s.performancePct > 0 ? "+" : ""}
-                {s.performancePct.toFixed(1)}%
-              </td>
-              <td className="px-3 py-2 text-center">
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${
-                    s.aboveSma50 ? "bg-green-400" : "bg-red-400"
-                  }`}
-                />
-              </td>
-              <td className="px-3 py-2 text-right text-[#888]">
-                {s.volumeVsAvg.toFixed(1)}x
-              </td>
-            </tr>
-          ))}
+          {sorted.map(({ stock: s, cat }) => {
+            const catBadge = stockCategoryBadge(cat);
+            return (
+              <tr
+                key={s.symbol}
+                className={`border-b border-[#1a1a1a] transition-colors hover:bg-[#1a1a1a] ${perfBg(s.performancePct)}`}
+              >
+                <td className="px-3 py-2 font-mono font-semibold text-white">
+                  {s.symbol}
+                </td>
+                <td className="px-3 py-2 text-[#ccc]">{s.name}</td>
+                <td className="px-3 py-2 text-center">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${catBadge.className}`}>
+                    {catBadge.label}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-right text-[#888]">
+                  ${s.priceAtRotationStart.toFixed(2)}
+                </td>
+                <td className="px-3 py-2 text-right text-white">
+                  ${s.priceNow.toFixed(2)}
+                </td>
+                <td className={`px-3 py-2 text-right font-semibold ${perfColor(s.performancePct)}`}>
+                  {s.performancePct > 0 ? "+" : ""}
+                  {s.performancePct.toFixed(1)}%
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full ${
+                      s.aboveSma50 ? "bg-green-400" : "bg-red-400"
+                    }`}
+                  />
+                </td>
+                <td className="px-3 py-2 text-right text-[#888]">
+                  {s.volumeVsAvg.toFixed(1)}x
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -565,13 +1087,31 @@ function HistoricalTimeline({ events }: { events: RotationEvent[] }) {
   );
 }
 
-// ── Section 4: Pattern Statistics ──
+// ── Section 4: Pattern Statistics (sortable) ──
+
+type PatternSortKey = "sectorName" | "totalRotations" | "avgDurationDays" | "avgPerformancePct" | "bestPerformancePct" | "worstPerformancePct";
 
 function PatternStatsTable({
   stats,
 }: {
   stats: RotationPatternStats[];
 }) {
+  const [sortKey, setSortKey] = useState<PatternSortKey>("totalRotations");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const sorted = useMemo(() => {
+    const copy = [...stats];
+    copy.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (typeof av === "string" && typeof bv === "string") {
+        return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    });
+    return copy;
+  }, [stats, sortKey, sortAsc]);
+
   if (stats.length === 0) {
     return (
       <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-8 text-center text-[#888]">
@@ -580,22 +1120,48 @@ function PatternStatsTable({
     );
   }
 
+  function handleSort(key: PatternSortKey) {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(key);
+      setSortAsc(key === "sectorName");
+    }
+  }
+
+  function SortArrow({ col }: { col: PatternSortKey }) {
+    if (sortKey !== col) return <span className="ml-1 text-[#444]">&uarr;&darr;</span>;
+    return <span className="ml-1 text-[#5ba3e6]">{sortAsc ? "\u25B2" : "\u25BC"}</span>;
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[#2a2a2a] text-left text-xs text-[#888]">
-            <th className="px-3 py-2">Sector</th>
+            <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("sectorName")}>
+              Sector<SortArrow col="sectorName" />
+            </th>
             <th className="px-3 py-2">ETF</th>
-            <th className="px-3 py-2 text-right">Rotations (1y)</th>
-            <th className="px-3 py-2 text-right">Avg Duration</th>
-            <th className="px-3 py-2 text-right">Avg Perf</th>
-            <th className="px-3 py-2 text-right">Best</th>
-            <th className="px-3 py-2 text-right">Worst</th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("totalRotations")}>
+              Rotations (1y)<SortArrow col="totalRotations" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("avgDurationDays")}>
+              Avg Duration<SortArrow col="avgDurationDays" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("avgPerformancePct")}>
+              Avg Perf<SortArrow col="avgPerformancePct" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("bestPerformancePct")}>
+              Best<SortArrow col="bestPerformancePct" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("worstPerformancePct")}>
+              Worst<SortArrow col="worstPerformancePct" />
+            </th>
           </tr>
         </thead>
         <tbody>
-          {stats.map((s) => (
+          {sorted.map((s) => (
             <tr
               key={s.sectorId}
               className="border-b border-[#1a1a1a] transition-colors hover:bg-[#1a1a1a]"
@@ -788,6 +1354,20 @@ export default function RotationTrackerPage() {
       {/* Content */}
       {data && (
         <div className="space-y-8">
+          {/* Enhancement #4: Regime Banner */}
+          {data.regime && (
+            <section>
+              <RegimeBanner regime={data.regime} />
+            </section>
+          )}
+
+          {/* Enhancement #7: Pair Z-Score Bar */}
+          {data.pairSignals && (
+            <section>
+              <PairZScoreBar pairSignals={data.pairSignals} />
+            </section>
+          )}
+
           {/* Section 1: Active Rotations */}
           <section>
             <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
@@ -803,6 +1383,8 @@ export default function RotationTrackerPage() {
               rotations={data.activeRotations}
               onExpand={setExpandedSector}
               expandedId={expandedSector}
+              regime={data.regime}
+              patternStats={data.patternStats}
             />
           </section>
 
@@ -819,7 +1401,7 @@ export default function RotationTrackerPage() {
             </section>
           )}
 
-          {/* Section 2.5: Recently Ended */}
+          {/* Recently Ended */}
           {data.recentlyEndedRotations.length > 0 && (
             <section>
               <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
@@ -830,7 +1412,7 @@ export default function RotationTrackerPage() {
             </section>
           )}
 
-          {/* Section 3: Historical Timeline */}
+          {/* Historical Timeline */}
           <section>
             <h2 className="mb-3 text-lg font-semibold text-white">
               12-Month Timeline
@@ -854,7 +1436,7 @@ export default function RotationTrackerPage() {
             </div>
           </section>
 
-          {/* Section 4: Pattern Statistics */}
+          {/* Pattern Statistics */}
           <section>
             <h2 className="mb-3 text-lg font-semibold text-white">
               Pattern Statistics

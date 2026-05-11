@@ -23,9 +23,13 @@ import type {
   ActiveRotationDetail,
   RotationPatternStats,
   RotationTrackerResult,
+  RegimeData,
+  PairSignalData,
 } from "./rotation-types";
 import { fetchYahooChart, calcSMA, fetchBatchQuotes } from "@/lib/prerun/data";
 import { SECTOR_UNIVERSE } from "@/data/sector-universe";
+import { fetchMacroRegime } from "./regime";
+import { computePairZScore } from "./pairs";
 
 // ── Module-level cache (15 minutes) ──
 
@@ -468,8 +472,12 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     return cachedResult;
   }
 
-  // 1. Fetch SPY chart first (benchmark)
-  const spyChart = await fetchYahooChart("SPY", "1y", "1d");
+  // 1. Fetch SPY chart, regime, and XLK chart in parallel
+  const [spyChart, regimeData, xlkChart] = await Promise.all([
+    fetchYahooChart("SPY", "1y", "1d"),
+    fetchMacroRegime().catch(() => null),
+    fetchYahooChart("XLK", "1y", "1d").catch(() => null),
+  ]);
   if (!spyChart || spyChart.closes.length < 50) {
     throw new Error("Failed to fetch SPY benchmark data");
   }
@@ -540,8 +548,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
   for (const event of activeEvents) {
     const sector = SECTOR_UNIVERSE.find((s) => s.id === event.sectorId);
     if (!sector) continue;
-    const stocks = sector.stocks.slice(0, 20); // Top 20 per sector
-    for (const stock of stocks) {
+    for (const stock of sector.stocks) {
       if (!allStockSymbols.includes(stock.symbol)) {
         allStockSymbols.push(stock.symbol);
         allStockNames.set(stock.symbol, stock.name);
@@ -561,7 +568,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     const sector = SECTOR_UNIVERSE.find((s) => s.id === event.sectorId);
     if (!sector) continue;
 
-    const sectorSymbols = sector.stocks.slice(0, 20).map((s) => s.symbol);
+    const sectorSymbols = sector.stocks.map((s) => s.symbol);
     const stocks = await fetchStockPerformance(
       event.sectorId,
       event.startDate,
@@ -590,12 +597,49 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     (e) => e.endDate !== null && e.endDate >= cutoff
   );
 
+  // 7. Compute pair z-scores from already-fetched ETF data
+  const xlyChartEntry = etfCharts.find((c) => c.sectorId === "consumer-discretionary");
+  const xlpChartEntry = etfCharts.find((c) => c.sectorId === "consumer-staples");
+  const xluChartEntry = etfCharts.find((c) => c.sectorId === "utilities");
+
+  let pairSignals: RotationTrackerResult["pairSignals"] = null;
+  const xlyXlpRaw =
+    xlyChartEntry?.chart && xlpChartEntry?.chart
+      ? computePairZScore(xlyChartEntry.chart.closes, xlpChartEntry.chart.closes, "XLY/XLP")
+      : null;
+  const xlkXluRaw =
+    xlkChart && xluChartEntry?.chart
+      ? computePairZScore(xlkChart.closes, xluChartEntry.chart.closes, "XLK/XLU")
+      : null;
+
+  if (xlyXlpRaw || xlkXluRaw) {
+    const mapPair = (p: typeof xlyXlpRaw): PairSignalData | null =>
+      p ? { pair: p.pair, zScore: p.zScore, isExtreme: p.isExtreme, signal: p.signal } : null;
+    pairSignals = { xlyXlp: mapPair(xlyXlpRaw), xlkXlu: mapPair(xlkXluRaw) };
+  }
+
+  // 8. Map regime to client-safe shape
+  const regime: RegimeData | null = regimeData
+    ? {
+        regime: regimeData.regime,
+        vix: regimeData.vix,
+        vixSlope: regimeData.vixSlope,
+        yield10y: regimeData.yield10y,
+        dxy: regimeData.dxy,
+        dxyTrend: regimeData.dxyTrend,
+        favoredSectors: regimeData.favoredSectors,
+        avoidSectors: regimeData.avoidSectors,
+      }
+    : null;
+
   const result: RotationTrackerResult = {
     calculatedAt: new Date().toISOString(),
     activeRotations,
     recentlyEndedRotations,
     patternStats: patternStats.sort((a, b) => b.totalRotations - a.totalRotations),
     allEvents,
+    regime,
+    pairSignals,
   };
 
   // Cache the result
