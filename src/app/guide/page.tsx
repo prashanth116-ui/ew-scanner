@@ -5,12 +5,14 @@ import { Activity, Target, TrendingUp, AlertTriangle, Zap, Search, BarChart3 } f
 
 const SECTIONS = [
   { id: "how-it-works", label: "How It Works" },
+  { id: "scoring", label: "Scoring" },
   { id: "universes", label: "Universes" },
   { id: "presets", label: "Presets" },
   { id: "reading-cards", label: "Reading Cards" },
   { id: "wave2-bottoms", label: "W2 Bottoms" },
   { id: "wave4-pullback", label: "W4 Pullback" },
   { id: "wave5-exhaust", label: "W5 Exhaustion" },
+  { id: "breakout", label: "Breakout" },
   { id: "best-practices", label: "Best Practices" },
   { id: "export-workflow", label: "Export & Workflow" },
 ];
@@ -73,20 +75,77 @@ export default function EWScannerGuidePage() {
         {/* Quick Overview */}
         <Section id="how-it-works" title="How the Scanner Works" icon={<Search className="h-5 w-5 text-[#5ba3e6]" />}>
           <p>
-            The scanner fetches 5 years of weekly price data for every stock in the selected universe,
-            then runs four layers of analysis:
+            The scanner fetches <strong className="text-white">5 years of weekly price data</strong> from Yahoo Finance for every stock in the selected universe
+            (batched 10 at a time with rate-limit delays), then runs five layers of analysis per ticker:
           </p>
           <ol className="mt-3 list-inside list-decimal space-y-2 text-[#c0c0c0]">
-            <li><strong className="text-white">Base scoring</strong> &mdash; Checks decline depth, duration, direction, and recovery against your filter thresholds (7-point scale).</li>
-            <li><strong className="text-white">Technical analysis</strong> &mdash; Fibonacci retracement, swing structure, volume patterns, and momentum computed in-browser on the weekly data.</li>
-            <li><strong className="text-white">Mode-specific filtering</strong> &mdash; Each scanner mode applies additional criteria (e.g., Wave 4 requires shallow pullback, Wave 5 requires near-ATH).</li>
-            <li><strong className="text-white">AI wave labeling</strong> &mdash; Claude reads the enriched data and assigns Elliott Wave position labels to each passing candidate.</li>
+            <li><strong className="text-white">Identify key levels</strong> &mdash; Find the all-time high (ATH) and the post-ATH trough. For stocks near ATH, the scanner uses the prior correction low as a structural fallback.</li>
+            <li><strong className="text-white">Algorithmic wave counting</strong> &mdash; Detects swing highs/lows using a 3-bar pivot method, then tries 6 wave count models (impulse/corrective on decline, recovery, and developing phases). Picks the best by quality score and stores an alternate count.</li>
+            <li><strong className="text-white">Multi-factor analysis</strong> &mdash; Fibonacci retracement (golden zone detection), volume comparison (decline vs recovery), momentum divergence (rate of change), and structure classification (impulsive 5-wave vs corrective A-B-C).</li>
+            <li><strong className="text-white">Mode-specific filtering</strong> &mdash; Each mode applies strict thresholds (e.g., Wave 2 requires golden zone, Wave 4 must not overlap Wave 1, Breakout needs volume expansion).</li>
+            <li><strong className="text-white">AI deep analysis</strong> &mdash; Top candidates get Claude-powered analysis with specific wave labels, forward targets (Fibonacci extensions), and invalidation levels.</li>
           </ol>
           <p className="mt-3">
-            Results are scored on a <strong className="text-white">20-point enhanced scale</strong> combining
-            all four layers, then ranked. The confidence tier (high / probable / speculative) tells you
+            Results are scored on a <strong className="text-white">25-point enhanced scale</strong> combining
+            all layers with mode-specific weighting, then ranked. The confidence tier (high / probable / speculative) tells you
             at a glance how many signals align.
           </p>
+        </Section>
+
+        {/* Scoring Breakdown */}
+        <Section id="scoring" title="Scoring Breakdown" icon={<BarChart3 className="h-5 w-5 text-[#5ba3e6]" />}>
+          <p>
+            Each candidate is scored on a <strong className="text-white">25-point enhanced scale</strong> composed of six components.
+            Weights vary by mode &mdash; Fibonacci matters more for Wave 4, volume matters more for Breakout.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2a2a2a] text-[#666]">
+                  <th className="py-1.5 pr-3 text-left font-medium">Component</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Max Pts</th>
+                  <th className="py-1.5 text-left font-medium">What It Measures</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#c0c0c0]">
+                {[
+                  { name: "Base", pts: "7", desc: "Decline depth (2), ATH timing (1), duration (2), recovery magnitude (2)" },
+                  { name: "Fibonacci", pts: "4", desc: "Golden zone (38.2-61.8%) = +3, near any Fib level = +1" },
+                  { name: "Volume", pts: "3", desc: "Expanding volume on recovery = +2, trending volume = +1" },
+                  { name: "Structure", pts: "3", desc: "Impulsive 5-wave = +3, corrective A-B-C = +2, unclear = 0" },
+                  { name: "Wave Count", pts: "5", desc: "Algorithmic count quality: valid + score 80+ = +5, 65+ = +4, 50+ = +3" },
+                  { name: "Relative Strength", pts: "3", desc: "Recovery momentum vs peers in the same scan batch" },
+                ].map((c) => (
+                  <tr key={c.name} className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{c.name}</td>
+                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{c.pts}</td>
+                    <td className="py-1.5">{c.desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3">
+            <strong className="text-white">Mode-specific weights:</strong>
+          </p>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-[#c0c0c0]">
+            <li><strong className="text-white">Wave 2:</strong> All factors equally weighted (1.0x)</li>
+            <li><strong className="text-white">Wave 4:</strong> Fibonacci 2.5x, Relative Strength 1.5x (precise retrace levels matter most)</li>
+            <li><strong className="text-white">Wave 5:</strong> Volume 1.5x, Relative Strength 2.0x (divergence + strength confirmation)</li>
+            <li><strong className="text-white">Breakout:</strong> Volume 2.0x, Relative Strength 2.0x (expansion + momentum)</li>
+          </ul>
+          <div className="mt-4 space-y-2">
+            <SubSection title="Confidence Tiers">
+              <p>
+                The raw score is normalized (0-100%) then bucketed:
+              </p>
+              <ul className="mt-2 list-inside list-disc space-y-1">
+                <li><Badge color="green">high</Badge> &mdash; normalized score &ge; 75%. Strong alignment across all factors.</li>
+                <li><Badge color="yellow">probable</Badge> &mdash; 50-74%. Most signals align but some conflict.</li>
+                <li><Badge color="gray">speculative</Badge> &mdash; &lt; 50%. Needs more confirmation before acting.</li>
+              </ul>
+            </SubSection>
+          </div>
         </Section>
 
         {/* Universes */}
@@ -167,10 +226,11 @@ export default function EWScannerGuidePage() {
           <div className="space-y-3">
             <SubSection title="Confidence Badge">
               <p>
-                <Badge color="green">high</Badge> means 75%+ of the 20-point score is filled &mdash;
-                strong alignment across Fibonacci, volume, structure, and base criteria.
+                <Badge color="green">high</Badge> means 75%+ of the normalized score &mdash;
+                strong alignment across Fibonacci, volume, structure, wave count, and base criteria.
                 <Badge color="yellow">probable</Badge> (50-74%) has some conflicting signals.
                 <Badge color="gray">speculative</Badge> (&lt;50%) needs more confirmation before acting.
+                See the <em>Scoring</em> section above for the full 25-point breakdown.
               </p>
             </SubSection>
             <SubSection title="Sparkline">
@@ -197,9 +257,9 @@ export default function EWScannerGuidePage() {
               </p>
               <p className="mt-2">
                 <strong className="text-white">Dots vs Enhanced Score:</strong> The 7 dots are binary pass/fail
-                checks for each signal dimension. The <strong className="text-white">20-point enhanced score</strong> is
-                a separate, more granular measure that weights each dimension differently (Fibonacci depth contributes
-                more than raw decline, for example). A stock can have 5/7 dots green but still score 16/20 if the
+                checks for each signal dimension. The <strong className="text-white">25-point enhanced score</strong> is
+                a separate, more granular measure that weights each dimension differently per mode (Fibonacci depth contributes
+                more in Wave 4, volume more in Breakout). A stock can have 5/7 dots green but still score 18/25 if the
                 passing dots are the high-weight ones. Use dots for quick visual scanning; use the enhanced score
                 for ranking and comparison.
               </p>
@@ -319,6 +379,45 @@ export default function EWScannerGuidePage() {
           </div>
         </Section>
 
+        {/* Scenario 4 */}
+        <Section
+          id="breakout"
+          title="Scenario 4: Breakout (New Impulse)"
+          icon={<TrendingUp className="h-5 w-5 text-green-400" />}
+        >
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-4">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[#666]">Setup</p>
+            <ul className="list-inside list-disc space-y-1 text-sm text-[#c0c0c0]">
+              <li>Mode: <strong className="text-white">Breakout</strong></li>
+              <li>Universe: <strong className="text-white">Blue Chips</strong> or <strong className="text-white">Full</strong></li>
+              <li>Min Decline: <strong className="text-white">20%</strong>, Duration: <strong className="text-white">3mo</strong>, Recovery: <strong className="text-white">40%</strong></li>
+              <li>HTF: Weekly, LTF: Daily</li>
+            </ul>
+          </div>
+          <div className="mt-3 space-y-2">
+            <p><strong className="text-white">What you&rsquo;re looking for:</strong></p>
+            <ul className="list-inside list-disc space-y-1 text-[#c0c0c0]">
+              <li>Stocks that suffered a meaningful decline (20%+) but have recovered most of it (40%+ retracement)</li>
+              <li>Volume expanding on the recovery &mdash; this is the key signal (weighted 2x in scoring)</li>
+              <li>Breaking above prior swing highs or consolidation resistance</li>
+              <li>Structural stocks (at/near ATH) are accepted in this mode &mdash; they represent base breakouts</li>
+              <li>Relative strength vs peers is high (also weighted 2x)</li>
+            </ul>
+            <p className="mt-2"><strong className="text-white">How to act:</strong></p>
+            <p className="text-[#c0c0c0]">
+              Breakout candidates are starting a new impulse wave (Wave 1 or Wave 3). Enter on the first
+              pullback after the breakout (not the breakout itself &mdash; too prone to fakeouts).
+              The invalidation is the prior swing low. Target is 1.618x the height of the base formation
+              projected from the breakout level.
+            </p>
+            <Tip>
+              Volume is king for breakouts. A breakout on 2x+ average volume is far more reliable than one
+              on normal volume. Check the volume component in the enhanced score &mdash; if it&rsquo;s maxed
+              (3/3), the breakout has institutional participation.
+            </Tip>
+          </div>
+        </Section>
+
         {/* Best Practices */}
         <Section id="best-practices" title="Best Practices" icon={<Zap className="h-5 w-5 text-yellow-400" />}>
           <div className="space-y-4">
@@ -362,6 +461,11 @@ export default function EWScannerGuidePage() {
               <strong className="text-white">Workflow suggestion:</strong> Run a weekly scan every Sunday. Export to Excel.
               Compare with the previous week&rsquo;s export to spot new candidates entering your target zone and existing
               candidates progressing as expected.
+            </li>
+            <li>
+              <strong className="text-white">Signal tracking:</strong> Every scan automatically records signals to the database.
+              After 7+ days, outcomes are tracked (7d/30d/60d/90d returns, target hits, invalidation hits).
+              Hit rate badges will appear on results once enough data accumulates.
             </li>
             <li>
               <strong className="text-white">Saved scans</strong> persist in your browser&rsquo;s local storage (up to 20 scans).
