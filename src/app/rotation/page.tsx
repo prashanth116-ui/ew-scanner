@@ -932,6 +932,20 @@ function ActiveRotationCards({
 
 // ── Section 2: Stock Performance Table (sortable + categorized) ──
 
+function actionChipColors(label: string): { bg: string; text: string; border: string } {
+  switch (label) {
+    case "Buy": return { bg: "bg-cyan-500/15", text: "text-cyan-400", border: "border-cyan-500/40" };
+    case "Hold": return { bg: "bg-green-500/15", text: "text-green-400", border: "border-green-500/40" };
+    case "Trim": return { bg: "bg-amber-500/15", text: "text-amber-400", border: "border-amber-500/40" };
+    case "Speculative Buy": return { bg: "bg-purple-500/15", text: "text-purple-400", border: "border-purple-500/40" };
+    case "Risky": return { bg: "bg-purple-500/10", text: "text-purple-400/70", border: "border-purple-500/30" };
+    case "Watch": return { bg: "bg-[#2a2a2a]", text: "text-[#888]", border: "border-[#444]" };
+    case "Avoid": return { bg: "bg-red-500/15", text: "text-red-400", border: "border-red-500/40" };
+    case "Exit": return { bg: "bg-red-500/15", text: "text-red-400", border: "border-red-500/40" };
+    default: return { bg: "bg-[#2a2a2a]", text: "text-[#888]", border: "border-[#444]" };
+  }
+}
+
 type StockSortKey = "symbol" | "name" | "action" | "priceAtRotationStart" | "priceNow" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rsAcceleration";
 
 function StockPerformanceTable({
@@ -943,6 +957,9 @@ function StockPerformanceTable({
 }) {
   const [sortKey, setSortKey] = useState<StockSortKey>("performancePct");
   const [sortAsc, setSortAsc] = useState(false);
+  const [actionFilter, setActionFilter] = useState<Set<string>>(new Set());
+  const [sma50Filter, setSma50Filter] = useState<"all" | "above" | "below">("all");
+  const [rsAccelFilter, setRsAccelFilter] = useState<"all" | "positive" | "negative">("all");
 
   const sectorAvgPct =
     detail.stocks.length > 0
@@ -951,13 +968,50 @@ function StockPerformanceTable({
 
   const etfPerfPct = detail.event.etfPerformancePct;
 
+  const availableActions = useMemo(() => {
+    const actions = new Set<string>();
+    for (const s of detail.stocks) {
+      const cat = categorizeStock(s, sectorAvgPct);
+      const action = computeStockAction(cat, lifecycle);
+      actions.add(action.label);
+    }
+    const ORDER = ["Buy", "Hold", "Trim", "Speculative Buy", "Risky", "Watch", "Avoid", "Exit"];
+    return ORDER.filter(a => actions.has(a));
+  }, [detail.stocks, sectorAvgPct, lifecycle]);
+
+  const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all";
+
+  function toggleAction(label: string) {
+    setActionFilter(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
+
+  function resetFilters() {
+    setActionFilter(new Set());
+    setSma50Filter("all");
+    setRsAccelFilter("all");
+  }
+
   const sorted = useMemo(() => {
-    const copy = detail.stocks.map((s) => {
+    let copy = detail.stocks.map((s) => {
       const cat = categorizeStock(s, sectorAvgPct);
       const stockAction = computeStockAction(cat, lifecycle);
       const vsEtf = s.performancePct - etfPerfPct;
       return { stock: s, cat, stockAction, vsEtf };
     });
+    // Filter
+    if (actionFilter.size > 0) {
+      copy = copy.filter(item => actionFilter.has(item.stockAction.label));
+    }
+    if (sma50Filter === "above") copy = copy.filter(item => item.stock.aboveSma50);
+    else if (sma50Filter === "below") copy = copy.filter(item => !item.stock.aboveSma50);
+    if (rsAccelFilter === "positive") copy = copy.filter(item => (item.stock.rsAcceleration ?? 0) > 0);
+    else if (rsAccelFilter === "negative") copy = copy.filter(item => (item.stock.rsAcceleration ?? 0) < 0);
+    // Sort
     copy.sort((a, b) => {
       let av: string | number;
       let bv: string | number;
@@ -980,7 +1034,7 @@ function StockPerformanceTable({
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return copy;
-  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct]);
+  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter]);
 
   if (detail.stocks.length === 0) {
     return (
@@ -1005,7 +1059,74 @@ function StockPerformanceTable({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div>
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#2a2a2a] bg-[#141414] px-4 py-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {availableActions.map(label => {
+            const colors = actionChipColors(label);
+            const active = actionFilter.has(label);
+            return (
+              <button
+                key={label}
+                onClick={() => toggleAction(label)}
+                className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                  active
+                    ? `${colors.bg} ${colors.text} ${colors.border}`
+                    : "bg-transparent text-[#555] border-[#333] hover:text-[#888] hover:border-[#444]"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="h-4 w-px bg-[#333]" />
+        <select
+          value={sma50Filter}
+          onChange={e => setSma50Filter(e.target.value as "all" | "above" | "below")}
+          className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
+        >
+          <option value="all">50MA: All</option>
+          <option value="above">Above 50MA</option>
+          <option value="below">Below 50MA</option>
+        </select>
+        <select
+          value={rsAccelFilter}
+          onChange={e => setRsAccelFilter(e.target.value as "all" | "positive" | "negative")}
+          className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
+        >
+          <option value="all">RS Accel: All</option>
+          <option value="positive">Positive (catching up)</option>
+          <option value="negative">Negative (fading)</option>
+        </select>
+        {hasActiveFilter && (
+          <button
+            onClick={resetFilters}
+            className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#888] transition-colors hover:text-white hover:border-[#444]"
+          >
+            Reset
+          </button>
+        )}
+        {hasActiveFilter && (
+          <span className="ml-auto text-xs text-[#888]">
+            <span className="font-medium text-white">{sorted.length}</span> of {detail.stocks.length} stocks
+          </span>
+        )}
+      </div>
+
+      {sorted.length === 0 && hasActiveFilter ? (
+        <div className="flex flex-col items-center gap-2 py-8 text-sm text-[#888]">
+          <span>No stocks match filters</span>
+          <button
+            onClick={resetFilters}
+            className="rounded border border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#888] transition-colors hover:text-white hover:border-[#444]"
+          >
+            Reset filters
+          </button>
+        </div>
+      ) : (
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[#2a2a2a] text-left text-xs text-[#888]">
@@ -1088,6 +1209,8 @@ function StockPerformanceTable({
           })}
         </tbody>
       </table>
+    </div>
+      )}
     </div>
   );
 }
