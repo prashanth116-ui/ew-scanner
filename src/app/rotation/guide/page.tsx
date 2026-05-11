@@ -22,7 +22,7 @@ const SECTIONS = [
   { id: "turnaround", label: "Turnaround Candidates" },
   { id: "reading-actions", label: "Reading Actions" },
   { id: "timeline", label: "Timeline & Stats" },
-  { id: "workflow", label: "Workflow" },
+  { id: "workflow", label: "Top-Down Workflow" },
   { id: "limitations", label: "Limitations" },
 ];
 
@@ -645,31 +645,122 @@ export default function RotationGuidePage() {
         {/* Section 8: Workflow */}
         <Section
           id="workflow"
-          title="Rotation Tracker Workflow"
+          title="Top-Down Workflow"
           icon={<Users className="h-5 w-5 text-[#5ba3e6]" />}
         >
-          <SubSection title="Daily Check (2 Minutes)">
-            <ol className="list-decimal pl-4 space-y-1">
-              <li>Open the Rotation Tracker. Check the regime banner &mdash; risk-on or risk-off?</li>
-              <li>Scan the active rotation cards. Any ENTER or ADD ON PULLBACK signals?</li>
-              <li>Click the strongest card to expand stocks. Sort by Action to see top opportunities.</li>
-              <li>Note any <span className="text-purple-400">Speculative Buy</span> stocks &mdash; add to watchlist for monitoring.</li>
-              <li>Check RS Accel on your existing holdings &mdash; negative accel on leaders = early warning to tighten stops.</li>
-            </ol>
+          <p>
+            Work from macro context down to individual stocks. Each step narrows your focus so you only spend time
+            on the highest-conviction setups.
+          </p>
+
+          <SubSection title="Step 1: Regime Check (Top Banner)">
+            <p>
+              Start at the <strong className="text-white">Regime Banner</strong> at the top of the page. This sets the context for everything below:
+            </p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong className="text-green-400">RISK ON</strong> &mdash; Broad participation likely. Turnaround setups have the best odds. Favor aggressive entries.</li>
+              <li><strong className="text-red-400">RISK OFF</strong> (VIX &gt; 25) &mdash; Be defensive. Favor leaders in favored sectors only. Skip turnaround plays.</li>
+              <li><strong className="text-amber-400">MIXED / INFLATIONARY</strong> &mdash; Be selective. Only act on HIGH conviction sectors with regime alignment.</li>
+            </ul>
+            <p className="mt-2">
+              Note the <strong className="text-white">Favored</strong> and <strong className="text-white">Avoid</strong> sectors &mdash;
+              these tell you which sectors have macro tailwinds or headwinds.
+            </p>
           </SubSection>
 
-          <SubSection title="Finding Turnaround Plays">
-            <ol className="list-decimal pl-4 space-y-1">
-              <li>Expand an EARLY or MATURING sector rotation card.</li>
-              <li>Sort the stock table by <strong className="text-white">RS Accel descending</strong>.</li>
-              <li>Look for purple <span className="text-purple-400">Speculative Buy</span> badges near the top.</li>
-              <li>Verify: is the stock&apos;s % Change negative but RS Accel strongly positive? That&apos;s the setup.</li>
-              <li>Check Vol vs Avg &mdash; you want &ge;0.8x to confirm real participation.</li>
-              <li>Cross-reference with the Pre-Run scanner and EW scanner for additional confirmation.</li>
-            </ol>
+          <SubSection title="Step 2: Scan Active Rotation Cards">
+            <p>
+              Read the <strong className="text-white">action signal banners</strong> on each card. Focus your time on:
+            </p>
+            <div className="space-y-1.5 mt-2">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-green-500/15 px-2 py-0.5 text-[10px] font-medium text-green-400">ENTER</span>
+                <span>Highest priority &mdash; early rotation with strong conviction and regime support</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-cyan-500/15 px-2 py-0.5 text-[10px] font-medium text-cyan-400">ADD ON PULLBACK</span>
+                <span>Second priority &mdash; established trend, good for adding on dips</span>
+              </div>
+            </div>
+            <p className="mt-2">
+              Skip HOLD and EXIT sectors for new entries &mdash; only check those if you already have positions.
+              Cards with a <span className="text-green-400">Regime Aligned</span> badge have macro support behind them.
+            </p>
           </SubSection>
 
-          <SubSection title="Interpreting Big Numbers">
+          <SubSection title="Step 3: Expand Sector &rarr; Spot Turnarounds">
+            <p>
+              Click a card to expand the stock table. <strong className="text-white">Turnaround setups are highlighted automatically</strong> with
+              an amber left border and <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">Turnaround</span> badge.
+              No filtering needed &mdash; they&apos;re visible while scrolling the full table.
+            </p>
+            <p className="mt-2">
+              A turnaround highlight means all three criteria are met:
+            </p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong className="text-white">Below 50MA</strong> &mdash; not yet in uptrend (early)</li>
+              <li><strong className="text-white">Positive RS Acceleration</strong> &mdash; relative strength improving vs sector</li>
+              <li><strong className="text-white">Volume &ge; 1.2x average</strong> &mdash; institutional interest confirmed</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Step 4: Use Filters for Specific Screens">
+            <p>
+              The filter bar has action chips, 50MA, RS Accel, and Volume dropdowns. Use these combos for targeted screening:
+            </p>
+            <div className="overflow-x-auto mt-2">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Goal</th>
+                    <th className="py-1.5 text-left font-medium">Filter Combination</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-amber-400">Turnaround candidates</td>
+                    <td className="py-2">Below 50MA + Positive RS Accel + Above Avg volume (matches amber highlights exactly)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-green-400">Strongest leaders</td>
+                    <td className="py-2">Hold/Buy chips + Above 50MA + Above Avg volume</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-red-400">Fading stocks to avoid</td>
+                    <td className="py-2">Above 50MA + Negative RS Accel (momentum dying despite uptrend)</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 font-medium text-cyan-400">Undiscovered catch-ups</td>
+                    <td className="py-2">Buy chip + Below Avg volume (hasn&apos;t been discovered yet &mdash; early)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Step 5: Cross-Reference with Regime">
+            <p>
+              A turnaround candidate in a <span className="text-green-400">Regime Aligned</span> sector has higher conviction
+              than one fighting a headwind. Check whether the expanded sector&apos;s card shows the alignment badge.
+            </p>
+            <p className="mt-2">
+              Sort by <strong className="text-white">RS Accel descending</strong> within highlighted turnaround rows to rank
+              them by momentum strength &mdash; the highest RS Accel values are reversing fastest.
+            </p>
+          </SubSection>
+
+          <SubSection title="Step 6: Validate with Pattern Stats">
+            <p>
+              Scroll to <strong className="text-white">Pattern Statistics</strong> to check the sector&apos;s historical rotation quality:
+            </p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong className="text-white">Avg Duration</strong> &mdash; compare to current days active. If past average, the rotation may be aging.</li>
+              <li><strong className="text-white">Avg Perf</strong> &mdash; sectors with consistently positive avg returns are higher quality targets.</li>
+              <li><strong className="text-white">Rotations (1y)</strong> &mdash; frequent short rotations = choppy, less reliable. Fewer long rotations = higher quality.</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Interpreting Big RS Accel Numbers">
             <p>RS Accel values outside &plusmn;5 deserve extra attention:</p>
             <ul className="list-disc pl-4 space-y-1">
               <li><strong className="text-green-400">RS Accel &gt; +5</strong> with negative % Change = strong turnaround signal.
@@ -684,10 +775,10 @@ export default function RotationGuidePage() {
           </SubSection>
 
           <Tip>
-            The most actionable setup: an <strong className="text-white">EARLY sector</strong> with a stock showing
-            <strong className="text-purple-400"> Speculative Buy</strong>, <strong className="text-green-400">RS Accel &gt; +2</strong>,
-            and <strong className="text-white">Vol &ge; 1.0x</strong>. This means fresh sector rotation + lagging stock reversing hard
-            with institutional volume. Cross-check the stock on the Pre-Run scanner for additional conviction.
+            The highest-conviction setup: an <strong className="text-green-400">ENTER</strong> sector with
+            <strong className="text-white"> Regime Aligned</strong> badge, containing amber-highlighted turnaround rows with
+            <strong className="text-green-400"> RS Accel &gt; +2</strong>. This means fresh rotation + macro tailwind + lagging stock
+            reversing with institutional volume. Cross-check on the Pre-Run scanner for additional confirmation.
           </Tip>
         </Section>
 
