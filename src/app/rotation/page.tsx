@@ -693,9 +693,9 @@ function computeStockAction(
 ): StockAction {
   if (category === "turnaround") {
     if (lifecycle === "EARLY" || lifecycle === "MATURING") {
-      return { label: "Turnaround Watch", rowBg: "bg-purple-500/8", badgeClass: "bg-purple-500/15 text-purple-400", sortOrder: 0 };
+      return { label: "Speculative Buy", rowBg: "bg-purple-500/8", badgeClass: "bg-purple-500/15 text-purple-400", sortOrder: 0 };
     }
-    return { label: "Speculative", rowBg: "bg-purple-500/5", badgeClass: "bg-purple-500/10 text-purple-400/70", sortOrder: 3 };
+    return { label: "Risky", rowBg: "bg-purple-500/5", badgeClass: "bg-purple-500/10 text-purple-400/70", sortOrder: 3 };
   }
   if (category === "avoid") {
     if (lifecycle === "EXHAUSTING") {
@@ -705,17 +705,17 @@ function computeStockAction(
   }
   if (category === "leader") {
     if (lifecycle === "EARLY" || lifecycle === "MATURING") {
-      return { label: "Ride", rowBg: "bg-green-500/8", badgeClass: "bg-green-500/15 text-green-400", sortOrder: 1 };
+      return { label: "Hold", rowBg: "bg-green-500/8", badgeClass: "bg-green-500/15 text-green-400", sortOrder: 1 };
     }
     if (lifecycle === "LATE") {
-      return { label: "Take Profit", rowBg: "bg-amber-500/8", badgeClass: "bg-amber-500/15 text-amber-400", sortOrder: 2 };
+      return { label: "Trim", rowBg: "bg-amber-500/8", badgeClass: "bg-amber-500/15 text-amber-400", sortOrder: 2 };
     }
     // EXHAUSTING
     return { label: "Exit", rowBg: "bg-red-500/8", badgeClass: "bg-red-500/15 text-red-400", sortOrder: 5 };
   }
   // catch-up
   if (lifecycle === "EARLY" || lifecycle === "MATURING") {
-    return { label: "Entry Candidate", rowBg: "bg-cyan-500/8", badgeClass: "bg-cyan-500/15 text-cyan-400", sortOrder: 0 };
+    return { label: "Buy", rowBg: "bg-cyan-500/8", badgeClass: "bg-cyan-500/15 text-cyan-400", sortOrder: 0 };
   }
   if (lifecycle === "LATE") {
     return { label: "Watch", rowBg: "", badgeClass: "bg-[#2a2a2a] text-[#888]", sortOrder: 3 };
@@ -1116,9 +1116,9 @@ function StrategySummaryBar({
   for (const s of detail.stocks) {
     const cat = categorizeStock(s, sectorAvgPct);
     const action = computeStockAction(cat, lifecycle);
-    if (action.label === "Ride" || action.label === "Take Profit") leaders++;
-    else if (action.label === "Entry Candidate") entryCandidates++;
-    else if (action.label === "Turnaround Watch" || action.label === "Speculative") turnaroundCount++;
+    if (action.label === "Hold" || action.label === "Trim") leaders++;
+    else if (action.label === "Buy") entryCandidates++;
+    else if (action.label === "Speculative Buy" || action.label === "Risky") turnaroundCount++;
     else if (action.label === "Avoid" || action.label === "Exit") avoidCount++;
   }
 

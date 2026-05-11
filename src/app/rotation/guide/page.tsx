@@ -482,12 +482,12 @@ export default function RotationGuidePage() {
           <SubSection title="Turnaround Actions by Lifecycle">
             <div className="space-y-1.5 mt-2">
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-purple-500/15 px-2 py-0.5 text-[10px] font-medium text-purple-400">Turnaround Watch</span>
+                <span className="rounded-full bg-purple-500/15 px-2 py-0.5 text-[10px] font-medium text-purple-400">Speculative Buy</span>
                 <span>Sector is EARLY or MATURING. The rotation has legs and the stock is reversing early &mdash; highest conviction turnaround setup.</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-400/70">Speculative</span>
-                <span>Sector is LATE or EXHAUSTING. The stock may be turning but the sector rotation is fading &mdash; higher risk, speculative only.</span>
+                <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-400/70">Risky</span>
+                <span>Sector is LATE or EXHAUSTING. The stock may be turning but the sector rotation is fading &mdash; higher risk.</span>
               </div>
             </div>
           </SubSection>
@@ -524,7 +524,7 @@ export default function RotationGuidePage() {
               RS Accel of +28 means the stock swung from &minus;23% underperformance over 20 days to +5% outperformance
               over 5 days. Massive acceleration. Combined with volume, this is a strong turnaround signal &mdash; the stock
               has reversed and institutional money is showing up. It gets the purple
-              <span className="text-purple-400 font-semibold"> Turnaround Watch</span> badge.
+              <span className="text-purple-400 font-semibold"> Speculative Buy</span> badge.
             </p>
           </SubSection>
 
@@ -561,20 +561,20 @@ export default function RotationGuidePage() {
                 <tbody className="text-[#c0c0c0]">
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-2 pr-3 font-medium text-green-400">Leader</td>
-                    <td className="py-2 pr-3"><span className="text-green-400">Ride</span> &mdash; hold and let it run</td>
-                    <td className="py-2 pr-3"><span className="text-amber-400">Take Profit</span> &mdash; lock in gains</td>
+                    <td className="py-2 pr-3"><span className="text-green-400">Hold</span> &mdash; hold and let it run</td>
+                    <td className="py-2 pr-3"><span className="text-amber-400">Trim</span> &mdash; lock in gains</td>
                     <td className="py-2"><span className="text-red-400">Exit</span> &mdash; rotation fading</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-2 pr-3 font-medium text-cyan-400">Catch-up</td>
-                    <td className="py-2 pr-3"><span className="text-cyan-400">Entry Candidate</span> &mdash; fresh entry</td>
+                    <td className="py-2 pr-3"><span className="text-cyan-400">Buy</span> &mdash; fresh entry</td>
                     <td className="py-2 pr-3"><span className="text-[#888]">Watch</span> &mdash; wait for clarity</td>
                     <td className="py-2"><span className="text-red-400">Avoid</span> &mdash; too late</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-2 pr-3 font-medium text-purple-400">Turnaround</td>
-                    <td className="py-2 pr-3"><span className="text-purple-400">Turnaround Watch</span> &mdash; highest priority</td>
-                    <td className="py-2 pr-3" colSpan={2}><span className="text-purple-400/70">Speculative</span> &mdash; risky, sector fading</td>
+                    <td className="py-2 pr-3"><span className="text-purple-400">Speculative Buy</span> &mdash; highest priority turnaround</td>
+                    <td className="py-2 pr-3" colSpan={2}><span className="text-purple-400/70">Risky</span> &mdash; sector fading, higher risk</td>
                   </tr>
                   <tr>
                     <td className="py-2 pr-3 font-medium text-red-400">Avoid</td>
@@ -590,10 +590,10 @@ export default function RotationGuidePage() {
           <SubSection title="Sort Order">
             <p>When sorted by Action, stocks appear in this priority order (highest conviction first):</p>
             <ol className="list-decimal pl-4 space-y-1">
-              <li><span className="text-purple-400">Turnaround Watch</span> / <span className="text-cyan-400">Entry Candidate</span> (sort order 0) &mdash; best new entry opportunities</li>
-              <li><span className="text-green-400">Ride</span> (sort order 1) &mdash; hold existing positions</li>
-              <li><span className="text-amber-400">Take Profit</span> (sort order 2) &mdash; consider trimming</li>
-              <li><span className="text-[#888]">Watch</span> / <span className="text-purple-400/70">Speculative</span> (sort order 3) &mdash; wait and see</li>
+              <li><span className="text-purple-400">Speculative Buy</span> / <span className="text-cyan-400">Buy</span> (sort order 0) &mdash; best new entry opportunities</li>
+              <li><span className="text-green-400">Hold</span> (sort order 1) &mdash; hold existing positions</li>
+              <li><span className="text-amber-400">Trim</span> (sort order 2) &mdash; consider trimming</li>
+              <li><span className="text-[#888]">Watch</span> / <span className="text-purple-400/70">Risky</span> (sort order 3) &mdash; wait and see</li>
               <li><span className="text-red-400">Avoid</span> (sort order 4) &mdash; no position</li>
               <li><span className="text-red-400">Exit</span> (sort order 5) &mdash; close position</li>
             </ol>
@@ -601,7 +601,7 @@ export default function RotationGuidePage() {
 
           <SubSection title="Strategy Summary Bar">
             <p>
-              Above the stock table, the summary bar shows aggregated counts: how many Leaders, Entry Candidates,
+              Above the stock table, the summary bar shows aggregated counts: how many Leaders, Buy candidates,
               Turnarounds, and Avoids are in the sector. Use this for a quick read on sector participation quality &mdash;
               a rotation with 8 Leaders and 2 Avoids is healthier than one with 3 Leaders and 7 Avoids.
             </p>
@@ -653,7 +653,7 @@ export default function RotationGuidePage() {
               <li>Open the Rotation Tracker. Check the regime banner &mdash; risk-on or risk-off?</li>
               <li>Scan the active rotation cards. Any ENTER or ADD ON PULLBACK signals?</li>
               <li>Click the strongest card to expand stocks. Sort by Action to see top opportunities.</li>
-              <li>Note any <span className="text-purple-400">Turnaround Watch</span> stocks &mdash; add to watchlist for monitoring.</li>
+              <li>Note any <span className="text-purple-400">Speculative Buy</span> stocks &mdash; add to watchlist for monitoring.</li>
               <li>Check RS Accel on your existing holdings &mdash; negative accel on leaders = early warning to tighten stops.</li>
             </ol>
           </SubSection>
@@ -662,7 +662,7 @@ export default function RotationGuidePage() {
             <ol className="list-decimal pl-4 space-y-1">
               <li>Expand an EARLY or MATURING sector rotation card.</li>
               <li>Sort the stock table by <strong className="text-white">RS Accel descending</strong>.</li>
-              <li>Look for purple <span className="text-purple-400">Turnaround Watch</span> badges near the top.</li>
+              <li>Look for purple <span className="text-purple-400">Speculative Buy</span> badges near the top.</li>
               <li>Verify: is the stock&apos;s % Change negative but RS Accel strongly positive? That&apos;s the setup.</li>
               <li>Check Vol vs Avg &mdash; you want &ge;0.8x to confirm real participation.</li>
               <li>Cross-reference with the Pre-Run scanner and EW scanner for additional confirmation.</li>
@@ -685,7 +685,7 @@ export default function RotationGuidePage() {
 
           <Tip>
             The most actionable setup: an <strong className="text-white">EARLY sector</strong> with a stock showing
-            <strong className="text-purple-400"> Turnaround Watch</strong>, <strong className="text-green-400">RS Accel &gt; +2</strong>,
+            <strong className="text-purple-400"> Speculative Buy</strong>, <strong className="text-green-400">RS Accel &gt; +2</strong>,
             and <strong className="text-white">Vol &ge; 1.0x</strong>. This means fresh sector rotation + lagging stock reversing hard
             with institutional volume. Cross-check the stock on the Pre-Run scanner for additional conviction.
           </Tip>
@@ -724,7 +724,7 @@ export default function RotationGuidePage() {
                 Always do additional analysis before entering.
               </li>
               <li>
-                <strong className="text-white">Sector lifecycle matters</strong> &mdash; Turnaround Watch in an EARLY sector
+                <strong className="text-white">Sector lifecycle matters</strong> &mdash; Speculative Buy in an EARLY sector
                 is much higher quality than Speculative in an EXHAUSTING sector. The sector provides the tailwind; without it,
                 the stock has to do all the work alone.
               </li>
