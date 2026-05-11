@@ -15,6 +15,7 @@ import {
   Shield,
   LogOut,
 } from "lucide-react";
+import Link from "next/link";
 import type {
   RotationTrackerResult,
   ActiveRotationDetail,
@@ -1582,6 +1583,12 @@ export default function RotationTrackerPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/rotation/guide"
+            className="rounded-md border border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white hover:border-[#444]"
+          >
+            Guide
+          </Link>
           {data && <DataAgeBadge calculatedAt={data.calculatedAt} />}
           <button
             onClick={() => fetchData(true)}
