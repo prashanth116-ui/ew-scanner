@@ -3,6 +3,8 @@ import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { calculateRotationTracker } from "@/lib/sector-rotation/rotation-tracker";
 
+export const maxDuration = 60;
+
 export async function GET(request: NextRequest) {
   const rl = rateLimit(`rotation-tracker:${getClientKey(request)}`, 3, 60_000);
   if (!rl.allowed) {

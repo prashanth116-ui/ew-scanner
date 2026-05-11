@@ -366,11 +366,17 @@ async function fetchStockPerformance(
   const results: RotationStockPerformance[] = [];
   const startTs = new Date(rotationStartDate).getTime() / 1000;
 
+  // Pre-filter: only fetch charts for stocks that have valid batch quotes
+  const quotedSymbols = symbols.filter((sym) => {
+    const q = batchQuotes.get(sym);
+    return q && q.price > 0;
+  });
+
   // Fetch 6mo daily bars for each stock to find price at rotation start
-  // Batch in groups of 10 with 500ms delays
+  // Batch in groups of 15 with 200ms delays
   const batches: string[][] = [];
-  for (let i = 0; i < symbols.length; i += 10) {
-    batches.push(symbols.slice(i, i + 10));
+  for (let i = 0; i < quotedSymbols.length; i += 15) {
+    batches.push(quotedSymbols.slice(i, i + 15));
   }
 
   for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
@@ -383,9 +389,9 @@ async function fetchStockPerformance(
     for (let j = 0; j < batch.length; j++) {
       const sym = batch[j];
       const chart = charts[j];
-      const quote = batchQuotes.get(sym);
+      const quote = batchQuotes.get(sym)!;
 
-      if (!chart || !quote || quote.price <= 0) continue;
+      if (!chart) continue;
 
       // Find closest trading day at or before rotation start date
       let priceAtStart: number | null = null;
@@ -419,7 +425,7 @@ async function fetchStockPerformance(
 
     // Delay between batches
     if (batchIdx < batches.length - 1) {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 200));
     }
   }
 
