@@ -41,6 +41,8 @@ export interface RotationStockPerformance {
   performancePct: number;
   aboveSma50: boolean;
   volumeVsAvg: number;
+  rsAcceleration: number; // positive = catching up vs sector ETF recently
+  isTurnaroundCandidate: boolean; // lagging stock with positive RS acceleration + volume
 }
 
 export interface ActiveRotationDetail {
@@ -69,7 +71,7 @@ export interface RotationPatternStats {
 
 export type LifecycleStage = "EARLY" | "MATURING" | "LATE" | "EXHAUSTING";
 export type ConvictionLevel = "HIGH" | "MODERATE" | "LOW" | "EXIT";
-export type StockCategory = "leader" | "catch-up" | "avoid";
+export type StockCategory = "leader" | "catch-up" | "avoid" | "turnaround";
 
 export interface ConvictionResult {
   level: ConvictionLevel;

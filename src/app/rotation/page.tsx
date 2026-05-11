@@ -32,7 +32,7 @@ import type {
 
 // ── localStorage cache (4-hour TTL) ──
 
-const CACHE_KEY = "ew-rotation-tracker-v3";
+const CACHE_KEY = "ew-rotation-tracker-v4";
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 
 function loadCached(): RotationTrackerResult | null {
@@ -534,6 +534,7 @@ function categorizeStock(
   stock: RotationStockPerformance,
   sectorAvgPct: number
 ): StockCategory {
+  if (stock.isTurnaroundCandidate) return "turnaround";
   if (!stock.aboveSma50) return "avoid";
   if (stock.performancePct > sectorAvgPct && stock.volumeVsAvg >= 1.0) return "leader";
   return "catch-up";
@@ -545,6 +546,8 @@ function stockCategoryBadge(cat: StockCategory): { label: string; className: str
       return { label: "Leader", className: "bg-green-500/15 text-green-400" };
     case "catch-up":
       return { label: "Catch-up", className: "bg-cyan-500/15 text-cyan-400" };
+    case "turnaround":
+      return { label: "Turnaround", className: "bg-purple-500/15 text-purple-400" };
     case "avoid":
       return { label: "Avoid", className: "bg-red-500/15 text-red-400" };
   }
@@ -687,6 +690,12 @@ function computeStockAction(
   category: StockCategory,
   lifecycle: LifecycleStage
 ): StockAction {
+  if (category === "turnaround") {
+    if (lifecycle === "EARLY" || lifecycle === "MATURING") {
+      return { label: "Turnaround Watch", rowBg: "bg-purple-500/8", badgeClass: "bg-purple-500/15 text-purple-400", sortOrder: 0 };
+    }
+    return { label: "Speculative", rowBg: "bg-purple-500/5", badgeClass: "bg-purple-500/10 text-purple-400/70", sortOrder: 3 };
+  }
   if (category === "avoid") {
     if (lifecycle === "EXHAUSTING") {
       return { label: "Exit", rowBg: "bg-red-500/8", badgeClass: "bg-red-500/15 text-red-400", sortOrder: 5 };
@@ -922,7 +931,7 @@ function ActiveRotationCards({
 
 // ── Section 2: Stock Performance Table (sortable + categorized) ──
 
-type StockSortKey = "symbol" | "name" | "action" | "priceAtRotationStart" | "priceNow" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg";
+type StockSortKey = "symbol" | "name" | "action" | "priceAtRotationStart" | "priceNow" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rsAcceleration";
 
 function StockPerformanceTable({
   detail,
@@ -1026,6 +1035,9 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("volumeVsAvg")}>
               Vol vs Avg<SortArrow col="volumeVsAvg" />
             </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("rsAcceleration")}>
+              RS Accel<SortArrow col="rsAcceleration" />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -1067,6 +1079,9 @@ function StockPerformanceTable({
                 <td className="px-3 py-2 text-right text-[#888]">
                   {s.volumeVsAvg.toFixed(1)}x
                 </td>
+                <td className={`px-3 py-2 text-right font-mono text-xs ${(s.rsAcceleration ?? 0) > 0 ? "text-green-400" : (s.rsAcceleration ?? 0) < 0 ? "text-red-400" : "text-[#666]"}`}>
+                  {(s.rsAcceleration ?? 0) > 0 ? "+" : ""}{(s.rsAcceleration ?? 0).toFixed(2)}
+                </td>
               </tr>
             );
           })}
@@ -1095,12 +1110,14 @@ function StrategySummaryBar({
   let leaders = 0;
   let entryCandidates = 0;
   let avoidCount = 0;
+  let turnaroundCount = 0;
 
   for (const s of detail.stocks) {
     const cat = categorizeStock(s, sectorAvgPct);
     const action = computeStockAction(cat, lifecycle);
     if (action.label === "Ride" || action.label === "Take Profit") leaders++;
     else if (action.label === "Entry Candidate") entryCandidates++;
+    else if (action.label === "Turnaround Watch" || action.label === "Speculative") turnaroundCount++;
     else if (action.label === "Avoid" || action.label === "Exit") avoidCount++;
   }
 
@@ -1115,6 +1132,7 @@ function StrategySummaryBar({
         <div className="flex items-center gap-3 text-xs text-[#888]">
           {leaders > 0 && <span>Leaders: <span className="text-green-400 font-medium">{leaders}</span></span>}
           {entryCandidates > 0 && <span>Entry Candidates: <span className="text-cyan-400 font-medium">{entryCandidates}</span></span>}
+          {turnaroundCount > 0 && <span>Turnarounds: <span className="text-purple-400 font-medium">{turnaroundCount}</span></span>}
           {avoidCount > 0 && <span>Avoid: <span className="text-red-400 font-medium">{avoidCount}</span></span>}
           <span className="text-[#666]">|</span>
           <span>

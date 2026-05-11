@@ -354,6 +354,51 @@ function buildEvent(
   };
 }
 
+// ── RS Acceleration (stock vs sector ETF) ──
+
+/**
+ * Compute RS acceleration: how much a stock is gaining/losing ground
+ * vs its sector ETF over recent days compared to the medium term.
+ *
+ * Formula: (stock_5d_return - etf_5d_return) - (stock_20d_return - etf_20d_return)
+ * Positive = stock is catching up faster recently than over the medium term.
+ * Returns 0 if fewer than 21 aligned data points.
+ */
+function computeRSAcceleration(stockCloses: number[], etfCloses: number[]): number {
+  const len = Math.min(stockCloses.length, etfCloses.length);
+  if (len < 21) return 0;
+
+  const sNow = stockCloses[len - 1];
+  const eNow = etfCloses[len - 1];
+  const s5 = stockCloses[len - 6];
+  const e5 = etfCloses[len - 6];
+  const s20 = stockCloses[len - 21];
+  const e20 = etfCloses[len - 21];
+
+  if (s5 === 0 || e5 === 0 || s20 === 0 || e20 === 0) return 0;
+
+  const stockReturn5d = ((sNow - s5) / s5) * 100;
+  const etfReturn5d = ((eNow - e5) / e5) * 100;
+  const stockReturn20d = ((sNow - s20) / s20) * 100;
+  const etfReturn20d = ((eNow - e20) / e20) * 100;
+
+  return (stockReturn5d - etfReturn5d) - (stockReturn20d - etfReturn20d);
+}
+
+/** Check if a stock qualifies as a turnaround candidate. */
+function checkTurnaroundCandidate(
+  perfPct: number,
+  sectorAvgPct: number,
+  rsAccel: number,
+  volumeVsAvg: number
+): boolean {
+  return (
+    perfPct < sectorAvgPct && // currently lagging the sector
+    rsAccel > 0.5 &&          // meaningful positive RS acceleration
+    volumeVsAvg >= 0.8        // at least near-average volume
+  );
+}
+
 // ── Stock performance for active rotations ──
 
 async function fetchStockPerformance(
@@ -361,10 +406,18 @@ async function fetchStockPerformance(
   rotationStartDate: string,
   symbols: string[],
   names: Map<string, string>,
-  batchQuotes: Map<string, { price: number; sma50: number | null; volume: number; avgVolume10d: number }>
+  batchQuotes: Map<string, { price: number; sma50: number | null; volume: number; avgVolume10d: number }>,
+  etfCloses: number[],
+  etfTimestamps: number[]
 ): Promise<RotationStockPerformance[]> {
   const results: RotationStockPerformance[] = [];
   const startTs = new Date(rotationStartDate).getTime() / 1000;
+
+  // Build ETF timestamp→index map for RS acceleration alignment
+  const etfTsMap = new Map<number, number>();
+  for (let i = 0; i < etfTimestamps.length; i++) {
+    etfTsMap.set(etfTimestamps[i], i);
+  }
 
   // Pre-filter: only fetch charts for stocks that have valid batch quotes
   const quotedSymbols = symbols.filter((sym) => {
@@ -412,6 +465,19 @@ async function fetchStockPerformance(
           ? Math.round((quote.volume / quote.avgVolume10d) * 100) / 100
           : 1;
 
+      // Align stock closes with ETF closes by matching timestamps for RS acceleration
+      const alignedStockCloses: number[] = [];
+      const alignedEtfCloses: number[] = [];
+      for (let k = 0; k < chart.timestamps.length; k++) {
+        const etfIdx = etfTsMap.get(chart.timestamps[k]);
+        if (etfIdx !== undefined && chart.closes[k] > 0 && etfCloses[etfIdx] > 0) {
+          alignedStockCloses.push(chart.closes[k]);
+          alignedEtfCloses.push(etfCloses[etfIdx]);
+        }
+      }
+
+      const rsAccel = computeRSAcceleration(alignedStockCloses, alignedEtfCloses);
+
       results.push({
         symbol: sym,
         name: names.get(sym) ?? sym,
@@ -420,6 +486,8 @@ async function fetchStockPerformance(
         performancePct: Math.round(perfPct * 100) / 100,
         aboveSma50,
         volumeVsAvg,
+        rsAcceleration: Math.round(rsAccel * 100) / 100,
+        isTurnaroundCandidate: false, // set in second pass below
       });
     }
 
@@ -431,6 +499,21 @@ async function fetchStockPerformance(
 
   // Sort by performance descending
   results.sort((a, b) => b.performancePct - a.performancePct);
+
+  // Second pass: compute sector average and flag turnaround candidates
+  if (results.length > 0) {
+    const sectorAvgPct =
+      results.reduce((sum, s) => sum + s.performancePct, 0) / results.length;
+    for (const stock of results) {
+      stock.isTurnaroundCandidate = checkTurnaroundCandidate(
+        stock.performancePct,
+        sectorAvgPct,
+        stock.rsAcceleration,
+        stock.volumeVsAvg
+      );
+    }
+  }
+
   return results;
 }
 
@@ -575,12 +658,17 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     if (!sector) continue;
 
     const sectorSymbols = sector.stocks.map((s) => s.symbol);
+    const etfChartEntry = etfCharts.find((c) => c.sectorId === event.sectorId);
+    const sectorEtfCloses = etfChartEntry?.chart?.closes ?? [];
+    const sectorEtfTimestamps = etfChartEntry?.chart?.timestamps ?? [];
     const stocks = await fetchStockPerformance(
       event.sectorId,
       event.startDate,
       sectorSymbols,
       allStockNames,
-      batchQuotes as Map<string, { price: number; sma50: number | null; volume: number; avgVolume10d: number }>
+      batchQuotes as Map<string, { price: number; sma50: number | null; volume: number; avgVolume10d: number }>,
+      sectorEtfCloses,
+      sectorEtfTimestamps
     );
 
     activeRotations.push({ event, stocks });
