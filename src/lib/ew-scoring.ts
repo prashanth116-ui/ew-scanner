@@ -12,8 +12,8 @@ import type {
 } from "./ew-types";
 import { countWaves, confirmMultiTimeframe } from "./ew-wave-counter";
 import { analyzeFibonacciEnhanced } from "./ew-fibonacci";
-import { analyzeVolume } from "./ew-volume";
-import { analyzeMomentum } from "./ew-momentum";
+import { analyzeVolume, analyzeWaveVolume } from "./ew-volume";
+import { analyzeMomentum, detectWave5Divergence } from "./ew-momentum";
 import { classifyStructure } from "./ew-swing";
 
 // ── Original types and functions (unchanged) ──
@@ -54,13 +54,25 @@ interface ScoringParams {
 const MAX_SCORE = 7;
 
 export function scoreCandidate(
-  q: QuoteData,
+  q: QuoteData & { athIdx?: number; lowIdx?: number; series?: PriceSeries },
   params: ScoringParams
 ): ScoredCandidate {
   const { minDecline, minDuration, minRecovery, passThreshold = 0.4 } = params;
 
   const declinePct = q.ath > 0 ? ((q.ath - q.low) / q.ath) * 100 : 0;
-  const monthsDecline = Math.max(0, (q.lowYear - q.athYear) * 12);
+  // C3: Use actual bar count when series data is available, fall back to year-based
+  let monthsDecline: number;
+  if (q.athIdx != null && q.lowIdx != null && q.series?.timestamps) {
+    const athTs = q.series.timestamps[q.athIdx];
+    const lowTs = q.series.timestamps[q.lowIdx];
+    if (athTs && lowTs && lowTs > athTs) {
+      monthsDecline = (lowTs - athTs) / (30 * 24 * 3600);
+    } else {
+      monthsDecline = Math.max(0, (q.lowYear - q.athYear) * 12);
+    }
+  } else {
+    monthsDecline = Math.max(0, (q.lowYear - q.athYear) * 12);
+  }
   const recoveryPct = q.low > 0 ? Math.max(0, ((q.current - q.low) / q.low) * 100) : 0;
 
   let score = 0;
@@ -141,6 +153,7 @@ interface ModeWeights {
   waveCount: number;
 }
 
+// C2: Wave count weight increased from 1.0 to 1.5 for wave modes (25→28 max)
 const MODE_WEIGHTS: Record<ScannerMode, ModeWeights> = {
   wave2: {
     base: 1.0,
@@ -148,7 +161,7 @@ const MODE_WEIGHTS: Record<ScannerMode, ModeWeights> = {
     volume: 1.0,
     structure: 1.0,
     relativeStrength: 1.0,
-    waveCount: 1.0,
+    waveCount: 1.5,  // C2: increased from 1.0
   },
   wave4: {
     base: 0.5,
@@ -156,7 +169,7 @@ const MODE_WEIGHTS: Record<ScannerMode, ModeWeights> = {
     volume: 1.0,
     structure: 0.5,
     relativeStrength: 1.5,
-    waveCount: 1.0,
+    waveCount: 1.5,  // C2: increased from 1.0
   },
   wave5: {
     base: 0.5,
@@ -164,7 +177,7 @@ const MODE_WEIGHTS: Record<ScannerMode, ModeWeights> = {
     volume: 1.5,
     structure: 1.0,
     relativeStrength: 2.0,
-    waveCount: 1.0,
+    waveCount: 1.5,  // C2: increased from 1.0
   },
   breakout: {
     base: 0.5,
@@ -172,11 +185,12 @@ const MODE_WEIGHTS: Record<ScannerMode, ModeWeights> = {
     volume: 2.0,
     structure: 1.0,
     relativeStrength: 2.0,
-    waveCount: 0.5,
+    waveCount: 0.75, // C2: increased from 0.5
   },
 };
 
-const ENHANCED_MAX = 25; // Was 20, now includes wave count quality (0-5)
+// C2: Increased from 25 to 28 to accommodate higher wave count max (0-8)
+const ENHANCED_MAX = 28;
 
 export function scoreEnhanced(
   q: EnrichedQuoteInput,
@@ -211,7 +225,6 @@ export function scoreEnhanced(
   const recentOpts = q.trueAth != null ? { recentBars: 26 } : undefined;
   const volumeAnalysis = analyzeVolume(q.series, q.athIdx, q.lowIdx, recentOpts);
   const momentumAnalysis = analyzeMomentum(q.series, q.athIdx, q.lowIdx, recentOpts);
-  const structureAnalysis = classifyStructure(q.series, q.athIdx, q.lowIdx);
 
   // V3: Run wave counter
   let waveCount: WaveCount | null = null;
@@ -221,18 +234,50 @@ export function scoreEnhanced(
     // Wave counting is non-critical
   }
 
-  // V3: Enhanced Fibonacci with extensions from wave count
-  const fibAnalysis = analyzeFibonacciEnhanced(q.ath, q.low, q.current, waveCount);
+  // B7: Structure classification uses wave counter when available
+  const structureAnalysis = classifyStructure(q.series, q.athIdx, q.lowIdx, waveCount);
+
+  // V3: Enhanced Fibonacci with extensions from wave count + B6 wave-endpoint mode
+  const fibAnalysis = analyzeFibonacciEnhanced(q.ath, q.low, q.current, waveCount, params.mode);
+
+  // A2: Per-wave volume analysis (bonus scoring)
+  const waveVolumeResult = analyzeWaveVolume(q.series, waveCount);
+
+  // B3: Wave 5 momentum divergence detection
+  const w5Divergence = detectWave5Divergence(q.series, waveCount);
 
   // Base score (0-7, weighted)
   const baseWeighted = (base.score / MAX_SCORE) * 7 * weights.base;
 
-  // Fibonacci score (0-4, weighted)
+  // C4: Mode-aware Fibonacci scoring (0-4, weighted)
+  const mode = params.mode ?? "wave2";
   let fibScore = 0;
-  if (fibAnalysis.withinGoldenZone) fibScore += 3; // Golden zone: strong signal
-  else if (fibAnalysis.retracementDepth >= 0.236 && fibAnalysis.retracementDepth <= 0.786) fibScore += 1;
-  if (fibAnalysis.nearestLevel) fibScore += 1; // Near a specific Fib level
-  fibScore = Math.min(fibScore, 4); // Cap at 4
+  if (mode === "wave2") {
+    // Wave 2: reward 50-61.8% retracement (deep correction typical)
+    const depth = fibAnalysis.retracementDepth;
+    if (depth >= 0.5 && depth <= 0.618) fibScore += 3;
+    else if (depth >= 0.382 && depth <= 0.786) fibScore += 2;
+    else if (depth >= 0.236 && depth <= 0.886) fibScore += 1;
+    if (fibAnalysis.nearestLevel) fibScore += 1;
+  } else if (mode === "wave4") {
+    // Wave 4: reward 23.6-38.2% retracement (shallow correction typical)
+    const depth = fibAnalysis.retracementDepth;
+    if (depth >= 0.236 && depth <= 0.382) fibScore += 3;
+    else if (depth >= 0.18 && depth <= 0.5) fibScore += 2;
+    else if (depth >= 0.1 && depth <= 0.618) fibScore += 1;
+    if (fibAnalysis.nearestLevel) fibScore += 1;
+  } else if (mode === "wave5") {
+    // Wave 5: score based on extension ratios (approaching 100% or 161.8% of W1)
+    if (fibAnalysis.retracementDepth >= 0.786) fibScore += 2;
+    if (fibAnalysis.extensions && fibAnalysis.extensions.length > 0) fibScore += 1;
+    if (fibAnalysis.nearestLevel) fibScore += 1;
+  } else {
+    // Breakout: keep original ATH-proximity scoring
+    if (fibAnalysis.withinGoldenZone) fibScore += 3;
+    else if (fibAnalysis.retracementDepth >= 0.236 && fibAnalysis.retracementDepth <= 0.786) fibScore += 1;
+    if (fibAnalysis.nearestLevel) fibScore += 1;
+  }
+  fibScore = Math.min(fibScore, 4);
   const fibWeighted = fibScore * weights.fibonacci;
 
   // Volume score (0-3, weighted)
@@ -240,6 +285,9 @@ export function scoreEnhanced(
   if (volumeAnalysis.confirmation) volScore += 2;
   else if (volumeAnalysis.volumeTrend === "neutral") volScore += 1;
   if (volumeAnalysis.recoveryAvgVol > 0) volScore += 1;
+  // A2: Per-wave volume bonus — if volume follows EW pattern, add 1 point
+  if (waveVolumeResult && waveVolumeResult.adherenceScore >= 75) volScore += 1;
+  volScore = Math.min(volScore, 4); // Allow up to 4 with wave volume bonus
   const volWeighted = volScore * weights.volume;
 
   // Structure score (0-3, weighted)
@@ -249,16 +297,19 @@ export function scoreEnhanced(
   else if (structureAnalysis.swingCount >= 2) structScore += 1;
   const structWeighted = structScore * weights.structure;
 
-  // V3: Wave count quality score (0-5, weighted)
-  // Tighter calibration: score 50 (prev → 4) now → 3, requires 80+ for max score
+  // C2: Wave count quality score (0-8, weighted) — increased from 0-5
   let waveCountScore = 0;
   if (waveCount) {
-    if (waveCount.isValid && waveCount.score >= 80) waveCountScore = 5;
-    else if (waveCount.isValid && waveCount.score >= 65) waveCountScore = 4;
-    else if (waveCount.isValid && waveCount.score >= 50) waveCountScore = 3;
-    else if (waveCount.isValid) waveCountScore = 2;
-    else if (waveCount.score >= 50) waveCountScore = 1.5;
-    else if (waveCount.score > 0) waveCountScore = 0.5;
+    if (waveCount.isValid && waveCount.score >= 80) waveCountScore = 8;
+    else if (waveCount.isValid && waveCount.score >= 65) waveCountScore = 6;
+    else if (waveCount.isValid && waveCount.score >= 50) waveCountScore = 5;
+    else if (waveCount.isValid) waveCountScore = 3;
+    else if (waveCount.score >= 50) waveCountScore = 2;
+    else if (waveCount.score > 0) waveCountScore = 1;
+  }
+  // B3: Wave 5 momentum divergence bonus (for Wave 5 mode)
+  if (w5Divergence && w5Divergence.bonusPoints > 0 && mode === "wave5") {
+    waveCountScore = Math.min(8, waveCountScore + w5Divergence.bonusPoints);
   }
   const waveCountWeighted = waveCountScore * weights.waveCount;
 
@@ -267,7 +318,18 @@ export function scoreEnhanced(
 
   const totalRaw = baseWeighted + fibWeighted + volWeighted + structWeighted + waveCountWeighted + rsWeighted;
   const safeTotalRaw = Number.isFinite(totalRaw) ? totalRaw : 0;
-  const enhancedNormalized = Math.min(safeTotalRaw / ENHANCED_MAX, 1);
+  let enhancedNormalized = Math.min(safeTotalRaw / ENHANCED_MAX, 1);
+
+  // C1: Wave count gates confidence level
+  // If wave count is absent or very weak, cap confidence at "speculative"
+  // regardless of total score — wave structure is a necessary condition for high confidence
+  const waveCountWeak = !waveCount || (!waveCount.isValid && waveCount.score < 30);
+  let confidenceTier = assignConfidenceTier(enhancedNormalized);
+  if (waveCountWeak && waveCountScore < 2) {
+    // No valid wave structure — downgrade one tier
+    if (confidenceTier === "high") confidenceTier = "probable";
+    else if (confidenceTier === "probable") confidenceTier = "speculative";
+  }
 
   // Quant enrichment
   const correctionVolumeDryUp = detectCorrectionVolumeDryUp(q.series!, waveCount);
@@ -302,7 +364,7 @@ export function scoreEnhanced(
     enhancedScore: Math.round(safeTotalRaw * 10) / 10,
     enhancedMax: ENHANCED_MAX,
     enhancedNormalized,
-    confidenceTier: assignConfidenceTier(enhancedNormalized),
+    confidenceTier,
     fibAnalysis,
     volumeAnalysis,
     momentumAnalysis,
@@ -363,9 +425,11 @@ export function scoreBatchEnhanced(
   );
 }
 
+// C2: Thresholds adjusted proportionally for 28-point max (was 25)
+// High: 22/28 = 0.786 → ~0.78, Moderate: 16/28 = 0.571 → ~0.57, Low: 10/28 = 0.357
 export function assignConfidenceTier(normalized: number): ConfidenceTier {
-  if (normalized >= 0.75) return "high";
-  if (normalized >= 0.5) return "probable";
+  if (normalized >= 0.78) return "high";
+  if (normalized >= 0.57) return "probable";
   return "speculative";
 }
 

@@ -1,4 +1,4 @@
-import type { SwingPoint, WavePoint, WaveCount, WaveDegree, WaveLabel, MTFConfirmation } from "./ew-types";
+import type { SwingPoint, WavePoint, WaveCount, WaveDegree, WaveLabel, MTFConfirmation, CorrectionType, WavePosition } from "./ew-types";
 import { detectSwings } from "./ew-swing";
 import type { PriceSeries } from "./ew-types";
 
@@ -37,12 +37,15 @@ export function countWaves(
   // Try developing wave counts (3-5 alternating points, not enough for full impulse)
   const developingRecovery = countDevelopingWaves(recoverySwings, series.close, "up", degree);
   const developingDecline = countDevelopingWaves(declineSwings, series.close, "down", degree);
+  // A4: Try diagonal patterns (leading/ending diagonals with overlapping waves)
+  const recoveryDiagonal = countDiagonalWaves(recoverySwings, series.close, "up", degree);
+  const declineDiagonal = countDiagonalWaves(declineSwings, series.close, "down", degree);
 
   // Partition candidates into recovery-based (forward-looking) and decline-based (historical)
-  const recoveryCandidates = [recoveryImpulse, correction, developingRecovery].filter(
+  const recoveryCandidates = [recoveryImpulse, correction, developingRecovery, recoveryDiagonal].filter(
     (c): c is WaveCount => c !== null
   );
-  const declineCandidates = [declineImpulse, declineCorrection, developingDecline].filter(
+  const declineCandidates = [declineImpulse, declineCorrection, developingDecline, declineDiagonal].filter(
     (c): c is WaveCount => c !== null
   );
 
@@ -165,29 +168,40 @@ export function countImpulseWaves(
       const { isValid, violations } = validateImpulse(p0, p1, p2, p3, p4, p5, direction);
       const score = scoreImpulse(p0, p1, p2, p3, p4, p5, direction);
 
+      // A3: Treat truncated Wave 5 as valid (but with lower score from scoreImpulse)
+      const sign = direction === "up" ? 1 : -1;
+      const isTruncated = (p5.price - p3.price) * sign <= 0;
+      const effectiveValid = isValid || (
+        isTruncated &&
+        violations.filter(v => v !== "Wave 5 doesn't exceed Wave 3" && v !== "Wave 2/4 alternation guideline violated").length === 0
+      );
+
       // Prefer valid counts: valid always beats invalid, then highest score
-      const dominated = bestIsValid && !isValid;
-      const dominates = isValid && !bestIsValid;
+      const dominated = bestIsValid && !effectiveValid;
+      const dominates = effectiveValid && !bestIsValid;
       if (dominates || (!dominated && score > bestScore)) {
         bestScore = score;
-        bestIsValid = isValid;
+        bestIsValid = effectiveValid;
         const labels: WaveLabel[] = ["1", "2", "3", "4", "5"];
         const waves: WavePoint[] = [p1, p2, p3, p4, p5].map((p, idx) => ({
           ...p,
           label: labels[idx],
           degree,
-          confidence: isValid ? Math.min(score / 100, 1) : Math.min(score / 100, 0.5),
+          confidence: effectiveValid ? Math.min(score / 100, 1) : Math.min(score / 100, 0.5),
         }));
 
+        const positionStr = getImpulsePosition(p0, p1, p2, p3, p4, p5, closes, direction);
         bestCount = {
           waves,
           waveStart: p0,
           direction,
           degree,
-          isValid,
+          isValid: effectiveValid,
           violations,
           score,
-          position: getImpulsePosition(p0, p1, p2, p3, p4, p5, closes, direction),
+          position: positionStr,
+          truncated: isTruncated,
+          structuredPosition: deriveStructuredPosition(positionStr, "impulse", waves),
         };
       }
     }
@@ -266,7 +280,25 @@ export function countCorrectiveWaves(
       else position = "A-B-C correction may be complete";
     }
 
-    bestCount = { waves, waveStart: p0, direction, degree, isValid, violations, score, position };
+    // A5: Classify correction subtype
+    const wALen = Math.abs(pA.price - p0.price);
+    const bRetrace = wALen > 0 ? Math.abs(pB.price - pA.price) / wALen : 0;
+    const wCLen = Math.abs(pC.price - pB.price);
+    const caRatio = wALen > 0 ? wCLen / wALen : 0;
+    let corrType: CorrectionType = "unknown";
+    if (bRetrace < 0.8 && caRatio >= 0.618) {
+      corrType = "zigzag"; // Sharp: B retraces < 80% of A, C extends beyond A end
+    } else if (bRetrace >= 0.8 && bRetrace <= 1.0 && caRatio >= 0.8 && caRatio <= 1.2) {
+      corrType = "flat"; // Sideways: B retraces > 80% of A, C ≈ A length
+    } else if (bRetrace > 1.0) {
+      corrType = "expanded_flat"; // B exceeds A start, C extends well beyond A end
+    }
+
+    bestCount = {
+      waves, waveStart: p0, direction, degree, isValid, violations, score, position,
+      correctionType: corrType,
+      structuredPosition: deriveStructuredPosition(position, "correction", waves),
+    };
   };
 
   // Pass 1: Consecutive 4-point windows (fast, finds local patterns)
@@ -325,6 +357,51 @@ export function countCorrectiveWaves(
 
       const score = scoreCorrection(p0, pA, bestBPoint, bestCPoint, direction);
       buildResult(p0, pA, bestBPoint, bestCPoint, score);
+    }
+  }
+
+  // A5: Pass 3 — Triangle detection (5+ converging alternating swings)
+  if (alternating.length >= 6) {
+    for (let i = 0; i < Math.min(limit - 5, 5); i++) {
+      const triStart = alternating[i];
+      if (triStart.type !== startType) continue;
+      const triPts = alternating.slice(i, i + 6);
+      if (triPts.length < 6) continue;
+
+      // Check convergence: highs decreasing, lows increasing (contracting triangle)
+      const highs = triPts.filter(p => p.type === "high").map(p => p.price);
+      const lows = triPts.filter(p => p.type === "low").map(p => p.price);
+      if (highs.length < 2 || lows.length < 2) continue;
+
+      const highsDecreasing = highs.every((h, idx) => idx === 0 || h <= highs[idx - 1]);
+      const lowsIncreasing = lows.every((l, idx) => idx === 0 || l >= lows[idx - 1]);
+
+      if (highsDecreasing && lowsIncreasing) {
+        // Valid contracting triangle — use the first 4 points as A-B-C pattern
+        const pA = triPts[1];
+        const pB = triPts[2];
+        const pC = triPts[3];
+        const triScore = scoreCorrection(triStart, pA, pB, pC, direction);
+        // Triangle gets a small bonus for clear convergence
+        const adjustedScore = Math.min(100, triScore + 5);
+
+        if (bestCount === null || adjustedScore > bestCount.score) {
+          const { isValid, violations } = validateCorrection(triStart, pA, pB, pC, direction);
+          const labels: WaveLabel[] = ["A", "B", "C"];
+          const waves: WavePoint[] = [pA, pB, pC].map((p, idx) => ({
+            ...p,
+            label: labels[idx],
+            degree,
+            confidence: isValid ? Math.min(adjustedScore / 100, 1) : Math.min(adjustedScore / 100, 0.5),
+          }));
+          bestCount = {
+            waves, waveStart: triStart, direction, degree, isValid, violations, score: adjustedScore,
+            position: "Triangle correction — consolidation pattern",
+            correctionType: "triangle",
+            structuredPosition: deriveStructuredPosition("Wave 4 correction", "correction", waves),
+          };
+        }
+      }
     }
   }
 
@@ -484,6 +561,7 @@ export function countDevelopingWaves(
     violations,
     score,
     position,
+    structuredPosition: deriveStructuredPosition(position, "developing", waves),
   };
 }
 
@@ -513,6 +591,7 @@ function validateImpulse(
     // Direction check: waves should progress upward
     if (p1.price <= p0.price) violations.push("Wave 1 doesn't move up");
     if (p3.price <= p1.price) violations.push("Wave 3 doesn't exceed Wave 1");
+    // A3: Allow truncated Wave 5 (doesn't exceed Wave 3) — valid but weaker
     if (p5.price <= p3.price) violations.push("Wave 5 doesn't exceed Wave 3");
     // Retrace direction: corrections must move against impulse
     if (p2.price >= p1.price) violations.push("Wave 2 doesn't retrace down");
@@ -527,13 +606,28 @@ function validateImpulse(
     if (p4.price >= p1.price) violations.push("Wave 4 overlaps Wave 1 territory");
     if (p1.price >= p0.price) violations.push("Wave 1 doesn't move down");
     if (p3.price >= p1.price) violations.push("Wave 3 doesn't exceed Wave 1");
+    // A3: Allow truncated Wave 5
     if (p5.price >= p3.price) violations.push("Wave 5 doesn't exceed Wave 3");
     // Retrace direction: corrections must move against impulse
     if (p2.price <= p1.price) violations.push("Wave 2 doesn't retrace up");
     if (p4.price <= p3.price) violations.push("Wave 4 doesn't retrace up");
   }
 
-  return { isValid: violations.length === 0, violations };
+  // A1: Alternation guideline — Wave 2 and Wave 4 should differ in character
+  // (sharp vs flat). Violation is a warning, not a rejection.
+  const w2Retrace = Math.abs(p2.price - p1.price) / Math.abs(p1.price - p0.price || 1);
+  const w2Duration = p2.index - p1.index;
+  const w4Retrace = Math.abs(p4.price - p3.price) / Math.abs(p3.price - p2.price || 1);
+  const w4Duration = p4.index - p3.index;
+  const w2IsSharp = w2Retrace > 0.618 && w2Duration < 3;
+  const w2IsFlat = w2Retrace < 0.5 && w2Duration > 5;
+  const w4IsSharp = w4Retrace > 0.618 && w4Duration < 3;
+  const w4IsFlat = w4Retrace < 0.5 && w4Duration > 5;
+  if ((w2IsSharp && w4IsSharp) || (w2IsFlat && w4IsFlat)) {
+    violations.push("Wave 2/4 alternation guideline violated");
+  }
+
+  return { isValid: violations.filter(v => v !== "Wave 2/4 alternation guideline violated").length === 0, violations };
 }
 
 function validateCorrection(
@@ -613,9 +707,19 @@ function scoreImpulse(
   // Wave 3 is longest (10 pts) — strong guideline
   if (w3Len > w1Len && w3Len > w5Len) score += 10;
 
-  // Rule adherence (15 pts)
+  // Rule adherence (15 pts) — alternation is a guideline, so only deduct 2 pts for it
   const { violations } = validateImpulse(p0, p1, p2, p3, p4, p5, direction);
-  score += Math.max(0, 15 - violations.length * 5);
+  const hardViolations = violations.filter(v => v !== "Wave 2/4 alternation guideline violated");
+  const hasAlternationViolation = violations.some(v => v === "Wave 2/4 alternation guideline violated");
+  score += Math.max(0, 15 - hardViolations.length * 5);
+  // A1: Deduct for alternation guideline violation (softer penalty)
+  if (hasAlternationViolation) score -= 5;
+
+  // A3: Truncated Wave 5 penalty — valid but less reliable
+  const sign2 = direction === "up" ? 1 : -1;
+  if ((p5.price - p3.price) * sign2 <= 0) {
+    score -= 15; // Significant penalty for truncation
+  }
 
   return Math.max(0, Math.min(100, Math.round(score)));
 }
@@ -767,6 +871,190 @@ function adjustScoreForQuality(
   }
 
   return Math.max(0, Math.min(100, Math.round(rawScore * multiplier)));
+}
+
+// ── D5: Structured Position Derivation ──
+
+/** Derive structured position metadata from position string and wave context. */
+function deriveStructuredPosition(
+  positionStr: string,
+  type: "impulse" | "correction" | "developing",
+  waves: WavePoint[]
+): WavePosition {
+  const lower = positionStr.toLowerCase();
+
+  // Default
+  const result: WavePosition = {
+    waveNumber: null,
+    phase: "unknown",
+    subPosition: "unknown",
+    label: "",
+  };
+
+  if (type === "developing") {
+    result.phase = "developing";
+    if (lower.includes("wave 3")) { result.waveNumber = 3; result.label = "3"; }
+    else if (lower.includes("wave 4")) { result.waveNumber = 4; result.label = "4"; }
+    else if (lower.includes("wave 5")) { result.waveNumber = 5; result.label = "5"; }
+    else if (lower.includes("wave 2")) { result.waveNumber = 2; result.label = "2"; }
+    else if (lower.includes("wave 1")) { result.waveNumber = 1; result.label = "1"; }
+    if (lower.includes("forming") || lower.includes("early")) result.subPosition = "early";
+    else if (lower.includes("extending") || lower.includes("advancing")) result.subPosition = "middle";
+    else if (lower.includes("beyond") || lower.includes("peak")) result.subPosition = "late";
+    return result;
+  }
+
+  if (type === "correction") {
+    result.phase = "correction";
+    if (lower.includes("wave c")) { result.label = "C"; }
+    else if (lower.includes("wave b")) { result.label = "B"; }
+    else if (lower.includes("wave a")) { result.label = "A"; }
+    if (lower.includes("complete") || lower.includes("beyond")) {
+      result.phase = "complete";
+      result.subPosition = "late";
+    } else if (lower.includes("extending")) {
+      result.subPosition = "late";
+    } else if (lower.includes("decline") || lower.includes("rally")) {
+      result.subPosition = "middle";
+    }
+    // Map correction position to wave number for mode matching
+    if (lower.includes("wave 2") || lower.includes("a-b-c")) result.waveNumber = 2;
+    else if (lower.includes("wave 4")) result.waveNumber = 4;
+    return result;
+  }
+
+  // Impulse
+  if (lower.includes("wave 1")) { result.waveNumber = 1; result.phase = "impulse"; result.label = "1"; }
+  else if (lower.includes("wave 2")) { result.waveNumber = 2; result.phase = "correction"; result.label = "2"; }
+  else if (lower.includes("wave 3")) { result.waveNumber = 3; result.phase = "impulse"; result.label = "3"; }
+  else if (lower.includes("wave 4")) { result.waveNumber = 4; result.phase = "correction"; result.label = "4"; }
+  else if (lower.includes("wave 5")) { result.waveNumber = 5; result.phase = "impulse"; result.label = "5"; }
+  else if (lower.includes("post-wave 5") || lower.includes("beyond wave 5")) {
+    result.waveNumber = 5; result.phase = "complete"; result.label = "5";
+  }
+
+  if (lower.includes("correction") || lower.includes("recovery")) result.subPosition = "early";
+  else if (lower.includes("strongest") || lower.includes("final")) result.subPosition = "middle";
+  else if (lower.includes("extension") || lower.includes("beyond")) result.subPosition = "late";
+
+  return result;
+}
+
+// ── A4: Diagonal Wave Recognition ──
+
+/**
+ * Count diagonal wave patterns (leading/ending diagonals).
+ * Diagonals are 5-wave patterns where Wave 4 overlaps Wave 1 territory
+ * and upper/lower boundaries converge (narrowing wedge shape).
+ * Distinguished from invalid impulse by the convergence requirement.
+ */
+export function countDiagonalWaves(
+  swings: SwingPoint[],
+  closes: number[],
+  direction: "up" | "down",
+  degree: WaveDegree
+): WaveCount | null {
+  if (swings.length < 5) return null;
+
+  const startType = direction === "up" ? "low" : "high";
+  const alternating = buildAlternatingSequence(swings, startType);
+  if (alternating.length < 6) return null;
+
+  let bestCount: WaveCount | null = null;
+  let bestScore = -1;
+
+  const limit = Math.min(alternating.length, 20);
+  for (let i = 0; i <= limit - 6; i++) {
+    for (let j = i + 5; j < limit; j++) {
+      const pts = pickSixPoints(alternating, i, j);
+      if (!pts) continue;
+
+      const [p0, p1, p2, p3, p4, p5] = pts;
+      if (p0.type !== startType) continue;
+
+      const sign = direction === "up" ? 1 : -1;
+
+      // Diagonal requires: waves move in right direction
+      if ((p1.price - p0.price) * sign <= 0) continue; // W1 must move in direction
+      if ((p3.price - p2.price) * sign <= 0) continue; // W3 must move in direction
+      if ((p5.price - p4.price) * sign <= 0) continue; // W5 must move in direction
+
+      // Key diagonal characteristic: Wave 4 MUST overlap Wave 1 territory
+      // (This is what distinguishes diagonals from impulses)
+      const overlaps = direction === "up"
+        ? p4.price <= p1.price   // W4 low enters W1 high territory
+        : p4.price >= p1.price;  // W4 high enters W1 low territory
+      if (!overlaps) continue;
+
+      // Check convergence: upper and lower trendlines should narrow
+      // Upper trendline: W1 peak → W3 peak → W5 peak
+      // Lower trendline: W0 → W2 → W4
+      const upperSlope1 = p3.price - p1.price;
+      const upperSlope2 = p5.price - p3.price;
+      const lowerSlope1 = p2.price - p0.price;
+      const lowerSlope2 = p4.price - p2.price;
+
+      // For convergence: slopes should decrease in magnitude (narrowing)
+      const upperConverging = Math.abs(upperSlope2) < Math.abs(upperSlope1);
+      const lowerConverging = Math.abs(lowerSlope2) < Math.abs(lowerSlope1);
+      // Require at least one trendline to converge
+      if (!upperConverging && !lowerConverging) continue;
+
+      // Score the diagonal (70% of normal impulse scoring)
+      let score = 0;
+      const w1Len = Math.abs(p1.price - p0.price);
+      const w3Len = Math.abs(p3.price - p2.price);
+      const w5Len = Math.abs(p5.price - p4.price);
+
+      // Direction correct (20 pts)
+      score += 20;
+      // W2 Fibonacci retracement (10 pts)
+      if (w1Len > 0) {
+        const w2Retrace = Math.abs(p2.price - p1.price) / w1Len;
+        score += fibProximityScore(w2Retrace, [0.5, 0.618, 0.786]) * 10;
+      }
+      // Convergence quality (15 pts)
+      if (upperConverging) score += 7;
+      if (lowerConverging) score += 8;
+      // Wave 3 not shortest (10 pts)
+      if (w3Len >= w1Len || w3Len >= w5Len) score += 10;
+      // Overlap confirms diagonal (5 pts)
+      score += 5;
+      // Rule adherence (10 pts)
+      score += 10;
+
+      // Scale to 70% of impulse (diagonals less reliable)
+      score = Math.round(score * 0.7);
+      score = Math.max(0, Math.min(100, score));
+
+      if (score > bestScore) {
+        bestScore = score;
+        const labels: WaveLabel[] = ["1", "2", "3", "4", "5"];
+        const waves: WavePoint[] = [p1, p2, p3, p4, p5].map((p, idx) => ({
+          ...p,
+          label: labels[idx],
+          degree,
+          confidence: Math.min(score / 100, 0.7), // Lower confidence for diagonals
+        }));
+
+        const positionStr = getImpulsePosition(p0, p1, p2, p3, p4, p5, closes, direction);
+        bestCount = {
+          waves,
+          waveStart: p0,
+          direction,
+          degree,
+          isValid: true,
+          violations: ["Diagonal pattern (Wave 4 overlaps Wave 1 — expected for diagonal)"],
+          score,
+          position: positionStr,
+          isDiagonal: true,
+          structuredPosition: deriveStructuredPosition(positionStr, "impulse", waves),
+        };
+      }
+    }
+  }
+
+  return bestCount;
 }
 
 // ── Helpers ──

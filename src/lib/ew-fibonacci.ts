@@ -1,4 +1,4 @@
-import type { FibLevel, FibAnalysis, FibExtension, ConfluenceZone, WaveCount } from "./ew-types";
+import type { FibLevel, FibAnalysis, FibExtension, ConfluenceZone, WaveCount, ScannerMode } from "./ew-types";
 
 const FIB_RATIOS = [
   { ratio: 0.236, label: "23.6%" },
@@ -173,43 +173,93 @@ export function findFibConfluence(
 
 /**
  * Enhanced Fibonacci analysis that includes extensions from wave count data.
+ * B6: When wave count is available, measures retracement from actual wave endpoints
+ * rather than ATH/low. Falls back to ATH/low when wave count is unavailable.
  */
 export function analyzeFibonacciEnhanced(
   ath: number,
   low: number,
   current: number,
-  waveCount?: WaveCount | null
+  waveCount?: WaveCount | null,
+  mode?: ScannerMode
 ): FibAnalysis {
   const base = analyzeFibonacci(ath, low, current);
 
   if (!waveCount || waveCount.waves.length < 2) return base;
 
-  // Calculate extensions from the wave count
   const waves = waveCount.waves;
-  let extensions: FibExtension[] = [];
-  let confluenceZones: ConfluenceZone[] = [];
+  const w1 = waves.find((w) => w.label === "1");
+  const w2 = waves.find((w) => w.label === "2");
+  const w3 = waves.find((w) => w.label === "3");
+  const w4 = waves.find((w) => w.label === "4");
+  const p0Price = waveCount.waveStart?.price;
 
-  // If we have at least waves 1 and 2, project Wave 3 targets
-  if (waves.length >= 2) {
-    const w1Label = waves.find((w) => w.label === "1");
-    const w2Label = waves.find((w) => w.label === "2");
-
-    if (w1Label && w2Label) {
-      // Use waveStart (p0) if available for accurate Wave 1 start,
-      // otherwise fall back to ath/low approximation
-      let w1Start: number;
-      if (waveCount.waveStart) {
-        w1Start = waveCount.waveStart.price;
-      } else {
-        w1Start = w1Label.price > w2Label.price ? low : ath;
+  // B6: Wave-endpoint Fibonacci retracement when wave count is valid
+  let waveBasedFib: FibAnalysis | null = null;
+  if (waveCount.isValid && p0Price != null) {
+    if (mode === "wave2" && w1) {
+      // Wave 2: measure retracement from Wave 1 start (p0) to Wave 1 end
+      const w1High = Math.max(p0Price, w1.price);
+      const w1Low = Math.min(p0Price, w1.price);
+      if (w1High > w1Low) {
+        waveBasedFib = analyzeFibonacci(w1High, w1Low, current);
       }
-      extensions = calculateFibExtensions(w1Start, w1Label.price, w2Label.price);
-      confluenceZones = findFibConfluence(extensions, base.levels);
+    } else if (mode === "wave4" && w2 && w3) {
+      // Wave 4: measure retracement from Wave 3 start (W2 end) to Wave 3 end
+      const w3High = Math.max(w2.price, w3.price);
+      const w3Low = Math.min(w2.price, w3.price);
+      if (w3High > w3Low) {
+        waveBasedFib = analyzeFibonacci(w3High, w3Low, current);
+      }
+    } else if (mode === "wave5" && w1 && w4) {
+      // Wave 5: extension from Wave 1 length projected from Wave 4 end
+      // Use extension-based analysis instead of retracement
+      const w1Len = Math.abs(w1.price - p0Price);
+      if (w1Len > 0) {
+        const dir = w1.price > p0Price ? 1 : -1;
+        const extLevels: FibLevel[] = [
+          { ratio: 0.618, label: "W5 61.8%", price: Math.round((w4.price + w1Len * 0.618 * dir) * 100) / 100 },
+          { ratio: 1.0, label: "W5 100%", price: Math.round((w4.price + w1Len * 1.0 * dir) * 100) / 100 },
+          { ratio: 1.618, label: "W5 161.8%", price: Math.round((w4.price + w1Len * 1.618 * dir) * 100) / 100 },
+        ];
+        // Find nearest extension level
+        let nearestExt: FibLevel | null = null;
+        let minDist = Infinity;
+        for (const l of extLevels) {
+          const dist = Math.abs(current - l.price) / (Math.abs(l.price) || 1);
+          if (dist < minDist && dist <= 0.05) { minDist = dist; nearestExt = l; }
+        }
+        waveBasedFib = {
+          levels: extLevels,
+          nearestLevel: nearestExt,
+          withinGoldenZone: false,
+          retracementDepth: base.retracementDepth,
+          depthLabel: base.depthLabel,
+        };
+      }
     }
   }
 
+  // Calculate extensions from W1/W2 for Wave 3 targets
+  let extensions: FibExtension[] = [];
+  let confluenceZones: ConfluenceZone[] = [];
+
+  if (w1 && w2) {
+    let w1Start: number;
+    if (waveCount.waveStart) {
+      w1Start = waveCount.waveStart.price;
+    } else {
+      w1Start = w1.price > w2.price ? low : ath;
+    }
+    extensions = calculateFibExtensions(w1Start, w1.price, w2.price);
+    const retLevels = waveBasedFib?.levels ?? base.levels;
+    confluenceZones = findFibConfluence(extensions, retLevels);
+  }
+
+  // Use wave-based Fibonacci when available, merge with extensions
+  const resultBase = waveBasedFib ?? base;
   return {
-    ...base,
+    ...resultBase,
     extensions: extensions.length > 0 ? extensions : undefined,
     confluenceZones: confluenceZones.length > 0 ? confluenceZones : undefined,
   };

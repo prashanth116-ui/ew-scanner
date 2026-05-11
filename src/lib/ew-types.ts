@@ -68,6 +68,15 @@ export interface StructureAnalysis {
 
 export type WaveLabel = "1" | "2" | "3" | "4" | "5" | "A" | "B" | "C";
 export type WaveDegree = "primary" | "intermediate" | "minor";
+export type CorrectionType = "zigzag" | "flat" | "expanded_flat" | "triangle" | "unknown";
+
+/** Structured wave position for mode matching (replaces string-only matching). */
+export interface WavePosition {
+  waveNumber: number | null;       // 1-5 for impulse, null if unclear
+  phase: "impulse" | "correction" | "complete" | "developing" | "unknown";
+  subPosition: "early" | "middle" | "late" | "unknown";
+  label: string;  // e.g. "A", "B", "C" for corrective
+}
 
 export interface WavePoint extends SwingPoint {
   label: WaveLabel;
@@ -85,6 +94,14 @@ export interface WaveCount {
   score: number; // 0-100 quality score
   position: string; // e.g. "In Wave 4 correction"
   alternateCount?: WaveCount;
+  /** True if Wave 5 didn't exceed Wave 3 (valid but weaker pattern). */
+  truncated?: boolean;
+  /** Classification of corrective pattern (A-B-C subtypes). */
+  correctionType?: CorrectionType;
+  /** Structured position for mode matching. */
+  structuredPosition?: WavePosition;
+  /** True if pattern is a leading or ending diagonal. */
+  isDiagonal?: boolean;
 }
 
 export interface FibExtension {

@@ -1,4 +1,4 @@
-import type { PriceSeries, SwingPoint, StructureAnalysis } from "./ew-types";
+import type { PriceSeries, SwingPoint, StructureAnalysis, WaveCount } from "./ew-types";
 
 /**
  * Detect swing highs and lows using N-bar pivot method.
@@ -65,14 +65,14 @@ export function countPivotsBetween(
 
 /**
  * Classify decline structure based on swing pattern between ATH and Low.
- * 5+ alternating pivots = impulsive (5-wave decline)
- * 3 major pivots = corrective (A-B-C)
- * Otherwise unclear
+ * B7: When wave counter is available, use its result for consistency.
+ * Falls back to independent swing counting when wave counter has no result.
  */
 export function classifyStructure(
   series: PriceSeries,
   athIdx: number,
-  lowIdx: number
+  lowIdx: number,
+  waveCount?: WaveCount | null
 ): StructureAnalysis {
   const swings = detectSwings(series, 3);
   const declineSwings = swings.filter(
@@ -81,6 +81,19 @@ export function classifyStructure(
 
   const swingCount = declineSwings.length;
 
+  // B7: If wave counter found a valid pattern, use it for classification
+  if (waveCount && waveCount.isValid) {
+    const hasImpulse = waveCount.waves.some(w => w.label === "5");
+    const hasCorrectiveABC = waveCount.waves.some(w => w.label === "C");
+    if (hasImpulse) {
+      return { swingCount, classification: "impulsive", swings: declineSwings };
+    }
+    if (hasCorrectiveABC) {
+      return { swingCount, classification: "corrective", swings: declineSwings };
+    }
+  }
+
+  // Fallback: independent swing counting
   let classification: StructureAnalysis["classification"] = "unclear";
   if (swingCount >= 5) {
     // Check for alternating pattern (high-low-high-low...)
