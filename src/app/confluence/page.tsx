@@ -48,13 +48,15 @@ import { getSectorForSymbol } from "@/data/sector-universe";
 import type { SectorRotationScore, SectorRotationResult, RRGQuadrant } from "@/lib/sector-rotation/types";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
+import { useSidebarState } from "@/lib/use-sidebar-state";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SidebarSection } from "@/components/sidebar-section";
 import { PresetList } from "@/components/preset-list";
 import { ScoreBar } from "@/components/score-bar";
+import { ProgressBar } from "@/components/progress-bar";
 
 const BATCH_SIZE = 10;
-const BATCH_DELAY = 3000;
+const BATCH_DELAY = 1000;
 
 type SortKey = "confluence" | "ew" | "squeeze" | "prerun" | "sector" | "pass";
 type SortDir = "asc" | "desc";
@@ -167,8 +169,8 @@ export default function ConfluencePage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // UI state
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { collapsed, toggleSection } = useCollapsibleSections();
+  const [sidebarOpen, setSidebarOpen] = useSidebarState("confluence");
+  const { collapsed, toggleSection } = useCollapsibleSections(undefined, "confluence");
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
   // Ticker search
@@ -860,16 +862,12 @@ export default function ConfluencePage() {
           {/* Progress */}
           {scanning && (
             <div className="mb-4">
-              <div className="flex items-center justify-between text-xs text-[#a0a0a0] mb-1">
-                <span>{progress}{totalCount > 200 && scannedCount > 0 && scannedCount < totalCount ? ` (~${Math.ceil(((totalCount - scannedCount) / BATCH_SIZE) * (BATCH_DELAY / 1000) / 60)}min left)` : ""}</span>
-                <span>{scannedCount}/{totalCount}</span>
-              </div>
-              <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[#ec4899] rounded-full transition-all duration-300"
-                  style={{ width: totalCount > 0 ? `${(scannedCount / totalCount) * 100}%` : "0%" }}
-                />
-              </div>
+              <ProgressBar
+                current={scannedCount}
+                total={totalCount}
+                label={`${progress}${totalCount > 200 && scannedCount > 0 && scannedCount < totalCount ? ` (~${Math.ceil(((totalCount - scannedCount) / BATCH_SIZE) * (BATCH_DELAY / 1000) / 60)}min left)` : ""}`}
+                color="bg-[#ec4899]"
+              />
             </div>
           )}
 

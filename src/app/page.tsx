@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef, Suspense, Fragment } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense, Fragment, memo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Activity,
   Search,
@@ -58,6 +59,7 @@ import { useDebounce } from "@/lib/use-debounce";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 import { recordSignals, fetchClientHitRates, type HitRateEntry } from "@/lib/signal-client";
 import { checkTargetResistance } from "@/lib/ew-resistance";
+import { ProgressBar } from "@/components/progress-bar";
 
 const HTF_OPTIONS = ["Monthly", "Weekly"] as const;
 const LTF_OPTIONS = ["Daily", "4H", "1H"] as const;
@@ -154,16 +156,26 @@ export default function EWScannerPageWrapper() {
 function EWScannerPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [htf, setHtf] = useState<string>("Monthly");
-  const [ltf, setLtf] = useState<string>("Daily");
-  const [universe, setUniverse] = useState<string>("SP500");
-  const [mode, setMode] = useState<ScannerMode>("wave2");
 
-  // Default sliders from mode config
+  // Initialize state from URL search params (Enhancement 2: URL state sync)
+  const initMode = (searchParams.get("mode") as ScannerMode) || "wave2";
+  const initModeConfig = getModeConfig(initMode);
+  const [htf, setHtf] = useState<string>(searchParams.get("htf") || "Monthly");
+  const [ltf, setLtf] = useState<string>(searchParams.get("ltf") || "Daily");
+  const [universe, setUniverse] = useState<string>(searchParams.get("universe") || "SP500");
+  const [mode, setMode] = useState<ScannerMode>(initMode);
+
+  // Default sliders from mode config, with URL override
   const modeConfig = getModeConfig(mode);
-  const [minDecline, setMinDecline] = useState(modeConfig.defaults.minDecline);
-  const [minMonths, setMinMonths] = useState(modeConfig.defaults.minMonths);
-  const [minRecovery, setMinRecovery] = useState(modeConfig.defaults.minRecovery);
+  const [minDecline, setMinDecline] = useState(
+    searchParams.has("minDecline") ? Number(searchParams.get("minDecline")) : initModeConfig.defaults.minDecline
+  );
+  const [minMonths, setMinMonths] = useState(
+    searchParams.has("minMonths") ? Number(searchParams.get("minMonths")) : initModeConfig.defaults.minMonths
+  );
+  const [minRecovery, setMinRecovery] = useState(
+    searchParams.has("minRecovery") ? Number(searchParams.get("minRecovery")) : initModeConfig.defaults.minRecovery
+  );
 
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState("");
@@ -201,9 +213,9 @@ function EWScannerPage() {
     return computeReliabilityScore(deepCandidate);
   }, [deepCandidate]);
 
-  const [sortBy, setSortBy] = useState<SortKey>("score");
-  const [groupBy, setGroupBy] = useState<GroupKey>("none");
-  const [viewMode, setViewMode] = useState<"detailed" | "compact">("detailed");
+  const [sortBy, setSortBy] = useState<SortKey>((searchParams.get("sortBy") as SortKey) || "score");
+  const [groupBy, setGroupBy] = useState<GroupKey>((searchParams.get("groupBy") as GroupKey) || "none");
+  const [viewMode, setViewMode] = useState<"detailed" | "compact">((searchParams.get("viewMode") as "detailed" | "compact") || "detailed");
 
   const [savedScans, setSavedScans] = useState<SavedScan[]>([]);
   const [showSaved, setShowSaved] = useState(false);
@@ -213,8 +225,43 @@ function EWScannerPage() {
   const [showAlertConfig, setShowAlertConfig] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
+  // Deep analysis phases
+  const [deepPhase, setDeepPhase] = useState<string>("Analyzing...");
+
+  // Progress bar state for scan
+  const [scannedCount, setScannedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+
   // Collapsible left panel sections (stores collapsed section keys)
-  const { collapsed, toggleSection } = useCollapsibleSections();
+  const { collapsed, toggleSection } = useCollapsibleSections(undefined, "ew-main");
+
+  // Debounced URL write-back (Enhancement 2)
+  const debouncedMode = useDebounce(mode, 300);
+  const debouncedUniverse = useDebounce(universe, 300);
+  const debouncedHtf = useDebounce(htf, 300);
+  const debouncedLtf = useDebounce(ltf, 300);
+  const debouncedSortBy = useDebounce(sortBy, 300);
+  const debouncedGroupBy = useDebounce(groupBy, 300);
+  const debouncedViewMode = useDebounce(viewMode, 300);
+
+  useEffect(() => {
+    // Don't update URL if we're loading a saved scan
+    if (searchParams.has("loadScan")) return;
+    const params = new URLSearchParams();
+    const defaults = getModeConfig(debouncedMode).defaults;
+    if (debouncedMode !== "wave2") params.set("mode", debouncedMode);
+    if (debouncedUniverse !== "SP500") params.set("universe", debouncedUniverse);
+    if (debouncedHtf !== "Monthly") params.set("htf", debouncedHtf);
+    if (debouncedLtf !== "Daily") params.set("ltf", debouncedLtf);
+    if (debouncedDecline !== defaults.minDecline) params.set("minDecline", String(debouncedDecline));
+    if (debouncedMonths !== defaults.minMonths) params.set("minMonths", String(debouncedMonths));
+    if (debouncedRecovery !== defaults.minRecovery) params.set("minRecovery", String(debouncedRecovery));
+    if (debouncedSortBy !== "score") params.set("sortBy", debouncedSortBy);
+    if (debouncedGroupBy !== "none") params.set("groupBy", debouncedGroupBy);
+    if (debouncedViewMode !== "detailed") params.set("viewMode", debouncedViewMode);
+    const qs = params.toString();
+    router.replace(qs ? `/?${qs}` : "/", { scroll: false });
+  }, [debouncedMode, debouncedUniverse, debouncedHtf, debouncedLtf, debouncedDecline, debouncedMonths, debouncedRecovery, debouncedSortBy, debouncedGroupBy, debouncedViewMode, searchParams, router]);
 
   // Hit rates from Supabase
   const [hitRates, setHitRates] = useState<HitRateEntry[]>([]);
@@ -440,6 +487,7 @@ function EWScannerPage() {
     setScanning(true);
     setResults([]);
     setLabels({});
+    setScannedCount(0);
 
     // Resolve tickers from preset or custom universe
     let tickers: { symbol: string; name: string; sector?: string }[];
@@ -457,8 +505,10 @@ function EWScannerPage() {
       tickers = UNIVERSES[universe as UniverseKey] ?? [];
     }
     const total = tickers.length;
+    setTotalCount(total);
     const quotes: EnrichedQuoteInput[] = [];
     let fetchFailures = 0;
+    let batchesSinceLastUpdate = 0;
 
     for (let i = 0; i < total; i += BATCH_SIZE) {
       const batch = tickers.slice(i, i + BATCH_SIZE);
@@ -466,6 +516,7 @@ function EWScannerPage() {
       const failRate = fetched > 0 ? fetchFailures / fetched : 0;
       const failWarning = failRate > 0.25 ? ` \u26a0 ${Math.round(failRate * 100)}% failing` : "";
       setProgress(`Fetching ${fetched}/${total}...${failWarning}`);
+      setScannedCount(fetched);
 
       const settled = await Promise.allSettled(
         batch.map(async (t) => {
@@ -506,6 +557,19 @@ function EWScannerPage() {
         }
       }
 
+      // Show partial results every 3 batches (30 tickers)
+      batchesSinceLastUpdate++;
+      if (batchesSinceLastUpdate >= 3 && quotes.length > 0) {
+        batchesSinceLastUpdate = 0;
+        const partial = scoreBatchEnhanced(quotes, {
+          minDecline,
+          minDuration: minMonths,
+          minRecovery,
+          mode,
+        });
+        setResults(partial);
+      }
+
       if (i + BATCH_SIZE < total) {
         await new Promise((r) => setTimeout(r, BATCH_DELAY));
       }
@@ -536,45 +600,44 @@ function EWScannerPage() {
 
     if (topForMtf.length > 0) {
       setProgress(`Running multi-timeframe confirmation for top ${topForMtf.length}...`);
-      for (const c of topForMtf) {
-        try {
-          const mtfRes = await fetch(
-            `/api/quote?ticker=${encodeURIComponent(c.ticker)}&detail=1&mtf=1`,
-            { signal }
-          );
-          if (mtfRes.ok) {
-            const mtfData = await mtfRes.json();
-            if (mtfData.dailySeries && c.waveCount) {
-              const dailySeries = mtfData.dailySeries as PriceSeries;
-              // Find ATH/Low indices in daily data
-              let dAthIdx = 0, dLowIdx = 0, dMax = -Infinity, dMin = Infinity;
-              for (let i = 0; i < dailySeries.high.length; i++) {
-                if (dailySeries.high[i] > dMax) { dMax = dailySeries.high[i]; dAthIdx = i; }
-              }
-              for (let i = dAthIdx; i < dailySeries.low.length; i++) {
-                if (dailySeries.low[i] < dMin) { dMin = dailySeries.low[i]; dLowIdx = i; }
-              }
-              c.mtfConfirmation = confirmMultiTimeframe(c.waveCount, dailySeries, dAthIdx, dLowIdx);
-              // For daily wave count: use global low (not just post-ATH low)
-              // so stocks at/near ATH get a full impulse count from the year's low
-              let dMicroLowIdx = dLowIdx;
-              if (dAthIdx >= dailySeries.high.length * 0.85) {
-                let gMin = Infinity;
-                for (let i = 0; i < dailySeries.low.length; i++) {
-                  if (dailySeries.low[i] < gMin) { gMin = dailySeries.low[i]; dMicroLowIdx = i; }
+      await Promise.allSettled(
+        topForMtf.map(async (c) => {
+          try {
+            const mtfRes = await fetch(
+              `/api/quote?ticker=${encodeURIComponent(c.ticker)}&detail=1&mtf=1`,
+              { signal }
+            );
+            if (mtfRes.ok) {
+              const mtfData = await mtfRes.json();
+              if (mtfData.dailySeries && c.waveCount) {
+                const dailySeries = mtfData.dailySeries as PriceSeries;
+                let dAthIdx = 0, dLowIdx = 0, dMax = -Infinity, dMin = Infinity;
+                for (let i = 0; i < dailySeries.high.length; i++) {
+                  if (dailySeries.high[i] > dMax) { dMax = dailySeries.high[i]; dAthIdx = i; }
+                }
+                for (let i = dAthIdx; i < dailySeries.low.length; i++) {
+                  if (dailySeries.low[i] < dMin) { dMin = dailySeries.low[i]; dLowIdx = i; }
+                }
+                c.mtfConfirmation = confirmMultiTimeframe(c.waveCount, dailySeries, dAthIdx, dLowIdx);
+                let dMicroLowIdx = dLowIdx;
+                if (dAthIdx >= dailySeries.high.length * 0.85) {
+                  let gMin = Infinity;
+                  for (let i = 0; i < dailySeries.low.length; i++) {
+                    if (dailySeries.low[i] < gMin) { gMin = dailySeries.low[i]; dMicroLowIdx = i; }
+                  }
+                }
+                const dailyCount = countWaves(dailySeries, dAthIdx, dMicroLowIdx, "intermediate");
+                if (dailyCount) {
+                  c.dailyWaveCount = dailyCount;
+                  c.dailySeries = dailySeries;
                 }
               }
-              const dailyCount = countWaves(dailySeries, dAthIdx, dMicroLowIdx, "intermediate");
-              if (dailyCount) {
-                c.dailyWaveCount = dailyCount;
-                c.dailySeries = dailySeries;
-              }
             }
+          } catch {
+            // MTF is non-critical
           }
-        } catch {
-          // MTF is non-critical
-        }
-      }
+        })
+      );
       // Update results to trigger re-render
       setResults([...scored]);
     }
@@ -673,8 +736,10 @@ function EWScannerPage() {
       setDeepStructured(null);
       setDeepLoading(true);
       setDeepTab("analysis");
+      setDeepPhase("Fetching context...");
 
       try {
+        setDeepPhase("Running analysis...");
         const res = await fetch("/api/deep", {
           method: "POST",
           signal: controller.signal,
@@ -798,11 +863,12 @@ function EWScannerPage() {
           }),
         });
 
+        setDeepPhase("Parsing response...");
         const data = await res.json();
         if (data.billing) {
-          setDeepAnalysis("AI analysis is temporarily unavailable \u2014 API credits need to be replenished. Scanning and scoring still work without AI.");
+          setDeepAnalysis("Error: AI analysis is temporarily unavailable — API credits need to be replenished. Scanning and scoring still work without AI.");
         } else if (!res.ok) {
-          setDeepAnalysis(data.error ?? data.analysis ?? "Analysis unavailable.");
+          setDeepAnalysis(`Error: ${data.error ?? data.analysis ?? "Analysis unavailable."}`);
         } else {
           setDeepAnalysis(data.analysis ?? "No analysis returned.");
           if (data.structured) {
@@ -810,7 +876,7 @@ function EWScannerPage() {
           }
         }
       } catch {
-        setDeepAnalysis("Failed to generate analysis. Please try again.");
+        setDeepAnalysis("Error: Failed to generate analysis. Please try again.");
       }
       setDeepLoading(false);
     },
@@ -852,43 +918,7 @@ function EWScannerPage() {
     setSavedScans(loadScans());
   }, []);
 
-  // --- Helpers ---
-  const scoreTextColor = (n: number) => {
-    if (n >= 0.7) return "text-green-400";
-    if (n >= 0.4) return "text-yellow-400";
-    return "text-red-400";
-  };
-
-  const scoreBgColor = (n: number) => {
-    if (n >= 0.7) return "bg-green-500";
-    if (n >= 0.4) return "bg-yellow-500";
-    return "bg-red-500";
-  };
-
-  const confidenceBadge = (tier: string) => {
-    switch (tier) {
-      case "high":
-        return "bg-green-500/20 text-green-400 border-green-500/30";
-      case "probable":
-        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
-      default:
-        return "bg-gray-500/20 text-gray-400 border-gray-500/30";
-    }
-  };
-
-  const fmtYear = (y: number) => String(y);
-
-  type DotStatus = "pass" | "warn" | "fail";
-  const getDot = (value: number, threshold: number): DotStatus => {
-    if (value >= threshold) return "pass";
-    if (value >= threshold * 0.5) return "warn";
-    return "fail";
-  };
-  const dotCss: Record<DotStatus, string> = {
-    pass: "bg-green-400",
-    warn: "bg-yellow-400",
-    fail: "bg-red-400",
-  };
+  // --- Helpers (defined outside component, see below) ---
 
   return (
     <div className="space-y-6">
@@ -1167,9 +1197,15 @@ function EWScannerPage() {
             </button>
           )}
 
-          {progress && (
+          {scanning && totalCount > 0 ? (
+            <ProgressBar
+              current={scannedCount}
+              total={totalCount}
+              label={progress || undefined}
+            />
+          ) : progress ? (
             <p className="text-center text-xs text-[#a0a0a0]">{progress}</p>
-          )}
+          ) : null}
 
           {/* Saved Scans */}
           {savedScans.length > 0 && (
@@ -1653,7 +1689,7 @@ function EWScannerPage() {
         <Dialog.Root open onOpenChange={() => setDeepTicker(null)}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[#2a2a2a] bg-[#1a1a1a] p-6 shadow-xl">
+            <Dialog.Content className="fixed inset-0 z-50 overflow-y-auto border border-[#2a2a2a] bg-[#1a1a1a] p-4 shadow-xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-w-2xl sm:w-full sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:p-6 sm:overflow-y-visible">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Dialog.Title className="text-lg font-bold text-white">
@@ -1751,14 +1787,22 @@ function EWScannerPage() {
                   />
                 </div>
               ) : deepLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-[#5ba3e6]" />
-                  <span className="ml-2 text-sm text-[#a0a0a0]">Analyzing...</span>
+                <div className="flex flex-col items-center justify-center gap-3 py-12">
+                  <div className="flex items-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-[#5ba3e6]" />
+                    <span className="ml-2 text-sm text-[#a0a0a0]">{deepPhase}</span>
+                  </div>
+                  <button
+                    onClick={() => { deepAbort.current?.abort(); setDeepLoading(false); setDeepAnalysis(""); }}
+                    className="rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+                  >
+                    Cancel
+                  </button>
                 </div>
               ) : deepStructured?.primaryCount ? (
                 <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-2">
                   {/* Primary & Alternate counts */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
                       <p className="text-[10px] uppercase tracking-wider text-[#666]">Primary Count</p>
                       <p className="mt-1 text-sm text-[#e6e6e6]">{deepStructured.primaryCount}</p>
@@ -1976,6 +2020,14 @@ function EWScannerPage() {
                   <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#c0c0c0]">
                     {deepAnalysis}
                   </div>
+                  {deepAnalysis.startsWith("Error:") && deepCandidate && (
+                    <button
+                      onClick={() => runDeep(deepCandidate)}
+                      className="mt-3 rounded-md border border-[#2a2a2a] bg-[#262626] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+                    >
+                      Retry Analysis
+                    </button>
+                  )}
                 </div>
               )}
             </Dialog.Content>
@@ -2004,9 +2056,50 @@ function EWScannerPage() {
   );
 }
 
+// ── Helpers (stable refs, outside component) ──
+
+function scoreTextColor(n: number): string {
+  if (n >= 0.7) return "text-green-400";
+  if (n >= 0.4) return "text-yellow-400";
+  return "text-red-400";
+}
+
+function scoreBgColor(n: number): string {
+  if (n >= 0.7) return "bg-green-500";
+  if (n >= 0.4) return "bg-yellow-500";
+  return "bg-red-500";
+}
+
+function confidenceBadge(tier: string): string {
+  switch (tier) {
+    case "high":
+      return "bg-green-500/20 text-green-400 border-green-500/30";
+    case "probable":
+      return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
+    default:
+      return "bg-gray-500/20 text-gray-400 border-gray-500/30";
+  }
+}
+
+function fmtYear(y: number): string {
+  return String(y);
+}
+
+type DotStatus = "pass" | "warn" | "fail";
+function getDot(value: number, threshold: number): DotStatus {
+  if (value >= threshold) return "pass";
+  if (value >= threshold * 0.5) return "warn";
+  return "fail";
+}
+const dotCss: Record<DotStatus, string> = {
+  pass: "bg-green-400",
+  warn: "bg-yellow-400",
+  fail: "bg-red-400",
+};
+
 // ── Sub-components ──
 
-function CandidateCard({
+const CandidateCard = memo(function CandidateCard({
   c,
   idx,
   labels,
@@ -2309,16 +2402,12 @@ function CandidateCard({
       </div>
     </div>
   );
-}
+});
 
 function CompactTable({
   items,
   labels,
   labeling,
-  scoreTextColor,
-  scoreBgColor,
-  confidenceBadge,
-  fmtYear,
   runDeep,
   mode,
 }: {
@@ -2341,211 +2430,286 @@ function CompactTable({
     });
   };
 
+  const tblMatchCount = useMemo(() => items.filter((i) => i.wavePositionMatch).length, [items]);
+
+  // Build flat row array: items + optional wave-position divider
+  const flatRows = useMemo(() => {
+    const rows: ({ type: "divider" } | { type: "item"; c: EnhancedScoredCandidate; idx: number })[] = [];
+    items.forEach((c, idx) => {
+      if (idx === tblMatchCount && tblMatchCount > 0 && tblMatchCount < items.length) {
+        rows.push({ type: "divider" });
+      }
+      rows.push({ type: "item", c, idx });
+    });
+    return rows;
+  }, [items, tblMatchCount]);
+
+  // Virtualize when > 30 items
+  const parentRef = useRef<HTMLDivElement>(null);
+  const useVirtual = items.length > 30;
+
+  const virtualizer = useVirtualizer({
+    count: useVirtual ? flatRows.length : 0,
+    getScrollElement: () => parentRef.current,
+    estimateSize: (i) => {
+      const row = flatRows[i];
+      if (row.type === "divider") return 28;
+      return expanded.has(row.c.ticker) ? 200 : 44;
+    },
+    overscan: 10,
+  });
+
+  const renderRow = (row: typeof flatRows[number]) => {
+    if (row.type === "divider") {
+      return (
+        <tr>
+          <td colSpan={8} className="px-3 py-1.5">
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-purple-500/30" />
+              <span className="text-[10px] text-purple-400/70">Other results</span>
+              <div className="h-px flex-1 bg-purple-500/30" />
+            </div>
+          </td>
+        </tr>
+      );
+    }
+    const { c, idx } = row;
+    const pct = Math.round(c.enhancedNormalized * 100);
+    const isExpanded = expanded.has(c.ticker);
+    return (
+      <Fragment key={c.ticker}>
+        <tr
+          onClick={() => toggleExpand(c.ticker)}
+          className="cursor-pointer border-b border-[#2a2a2a] bg-[#1a1a1a] transition-colors hover:bg-[#222]"
+        >
+          <td className="px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <ChevronRight className={`h-3 w-3 shrink-0 text-[#555] transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+              {c.wavePositionMatch && (
+                <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-purple-500" title="EW wave position match" />
+              )}
+              <span className="font-bold text-white">{c.ticker}</span>
+              <span className="hidden truncate text-[#666] sm:inline">{c.name}</span>
+            </div>
+          </td>
+          <td className="px-2 py-2.5 text-right">
+            <div className="flex items-center justify-end gap-1.5">
+              <div className="h-1.5 w-8 overflow-hidden rounded-full bg-[#262626]">
+                <div
+                  className={`h-full rounded-full ${scoreBgColor(c.enhancedNormalized)}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className={`font-bold ${scoreTextColor(c.enhancedNormalized)}`}>{pct}%</span>
+            </div>
+          </td>
+          <td className="px-2 py-2.5">
+            <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${confidenceBadge(c.confidenceTier)}`}>
+              {c.confidenceTier}
+            </span>
+          </td>
+          <td className="px-2 py-2.5 text-right font-mono text-red-400">{c.declinePct.toFixed(1)}%</td>
+          <td className="hidden px-2 py-2.5 text-right font-mono text-yellow-400 sm:table-cell">{c.monthsDecline.toFixed(0)}mo</td>
+          <td className="hidden px-2 py-2.5 text-right font-mono text-green-400 sm:table-cell">{c.recoveryPct.toFixed(1)}%</td>
+          <td className="max-w-[180px] truncate px-2 py-2.5 text-[#5ba3e6]">
+            {labels[c.ticker] ?? (labeling ? "..." : "")}
+          </td>
+          <td className="px-2 py-2.5 text-right">
+            <button
+              onClick={(e) => { e.stopPropagation(); runDeep(c); }}
+              className="rounded-md border border-[#2a2a2a] bg-[#262626] px-3 py-2 text-xs text-[#a0a0a0] transition-colors hover:border-[#3a3a3a] hover:text-white min-h-[44px] min-w-[44px]"
+            >
+              Deep
+            </button>
+          </td>
+        </tr>
+        {isExpanded && (
+          <tr className="border-b border-[#2a2a2a]">
+            <td colSpan={8} className="bg-[#161616] px-4 py-3">
+              <CompactExpandedRow c={c} />
+            </td>
+          </tr>
+        )}
+      </Fragment>
+    );
+  };
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
+    <div ref={parentRef} className="overflow-x-auto rounded-lg border border-[#2a2a2a]" style={useVirtual ? { maxHeight: "70vh", overflowY: "auto" } : undefined}>
       <table className="w-full text-xs">
-        <thead>
+        <thead className={useVirtual ? "sticky top-0 z-10" : undefined}>
           <tr className="border-b border-[#2a2a2a] bg-[#1a1a1a] text-[9px] uppercase tracking-wider text-[#666]">
             <th className="px-3 py-2 text-left font-medium">Ticker</th>
             <th className="px-2 py-2 text-right font-medium">Score</th>
             <th className="px-2 py-2 text-left font-medium">Confidence</th>
             <th className="px-2 py-2 text-right font-medium">Decline</th>
-            <th className="px-2 py-2 text-right font-medium">Duration</th>
-            <th className="px-2 py-2 text-right font-medium">Recovery</th>
+            <th className="hidden px-2 py-2 text-right font-medium sm:table-cell">Duration</th>
+            <th className="hidden px-2 py-2 text-right font-medium sm:table-cell">Recovery</th>
             <th className="px-2 py-2 text-left font-medium">AI Label</th>
             <th className="px-2 py-2 text-right font-medium"></th>
           </tr>
         </thead>
         <tbody>
-          {(() => {
-            const tblMatchCount = items.filter((i) => i.wavePositionMatch).length;
-            return items.map((c, idx) => {
-            const pct = Math.round(c.enhancedNormalized * 100);
-            const isExpanded = expanded.has(c.ticker);
-            return (
-              <Fragment key={c.ticker}>
-                {idx === tblMatchCount && tblMatchCount > 0 && tblMatchCount < items.length && (
-                  <tr>
-                    <td colSpan={8} className="px-3 py-1.5">
-                      <div className="flex items-center gap-3">
-                        <div className="h-px flex-1 bg-purple-500/30" />
-                        <span className="text-[10px] text-purple-400/70">Other results</span>
-                        <div className="h-px flex-1 bg-purple-500/30" />
-                      </div>
-                    </td>
-                  </tr>
-                )}
-                <tr
-                  onClick={() => toggleExpand(c.ticker)}
-                  className="ew-card-in cursor-pointer border-b border-[#2a2a2a] bg-[#1a1a1a] transition-colors hover:bg-[#222]"
-                  style={{ animationDelay: `${idx * 30}ms` }}
-                >
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <ChevronRight className={`h-3 w-3 shrink-0 text-[#555] transition-transform ${isExpanded ? "rotate-90" : ""}`} />
-                      {c.wavePositionMatch && (
-                        <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-purple-500" title="EW wave position match" />
-                      )}
-                      <span className="font-bold text-white">{c.ticker}</span>
-                      <span className="hidden truncate text-[#666] sm:inline">{c.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <div className="h-1.5 w-8 overflow-hidden rounded-full bg-[#262626]">
-                        <div
-                          className={`h-full rounded-full ${scoreBgColor(c.enhancedNormalized)}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className={`font-bold ${scoreTextColor(c.enhancedNormalized)}`}>{pct}%</span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-2.5">
-                    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${confidenceBadge(c.confidenceTier)}`}>
-                      {c.confidenceTier}
-                    </span>
-                  </td>
-                  <td className="px-2 py-2.5 text-right font-mono text-red-400">{c.declinePct.toFixed(1)}%</td>
-                  <td className="px-2 py-2.5 text-right font-mono text-yellow-400">{c.monthsDecline.toFixed(0)}mo</td>
-                  <td className="px-2 py-2.5 text-right font-mono text-green-400">{c.recoveryPct.toFixed(1)}%</td>
-                  <td className="max-w-[180px] truncate px-2 py-2.5 text-[#5ba3e6]">
-                    {labels[c.ticker] ?? (labeling ? "..." : "")}
-                  </td>
-                  <td className="px-2 py-2.5 text-right">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); runDeep(c); }}
-                      className="rounded-md border border-[#2a2a2a] bg-[#262626] px-2 py-1 text-[10px] text-[#a0a0a0] transition-colors hover:border-[#3a3a3a] hover:text-white"
-                    >
-                      Deep
-                    </button>
-                  </td>
+          {useVirtual ? (
+            <>
+              {virtualizer.getVirtualItems().length > 0 && (
+                <tr style={{ height: virtualizer.getVirtualItems()[0].start }}>
+                  <td colSpan={8} />
                 </tr>
-                {isExpanded && (
-                  <tr className="border-b border-[#2a2a2a]">
-                    <td colSpan={8} className="bg-[#161616] px-4 py-3">
-                      <div className="flex flex-wrap gap-4">
-                        {/* Left: analysis details */}
-                        <div className="min-w-[200px] flex-1 space-y-1.5 text-xs">
-                          {c.fibAnalysis && (
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-block h-2 w-2 rounded-full ${c.fibAnalysis.withinGoldenZone ? "bg-green-400" : "bg-yellow-400"}`} />
-                              <span className="text-[#c0c0c0]">Fib:</span>
-                              <span className="text-[#a0a0a0]">{c.fibAnalysis.depthLabel}</span>
-                            </div>
-                          )}
-                          {c.volumeAnalysis && (
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-block h-2 w-2 rounded-full ${c.volumeAnalysis.confirmation ? "bg-green-400" : "bg-yellow-400"}`} />
-                              <span className="text-[#c0c0c0]">Volume:</span>
-                              <span className="text-[#a0a0a0]">{c.volumeAnalysis.volumeTrend}</span>
-                            </div>
-                          )}
-                          {c.structureAnalysis && (
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-block h-2 w-2 rounded-full ${c.structureAnalysis.classification === "impulsive" ? "bg-green-400" : "bg-yellow-400"}`} />
-                              <span className="text-[#c0c0c0]">Structure:</span>
-                              <span className="text-[#a0a0a0]">{c.structureAnalysis.classification} ({c.structureAnalysis.swingCount} swings)</span>
-                            </div>
-                          )}
-                          {c.waveCount && (
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-block h-2 w-2 rounded-full ${c.waveCount.isValid && c.waveCount.score >= 50 ? "bg-green-400" : "bg-yellow-400"}`} />
-                              <span className="text-[#c0c0c0]">Waves:</span>
-                              <span className="text-[#a0a0a0]">{c.waveCount.waves.map((w) => w.label).join("-")} ({c.waveCount.score}/100)</span>
-                            </div>
-                          )}
-                          {(() => {
-                            const tgts: { label: string; price: number }[] = [];
-                            if (c.fibAnalysis?.extensions) {
-                              for (const e of c.fibAnalysis.extensions) {
-                                if (e.price > c.current * 1.005) tgts.push({ label: e.label, price: e.price });
-                              }
-                            }
-                            if (c.waveCount) {
-                              const wInfo = getWaveStatusInfo(c.waveCount, c.current);
-                              for (const t of wInfo.targets) {
-                                if (t.price > c.current * 1.005) tgts.push(t);
-                              }
-                            }
-                            {
-                              const ath = c.trueAth ?? c.ath;
-                              const lo = c.trueLow ?? c.low;
-                              const rng = ath - lo;
-                              if (rng > 0) {
-                                for (const [r, lbl] of [[0.382, "38.2%"], [0.5, "50%"], [0.618, "61.8%"]] as const) {
-                                  const p = lo + rng * r;
-                                  if (p > c.current * 1.005) tgts.push({ label: `${lbl} retracement`, price: Math.round(p * 100) / 100 });
-                                }
-                              }
-                            }
-                            tgts.sort((a, b) => a.price - b.price);
-                            const uq = tgts.filter((t, i) =>
-                              !tgts.slice(0, i).some((u) => Math.abs(u.price - t.price) / t.price < 0.005)
-                            );
-                            const n3 = uq.slice(0, 3);
-                            if (n3.length === 0) return null;
-                            return (
-                              <div className="flex items-center gap-2">
-                                <span className="inline-block h-2 w-2 rounded-full bg-green-400" />
-                                <span className="text-[#a0a0a0]">
-                                  {n3.map((t, i) => (
-                                    <span key={i}>
-                                      {i > 0 && " → "}
-                                      <span className="text-[#c0c0c0]">T{i + 1}:</span>{" "}
-                                      <span className={`font-mono ${i < 2 ? "text-green-400" : "text-green-400/60"}`}>${t.price.toFixed(2)}</span>
-                                      <span className="text-[#666] ml-0.5">({t.label})</span>
-                                    </span>
-                                  ))}
-                                </span>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                        {/* Center: prices */}
-                        <div className="flex gap-4 text-center text-xs">
-                          <div>
-                            <p className="text-[#666]">ATH</p>
-                            <p className="font-mono font-medium text-[#e6e6e6]">${c.ath.toFixed(2)}</p>
-                            <p className="text-[10px] text-[#555]">{fmtYear(c.athYear)}</p>
-                          </div>
-                          <div>
-                            <p className="text-[#666]">Low</p>
-                            <p className="font-mono font-medium text-red-400">${c.low.toFixed(2)}</p>
-                            <p className="text-[10px] text-[#555]">{fmtYear(c.lowYear)}</p>
-                          </div>
-                          <div>
-                            <p className="text-[#666]">Current</p>
-                            <p className="font-mono font-medium text-green-400">${c.current.toFixed(2)}</p>
-                          </div>
-                        </div>
-                        {/* Right: sparkline + fib bar */}
-                        <div className="flex flex-col items-center gap-1">
-                          {c.series && (
-                            <EWSparkline
-                              series={c.series}
-                              athIdx={c.athIdx}
-                              lowIdx={c.lowIdx}
-                              fibLevels={c.fibAnalysis?.levels}
-                              waveLabels={c.waveCount?.waves}
-                              width={160}
-                              height={40}
-                            />
-                          )}
-                          {c.fibAnalysis && (
-                            <EWFibBar retracementDepth={c.fibAnalysis.retracementDepth} extensions={c.fibAnalysis.extensions} width={160} height={18} />
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
+              )}
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const row = flatRows[virtualRow.index];
+                return (
+                  <Fragment key={virtualRow.key}>
+                    {renderRow(row)}
+                  </Fragment>
+                );
+              })}
+              {virtualizer.getVirtualItems().length > 0 && (
+                <tr style={{ height: virtualizer.getTotalSize() - (virtualizer.getVirtualItems().at(-1)?.end ?? 0) }}>
+                  <td colSpan={8} />
+                </tr>
+              )}
+            </>
+          ) : (
+            flatRows.map((row, i) => (
+              <Fragment key={row.type === "divider" ? `div-${i}` : row.c.ticker}>
+                {renderRow(row)}
               </Fragment>
-            );
-          });
-          })()}
+            ))
+          )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** Expanded row details for CompactTable — separated for clarity. */
+function CompactExpandedRow({ c }: { c: EnhancedScoredCandidate }) {
+  return (
+    <div className="flex flex-wrap gap-4">
+      {/* Left: analysis details */}
+      <div className="min-w-[200px] flex-1 space-y-1.5 text-xs">
+        {c.fibAnalysis && (
+          <div className="flex items-center gap-2">
+            <span className={`inline-block h-2 w-2 rounded-full ${c.fibAnalysis.withinGoldenZone ? "bg-green-400" : "bg-yellow-400"}`} />
+            <span className="text-[#c0c0c0]">Fib:</span>
+            <span className="text-[#a0a0a0]">{c.fibAnalysis.depthLabel}</span>
+          </div>
+        )}
+        {c.volumeAnalysis && (
+          <div className="flex items-center gap-2">
+            <span className={`inline-block h-2 w-2 rounded-full ${c.volumeAnalysis.confirmation ? "bg-green-400" : "bg-yellow-400"}`} />
+            <span className="text-[#c0c0c0]">Volume:</span>
+            <span className="text-[#a0a0a0]">{c.volumeAnalysis.volumeTrend}</span>
+          </div>
+        )}
+        {c.structureAnalysis && (
+          <div className="flex items-center gap-2">
+            <span className={`inline-block h-2 w-2 rounded-full ${c.structureAnalysis.classification === "impulsive" ? "bg-green-400" : "bg-yellow-400"}`} />
+            <span className="text-[#c0c0c0]">Structure:</span>
+            <span className="text-[#a0a0a0]">{c.structureAnalysis.classification} ({c.structureAnalysis.swingCount} swings)</span>
+          </div>
+        )}
+        {c.waveCount && (
+          <div className="flex items-center gap-2">
+            <span className={`inline-block h-2 w-2 rounded-full ${c.waveCount.isValid && c.waveCount.score >= 50 ? "bg-green-400" : "bg-yellow-400"}`} />
+            <span className="text-[#c0c0c0]">Waves:</span>
+            <span className="text-[#a0a0a0]">{c.waveCount.waves.map((w) => w.label).join("-")} ({c.waveCount.score}/100)</span>
+          </div>
+        )}
+        {/* Duration & Recovery (visible here on mobile since columns are hidden) */}
+        <div className="flex items-center gap-2 sm:hidden">
+          <span className="inline-block h-2 w-2 rounded-full bg-yellow-400" />
+          <span className="text-[#c0c0c0]">Duration:</span>
+          <span className="text-[#a0a0a0]">{c.monthsDecline.toFixed(0)}mo</span>
+        </div>
+        <div className="flex items-center gap-2 sm:hidden">
+          <span className="inline-block h-2 w-2 rounded-full bg-green-400" />
+          <span className="text-[#c0c0c0]">Recovery:</span>
+          <span className="text-[#a0a0a0]">{c.recoveryPct.toFixed(1)}%</span>
+        </div>
+        {(() => {
+          const tgts: { label: string; price: number }[] = [];
+          if (c.fibAnalysis?.extensions) {
+            for (const e of c.fibAnalysis.extensions) {
+              if (e.price > c.current * 1.005) tgts.push({ label: e.label, price: e.price });
+            }
+          }
+          if (c.waveCount) {
+            const wInfo = getWaveStatusInfo(c.waveCount, c.current);
+            for (const t of wInfo.targets) {
+              if (t.price > c.current * 1.005) tgts.push(t);
+            }
+          }
+          {
+            const ath = c.trueAth ?? c.ath;
+            const lo = c.trueLow ?? c.low;
+            const rng = ath - lo;
+            if (rng > 0) {
+              for (const [r, lbl] of [[0.382, "38.2%"], [0.5, "50%"], [0.618, "61.8%"]] as const) {
+                const p = lo + rng * r;
+                if (p > c.current * 1.005) tgts.push({ label: `${lbl} retracement`, price: Math.round(p * 100) / 100 });
+              }
+            }
+          }
+          tgts.sort((a, b) => a.price - b.price);
+          const uq = tgts.filter((t, i) =>
+            !tgts.slice(0, i).some((u) => Math.abs(u.price - t.price) / t.price < 0.005)
+          );
+          const n3 = uq.slice(0, 3);
+          if (n3.length === 0) return null;
+          return (
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full bg-green-400" />
+              <span className="text-[#a0a0a0]">
+                {n3.map((t, i) => (
+                  <span key={i}>
+                    {i > 0 && " → "}
+                    <span className="text-[#c0c0c0]">T{i + 1}:</span>{" "}
+                    <span className={`font-mono ${i < 2 ? "text-green-400" : "text-green-400/60"}`}>${t.price.toFixed(2)}</span>
+                    <span className="text-[#666] ml-0.5">({t.label})</span>
+                  </span>
+                ))}
+              </span>
+            </div>
+          );
+        })()}
+      </div>
+      {/* Center: prices */}
+      <div className="flex gap-4 text-center text-xs">
+        <div>
+          <p className="text-[#666]">ATH</p>
+          <p className="font-mono font-medium text-[#e6e6e6]">${c.ath.toFixed(2)}</p>
+          <p className="text-[10px] text-[#555]">{fmtYear(c.athYear)}</p>
+        </div>
+        <div>
+          <p className="text-[#666]">Low</p>
+          <p className="font-mono font-medium text-red-400">${c.low.toFixed(2)}</p>
+          <p className="text-[10px] text-[#555]">{fmtYear(c.lowYear)}</p>
+        </div>
+        <div>
+          <p className="text-[#666]">Current</p>
+          <p className="font-mono font-medium text-green-400">${c.current.toFixed(2)}</p>
+        </div>
+      </div>
+      {/* Right: sparkline + fib bar */}
+      <div className="flex flex-col items-center gap-1">
+        {c.series && (
+          <EWSparkline
+            series={c.series}
+            athIdx={c.athIdx}
+            lowIdx={c.lowIdx}
+            fibLevels={c.fibAnalysis?.levels}
+            waveLabels={c.waveCount?.waves}
+            width={160}
+            height={40}
+          />
+        )}
+        {c.fibAnalysis && (
+          <EWFibBar retracementDepth={c.fibAnalysis.retracementDepth} extensions={c.fibAnalysis.extensions} width={160} height={18} />
+        )}
+      </div>
     </div>
   );
 }

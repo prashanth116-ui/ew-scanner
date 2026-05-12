@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense, memo } from "react";
 import {
   Search,
   Loader2,
@@ -41,11 +41,14 @@ import {
 } from "@/data/prerun-universe";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
+import { useSidebarState } from "@/lib/use-sidebar-state";
 import { formatMktCap } from "@/lib/format-utils";
 import { verdictColor, scoreBarGradient, scoreDotColor } from "@/lib/color-utils";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SidebarSection } from "@/components/sidebar-section";
 import { PresetList } from "@/components/preset-list";
+import { ProgressBar } from "@/components/progress-bar";
+import { loadFromCache, saveToCache } from "@/lib/scan-cache";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 2000;
@@ -119,8 +122,8 @@ function PreRunPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // Sidebar collapse
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { collapsed, toggleSection } = useCollapsibleSections();
+  const [sidebarOpen, setSidebarOpen] = useSidebarState("prerun");
+  const { collapsed, toggleSection } = useCollapsibleSections(undefined, "prerun");
 
   // Saved scans
   const [savedScans, setSavedScans] = useState<SavedPreRunScan[]>([]);
@@ -133,10 +136,15 @@ function PreRunPage() {
   // Copy watchlist
   const [copiedToast, setCopiedToast] = useState(false);
 
-  // Seed watchlist on mount
+  // Seed watchlist on mount + load cache
   useEffect(() => {
     seedWatchlistIfEmpty();
     setSavedScans(loadPreRunScans());
+    // Pre-populate from cache (30-min TTL)
+    const cached = loadFromCache<PreRunResult[]>("ew-prerun-scan-v1", 30 * 60 * 1000);
+    if (cached && cached.length > 0) {
+      setRawResults(cached);
+    }
   }, []);
 
   // Cleanup abort on unmount
@@ -274,8 +282,9 @@ function PreRunPage() {
       }
     }
 
-    // Save results to cache
+    // Save results to persistent storage + localStorage cache
     saveScanResults(results);
+    saveToCache("ew-prerun-scan-v1", results);
     setScanning(false);
     setProgress("");
   }, [sectorBucket]);
@@ -722,20 +731,12 @@ function PreRunPage() {
         {/* Progress */}
         {scanning && (
           <div className="mb-4">
-            <div className="flex items-center justify-between text-xs text-[#a0a0a0] mb-1">
-              <span>{progress}{totalCount > 200 && scannedCount > 0 && scannedCount < totalCount ? ` (~${Math.ceil(((totalCount - scannedCount) / BATCH_SIZE) * (BATCH_DELAY / 1000) / 60)}min left)` : ""}</span>
-              <span>
-                {scannedCount}/{totalCount}
-              </span>
-            </div>
-            <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#5ba3e6] rounded-full transition-all duration-300"
-                style={{
-                  width: totalCount > 0 ? `${(scannedCount / totalCount) * 100}%` : "0%",
-                }}
-              />
-            </div>
+            <ProgressBar
+              current={scannedCount}
+              total={totalCount}
+              label={`${progress}${totalCount > 200 && scannedCount > 0 && scannedCount < totalCount ? ` (~${Math.ceil(((totalCount - scannedCount) / BATCH_SIZE) * (BATCH_DELAY / 1000) / 60)}min left)` : ""}`}
+              color="bg-[#10b981]"
+            />
           </div>
         )}
 
@@ -935,7 +936,7 @@ function PreRunPage() {
 
 // -- Result Card Component --
 
-function ResultCard({
+const ResultCard = memo(function ResultCard({
   result,
   index,
   onAddToWatchlist,
@@ -1162,4 +1163,4 @@ function ResultCard({
       </div>
     </div>
   );
-}
+});

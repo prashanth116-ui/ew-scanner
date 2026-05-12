@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         const [ewSettled, squeezeSettled, prerunSettled] = await Promise.allSettled([
           Promise.race([fetchAndScoreEW(ticker), timeout<InternalEWResult | null>(FETCH_TIMEOUT)]),
           Promise.race([fetchAndScoreSqueeze(ticker), timeout<InternalSqueezeResult | null>(FETCH_TIMEOUT)]),
-          fetchAndScorePreRun(ticker),
+          Promise.race([fetchAndScorePreRun(ticker), timeout<InternalPreRunResult | null>(FETCH_TIMEOUT)]),
         ]);
 
         const ewRaw = ewSettled.status === "fulfilled" ? ewSettled.value : null;

@@ -105,7 +105,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(baseResponse);
+    const cacheControl = mtf
+      ? "s-maxage=60, stale-while-revalidate=30"
+      : "s-maxage=300, stale-while-revalidate=60";
+    return NextResponse.json(baseResponse, {
+      headers: { "Cache-Control": cacheControl },
+    });
   } catch (err) {
     logError("api/quote", err, { ticker });
     return NextResponse.json(

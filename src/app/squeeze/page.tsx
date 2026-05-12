@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense, memo } from "react";
 import {
   Search,
   Loader2,
@@ -49,6 +49,7 @@ import { computeSITrend, type SITrendDirection } from "@/lib/squeeze-scoring";
 import { recordSignals, fetchClientHitRates, type HitRateEntry } from "@/lib/signal-client";
 import { useDebounce } from "@/lib/use-debounce";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
+import { useSidebarState } from "@/lib/use-sidebar-state";
 import { formatM, formatNum, formatDate } from "@/lib/format-utils";
 import { tierColor } from "@/lib/color-utils";
 import { ScannerCTA } from "@/components/scanner-cta";
@@ -56,6 +57,8 @@ import { ScoreBar } from "@/components/score-bar";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SidebarSection } from "@/components/sidebar-section";
 import { PresetList } from "@/components/preset-list";
+import { ProgressBar } from "@/components/progress-bar";
+import { loadFromCache, saveToCache } from "@/lib/scan-cache";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 300;
@@ -176,8 +179,8 @@ function SqueezePage() {
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
   // Sidebar collapse (full + sections)
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { collapsed, toggleSection } = useCollapsibleSections();
+  const [sidebarOpen, setSidebarOpen] = useSidebarState("squeeze");
+  const { collapsed, toggleSection } = useCollapsibleSections(undefined, "squeeze");
 
   // Saved scans
   const [savedScans, setSavedScans] = useState<SavedSqueezeScan[]>([]);
@@ -190,10 +193,15 @@ function SqueezePage() {
   // Export / copy watchlist
   const [copiedToast, setCopiedToast] = useState(false);
 
-  // Load saved scans and watchlists on mount
+  // Load saved scans, watchlists, and cached results on mount
   useEffect(() => {
     setSavedScans(loadSqueezeScans());
     setSqueezeWatchlists(loadSqueezeWatchlists());
+    // Pre-populate from cache (30-min TTL)
+    const cached = loadFromCache<SqueezeData[]>("ew-squeeze-scan-v1", 30 * 60 * 1000);
+    if (cached && cached.length > 0) {
+      setRawResults(cached);
+    }
   }, []);
 
   // Cleanup abort on unmount
@@ -358,6 +366,9 @@ function SqueezePage() {
         score: s.squeezeScore,
       }));
     recordSignals(toRecord);
+
+    // Save to cache
+    saveToCache("ew-squeeze-scan-v1", results);
 
     setScanning(false);
     setProgress("");
@@ -918,20 +929,12 @@ function SqueezePage() {
         {/* Progress */}
         {scanning && (
           <div className="mb-4">
-            <div className="flex items-center justify-between text-xs text-[#a0a0a0] mb-1">
-              <span>{progress}</span>
-              <span>
-                {scannedCount}/{totalCount}
-              </span>
-            </div>
-            <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#5ba3e6] rounded-full transition-all duration-300"
-                style={{
-                  width: totalCount > 0 ? `${(scannedCount / totalCount) * 100}%` : "0%",
-                }}
-              />
-            </div>
+            <ProgressBar
+              current={scannedCount}
+              total={totalCount}
+              label={progress || undefined}
+              color="bg-[#5ba3e6]"
+            />
           </div>
         )}
 
@@ -1148,7 +1151,7 @@ function SqueezePage() {
 
 // ── Table Row Component ──
 
-function TableRow({
+const TableRow = memo(function TableRow({
   candidate: c,
   expanded,
   onToggle,
@@ -1372,4 +1375,4 @@ function TableRow({
       )}
     </>
   );
-}
+});
