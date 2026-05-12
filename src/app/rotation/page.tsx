@@ -14,6 +14,10 @@ import {
   Plus,
   Shield,
   LogOut,
+  Copy,
+  Check,
+  FileDown,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import type {
@@ -30,6 +34,7 @@ import type {
   PairSignalData,
   StockCategory,
 } from "@/lib/sector-rotation/rotation-types";
+import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 
 // ── localStorage cache (4-hour TTL) ──
 
@@ -825,7 +830,14 @@ function ActiveRotationCards({
                   {r.event.sectorName}
                 </h3>
                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs text-[#888]">{r.event.etf}</span>
+                  <Link
+                    href={`/sectors?sector=${encodeURIComponent(r.event.etf)}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-[#5ba3e6] hover:text-[#7bb8f0] transition-colors"
+                    title="View in Sector Dashboard"
+                  >
+                    {r.event.etf}
+                  </Link>
                   <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${quadrantBadge(h.quadrant).className}`}>
                     {quadrantBadge(h.quadrant).label}
                   </span>
@@ -1656,6 +1668,126 @@ function RecentlyEndedList({ events }: { events: RotationEvent[] }) {
   );
 }
 
+// ── Sector Heatmap Strip (all 13 sectors at a glance) ──
+
+function heatmapQuadrantBg(q: RRGQuadrant): string {
+  switch (q) {
+    case "LEADING": return "bg-green-500/20 border-green-500/30";
+    case "WEAKENING": return "bg-amber-500/20 border-amber-500/30";
+    case "LAGGING": return "bg-red-500/20 border-red-500/30";
+    case "IMPROVING": return "bg-cyan-500/20 border-cyan-500/30";
+  }
+}
+
+function heatmapQuadrantText(q: RRGQuadrant): string {
+  switch (q) {
+    case "LEADING": return "text-green-400";
+    case "WEAKENING": return "text-amber-400";
+    case "LAGGING": return "text-red-400";
+    case "IMPROVING": return "text-cyan-400";
+  }
+}
+
+function SectorHeatmapStrip({ sectors }: { sectors: SectorRotationScore[] }) {
+  const sorted = useMemo(() =>
+    [...sectors].sort((a, b) => b.compositeScore - a.compositeScore),
+    [sectors]
+  );
+
+  return (
+    <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-xs font-medium text-[#888]">All Sectors — RRG Quadrants</h3>
+        <Link
+          href="/sectors"
+          className="flex items-center gap-1 text-[10px] text-[#5ba3e6] hover:text-[#7bb8f0] transition-colors"
+        >
+          Full Sector Dashboard <ExternalLink className="h-3 w-3" />
+        </Link>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {sorted.map((s) => (
+          <Link
+            key={s.etf}
+            href={`/sectors?sector=${encodeURIComponent(s.etf)}`}
+            className={`rounded border px-2 py-1 text-center transition-colors hover:brightness-125 ${heatmapQuadrantBg(s.quadrant)}`}
+            title={`${s.sector}: ${s.quadrant} — Score ${s.compositeScore.toFixed(0)} — RS ${s.rsRatio.toFixed(1)} / Mom ${s.rsMomentum.toFixed(1)}`}
+          >
+            <div className="text-[10px] font-semibold text-white">{s.etf}</div>
+            <div className={`text-[9px] font-medium ${heatmapQuadrantText(s.quadrant)}`}>
+              {s.compositeScore.toFixed(0)}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Copy/Export Bar for Stock Tables ──
+
+function CopyExportBar({
+  stocks,
+  sectorName,
+}: {
+  stocks: RotationStockPerformance[];
+  sectorName: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  function copyTickers() {
+    const tickers = stocks.map((s) => s.symbol).join(", ");
+    navigator.clipboard.writeText(tickers).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  function exportCsv() {
+    const headers = ["Symbol", "Name", "Start Price", "Current", "% Change", "Above 50MA", "Vol vs Avg", "RS Accel", "Turnaround"];
+    const rows = stocks.map((s) => [
+      s.symbol,
+      s.name,
+      s.priceAtRotationStart.toFixed(2),
+      s.priceNow.toFixed(2),
+      s.performancePct.toFixed(2),
+      s.aboveSma50 ? "Yes" : "No",
+      s.volumeVsAvg.toFixed(2),
+      (s.rsAcceleration ?? 0).toFixed(2),
+      s.isTurnaroundCandidate ? "Yes" : "No",
+    ]);
+    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${sectorName.replace(/\s+/g, "-").toLowerCase()}-rotation-stocks-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={copyTickers}
+        className="flex items-center gap-1 rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-[10px] text-[#888] transition-colors hover:text-white hover:border-[#444]"
+        title="Copy all tickers"
+      >
+        {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+        {copied ? "Copied" : "Copy Tickers"}
+      </button>
+      <button
+        onClick={exportCsv}
+        className="flex items-center gap-1 rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-[10px] text-[#888] transition-colors hover:text-white hover:border-[#444]"
+        title="Export as CSV"
+      >
+        <FileDown className="h-3 w-3" />
+        CSV
+      </button>
+    </div>
+  );
+}
+
 // ── Main Page Component ──
 
 export default function RotationTrackerPage() {
@@ -1663,6 +1795,7 @@ export default function RotationTrackerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSector, setExpandedSector] = useState<string | null>(null);
+  const [heatmapSectors, setHeatmapSectors] = useState<SectorRotationScore[] | null>(null);
 
   const fetchData = useCallback(async (skipCache = false) => {
     setLoading(true);
@@ -1696,10 +1829,23 @@ export default function RotationTrackerPage() {
     }
   }, []);
 
+  // Fetch sector heatmap data (separate API)
+  const fetchHeatmap = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sector-rotation");
+      if (!res.ok) return;
+      const result = await res.json();
+      if (result.sectors) setHeatmapSectors(result.sectors);
+    } catch {
+      // Non-critical — heatmap is supplementary
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    fetchHeatmap();
+  }, [fetchData, fetchHeatmap]);
 
   // Auto-refresh every 10 minutes
   useEffect(() => {
@@ -1727,6 +1873,12 @@ export default function RotationTrackerPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/sectors"
+            className="rounded-md border border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white hover:border-[#444]"
+          >
+            Sectors
+          </Link>
           <Link
             href="/rotation/guide"
             className="rounded-md border border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white hover:border-[#444]"
@@ -1774,6 +1926,13 @@ export default function RotationTrackerPage() {
             </section>
           )}
 
+          {/* Sector Heatmap Strip (all 13 sectors at a glance) */}
+          {heatmapSectors && (
+            <section>
+              <SectorHeatmapStrip sectors={heatmapSectors} />
+            </section>
+          )}
+
           {/* Enhancement #7: Pair Z-Score Bar */}
           {data.pairSignals && (
             <section>
@@ -1809,11 +1968,20 @@ export default function RotationTrackerPage() {
             const as_ = computeActionSignal(lc, conv, ra);
             return (
               <section className="rounded-lg border border-[#2a2a2a] bg-[#111] overflow-hidden">
-                <div className="border-b border-[#2a2a2a] px-4 py-3">
-                  <h2 className="font-semibold text-white">
-                    {expandedDetail.event.sectorName} — Top Stocks Since Rotation
-                    Start ({expandedDetail.event.startDate})
-                  </h2>
+                <div className="border-b border-[#2a2a2a] px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <h2 className="font-semibold text-white">
+                      {expandedDetail.event.sectorName} — Top Stocks Since Rotation
+                      Start ({expandedDetail.event.startDate})
+                    </h2>
+                    <Link
+                      href={`/sectors?sector=${encodeURIComponent(expandedDetail.event.etf)}`}
+                      className="flex items-center gap-1 rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-[10px] text-[#5ba3e6] transition-colors hover:text-[#7bb8f0] hover:border-[#444]"
+                    >
+                      <ExternalLink className="h-3 w-3" /> Sector Dashboard
+                    </Link>
+                  </div>
+                  <CopyExportBar stocks={expandedDetail.stocks} sectorName={expandedDetail.event.sectorName} />
                 </div>
                 <StrategySummaryBar detail={expandedDetail} lifecycle={lc} actionSignal={as_} />
                 <StockPerformanceTable detail={expandedDetail} lifecycle={lc} />

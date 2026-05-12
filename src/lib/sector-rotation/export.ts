@@ -41,7 +41,9 @@ export async function exportSectorsToExcel(
         Score: stock.score.toFixed(1),
         Price: quote?.price?.toFixed(2) ?? "-",
         "SMA50": quote?.sma50?.toFixed(2) ?? "-",
+        "SMA200": quote?.sma200?.toFixed(2) ?? "-",
         "% from SMA50": quote?.pctFromSma50?.toFixed(1) ?? "-",
+        "RS Accel": quote?.rsAccel?.toFixed(2) ?? "-",
         Reasons: stock.reasons.join("; "),
       });
     }

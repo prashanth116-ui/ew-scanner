@@ -36,7 +36,18 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       ...result,
-      regime: regime ?? undefined,
+      regime: regime
+        ? {
+            regime: regime.regime,
+            vix: regime.vix,
+            vixSlope: regime.vixSlope,
+            yield10y: regime.yield10y,
+            dxy: regime.dxy,
+            dxyTrend: regime.dxyTrend,
+            favoredSectors: regime.favoredSectors,
+            avoidSectors: regime.avoidSectors,
+          }
+        : undefined,
     });
   } catch (err) {
     logError("api/sector-rotation", err);

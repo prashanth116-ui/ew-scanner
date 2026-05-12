@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Clock, FileDown, Copy, Check } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Clock, FileDown, Copy, Check, Search, X, ExternalLink, Bell, BellOff, Zap } from "lucide-react";
+import Link from "next/link";
 import type {
   SectorRotationResult,
   SectorRotationScore,
@@ -25,7 +26,6 @@ import { compositeColor, compositeTextColor } from "@/lib/color-utils";
 import { exportSectorsToExcel } from "@/lib/sector-rotation/export";
 
 // ── Color helpers ──
-
 
 function quadrantColor(q: RRGQuadrant): string {
   switch (q) {
@@ -65,7 +65,6 @@ function timeAgo(isoDate: string): { text: string; stale: boolean; veryStale: bo
 function DataAgeBadge({ calculatedAt }: { calculatedAt: string }) {
   const [age, setAge] = useState(() => timeAgo(calculatedAt));
 
-  // Update every minute
   useEffect(() => {
     setAge(timeAgo(calculatedAt));
     const interval = setInterval(() => setAge(timeAgo(calculatedAt)), 60_000);
@@ -101,21 +100,13 @@ function DataAgeBadge({ calculatedAt }: { calculatedAt: string }) {
 type TradingAction = "TRADE" | "BUILD" | "WATCH" | "TRIM" | "AVOID";
 
 function getTradingAction(s: SectorRotationScore): TradingAction {
-  // Best: LEADING with strong composite + positive acceleration
   if (s.quadrant === "LEADING" && s.compositeScore >= 60 && s.acceleration > 0) return "TRADE";
-  // Early entry: IMPROVING with positive acceleration (textbook rotation entry)
   if (s.quadrant === "IMPROVING" && s.acceleration > 0) return "BUILD";
-  // Good: LEADING with high composite (even if accel is turning)
   if (s.quadrant === "LEADING" && s.compositeScore >= 60) return "TRADE";
-  // Decent: LEADING but weak composite — still outperforming SPY
   if (s.quadrant === "LEADING") return "WATCH";
-  // Warning: WEAKENING — money starting to leave
   if (s.quadrant === "WEAKENING") return "TRIM";
-  // Potential: IMPROVING but not yet accelerating
   if (s.quadrant === "IMPROVING") return "WATCH";
-  // Transition signal: LAGGING but acceleration turning positive with decent composite
   if (s.quadrant === "LAGGING" && s.acceleration > 0 && s.compositeScore >= 40) return "WATCH";
-  // Bottom: LAGGING
   return "AVOID";
 }
 
@@ -135,12 +126,14 @@ interface StockInSector {
   ticker: string;
   companyName: string;
   rs20d: number | null;
+  rsAccel: number | null;
   pctFromAth: number | null;
   finalScore: number;
   verdict: string;
   price: number | null;
   aboveSma50: boolean | null;
   volumeVsAvg: number | null;
+  sectorName: string;
 }
 
 function rsColor(rs: number | null): string {
@@ -151,29 +144,64 @@ function rsColor(rs: number | null): string {
   return "text-red-400";
 }
 
-// ── Sector Stock Table ──
+function rsAccelColor(val: number | null): string {
+  if (val === null) return "text-[#666]";
+  if (val > 2) return "text-green-400";
+  if (val > 0) return "text-green-400/70";
+  if (val > -2) return "text-red-400/70";
+  return "text-red-400";
+}
 
-type StockSortKey = "ticker" | "rs20d" | "finalScore" | "volumeVsAvg" | "aboveSma50" | "verdict";
+// ── ETF Return Sparkline (#5) ──
+
+function EtfSparkline({ returns }: { returns: number[] | undefined }) {
+  if (!returns || returns.length < 3) return null;
+  const W = 48;
+  const H = 18;
+  const pad = 1;
+  const min = Math.min(...returns);
+  const max = Math.max(...returns);
+  const range = max - min || 1;
+  const points = returns.map((r, i) => {
+    const x = pad + (i / (returns.length - 1)) * (W - 2 * pad);
+    const y = H - pad - ((r - min) / range) * (H - 2 * pad);
+    return `${x},${y}`;
+  }).join(" ");
+  const cumReturn = returns.reduce((s, r) => s + r, 0);
+  const color = cumReturn >= 0 ? "#4ade80" : "#f87171";
+  return (
+    <svg width={W} height={H} className="inline-block" aria-label="20d return sparkline">
+      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// ── Sector Stock Table (Enhanced #2: RS Accel, #8: export, #14: mobile) ──
+
+type StockSortKey = "ticker" | "rs20d" | "rsAccel" | "finalScore" | "volumeVsAvg" | "aboveSma50" | "verdict";
 type SmaFilter = "all" | "above" | "below";
 type VolFilter = "all" | "above" | "below";
 type VerdictFilter = "all" | "priority" | "keep" | "watch";
+type RsAccelFilter = "all" | "positive" | "negative";
 
 const VERDICT_RANK: Record<string, number> = { "PRIORITY BUY": 0, KEEP: 1, WATCH: 2, DISCARD: 3, "": 4 };
 
-function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
+function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sectorName?: string }) {
   const [sortKey, setSortKey] = useState<StockSortKey>("rs20d");
   const [sortAsc, setSortAsc] = useState(false);
   const [sma50Filter, setSma50Filter] = useState<SmaFilter>("all");
   const [volFilter, setVolFilter] = useState<VolFilter>("all");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
+  const [rsAccelFilter, setRsAccelFilter] = useState<RsAccelFilter>("all");
+  const [tableCopied, setTableCopied] = useState(false);
 
   const handleSort = (key: StockSortKey) => {
     if (sortKey === key) setSortAsc(!sortAsc);
     else { setSortKey(key); setSortAsc(key === "ticker"); }
   };
 
-  const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); };
-  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all";
+  const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); };
+  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all";
 
   const filtered = useMemo(() => {
     let list = [...stocks];
@@ -184,8 +212,10 @@ function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
     if (verdictFilter === "priority") list = list.filter((s) => s.verdict === "PRIORITY BUY");
     else if (verdictFilter === "keep") list = list.filter((s) => s.verdict === "KEEP");
     else if (verdictFilter === "watch") list = list.filter((s) => s.verdict === "WATCH");
+    if (rsAccelFilter === "positive") list = list.filter((s) => (s.rsAccel ?? 0) > 0);
+    else if (rsAccelFilter === "negative") list = list.filter((s) => (s.rsAccel ?? 0) < 0);
     return list;
-  }, [stocks, sma50Filter, volFilter, verdictFilter]);
+  }, [stocks, sma50Filter, volFilter, verdictFilter, rsAccelFilter]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -193,6 +223,7 @@ function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
     switch (sortKey) {
       case "ticker": return list.sort((a, b) => dir * a.ticker.localeCompare(b.ticker));
       case "rs20d": return list.sort((a, b) => dir * ((a.rs20d ?? -999) - (b.rs20d ?? -999)));
+      case "rsAccel": return list.sort((a, b) => dir * ((a.rsAccel ?? -999) - (b.rsAccel ?? -999)));
       case "finalScore": return list.sort((a, b) => dir * (a.finalScore - b.finalScore));
       case "volumeVsAvg": return list.sort((a, b) => dir * ((a.volumeVsAvg ?? -1) - (b.volumeVsAvg ?? -1)));
       case "aboveSma50": return list.sort((a, b) => dir * ((a.aboveSma50 === true ? 1 : a.aboveSma50 === false ? 0 : -1) - (b.aboveSma50 === true ? 1 : b.aboveSma50 === false ? 0 : -1)));
@@ -203,17 +234,38 @@ function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
 
   const sortArrow = (key: StockSortKey) => sortKey === key ? (sortAsc ? " \u25B2" : " \u25BC") : "";
 
+  // #8: Copy filtered tickers
+  const copyTickers = () => {
+    const tickers = sorted.map((s) => s.ticker).join(", ");
+    navigator.clipboard.writeText(tickers).then(() => {
+      setTableCopied(true);
+      setTimeout(() => setTableCopied(false), 2000);
+    });
+  };
+
+  // #8: Export to CSV
+  const exportCsv = () => {
+    const header = "Ticker,Company,RS 20d,RS Accel,>50MA,Vol vs Avg,Score,Verdict";
+    const rows = sorted.map((s) =>
+      [s.ticker, `"${s.companyName}"`, s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.verdict].join(",")
+    );
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${sectorName ?? "sector"}-stocks.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
       {/* Filter bar */}
       <div className="flex items-center gap-2 flex-wrap mb-2 text-xs">
         <label className="flex items-center gap-1 text-[#888]">
           50MA
-          <select
-            value={sma50Filter}
-            onChange={(e) => setSma50Filter(e.target.value as SmaFilter)}
-            className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs"
-          >
+          <select value={sma50Filter} onChange={(e) => setSma50Filter(e.target.value as SmaFilter)} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
             <option value="all">All</option>
             <option value="above">Above</option>
             <option value="below">Below</option>
@@ -221,23 +273,23 @@ function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
         </label>
         <label className="flex items-center gap-1 text-[#888]">
           Volume
-          <select
-            value={volFilter}
-            onChange={(e) => setVolFilter(e.target.value as VolFilter)}
-            className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs"
-          >
+          <select value={volFilter} onChange={(e) => setVolFilter(e.target.value as VolFilter)} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
             <option value="all">All</option>
             <option value="above">Above Avg</option>
             <option value="below">Below Avg</option>
           </select>
         </label>
         <label className="flex items-center gap-1 text-[#888]">
+          RS Accel
+          <select value={rsAccelFilter} onChange={(e) => setRsAccelFilter(e.target.value as RsAccelFilter)} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
+            <option value="all">All</option>
+            <option value="positive">Positive</option>
+            <option value="negative">Negative</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-[#888]">
           Verdict
-          <select
-            value={verdictFilter}
-            onChange={(e) => setVerdictFilter(e.target.value as VerdictFilter)}
-            className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs"
-          >
+          <select value={verdictFilter} onChange={(e) => setVerdictFilter(e.target.value as VerdictFilter)} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
             <option value="all">All</option>
             <option value="priority">Priority</option>
             <option value="keep">Keep</option>
@@ -245,23 +297,32 @@ function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
           </select>
         </label>
         {hasFilters && (
-          <button onClick={resetFilters} className="text-[#5ba3e6] hover:text-white transition-colors">
-            Reset
-          </button>
+          <button onClick={resetFilters} className="text-[#5ba3e6] hover:text-white transition-colors">Reset</button>
         )}
-        <span className="text-[#555] ml-auto">
-          {filtered.length === stocks.length ? `${stocks.length} stocks` : `${filtered.length} of ${stocks.length} stocks`}
-        </span>
+        {/* #8: Copy + Export */}
+        <div className="flex items-center gap-1 ml-auto">
+          <button onClick={copyTickers} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" title="Copy filtered tickers">
+            {tableCopied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+          </button>
+          <button onClick={exportCsv} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" title="Export to CSV">
+            <FileDown className="h-3 w-3" />
+          </button>
+          <span className="text-[#555] ml-1">
+            {filtered.length === stocks.length ? `${stocks.length} stocks` : `${filtered.length} of ${stocks.length}`}
+          </span>
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
+      {/* #14: Desktop table + mobile cards */}
+      {/* Desktop table */}
+      <div className="overflow-x-auto hidden sm:block">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-[#666] border-b border-[#2a2a2a]">
               <th className="text-left py-1.5 pr-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("ticker")}>Ticker{sortArrow("ticker")}</th>
-              <th className="text-left py-1.5 pr-2 font-medium hidden sm:table-cell">Company</th>
+              <th className="text-left py-1.5 pr-2 font-medium hidden md:table-cell">Company</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rs20d")}>RS 20d{sortArrow("rs20d")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rsAccel")}>RS Accel{sortArrow("rsAccel")}</th>
               <th className="text-center py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("aboveSma50")}>&gt;50MA{sortArrow("aboveSma50")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("volumeVsAvg")}>Vol vs Avg{sortArrow("volumeVsAvg")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("finalScore")}>Score{sortArrow("finalScore")}</th>
@@ -270,32 +331,24 @@ function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
           </thead>
           <tbody>
             {sorted.map((s) => {
-              const isTurnaround = s.aboveSma50 === false && (s.rs20d ?? 0) > 0 && (s.volumeVsAvg ?? 0) >= 1.2;
+              // Enhanced turnaround: below 50MA + positive RS + volume >= 1.2x + positive RS accel
+              const isTurnaround = s.aboveSma50 === false && (s.rs20d ?? 0) > 0 && (s.volumeVsAvg ?? 0) >= 1.2 && (s.rsAccel ?? 0) > 0;
               return (
-                <tr
-                  key={s.ticker}
-                  className={`border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors ${isTurnaround ? "border-l-2 border-l-amber-400 bg-amber-500/5" : ""}`}
-                >
+                <tr key={s.ticker} className={`border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors ${isTurnaround ? "border-l-2 border-l-amber-400 bg-amber-500/5" : ""}`}>
                   <td className="py-1.5 pr-2">
                     <div className="flex items-center gap-1.5">
-                      <a
-                        href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium text-white hover:text-[#5ba3e6] transition-colors"
-                      >
-                        {s.ticker}
-                      </a>
+                      <a href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`} target="_blank" rel="noopener noreferrer" className="font-medium text-white hover:text-[#5ba3e6] transition-colors">{s.ticker}</a>
                       {isTurnaround && (
-                        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-400 whitespace-nowrap">
-                          Turnaround
-                        </span>
+                        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-400 whitespace-nowrap">Turnaround</span>
                       )}
                     </div>
                   </td>
-                  <td className="py-1.5 pr-2 text-[#555] truncate max-w-[120px] hidden sm:table-cell">{s.companyName}</td>
+                  <td className="py-1.5 pr-2 text-[#555] truncate max-w-[120px] hidden md:table-cell">{s.companyName}</td>
                   <td className={`py-1.5 px-2 text-right ${rsColor(s.rs20d)}`}>
                     {s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}
+                  </td>
+                  <td className={`py-1.5 px-2 text-right font-mono ${rsAccelColor(s.rsAccel)}`}>
+                    {s.rsAccel !== null ? `${s.rsAccel > 0 ? "+" : ""}${s.rsAccel.toFixed(2)}` : "-"}
                   </td>
                   <td className="py-1.5 px-2 text-center">
                     {s.aboveSma50 === true ? (
@@ -309,9 +362,7 @@ function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
                   <td className={`py-1.5 px-2 text-right ${s.volumeVsAvg !== null && s.volumeVsAvg >= 1.5 ? "text-amber-400" : s.volumeVsAvg !== null && s.volumeVsAvg >= 1.0 ? "text-[#a0a0a0]" : "text-[#555]"}`}>
                     {s.volumeVsAvg !== null ? `${s.volumeVsAvg.toFixed(2)}x` : "-"}
                   </td>
-                  <td className="py-1.5 px-2 text-right text-[#666]">
-                    {s.finalScore > 0 ? s.finalScore : "-"}
-                  </td>
+                  <td className="py-1.5 px-2 text-right text-[#666]">{s.finalScore > 0 ? s.finalScore : "-"}</td>
                   <td className="py-1.5 pl-2">
                     {s.verdict ? (
                       <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
@@ -319,12 +370,8 @@ function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
                         s.verdict === "KEEP" ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" :
                         s.verdict === "WATCH" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
                         "bg-red-500/15 text-red-400 border-red-500/30"
-                      }`}>
-                        {s.verdict}
-                      </span>
-                    ) : (
-                      <span className="text-[#444]">-</span>
-                    )}
+                      }`}>{s.verdict}</span>
+                    ) : <span className="text-[#444]">-</span>}
                   </td>
                 </tr>
               );
@@ -332,8 +379,512 @@ function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
           </tbody>
         </table>
       </div>
+
+      {/* #14: Mobile card layout */}
+      <div className="sm:hidden space-y-2">
+        {sorted.map((s) => {
+          const isTurnaround = s.aboveSma50 === false && (s.rs20d ?? 0) > 0 && (s.volumeVsAvg ?? 0) >= 1.2 && (s.rsAccel ?? 0) > 0;
+          return (
+            <div key={s.ticker} className={`rounded-lg border p-3 ${isTurnaround ? "border-l-2 border-l-amber-400 bg-amber-500/5 border-amber-500/20" : "border-[#2a2a2a] bg-[#141414]"}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <a href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`} target="_blank" rel="noopener noreferrer" className="font-semibold text-white hover:text-[#5ba3e6]">{s.ticker}</a>
+                  {isTurnaround && <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-400">Turnaround</span>}
+                  {s.verdict && <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
+                    s.verdict === "PRIORITY BUY" ? "bg-green-500/15 text-green-400 border-green-500/30" :
+                    s.verdict === "KEEP" ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" :
+                    s.verdict === "WATCH" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
+                    "bg-red-500/15 text-red-400 border-red-500/30"
+                  }`}>{s.verdict}</span>}
+                </div>
+                {s.aboveSma50 === true ? <span className="h-2 w-2 rounded-full bg-green-400" /> : s.aboveSma50 === false ? <span className="h-2 w-2 rounded-full bg-red-400" /> : null}
+              </div>
+              <div className="mt-1 text-[10px] text-[#555]">{s.companyName}</div>
+              <div className="mt-2 grid grid-cols-4 gap-2 text-[11px]">
+                <div><span className="text-[#666]">RS</span> <span className={rsColor(s.rs20d)}>{s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}</span></div>
+                <div><span className="text-[#666]">Accel</span> <span className={rsAccelColor(s.rsAccel)}>{s.rsAccel !== null ? `${s.rsAccel > 0 ? "+" : ""}${s.rsAccel.toFixed(1)}` : "-"}</span></div>
+                <div><span className="text-[#666]">Vol</span> <span className="text-[#a0a0a0]">{s.volumeVsAvg?.toFixed(1) ?? "-"}x</span></div>
+                <div><span className="text-[#666]">Score</span> <span className="text-[#a0a0a0]">{s.finalScore || "-"}</span></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       {sorted.length === 0 && (
         <p className="text-center text-xs text-[#555] py-4">No stocks match current filters</p>
+      )}
+    </div>
+  );
+}
+
+// ── #4: Regime Banner ──
+
+function RegimeBanner({ regime }: { regime: SectorRotationResult["regime"] }) {
+  if (!regime) return null;
+  const regimeColor = regime.regime === "RISK_ON" ? "text-green-400" : regime.regime === "RISK_OFF" ? "text-red-400" : regime.regime === "INFLATIONARY" ? "text-amber-400" : "text-[#888]";
+  const borderColor = regime.regime === "RISK_ON" ? "border-green-500/30" : regime.regime === "RISK_OFF" ? "border-red-500/30" : regime.regime === "INFLATIONARY" ? "border-amber-500/30" : "border-[#333]";
+
+  return (
+    <div className={`rounded-lg border ${borderColor} bg-[#1a1a1a] p-4`}>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div>
+          <span className="text-xs text-[#888]">Regime</span>
+          <div className={`text-sm font-semibold ${regimeColor}`}>{regime.regime.replace("_", " ")}</div>
+        </div>
+        <div>
+          <span className="text-xs text-[#888]">VIX</span>
+          <div className={`text-sm font-medium ${regime.vix > 25 ? "text-red-400" : regime.vix < 18 ? "text-green-400" : "text-amber-400"}`}>
+            {regime.vix.toFixed(1)}
+            <span className="ml-1 text-[10px] text-[#666]">{regime.vixSlope}</span>
+          </div>
+        </div>
+        <div>
+          <span className="text-xs text-[#888]">10Y Yield</span>
+          <div className="text-sm font-medium text-[#ccc]">{regime.yield10y.toFixed(2)}%</div>
+        </div>
+        <div>
+          <span className="text-xs text-[#888]">USD (DXY)</span>
+          <div className="text-sm font-medium text-[#ccc]">
+            {regime.dxy.toFixed(1)}
+            <span className="ml-1 text-[10px] text-[#666]">{regime.dxyTrend}</span>
+          </div>
+        </div>
+        {regime.favoredSectors.length > 0 && (
+          <div>
+            <span className="text-xs text-[#888]">Favored</span>
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {regime.favoredSectors.map((s) => (
+                <span key={s} className="rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] text-green-400">{s}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        {regime.avoidSectors.length > 0 && (
+          <div>
+            <span className="text-xs text-[#888]">Avoid</span>
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {regime.avoidSectors.map((s) => (
+                <span key={s} className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400">{s}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── #3: Pre-Rotation Watchlist ──
+
+function PreRotationWatchlist({ sectors }: { sectors: SectorRotationScore[] }) {
+  const candidates = sectors.filter(
+    (s) => s.quadrant === "LAGGING" && s.acceleration > 0 && s.cmf20 > 0
+  );
+  // Also include LAGGING with acceleration inflection (even if CMF not yet positive)
+  const nearCandidates = sectors.filter(
+    (s) => s.quadrant === "LAGGING" && s.acceleration > 0 && s.cmf20 <= 0 && !candidates.includes(s)
+  );
+  if (candidates.length === 0 && nearCandidates.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4">
+      <h2 className="mb-2 text-base font-semibold text-white flex items-center gap-2">
+        <Zap className="h-4 w-4 text-purple-400" />
+        Rotation Watchlist
+      </h2>
+      <p className="text-xs text-[#888] mb-3">LAGGING sectors with positive acceleration — textbook LAGGING-to-IMPROVING rotation entries</p>
+      <div className="space-y-2">
+        {candidates.map((s) => (
+          <div key={s.sector} className="flex items-center justify-between rounded-lg border border-purple-500/20 bg-[#1a1a1a] px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-purple-400 animate-pulse" />
+              <span className="font-medium text-white">{s.sector}</span>
+              <span className="text-xs text-[#666]">{s.etf}</span>
+              <Link href={`/rotation?sector=${encodeURIComponent(s.sector)}`} className="text-[10px] text-purple-400 hover:text-purple-300">
+                <ExternalLink className="h-3 w-3 inline" />
+              </Link>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <span className="text-green-400">Accel: +{s.acceleration.toFixed(2)}</span>
+              <span className="text-green-400/70">CMF: +{s.cmf20.toFixed(3)}</span>
+              <span className="text-[#888]">{s.compositeScore}/100</span>
+            </div>
+          </div>
+        ))}
+        {nearCandidates.map((s) => (
+          <div key={s.sector} className="flex items-center justify-between rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#555]" />
+              <span className="font-medium text-[#a0a0a0]">{s.sector}</span>
+              <span className="text-xs text-[#666]">{s.etf}</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <span className="text-green-400/70">Accel: +{s.acceleration.toFixed(2)}</span>
+              <span className="text-red-400/70">CMF: {s.cmf20.toFixed(3)}</span>
+              <span className="text-[#555]">Waiting for flow</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── #9: Sector Correlation Matrix ──
+
+function CorrelationMatrix({ correlationMatrix, sectors }: { correlationMatrix?: Record<string, number>; sectors: SectorRotationScore[] }) {
+  if (!correlationMatrix || Object.keys(correlationMatrix).length === 0) return null;
+  const matrix = correlationMatrix;
+  const etfs = sectors.map((s) => s.etf);
+
+  function getCorr(a: string, b: string): number | null {
+    if (a === b) return 1;
+    return matrix[`${a}:${b}`] ?? matrix[`${b}:${a}`] ?? null;
+  }
+
+  function corrColor(c: number | null): string {
+    if (c === null) return "bg-[#1a1a1a]";
+    if (c >= 0.8) return "bg-green-500/40";
+    if (c >= 0.5) return "bg-green-500/20";
+    if (c >= 0.2) return "bg-green-500/10";
+    if (c >= -0.2) return "bg-[#1a1a1a]";
+    if (c >= -0.5) return "bg-red-500/10";
+    if (c >= -0.8) return "bg-red-500/20";
+    return "bg-red-500/40";
+  }
+
+  return (
+    <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+      <h2 className="mb-3 text-base font-semibold text-white">Sector Correlation (20d Returns)</h2>
+      <div className="overflow-x-auto">
+        <table className="text-[9px]">
+          <thead>
+            <tr>
+              <th className="px-1 py-1" />
+              {etfs.map((e) => <th key={e} className="px-1 py-1 text-[#888] font-normal text-center" style={{ writingMode: "vertical-rl" }}>{e}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {etfs.map((row) => (
+              <tr key={row}>
+                <td className="px-1 py-0.5 text-[#888] font-medium whitespace-nowrap">{row}</td>
+                {etfs.map((col) => {
+                  const c = getCorr(row, col);
+                  return (
+                    <td key={col} className={`px-1 py-0.5 text-center ${corrColor(c)}`} title={`${row} vs ${col}: ${c?.toFixed(2) ?? "N/A"}`}>
+                      <span className={c !== null && Math.abs(c) >= 0.8 ? "font-semibold text-white" : "text-[#888]"}>
+                        {c !== null ? c.toFixed(1) : ""}
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[10px] text-[#555]">High correlation ({"\u2265"}0.8) = sectors move together. Low/negative = diversification opportunity.</p>
+    </div>
+  );
+}
+
+// ── #12: Breadth Thrust Indicator ──
+
+function BreadthThrustBanner({ sectors }: { sectors: SectorRotationScore[] }) {
+  // Check if any sector has breadth moving from <30% to >70%
+  // Since we only have current breadth, check for sectors with very high breadth (>70%) that were likely low recently
+  // The acceleration inflection + breadthPct > 70 is a proxy
+  const thrustCandidates = sectors.filter(
+    (s) => s.breadthPct !== null && s.breadthPct >= 70 && s.accelerationInflection
+  );
+  if (thrustCandidates.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-green-500/40 bg-green-500/5 p-4">
+      <h2 className="mb-2 text-sm font-semibold text-green-400 flex items-center gap-2">
+        <Zap className="h-4 w-4" />
+        Breadth Thrust Signal
+      </h2>
+      <p className="text-xs text-[#888] mb-2">Sectors with breadth &gt;70% and momentum inflection — historically one of the strongest bullish signals</p>
+      <div className="flex flex-wrap gap-2">
+        {thrustCandidates.map((s) => (
+          <div key={s.sector} className="rounded-lg border border-green-500/20 bg-[#1a1a1a] px-3 py-1.5">
+            <span className="font-medium text-white">{s.sector}</span>
+            <span className="ml-2 text-xs text-green-400">{s.breadthPct}% breadth</span>
+            <span className="ml-2 text-xs text-green-400/70">+accel</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── #11: Sector Comparison Mode ──
+
+function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#888] hover:text-white hover:border-[#444] transition-colors">
+        Compare Sectors
+      </button>
+    );
+  }
+
+  const toggleSector = (etf: string) => {
+    setSelected((prev) => prev.includes(etf) ? prev.filter((s) => s !== etf) : prev.length < 3 ? [...prev, etf] : prev);
+  };
+
+  const compared = sectors.filter((s) => selected.includes(s.etf));
+  const metrics: { label: string; key: string; format: (s: SectorRotationScore) => string; color?: (s: SectorRotationScore) => string }[] = [
+    { label: "Composite", key: "compositeScore", format: (s) => `${s.compositeScore}`, color: (s) => compositeTextColor(s.compositeScore) },
+    { label: "Quadrant", key: "quadrant", format: (s) => s.quadrant },
+    { label: "Acceleration", key: "acceleration", format: (s) => `${s.acceleration > 0 ? "+" : ""}${s.acceleration.toFixed(2)}`, color: (s) => s.acceleration > 0 ? "text-green-400" : "text-red-400" },
+    { label: "Mansfield RS", key: "mansfieldRS", format: (s) => `${s.mansfieldRS > 0 ? "+" : ""}${s.mansfieldRS.toFixed(2)}`, color: (s) => s.mansfieldRS > 0 ? "text-green-400" : "text-red-400" },
+    { label: "CMF (20d)", key: "cmf20", format: (s) => `${s.cmf20 > 0 ? "+" : ""}${s.cmf20.toFixed(3)}`, color: (s) => s.cmf20 > 0 ? "text-green-400" : "text-red-400" },
+    { label: "Breadth %", key: "breadthPct", format: (s) => s.breadthPct !== null ? `${s.breadthPct}%` : "N/A" },
+    { label: "OBV Trend", key: "obvTrend", format: (s) => s.obvTrend === 1 ? "Accum" : s.obvTrend === -1 ? "Distrib" : "Flat" },
+    { label: "RS-Ratio", key: "rsRatio", format: (s) => s.rsRatio.toFixed(2) },
+    { label: "RS-Momentum", key: "rsMomentum", format: (s) => s.rsMomentum.toFixed(4) },
+  ];
+
+  return (
+    <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base font-semibold text-white">Compare Sectors</h2>
+        <button onClick={() => { setOpen(false); setSelected([]); }} className="text-[#666] hover:text-white"><X className="h-4 w-4" /></button>
+      </div>
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {sectors.map((s) => (
+          <button key={s.etf} onClick={() => toggleSector(s.etf)}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
+              selected.includes(s.etf) ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border-transparent"
+            }`}>{s.etf}</button>
+        ))}
+        <span className="text-[10px] text-[#555] self-center ml-2">Select up to 3</span>
+      </div>
+      {compared.length >= 2 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-[#2a2a2a]">
+                <th className="text-left py-1.5 pr-4 text-[#666]">Metric</th>
+                {compared.map((s) => <th key={s.etf} className="text-center py-1.5 px-3 text-white font-semibold">{s.etf}<div className="text-[10px] text-[#666] font-normal">{s.sector}</div></th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.map((m) => (
+                <tr key={m.key} className="border-b border-[#1a1a1a]">
+                  <td className="py-1.5 pr-4 text-[#888]">{m.label}</td>
+                  {compared.map((s) => (
+                    <td key={s.etf} className={`py-1.5 px-3 text-center ${m.color ? m.color(s) : "text-white"}`}>{m.format(s)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── #10: Alert Configuration ──
+
+interface SectorAlert {
+  id: string;
+  sectorEtf: string;
+  condition: "enters_quadrant" | "acceleration_positive" | "cmf_positive";
+  value?: string;
+  enabled: boolean;
+}
+
+const ALERT_STORAGE_KEY = "ew-sector-alerts-v1";
+
+function loadAlerts(): SectorAlert[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(ALERT_STORAGE_KEY) ?? "[]");
+  } catch { return []; }
+}
+
+function saveAlerts(alerts: SectorAlert[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(ALERT_STORAGE_KEY, JSON.stringify(alerts));
+}
+
+function AlertPanel({ sectors, data }: { sectors: SectorRotationScore[]; data: SectorRotationResult }) {
+  const [alerts, setAlerts] = useState<SectorAlert[]>([]);
+  const [open, setOpen] = useState(false);
+  const [triggeredAlerts, setTriggeredAlerts] = useState<string[]>([]);
+
+  useEffect(() => { setAlerts(loadAlerts()); }, []);
+
+  // Check alerts against current data
+  useEffect(() => {
+    const triggered: string[] = [];
+    for (const alert of alerts) {
+      if (!alert.enabled) continue;
+      const sector = sectors.find((s) => s.etf === alert.sectorEtf);
+      if (!sector) continue;
+      if (alert.condition === "enters_quadrant" && sector.quadrant === alert.value) {
+        triggered.push(`${sector.sector} entered ${alert.value}`);
+      }
+      if (alert.condition === "acceleration_positive" && sector.acceleration > 0) {
+        triggered.push(`${sector.sector} acceleration turned positive`);
+      }
+      if (alert.condition === "cmf_positive" && sector.cmf20 > 0) {
+        triggered.push(`${sector.sector} CMF turned positive`);
+      }
+    }
+    setTriggeredAlerts(triggered);
+  }, [alerts, sectors]);
+
+  const addAlert = (etf: string, condition: SectorAlert["condition"], value?: string) => {
+    const newAlert: SectorAlert = { id: Date.now().toString(), sectorEtf: etf, condition, value, enabled: true };
+    const updated = [...alerts, newAlert];
+    setAlerts(updated);
+    saveAlerts(updated);
+  };
+
+  const removeAlert = (id: string) => {
+    const updated = alerts.filter((a) => a.id !== id);
+    setAlerts(updated);
+    saveAlerts(updated);
+  };
+
+  const toggleAlert = (id: string) => {
+    const updated = alerts.map((a) => a.id === id ? { ...a, enabled: !a.enabled } : a);
+    setAlerts(updated);
+    saveAlerts(updated);
+  };
+
+  return (
+    <>
+      {/* Triggered alerts banner */}
+      {triggeredAlerts.length > 0 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-2">
+          <div className="flex items-center gap-2 text-xs text-amber-400">
+            <Bell className="h-3.5 w-3.5" />
+            <span className="font-medium">Alerts triggered:</span>
+            {triggeredAlerts.map((t, i) => <span key={i} className="text-[#ccc]">{t}</span>)}
+          </div>
+        </div>
+      )}
+
+      {/* Alert config button */}
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white">
+        <Bell className="h-4 w-4" />
+        <span className="hidden sm:inline">Alerts{alerts.length > 0 ? ` (${alerts.length})` : ""}</span>
+      </button>
+
+      {/* Alert config panel */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setOpen(false)}>
+          <div className="mx-4 w-full max-w-md rounded-xl border border-[#2a2a2a] bg-[#111] p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Sector Alerts</h3>
+              <button onClick={() => setOpen(false)} className="text-[#666] hover:text-white"><X className="h-4 w-4" /></button>
+            </div>
+            {/* Existing alerts */}
+            {alerts.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {alerts.map((a) => {
+                  const sector = sectors.find((s) => s.etf === a.sectorEtf);
+                  return (
+                    <div key={a.id} className="flex items-center justify-between rounded border border-[#2a2a2a] px-3 py-2 text-xs">
+                      <span className={a.enabled ? "text-white" : "text-[#555]"}>
+                        {sector?.sector ?? a.sectorEtf}: {a.condition === "enters_quadrant" ? `enters ${a.value}` : a.condition === "acceleration_positive" ? "accel turns +" : "CMF turns +"}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => toggleAlert(a.id)} className="text-[#666] hover:text-white">
+                          {a.enabled ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
+                        </button>
+                        <button onClick={() => removeAlert(a.id)} className="text-[#666] hover:text-red-400"><X className="h-3 w-3" /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Add new alert */}
+            <div className="border-t border-[#2a2a2a] pt-3">
+              <p className="text-xs text-[#888] mb-2">Add alert</p>
+              <div className="space-y-2">
+                {sectors.slice(0, 6).map((s) => (
+                  <div key={s.etf} className="flex items-center gap-2">
+                    <span className="text-xs text-white w-16 truncate">{s.etf}</span>
+                    <button onClick={() => addAlert(s.etf, "enters_quadrant", "IMPROVING")} className="rounded border border-[#333] px-2 py-0.5 text-[10px] text-[#888] hover:text-cyan-400 hover:border-cyan-500/30">IMPROVING</button>
+                    <button onClick={() => addAlert(s.etf, "acceleration_positive")} className="rounded border border-[#333] px-2 py-0.5 text-[10px] text-[#888] hover:text-green-400 hover:border-green-500/30">Accel +</button>
+                    <button onClick={() => addAlert(s.etf, "cmf_positive")} className="rounded border border-[#333] px-2 py-0.5 text-[10px] text-[#888] hover:text-green-400 hover:border-green-500/30">CMF +</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── #6: Global Stock Search ──
+
+function StockSearch({ allStocks }: { allStocks: StockInSector[] }) {
+  const [query, setQuery] = useState("");
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const results = useMemo(() => {
+    if (query.length < 1) return [];
+    const q = query.toUpperCase();
+    return allStocks
+      .filter((s) => s.ticker.includes(q) || s.companyName.toUpperCase().includes(q))
+      .slice(0, 10);
+  }, [query, allStocks]);
+
+  const showResults = focused && results.length > 0;
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-2 rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5">
+        <Search className="h-4 w-4 text-[#666]" />
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setTimeout(() => setFocused(false), 200)}
+          placeholder="Search any stock..."
+          className="bg-transparent text-sm text-white placeholder:text-[#555] outline-none w-32 sm:w-48"
+        />
+        {query && (
+          <button onClick={() => { setQuery(""); inputRef.current?.focus(); }} className="text-[#666] hover:text-white">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      {showResults && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-[#2a2a2a] bg-[#111] py-1 shadow-xl max-h-80 overflow-y-auto">
+          {results.map((s) => (
+            <a key={s.ticker} href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`} target="_blank" rel="noopener noreferrer"
+              className="flex items-center justify-between px-3 py-2 text-xs hover:bg-[#1a1a1a] transition-colors">
+              <div>
+                <span className="font-semibold text-white">{s.ticker}</span>
+                <span className="ml-2 text-[#666]">{s.companyName}</span>
+                <span className="ml-2 rounded-full bg-[#2a2a2a] px-1.5 py-0.5 text-[10px] text-[#888]">{s.sectorName}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={rsColor(s.rs20d)}>{s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : ""}</span>
+                <span className={rsAccelColor(s.rsAccel)}>{s.rsAccel !== null ? `${s.rsAccel > 0 ? "+" : ""}${s.rsAccel.toFixed(1)}` : ""}</span>
+                {s.aboveSma50 === true ? <span className="h-2 w-2 rounded-full bg-green-400" /> : s.aboveSma50 === false ? <span className="h-2 w-2 rounded-full bg-red-400" /> : null}
+              </div>
+            </a>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -346,7 +897,6 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
   const H = 400;
   const PAD = 50;
 
-  // Find axis ranges (include trail points for proper scaling)
   const allRatios: number[] = [];
   const allMoms: number[] = [];
   for (const s of sectors) {
@@ -372,27 +922,18 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[500px]" role="img" aria-label="Relative Rotation Graph">
-      {/* Quadrant backgrounds */}
       <rect x={cx} y={PAD} width={W - PAD - cx} height={cy - PAD} fill="rgba(74,222,128,0.05)" />
       <rect x={PAD} y={PAD} width={cx - PAD} height={cy - PAD} fill="rgba(34,211,238,0.05)" />
       <rect x={PAD} y={cy} width={cx - PAD} height={H - PAD - cy} fill="rgba(248,113,113,0.05)" />
       <rect x={cx} y={cy} width={W - PAD - cx} height={H - PAD - cy} fill="rgba(251,191,36,0.05)" />
-
-      {/* Crosshair */}
       <line x1={cx} y1={PAD} x2={cx} y2={H - PAD} stroke="#333" strokeWidth={1} />
       <line x1={PAD} y1={cy} x2={W - PAD} y2={cy} stroke="#333" strokeWidth={1} />
-
-      {/* Quadrant labels */}
       <text x={W - PAD - 5} y={PAD + 15} textAnchor="end" fill="#4ade80" fontSize={11} opacity={0.5}>LEADING</text>
       <text x={PAD + 5} y={PAD + 15} textAnchor="start" fill="#22d3ee" fontSize={11} opacity={0.5}>IMPROVING</text>
       <text x={PAD + 5} y={H - PAD - 5} textAnchor="start" fill="#f87171" fontSize={11} opacity={0.5}>LAGGING</text>
       <text x={W - PAD - 5} y={H - PAD - 5} textAnchor="end" fill="#fbbf24" fontSize={11} opacity={0.5}>WEAKENING</text>
-
-      {/* Axis labels */}
       <text x={W / 2} y={H - 8} textAnchor="middle" fill="#666" fontSize={10}>RS-Ratio</text>
       <text x={12} y={H / 2} textAnchor="middle" fill="#666" fontSize={10} transform={`rotate(-90,12,${H / 2})`}>RS-Momentum</text>
-
-      {/* Trailing tails — 4-week history showing direction of movement */}
       {sectors.map((s) => {
         const trail = s.rrgTrail;
         if (!trail || trail.length < 2) return null;
@@ -401,62 +942,26 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
         const isHov = hovered === s.sector;
         return (
           <g key={`trail-${s.sector}`}>
-            <polyline
-              points={points}
-              fill="none"
-              stroke={color}
-              strokeWidth={isHov ? 2 : 1.5}
-              opacity={isHov ? 0.8 : 0.3}
-              strokeLinejoin="round"
-            />
-            {/* Small dot at trail start (oldest point) */}
-            <circle
-              cx={scaleX(trail[0].rsRatio)}
-              cy={scaleY(trail[0].rsMomentum)}
-              r={2}
-              fill={color}
-              opacity={isHov ? 0.6 : 0.2}
-            />
+            <polyline points={points} fill="none" stroke={color} strokeWidth={isHov ? 2 : 1.5} opacity={isHov ? 0.8 : 0.3} strokeLinejoin="round" />
+            <circle cx={scaleX(trail[0].rsRatio)} cy={scaleY(trail[0].rsMomentum)} r={2} fill={color} opacity={isHov ? 0.6 : 0.2} />
           </g>
         );
       })}
-
-      {/* Sector dots — labels shown on hover to avoid overlap with 13 sectors */}
       {sectors.map((s) => {
         const x = scaleX(s.rsRatio);
         const y = scaleY(s.rsMomentum);
         const color = quadrantDotColor(s.quadrant);
         const isHov = hovered === s.sector;
-
         return (
-          <g
-            key={s.sector}
-            onMouseEnter={() => setHovered(s.sector)}
-            onMouseLeave={() => setHovered(null)}
-            style={{ cursor: "pointer" }}
-          >
-            <circle
-              cx={x}
-              cy={y}
-              r={isHov ? 7 : 5}
-              fill={color}
-              stroke={isHov ? "#fff" : "none"}
-              strokeWidth={1.5}
-              opacity={isHov ? 1 : 0.85}
-            />
+          <g key={s.sector} onMouseEnter={() => setHovered(s.sector)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
+            <circle cx={x} cy={y} r={isHov ? 7 : 5} fill={color} stroke={isHov ? "#fff" : "none"} strokeWidth={1.5} opacity={isHov ? 1 : 0.85} />
             {isHov ? (
               <>
-                <text x={x} y={y - 12} textAnchor="middle" fill={color} fontSize={11} fontWeight="bold">
-                  {s.etf}
-                </text>
-                <text x={x} y={y + 20} textAnchor="middle" fill="#a0a0a0" fontSize={10}>
-                  {s.sector} ({s.compositeScore}/100)
-                </text>
+                <text x={x} y={y - 12} textAnchor="middle" fill={color} fontSize={11} fontWeight="bold">{s.etf}</text>
+                <text x={x} y={y + 20} textAnchor="middle" fill="#a0a0a0" fontSize={10}>{s.sector} ({s.compositeScore}/100)</text>
               </>
             ) : (
-              <text x={x} y={y - 8} textAnchor="middle" fill={color} fontSize={8} opacity={0.7}>
-                {s.etf}
-              </text>
+              <text x={x} y={y - 8} textAnchor="middle" fill={color} fontSize={8} opacity={0.7}>{s.etf}</text>
             )}
           </g>
         );
@@ -465,137 +970,65 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
   );
 }
 
-// ── Sector Detail Accordion ──
+// ── Sector Detail Accordion (enhanced with #7 cross-linking, #5 sparkline) ──
 
-function SectorDetail({ sector, stocks, prevSnapshot }: { sector: SectorRotationScore; stocks: StockInSector[]; prevSnapshot?: SectorSnapshot | null }) {
+function SectorDetail({ sector, stocks, prevSnapshot, etfReturns }: { sector: SectorRotationScore; stocks: StockInSector[]; prevSnapshot?: SectorSnapshot | null; etfReturns?: number[] }) {
   const [open, setOpen] = useState(false);
 
   return (
     <div className={`border rounded-lg ${sector.stealthAccumulation ? "border-cyan-500/40" : "border-[#2a2a2a]"}`}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg"
-      >
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-lg">{sector.trendArrow}</span>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium text-white truncate">{sector.sector}</span>
               <span className="text-xs text-[#666]">{sector.etf}</span>
-              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${quadrantColor(sector.quadrant)}`}>
-                {sector.quadrant}
-              </span>
-              {(() => {
-                const action = getTradingAction(sector);
-                const badge = actionBadge(action);
-                return (
-                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${badge.className}`}>
-                    {badge.label}
-                  </span>
-                );
-              })()}
-              {sector.stealthAccumulation && (
-                <span className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-400">
-                  STEALTH
-                </span>
-              )}
-              {(sector.dataQuality ?? 100) < 100 && (
-                <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
-                  {sector.dataQuality ?? 100}% data
-                </span>
-              )}
+              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${quadrantColor(sector.quadrant)}`}>{sector.quadrant}</span>
+              {(() => { const action = getTradingAction(sector); const badge = actionBadge(action); return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>; })()}
+              {sector.stealthAccumulation && <span className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-400">STEALTH</span>}
+              {(sector.dataQuality ?? 100) < 100 && <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">{sector.dataQuality ?? 100}% data</span>}
             </div>
-            {/* subsectors display removed — 1:1 sector-to-ETF mapping */}
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          {/* #5: Sparkline */}
+          <EtfSparkline returns={etfReturns} />
+          {/* #7: Link to rotation tracker */}
+          <Link href={`/rotation?sector=${encodeURIComponent(sector.sector)}`} onClick={(e) => e.stopPropagation()} className="text-[#555] hover:text-[#5ba3e6]" title="View in Rotation Tracker">
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
           <span className="text-xs text-[#666]">{stocks.length} stocks</span>
           <span className={`text-lg font-bold ${compositeTextColor(sector.compositeScore)}`}>
             {sector.compositeScore}
             {prevSnapshot && (() => {
               const delta = sector.compositeScore - prevSnapshot.compositeScore;
               if (delta === 0) return null;
-              return (
-                <span className={`ml-1 text-xs font-semibold ${delta > 0 ? "text-green-400" : "text-red-400"}`}>
-                  ({delta > 0 ? "+" : ""}{delta})
-                </span>
-              );
+              return <span className={`ml-1 text-xs font-semibold ${delta > 0 ? "text-green-400" : "text-red-400"}`}>({delta > 0 ? "+" : ""}{delta})</span>;
             })()}
           </span>
           {open ? <ChevronUp className="h-4 w-4 text-[#666]" /> : <ChevronDown className="h-4 w-4 text-[#666]" />}
         </div>
       </button>
-
       {open && (
         <div className="border-t border-[#2a2a2a] px-4 py-3 space-y-4">
-          {/* Sector indicators grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-[#888]">Momentum Composite</span>
-              <span className="text-white">{sector.momentumComposite} <span className="text-[#666]">({sector.momentumPercentile}th %ile)</span></span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">Acceleration</span>
-              <span className={sector.acceleration > 0 ? "text-green-400" : sector.acceleration < 0 ? "text-red-400" : "text-[#a0a0a0]"}>
-                {sector.acceleration > 0 ? "+" : ""}{sector.acceleration}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">Mansfield RS</span>
-              <span className={sector.mansfieldRS > 0 ? "text-green-400" : sector.mansfieldRS < 0 ? "text-red-400" : "text-[#a0a0a0]"}>
-                {sector.mansfieldRS > 0 ? "+" : ""}{sector.mansfieldRS}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">CMF (20d)</span>
-              <span className={sector.cmf20 > 0 ? "text-green-400" : sector.cmf20 < 0 ? "text-red-400" : "text-[#a0a0a0]"}>
-                {sector.cmf20 > 0 ? "+" : ""}{sector.cmf20}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">OBV Trend</span>
-              <span className={sector.obvTrend === 1 ? "text-green-400" : sector.obvTrend === -1 ? "text-red-400" : "text-[#a0a0a0]"}>
-                {sector.obvTrend === 1 ? "Accumulation" : sector.obvTrend === -1 ? "Distribution" : "Flat"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">Breadth (% &gt; 50d SMA)</span>
-              <span className="text-white">{sector.breadthPct !== null ? `${sector.breadthPct}%` : "N/A"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">Unusual Volume</span>
-              <span className={sector.unusualVolume ? "text-amber-400" : "text-[#a0a0a0]"}>
-                {sector.unusualVolume ? "Yes" : "No"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">Insider Buys</span>
-              <span className={sector.aggregateInsiderBuys > 0 ? "text-green-400" : "text-[#a0a0a0]"}>
-                {sector.aggregateInsiderBuys}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">Avg P/C Ratio</span>
-              <span className="text-white">{sector.aggregatePCR !== null ? sector.aggregatePCR : "N/A"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">Earnings Beat %</span>
-              <span className="text-white">{sector.earningsBeatPct}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">Smart Money Score</span>
-              <span className={compositeTextColor(sector.smartMoneyScore)}>{sector.smartMoneyScore}/100</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#888]">RS-Ratio / Momentum</span>
-              <span className="text-white">{sector.rsRatio} / {sector.rsMomentum}</span>
-            </div>
+            <div className="flex justify-between"><span className="text-[#888]">Momentum Composite</span><span className="text-white">{sector.momentumComposite} <span className="text-[#666]">({sector.momentumPercentile}th %ile)</span></span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Acceleration</span><span className={sector.acceleration > 0 ? "text-green-400" : sector.acceleration < 0 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.acceleration > 0 ? "+" : ""}{sector.acceleration}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Mansfield RS</span><span className={sector.mansfieldRS > 0 ? "text-green-400" : sector.mansfieldRS < 0 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.mansfieldRS > 0 ? "+" : ""}{sector.mansfieldRS}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">CMF (20d)</span><span className={sector.cmf20 > 0 ? "text-green-400" : sector.cmf20 < 0 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.cmf20 > 0 ? "+" : ""}{sector.cmf20}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">OBV Trend</span><span className={sector.obvTrend === 1 ? "text-green-400" : sector.obvTrend === -1 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.obvTrend === 1 ? "Accumulation" : sector.obvTrend === -1 ? "Distribution" : "Flat"}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Breadth (% &gt; 50d SMA)</span><span className="text-white">{sector.breadthPct !== null ? `${sector.breadthPct}%` : "N/A"}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Unusual Volume</span><span className={sector.unusualVolume ? "text-amber-400" : "text-[#a0a0a0]"}>{sector.unusualVolume ? "Yes" : "No"}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Insider Buys</span><span className={sector.aggregateInsiderBuys > 0 ? "text-green-400" : "text-[#a0a0a0]"}>{sector.aggregateInsiderBuys}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Avg P/C Ratio</span><span className="text-white">{sector.aggregatePCR !== null ? sector.aggregatePCR : "N/A"}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Earnings Beat %</span><span className="text-white">{sector.earningsBeatPct}%</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Smart Money Score</span><span className={compositeTextColor(sector.smartMoneyScore)}>{sector.smartMoneyScore}/100</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">RS-Ratio / Momentum</span><span className="text-white">{sector.rsRatio} / {sector.rsMomentum}</span></div>
           </div>
-
-          {/* Stock table */}
           {stocks.length > 0 && (
             <div className="border-t border-[#2a2a2a] pt-3">
-              <SectorStockTable stocks={stocks} />
+              <SectorStockTable stocks={stocks} sectorName={sector.sector} />
             </div>
           )}
         </div>
@@ -621,17 +1054,9 @@ export default function SectorRotationPage() {
   const [history, setHistory] = useState<DailySnapshot[]>([]);
   const [copiedToast, setCopiedToast] = useState(false);
 
-  // Load history from localStorage
-  useEffect(() => {
-    setHistory(loadHistory());
-  }, []);
+  useEffect(() => { setHistory(loadHistory()); }, []);
+  useEffect(() => { if (data) setHistory(loadHistory()); }, [data]);
 
-  // Reload history after fresh fetch (data change = potential new snapshot)
-  useEffect(() => {
-    if (data) setHistory(loadHistory());
-  }, [data]);
-
-  // Build comparison lookup: sector name → SectorSnapshot for selected date
   const comparisonMap = useMemo(() => {
     if (!compareDate) return null;
     const snap = getSnapshot(compareDate);
@@ -641,7 +1066,6 @@ export default function SectorRotationPage() {
     return map;
   }, [compareDate]);
 
-  // Comparison summary counts
   const comparisonSummary = useMemo(() => {
     if (!comparisonMap || !data) return null;
     let improved = 0, declined = 0, unchanged = 0;
@@ -656,42 +1080,37 @@ export default function SectorRotationPage() {
     return { improved, declined, unchanged };
   }, [comparisonMap, data]);
 
-  // Load pre-run scan results from localStorage for stock-level data
-  useEffect(() => {
-    setScanResults(loadScanResults());
-  }, []);
+  useEffect(() => { setScanResults(loadScanResults()); }, []);
 
-  // Build stock list per sector: ALL sector-universe stocks, enriched with pre-run + batch quote data
+  // Build stock list per sector with RS Accel (#2)
   const stocksBySector = useMemo(() => {
-    // Index scan results by ticker for fast lookup
     const scanByTicker = new Map<string, (typeof scanResults)[number]>();
-    for (const r of scanResults) {
-      scanByTicker.set(r.data.ticker, r);
-    }
+    for (const r of scanResults) scanByTicker.set(r.data.ticker, r);
 
     const quotes = data?.stockQuotes ?? {};
-
     const map = new Map<string, StockInSector[]>();
     for (const sectorDef of SECTOR_UNIVERSE) {
       const stocks: StockInSector[] = sectorDef.stocks.map((stock) => {
         const preRun = scanByTicker.get(stock.symbol);
         const quote = quotes[stock.symbol];
-        // Prefer pre-run RS, fall back to batch quote pctFromSma50
         const rs20d = preRun?.data.relativeStrength20d ?? quote?.pctFromSma50 ?? null;
         const aboveSma50 = quote?.sma50 != null && quote.sma50 > 0 ? quote.price > quote.sma50 : null;
         const volumeVsAvg = quote?.avgVolume10d != null && quote.avgVolume10d > 0
           ? Math.round((quote.volume / quote.avgVolume10d) * 100) / 100
           : null;
+        const rsAccel = quote?.rsAccel ?? null;
         return {
           ticker: stock.symbol,
           companyName: stock.name,
           rs20d,
+          rsAccel,
           pctFromAth: preRun?.data.pctFromAth ?? null,
           finalScore: preRun?.scores.finalScore ?? 0,
           verdict: preRun?.verdict ?? "",
           price: quote?.price ?? null,
           aboveSma50,
           volumeVsAvg,
+          sectorName: sectorDef.displayName,
         };
       });
       map.set(sectorDef.displayName, stocks);
@@ -699,46 +1118,33 @@ export default function SectorRotationPage() {
     return map;
   }, [scanResults, data]);
 
-  // Sort sectors based on selected mode
+  // #6: Flat list of all stocks for search
+  const allStocks = useMemo(() => {
+    const list: StockInSector[] = [];
+    for (const stocks of stocksBySector.values()) list.push(...stocks);
+    return list;
+  }, [stocksBySector]);
+
   const sortedSectors = useMemo(() => {
     if (!data) return [];
     const sectors = [...data.sectors];
     switch (sortMode) {
-      case "score":
-        return sectors.sort((a, b) => b.compositeScore - a.compositeScore);
-      case "action":
-        return sectors.sort((a, b) => {
-          const diff = ACTION_RANK[getTradingAction(a)] - ACTION_RANK[getTradingAction(b)];
-          return diff !== 0 ? diff : b.compositeScore - a.compositeScore;
-        });
-      case "quadrant":
-        return sectors.sort((a, b) => {
-          const diff = QUADRANT_RANK[a.quadrant] - QUADRANT_RANK[b.quadrant];
-          return diff !== 0 ? diff : b.compositeScore - a.compositeScore;
-        });
-      case "acceleration":
-        return sectors.sort((a, b) => b.acceleration - a.acceleration);
-      case "name":
-        return sectors.sort((a, b) => a.sector.localeCompare(b.sector));
-      default:
-        return sectors;
+      case "score": return sectors.sort((a, b) => b.compositeScore - a.compositeScore);
+      case "action": return sectors.sort((a, b) => { const diff = ACTION_RANK[getTradingAction(a)] - ACTION_RANK[getTradingAction(b)]; return diff !== 0 ? diff : b.compositeScore - a.compositeScore; });
+      case "quadrant": return sectors.sort((a, b) => { const diff = QUADRANT_RANK[a.quadrant] - QUADRANT_RANK[b.quadrant]; return diff !== 0 ? diff : b.compositeScore - a.compositeScore; });
+      case "acceleration": return sectors.sort((a, b) => b.acceleration - a.acceleration);
+      case "name": return sectors.sort((a, b) => a.sector.localeCompare(b.sector));
+      default: return sectors;
     }
   }, [data, sortMode]);
 
   const fetchData = useCallback(async (skipCache = false) => {
     setLoading(true);
     setError(null);
-
-    // Try localStorage cache first
     if (!skipCache) {
       const cached = loadSectorRotation();
-      if (cached) {
-        setData(cached);
-        setLoading(false);
-        return;
-      }
+      if (cached) { setData(cached); setLoading(false); return; }
     }
-
     try {
       const res = await fetch("/api/sector-rotation");
       if (!res.ok) {
@@ -756,40 +1162,20 @@ export default function SectorRotationPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { const interval = setInterval(() => fetchData(true), 10 * 60 * 1000); return () => clearInterval(interval); }, [fetchData]);
 
-  // Auto-refresh every 10 minutes (skip cache to get fresh data)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchData(true);
-    }, 10 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
-
-  const handleExport = useCallback(() => {
-    if (data) exportSectorsToExcel(data);
-  }, [data]);
+  const handleExport = useCallback(() => { if (data) exportSectorsToExcel(data); }, [data]);
 
   const copyWatchlist = useCallback(() => {
     if (!data) return;
-    const tickers = data.topStocksToWatch
-      .flatMap((g) => g.stocks.map((s) => s.ticker))
-      .join(", ");
-    navigator.clipboard.writeText(tickers).then(() => {
-      setCopiedToast(true);
-      setTimeout(() => setCopiedToast(false), 2000);
-    });
+    const tickers = data.topStocksToWatch.flatMap((g) => g.stocks.map((s) => s.ticker)).join(", ");
+    navigator.clipboard.writeText(tickers).then(() => { setCopiedToast(true); setTimeout(() => setCopiedToast(false), 2000); });
   }, [data]);
 
-  // Loading timeout — show retry after 90 seconds
   const [loadingTimeout, setLoadingTimeout] = useState(false);
   useEffect(() => {
-    if (!loading || data) {
-      setLoadingTimeout(false);
-      return;
-    }
+    if (!loading || data) { setLoadingTimeout(false); return; }
     const timer = setTimeout(() => setLoadingTimeout(true), 90_000);
     return () => clearTimeout(timer);
   }, [loading, data]);
@@ -803,12 +1189,7 @@ export default function SectorRotationPage() {
         {loadingTimeout && (
           <div className="mt-6">
             <p className="text-xs text-amber-400">This is taking longer than expected.</p>
-            <button
-              onClick={() => { setLoadingTimeout(false); fetchData(true); }}
-              className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]"
-            >
-              Retry
-            </button>
+            <button onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
           </div>
         )}
       </div>
@@ -819,12 +1200,7 @@ export default function SectorRotationPage() {
     return (
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <p className="text-red-400">Error: {error}</p>
-        <button
-          onClick={() => fetchData(true)}
-          className="mt-4 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]"
-        >
-          Retry
-        </button>
+        <button onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
       </div>
     );
   }
@@ -834,56 +1210,40 @@ export default function SectorRotationPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
+            {/* #7: Cross-page link */}
+            <Link href="/rotation" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
+              Rotation Tracker <ExternalLink className="h-3 w-3 inline ml-0.5" />
+            </Link>
+          </div>
           <div className="mt-1 flex items-center gap-3">
             <DataAgeBadge calculatedAt={data.calculatedAt} />
-            <span className="text-xs text-[#555]">
-              {new Date(data.calculatedAt).toLocaleString()}
-            </span>
-            {data.stockQuotes && (
-              <span className="text-xs text-[#555]">
-                {Object.keys(data.stockQuotes).length} quotes
-              </span>
-            )}
+            <span className="text-xs text-[#555]">{new Date(data.calculatedAt).toLocaleString()}</span>
+            {data.stockQuotes && <span className="text-xs text-[#555]">{Object.keys(data.stockQuotes).length} quotes</span>}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
-          >
-            <FileDown className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
+          {/* #6: Global search */}
+          <StockSearch allStocks={allStocks} />
+          {/* #10: Alerts */}
+          <AlertPanel sectors={data.sectors} data={data} />
+          <button onClick={handleExport} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white">
+            <FileDown className="h-4 w-4" /><span className="hidden sm:inline">Export</span>
           </button>
-          <button
-            onClick={copyWatchlist}
-            className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
-            title="Copy all top stock tickers to clipboard"
-          >
-            {copiedToast ? (
-              <>
-                <Check className="h-4 w-4 text-green-400" />
-                <span className="text-green-400 hidden sm:inline">Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-4 w-4" />
-                <span className="hidden sm:inline">Copy Tickers</span>
-              </>
-            )}
+          <button onClick={copyWatchlist} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" title="Copy all top stock tickers to clipboard">
+            {copiedToast ? <><Check className="h-4 w-4 text-green-400" /><span className="text-green-400 hidden sm:inline">Copied</span></> : <><Copy className="h-4 w-4" /><span className="hidden sm:inline">Copy Tickers</span></>}
           </button>
-          <button
-            onClick={() => fetchData(true)}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+          <button onClick={() => fetchData(true)} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50">
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </button>
         </div>
       </div>
+
+      {/* #4: Regime Banner */}
+      <RegimeBanner regime={data.regime} />
 
       {/* Panel 1: Rotation Status Banner */}
       <div className={`rounded-xl border p-4 ${data.rotationActive ? "border-green-500/30 bg-green-500/5" : "border-[#2a2a2a] bg-[#141414]"}`}>
@@ -891,78 +1251,47 @@ export default function SectorRotationPage() {
           <div className="flex items-center gap-3">
             <div className={`h-3 w-3 rounded-full ${data.rotationActive ? "bg-green-500 animate-pulse" : "bg-[#555]"}`} />
             <div>
-              <div className="font-semibold text-white">
-                {data.rotationActive ? "Rotation Active" : "No Clear Rotation"}
-              </div>
+              <div className="font-semibold text-white">{data.rotationActive ? "Rotation Active" : "No Clear Rotation"}</div>
               <div className="text-sm text-[#a0a0a0]">{data.rotationSummary}</div>
             </div>
           </div>
           <div className="flex items-center gap-6">
             <div className="text-right">
               <div className="text-xs text-[#666]">Dispersion</div>
-              <div className={`text-lg font-bold ${data.dispersionIndex > 4 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#a0a0a0]"}`}>
-                {data.dispersionIndex}
-              </div>
-              <div className="text-xs text-[#555]">
-                {data.dispersionIndex > 4 ? "High" : data.dispersionIndex > 2 ? "Moderate" : "Low"}
-              </div>
+              <div className={`text-lg font-bold ${data.dispersionIndex > 4 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{data.dispersionIndex}</div>
+              <div className="text-xs text-[#555]">{data.dispersionIndex > 4 ? "High" : data.dispersionIndex > 2 ? "Moderate" : "Low"}</div>
             </div>
             <div className="text-right">
               <div className="text-xs text-[#666]">Sector Spread</div>
-              <div className={`text-lg font-bold ${(data.sectorSpread ?? 0) > 8 ? "text-green-400" : (data.sectorSpread ?? 0) > 4 ? "text-amber-400" : "text-[#a0a0a0]"}`}>
-                {data.sectorSpread ?? 0}%
-              </div>
-              <div className="text-xs text-[#555]">
-                {(data.sectorSpread ?? 0) > 8 ? "Wide" : (data.sectorSpread ?? 0) > 4 ? "Moderate" : "Narrow"}
-              </div>
+              <div className={`text-lg font-bold ${(data.sectorSpread ?? 0) > 8 ? "text-green-400" : (data.sectorSpread ?? 0) > 4 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{data.sectorSpread ?? 0}%</div>
+              <div className="text-xs text-[#555]">{(data.sectorSpread ?? 0) > 8 ? "Wide" : (data.sectorSpread ?? 0) > 4 ? "Moderate" : "Narrow"}</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Panel 2: Sector Heatmap Grid */}
+      {/* #12: Breadth Thrust */}
+      <BreadthThrustBanner sectors={data.sectors} />
+
+      {/* #3: Pre-Rotation Watchlist */}
+      <PreRotationWatchlist sectors={data.sectors} />
+
+      {/* Panel 2: Sector Heatmap Grid (enhanced with #5 sparklines) */}
       <div>
         <div className="mb-3 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-white">Sector Scores</h2>
             <div className="flex items-center gap-1 overflow-x-auto">
               <span className="text-xs text-[#555] shrink-0 mr-1">Sort:</span>
-              {([
-                ["score", "Score"],
-                ["action", "Action"],
-                ["quadrant", "Quadrant"],
-                ["acceleration", "Accel"],
-                ["name", "Name"],
-              ] as [SortMode, string][]).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  onClick={() => setSortMode(mode)}
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    sortMode === mode
-                      ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30"
-                      : "text-[#666] hover:text-[#a0a0a0] border border-transparent"
-                  }`}
-                >
-                  {label}
-                </button>
+              {([["score", "Score"], ["action", "Action"], ["quadrant", "Quadrant"], ["acceleration", "Accel"], ["name", "Name"]] as [SortMode, string][]).map(([mode, label]) => (
+                <button key={mode} onClick={() => setSortMode(mode)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${sortMode === mode ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>{label}</button>
               ))}
             </div>
           </div>
-
-          {/* Comparison date selector */}
           {history.length > 0 && (
             <div className="flex items-center gap-1 overflow-x-auto">
               <span className="text-xs text-[#555] shrink-0 mr-1">Compare:</span>
-              <button
-                onClick={() => setCompareDate(null)}
-                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  compareDate === null
-                    ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30"
-                    : "text-[#666] hover:text-[#a0a0a0] border border-transparent"
-                }`}
-              >
-                None
-              </button>
+              <button onClick={() => setCompareDate(null)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${compareDate === null ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>None</button>
               {history.map((snap) => {
                 const d = new Date(snap.date + "T12:00:00");
                 const daysAgo = Math.round((Date.now() - d.getTime()) / 86_400_000);
@@ -973,29 +1302,14 @@ export default function SectorRotationPage() {
                 else if (daysAgo <= 22) label = "3w ago";
                 else label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
                 return (
-                  <button
-                    key={snap.date}
-                    onClick={() => setCompareDate(snap.date)}
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      compareDate === snap.date
-                        ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-                        : "text-[#666] hover:text-[#a0a0a0] border border-transparent"
-                    }`}
-                    title={snap.date}
-                  >
-                    {label}
-                  </button>
+                  <button key={snap.date} onClick={() => setCompareDate(snap.date)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${compareDate === snap.date ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`} title={snap.date}>{label}</button>
                 );
               })}
             </div>
           )}
-
-          {/* Comparison summary banner */}
           {compareDate && comparisonSummary && (
             <div className="flex items-center gap-2 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-1.5 text-xs text-[#a0a0a0]">
-              <span className="text-purple-400 font-medium">
-                Comparing to {new Date(compareDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-              </span>
+              <span className="text-purple-400 font-medium">Comparing to {new Date(compareDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
               <span>&mdash;</span>
               <span className="text-green-400">{comparisonSummary.improved} improved</span>
               <span className="text-red-400">{comparisonSummary.declined} declined</span>
@@ -1005,53 +1319,30 @@ export default function SectorRotationPage() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {sortedSectors.map((s) => (
-            <div
-              key={s.sector}
-              className={`rounded-lg border p-3 transition-colors ${
-                s.stealthAccumulation
-                  ? "border-cyan-500/40 bg-cyan-500/5"
-                  : "border-[#2a2a2a] bg-[#141414]"
-              }`}
-            >
+            <div key={s.sector} className={`rounded-lg border p-3 transition-colors ${s.stealthAccumulation ? "border-cyan-500/40 bg-cyan-500/5" : "border-[#2a2a2a] bg-[#141414]"}`}>
               <div className="flex items-start justify-between gap-1">
                 <div className="min-w-0">
-                  <div className="truncate text-xs font-medium text-white" title={s.sector}>
-                    {s.sector}
+                  <div className="truncate text-xs font-medium text-white" title={s.sector}>{s.sector}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-[#666]">{s.etf}</span>
+                    {/* #5: Sparkline in heatmap card */}
+                    <EtfSparkline returns={data.etfReturns20d?.[s.etf]} />
                   </div>
-                  <div className="text-xs text-[#666]">{s.etf}</div>
                 </div>
                 <span className="text-lg shrink-0">{s.trendArrow}</span>
               </div>
               <div className="mt-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className={compositeTextColor(s.compositeScore)}>{s.compositeScore}</span>
-                  <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${quadrantColor(s.quadrant)}`}>
-                    {s.quadrant}
-                  </span>
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${quadrantColor(s.quadrant)}`}>{s.quadrant}</span>
                 </div>
                 <div className="mt-1 h-1.5 w-full rounded-full bg-[#2a2a2a]">
-                  <div
-                    className={`h-1.5 rounded-full ${compositeColor(s.compositeScore)}`}
-                    style={{ width: `${s.compositeScore}%` }}
-                  />
+                  <div className={`h-1.5 rounded-full ${compositeColor(s.compositeScore)}`} style={{ width: `${s.compositeScore}%` }} />
                 </div>
                 <div className="mt-1.5 flex items-center justify-between">
-                  {(() => {
-                    const action = getTradingAction(s);
-                    const badge = actionBadge(action);
-                    return (
-                      <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>
-                        {badge.label}
-                      </span>
-                    );
-                  })()}
-                  {(s.dataQuality ?? 100) < 100 && (
-                    <span className="text-[10px] text-amber-400/70" title={`${s.dataQuality ?? 100}% of composite factors have real data`}>
-                      {s.dataQuality ?? 100}% data
-                    </span>
-                  )}
+                  {(() => { const action = getTradingAction(s); const badge = actionBadge(action); return <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>{badge.label}</span>; })()}
+                  {(s.dataQuality ?? 100) < 100 && <span className="text-[10px] text-amber-400/70" title={`${s.dataQuality ?? 100}% of composite factors have real data`}>{s.dataQuality ?? 100}% data</span>}
                 </div>
-                {/* Delta indicators when comparison active */}
                 {(() => {
                   const prev = comparisonMap?.get(s.sector);
                   if (!prev) return null;
@@ -1063,21 +1354,9 @@ export default function SectorRotationPage() {
                   if (delta === 0 && !quadChanged && !actionChanged) return null;
                   return (
                     <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                      {delta !== 0 && (
-                        <span className={`text-[10px] font-semibold ${delta > 0 ? "text-green-400" : "text-red-400"}`}>
-                          {delta > 0 ? "+" : ""}{delta}
-                        </span>
-                      )}
-                      {quadChanged && (
-                        <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 text-[9px] text-[#888]">
-                          was {prev.quadrant}
-                        </span>
-                      )}
-                      {actionChanged && (
-                        <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 text-[9px] text-[#888]">
-                          was {prevAction}
-                        </span>
-                      )}
+                      {delta !== 0 && <span className={`text-[10px] font-semibold ${delta > 0 ? "text-green-400" : "text-red-400"}`}>{delta > 0 ? "+" : ""}{delta}</span>}
+                      {quadChanged && <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 text-[9px] text-[#888]">was {prev.quadrant}</span>}
+                      {actionChanged && <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 text-[9px] text-[#888]">was {prevAction}</span>}
                     </div>
                   );
                 })()}
@@ -1089,26 +1368,16 @@ export default function SectorRotationPage() {
 
       {/* Panel 3: RRG + Panel 4: Leading Indicators / Smart Money */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* RRG Chart */}
         <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
           <h2 className="mb-3 text-lg font-semibold text-white">Relative Rotation Graph</h2>
-          <div className="flex justify-center">
-            <RRGChart sectors={data.sectors} />
-          </div>
+          <div className="flex justify-center"><RRGChart sectors={data.sectors} /></div>
         </div>
-
-        {/* Leading Indicators + Smart Money */}
         <div className="space-y-4">
-          {/* Leading Indicators */}
           <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
             <h2 className="mb-3 text-base font-semibold text-white">Leading Indicators</h2>
             {(() => {
-              const withSignals = data.sectors.filter(
-                (s) => s.stealthAccumulation || s.flowPriceDivergence || s.breadthDivergence || s.accelerationInflection
-              );
-              if (withSignals.length === 0) {
-                return <p className="text-sm text-[#666]">No leading indicators detected</p>;
-              }
+              const withSignals = data.sectors.filter((s) => s.stealthAccumulation || s.flowPriceDivergence || s.breadthDivergence || s.accelerationInflection);
+              if (withSignals.length === 0) return <p className="text-sm text-[#666]">No leading indicators detected</p>;
               return (
                 <div className="space-y-2">
                   {withSignals.map((s) => {
@@ -1121,9 +1390,7 @@ export default function SectorRotationPage() {
                         <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${s.stealthAccumulation ? "bg-cyan-400" : "bg-amber-400"}`} />
                         <div>
                           <span className="font-medium text-white">{s.sector}</span>
-                          {s.stealthAccumulation && (
-                            <span className="ml-2 text-xs text-cyan-400">(Stealth)</span>
-                          )}
+                          {s.stealthAccumulation && <span className="ml-2 text-xs text-cyan-400">(Stealth)</span>}
                           <div className="text-xs text-[#888]">{signals.join(", ")}</div>
                         </div>
                       </div>
@@ -1133,8 +1400,6 @@ export default function SectorRotationPage() {
               );
             })()}
           </div>
-
-          {/* Stocks to Watch */}
           <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
             <h2 className="mb-3 text-base font-semibold text-white">Stocks to Watch</h2>
             {data.topStocksToWatch.length === 0 ? (
@@ -1146,11 +1411,7 @@ export default function SectorRotationPage() {
                     <div className="text-xs font-medium text-[#888] mb-1">{sw.sector}</div>
                     <div className="flex flex-wrap gap-2">
                       {sw.stocks.map((stock) => (
-                        <div
-                          key={stock.ticker}
-                          className="rounded-md border border-[#333] bg-[#1a1a1a] px-2.5 py-1.5 text-sm"
-                          title={stock.reasons.join(", ")}
-                        >
+                        <div key={stock.ticker} className="rounded-md border border-[#333] bg-[#1a1a1a] px-2.5 py-1.5 text-sm" title={stock.reasons.join(", ")}>
                           <span className="font-medium text-white">{stock.ticker}</span>
                           <span className="ml-1.5 text-xs text-[#888]">{stock.score}</span>
                         </div>
@@ -1164,17 +1425,21 @@ export default function SectorRotationPage() {
         </div>
       </div>
 
+      {/* #11: Sector Comparison */}
+      <SectorComparison sectors={data.sectors} />
+
+      {/* #9: Correlation Matrix */}
+      <CorrelationMatrix correlationMatrix={data.correlationMatrix} sectors={data.sectors} />
+
       {/* Panel 5: Sector Detail Cards */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-white">Sector Details</h2>
-          {scanResults.length === 0 && (
-            <span className="text-xs text-[#555]">Run a Pre-Run scan to see stock-level data</span>
-          )}
+          {scanResults.length === 0 && <span className="text-xs text-[#555]">Run a Pre-Run scan to see stock-level data</span>}
         </div>
         <div className="space-y-2">
           {sortedSectors.map((s) => (
-            <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} prevSnapshot={comparisonMap?.get(s.sector)} />
+            <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} prevSnapshot={comparisonMap?.get(s.sector)} etfReturns={data.etfReturns20d?.[s.etf]} />
           ))}
         </div>
       </div>
@@ -1187,31 +1452,17 @@ export default function SectorRotationPage() {
             <div className="text-xs font-medium text-[#888] mb-1">XLY / XLP (Risk Appetite)</div>
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold text-white">{data.crossSectorPairs.xlyXlp.ratio}</span>
-              <span className={`text-sm ${
-                data.crossSectorPairs.xlyXlp.trend.includes("Rising") ? "text-green-400" :
-                data.crossSectorPairs.xlyXlp.trend.includes("Falling") ? "text-red-400" : "text-[#888]"
-              }`}>
-                {data.crossSectorPairs.xlyXlp.trend}
-              </span>
+              <span className={`text-sm ${data.crossSectorPairs.xlyXlp.trend.includes("Rising") ? "text-green-400" : data.crossSectorPairs.xlyXlp.trend.includes("Falling") ? "text-red-400" : "text-[#888]"}`}>{data.crossSectorPairs.xlyXlp.trend}</span>
             </div>
-            <p className="mt-1 text-xs text-[#666]">
-              Rising = cyclical rotation (risk-on). Falling = defensive rotation (risk-off).
-            </p>
+            <p className="mt-1 text-xs text-[#666]">Rising = cyclical rotation (risk-on). Falling = defensive rotation (risk-off).</p>
           </div>
           <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
             <div className="text-xs font-medium text-[#888] mb-1">XLK / XLU (Growth vs Defense)</div>
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold text-white">{data.crossSectorPairs.xlkXlu.ratio}</span>
-              <span className={`text-sm ${
-                data.crossSectorPairs.xlkXlu.trend.includes("Rising") ? "text-green-400" :
-                data.crossSectorPairs.xlkXlu.trend.includes("Falling") ? "text-red-400" : "text-[#888]"
-              }`}>
-                {data.crossSectorPairs.xlkXlu.trend}
-              </span>
+              <span className={`text-sm ${data.crossSectorPairs.xlkXlu.trend.includes("Rising") ? "text-green-400" : data.crossSectorPairs.xlkXlu.trend.includes("Falling") ? "text-red-400" : "text-[#888]"}`}>{data.crossSectorPairs.xlkXlu.trend}</span>
             </div>
-            <p className="mt-1 text-xs text-[#666]">
-              Rising = growth favored. Falling = defensive/utilities favored.
-            </p>
+            <p className="mt-1 text-xs text-[#666]">Rising = growth favored. Falling = defensive/utilities favored.</p>
           </div>
         </div>
       </div>

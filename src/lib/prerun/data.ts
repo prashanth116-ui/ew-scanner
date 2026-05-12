@@ -666,6 +666,7 @@ export interface BatchQuote {
   symbol: string;
   price: number;
   sma50: number | null;
+  sma200: number | null;
   volume: number;
   avgVolume10d: number;
 }
@@ -740,6 +741,7 @@ export async function fetchBatchQuotes(
         symbol,
         price: (quote.regularMarketPrice as number) ?? 0,
         sma50: (quote.fiftyDayAverage as number) ?? null,
+        sma200: (quote.twoHundredDayAverage as number) ?? null,
         volume: (quote.regularMarketVolume as number) ?? 0,
         avgVolume10d: (quote.averageDailyVolume10Day as number) ?? 0,
       });
@@ -766,6 +768,7 @@ export async function fetchBatchQuotes(
           symbol,
           price: (quote.regularMarketPrice as number) ?? 0,
           sma50: (quote.fiftyDayAverage as number) ?? null,
+          sma200: (quote.twoHundredDayAverage as number) ?? null,
           volume: (quote.regularMarketVolume as number) ?? 0,
           avgVolume10d: (quote.averageDailyVolume10Day as number) ?? 0,
         });

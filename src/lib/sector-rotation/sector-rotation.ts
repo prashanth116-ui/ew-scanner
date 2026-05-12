@@ -751,12 +751,63 @@ export async function calculateSectorRotation(
   }
 
   // Build compact stock quotes map for client-side RS display
-  const stockQuotes: Record<string, { price: number; sma50: number | null; pctFromSma50: number | null; volume: number; avgVolume10d: number }> = {};
+  const stockQuotes: Record<string, { price: number; sma50: number | null; sma200: number | null; pctFromSma50: number | null; rsAccel: number | null; volume: number; avgVolume10d: number }> = {};
   for (const [symbol, q] of batchQuotes) {
     const pctFromSma50 = q.sma50 != null && q.sma50 > 0
       ? Math.round(((q.price - q.sma50) / q.sma50) * 1000) / 10  // 1 decimal
       : null;
-    stockQuotes[symbol] = { price: q.price, sma50: q.sma50, pctFromSma50, volume: q.volume, avgVolume10d: q.avgVolume10d };
+    // RS Acceleration: difference between distance from 50d SMA vs 200d SMA
+    // Positive = short-term momentum exceeding long-term trend (accelerating)
+    // Negative = short-term momentum lagging long-term trend (decelerating)
+    const pctFromSma200 = q.sma200 != null && q.sma200 > 0
+      ? ((q.price - q.sma200) / q.sma200) * 100
+      : null;
+    const rsAccel = pctFromSma50 != null && pctFromSma200 != null
+      ? Math.round((pctFromSma50 - pctFromSma200) * 100) / 100
+      : null;
+    stockQuotes[symbol] = { price: q.price, sma50: q.sma50, sma200: q.sma200, pctFromSma50, rsAccel, volume: q.volume, avgVolume10d: q.avgVolume10d };
+  }
+
+  // Compute 20d daily returns per sector ETF for sparklines
+  const etfReturns20d: Record<string, number[]> = {};
+  for (const group of sectorGroups) {
+    const chart = charts.get(group.etf);
+    if (!chart || chart.closes.length < 22) continue;
+    const returns: number[] = [];
+    const slice = chart.closes.slice(-21);
+    for (let i = 1; i < slice.length; i++) {
+      returns.push(slice[i - 1] !== 0 ? ((slice[i] - slice[i - 1]) / slice[i - 1]) * 100 : 0);
+    }
+    etfReturns20d[group.etf] = returns;
+  }
+
+  // Compute 20d return correlation matrix between sector ETFs
+  const correlationMatrix: Record<string, number> = {};
+  const etfReturnArrays = sectorGroups
+    .map((g) => ({ etf: g.etf, returns: etfReturns20d[g.etf] }))
+    .filter((e) => e.returns && e.returns.length >= 10);
+
+  for (let i = 0; i < etfReturnArrays.length; i++) {
+    for (let j = i + 1; j < etfReturnArrays.length; j++) {
+      const a = etfReturnArrays[i];
+      const b = etfReturnArrays[j];
+      const len = Math.min(a.returns!.length, b.returns!.length);
+      const ra = a.returns!.slice(-len);
+      const rb = b.returns!.slice(-len);
+      const meanA = ra.reduce((s, v) => s + v, 0) / len;
+      const meanB = rb.reduce((s, v) => s + v, 0) / len;
+      let cov = 0, varA = 0, varB = 0;
+      for (let k = 0; k < len; k++) {
+        const da = ra[k] - meanA;
+        const db = rb[k] - meanB;
+        cov += da * db;
+        varA += da * da;
+        varB += db * db;
+      }
+      const denom = Math.sqrt(varA * varB);
+      const corr = denom !== 0 ? cov / denom : 0;
+      correlationMatrix[`${a.etf}:${b.etf}`] = Math.round(corr * 100) / 100;
+    }
   }
 
   const result: SectorRotationResult = {
@@ -770,6 +821,8 @@ export async function calculateSectorRotation(
     topStocksToWatch,
     stockQuotes,
     correlationBreak,
+    correlationMatrix,
+    etfReturns20d,
   };
 
   cachedResult = { data: result, ts: Date.now() };

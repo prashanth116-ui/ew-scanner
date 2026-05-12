@@ -61,6 +61,21 @@ export interface SectorRotationResult {
     stocks: { ticker: string; score: number; reasons: string[] }[];
   }[];
   /** Per-stock quote data from batch fetch (price vs 50d SMA). */
-  stockQuotes: Record<string, { price: number; sma50: number | null; pctFromSma50: number | null; volume: number; avgVolume10d: number }>;
+  stockQuotes: Record<string, { price: number; sma50: number | null; sma200: number | null; pctFromSma50: number | null; rsAccel: number | null; volume: number; avgVolume10d: number }>;
   correlationBreak: boolean;
+  /** 20d return correlation matrix between sector ETFs (upper triangle, keyed by "ETF1:ETF2") */
+  correlationMatrix?: Record<string, number>;
+  /** 20d daily returns per sector ETF for sparklines (newest last, ~20 values) */
+  etfReturns20d?: Record<string, number[]>;
+  /** Regime data (VIX, 10Y, DXY) */
+  regime?: {
+    regime: "RISK_ON" | "RISK_OFF" | "INFLATIONARY" | "MIXED";
+    vix: number;
+    vixSlope: "rising" | "falling" | "flat";
+    yield10y: number;
+    dxy: number;
+    dxyTrend: "rising" | "falling" | "flat";
+    favoredSectors: string[];
+    avoidSectors: string[];
+  };
 }
