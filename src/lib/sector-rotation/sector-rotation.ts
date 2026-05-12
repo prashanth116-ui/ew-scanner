@@ -751,12 +751,12 @@ export async function calculateSectorRotation(
   }
 
   // Build compact stock quotes map for client-side RS display
-  const stockQuotes: Record<string, { price: number; sma50: number | null; pctFromSma50: number | null }> = {};
+  const stockQuotes: Record<string, { price: number; sma50: number | null; pctFromSma50: number | null; volume: number; avgVolume10d: number }> = {};
   for (const [symbol, q] of batchQuotes) {
     const pctFromSma50 = q.sma50 != null && q.sma50 > 0
       ? Math.round(((q.price - q.sma50) / q.sma50) * 1000) / 10  // 1 decimal
       : null;
-    stockQuotes[symbol] = { price: q.price, sma50: q.sma50, pctFromSma50 };
+    stockQuotes[symbol] = { price: q.price, sma50: q.sma50, pctFromSma50, volume: q.volume, avgVolume10d: q.avgVolume10d };
   }
 
   const result: SectorRotationResult = {

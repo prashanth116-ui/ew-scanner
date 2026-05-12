@@ -138,6 +138,9 @@ interface StockInSector {
   pctFromAth: number | null;
   finalScore: number;
   verdict: string;
+  price: number | null;
+  aboveSma50: boolean | null;
+  volumeVsAvg: number | null;
 }
 
 function rsColor(rs: number | null): string {
@@ -146,6 +149,194 @@ function rsColor(rs: number | null): string {
   if (rs > 0) return "text-green-400/70";
   if (rs > -5) return "text-red-400/70";
   return "text-red-400";
+}
+
+// ── Sector Stock Table ──
+
+type StockSortKey = "ticker" | "rs20d" | "finalScore" | "volumeVsAvg" | "aboveSma50" | "verdict";
+type SmaFilter = "all" | "above" | "below";
+type VolFilter = "all" | "above" | "below";
+type VerdictFilter = "all" | "priority" | "keep" | "watch";
+
+const VERDICT_RANK: Record<string, number> = { "PRIORITY BUY": 0, KEEP: 1, WATCH: 2, DISCARD: 3, "": 4 };
+
+function SectorStockTable({ stocks }: { stocks: StockInSector[] }) {
+  const [sortKey, setSortKey] = useState<StockSortKey>("rs20d");
+  const [sortAsc, setSortAsc] = useState(false);
+  const [sma50Filter, setSma50Filter] = useState<SmaFilter>("all");
+  const [volFilter, setVolFilter] = useState<VolFilter>("all");
+  const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
+
+  const handleSort = (key: StockSortKey) => {
+    if (sortKey === key) setSortAsc(!sortAsc);
+    else { setSortKey(key); setSortAsc(key === "ticker"); }
+  };
+
+  const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); };
+  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all";
+
+  const filtered = useMemo(() => {
+    let list = [...stocks];
+    if (sma50Filter === "above") list = list.filter((s) => s.aboveSma50 === true);
+    else if (sma50Filter === "below") list = list.filter((s) => s.aboveSma50 === false);
+    if (volFilter === "above") list = list.filter((s) => (s.volumeVsAvg ?? 0) >= 1.0);
+    else if (volFilter === "below") list = list.filter((s) => s.volumeVsAvg !== null && s.volumeVsAvg < 1.0);
+    if (verdictFilter === "priority") list = list.filter((s) => s.verdict === "PRIORITY BUY");
+    else if (verdictFilter === "keep") list = list.filter((s) => s.verdict === "KEEP");
+    else if (verdictFilter === "watch") list = list.filter((s) => s.verdict === "WATCH");
+    return list;
+  }, [stocks, sma50Filter, volFilter, verdictFilter]);
+
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    const dir = sortAsc ? 1 : -1;
+    switch (sortKey) {
+      case "ticker": return list.sort((a, b) => dir * a.ticker.localeCompare(b.ticker));
+      case "rs20d": return list.sort((a, b) => dir * ((a.rs20d ?? -999) - (b.rs20d ?? -999)));
+      case "finalScore": return list.sort((a, b) => dir * (a.finalScore - b.finalScore));
+      case "volumeVsAvg": return list.sort((a, b) => dir * ((a.volumeVsAvg ?? -1) - (b.volumeVsAvg ?? -1)));
+      case "aboveSma50": return list.sort((a, b) => dir * ((a.aboveSma50 === true ? 1 : a.aboveSma50 === false ? 0 : -1) - (b.aboveSma50 === true ? 1 : b.aboveSma50 === false ? 0 : -1)));
+      case "verdict": return list.sort((a, b) => dir * ((VERDICT_RANK[a.verdict] ?? 4) - (VERDICT_RANK[b.verdict] ?? 4)));
+      default: return list;
+    }
+  }, [filtered, sortKey, sortAsc]);
+
+  const sortArrow = (key: StockSortKey) => sortKey === key ? (sortAsc ? " \u25B2" : " \u25BC") : "";
+
+  return (
+    <div>
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 flex-wrap mb-2 text-xs">
+        <label className="flex items-center gap-1 text-[#888]">
+          50MA
+          <select
+            value={sma50Filter}
+            onChange={(e) => setSma50Filter(e.target.value as SmaFilter)}
+            className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs"
+          >
+            <option value="all">All</option>
+            <option value="above">Above</option>
+            <option value="below">Below</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-[#888]">
+          Volume
+          <select
+            value={volFilter}
+            onChange={(e) => setVolFilter(e.target.value as VolFilter)}
+            className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs"
+          >
+            <option value="all">All</option>
+            <option value="above">Above Avg</option>
+            <option value="below">Below Avg</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-[#888]">
+          Verdict
+          <select
+            value={verdictFilter}
+            onChange={(e) => setVerdictFilter(e.target.value as VerdictFilter)}
+            className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs"
+          >
+            <option value="all">All</option>
+            <option value="priority">Priority</option>
+            <option value="keep">Keep</option>
+            <option value="watch">Watch</option>
+          </select>
+        </label>
+        {hasFilters && (
+          <button onClick={resetFilters} className="text-[#5ba3e6] hover:text-white transition-colors">
+            Reset
+          </button>
+        )}
+        <span className="text-[#555] ml-auto">
+          {filtered.length === stocks.length ? `${stocks.length} stocks` : `${filtered.length} of ${stocks.length} stocks`}
+        </span>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-[#666] border-b border-[#2a2a2a]">
+              <th className="text-left py-1.5 pr-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("ticker")}>Ticker{sortArrow("ticker")}</th>
+              <th className="text-left py-1.5 pr-2 font-medium hidden sm:table-cell">Company</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rs20d")}>RS 20d{sortArrow("rs20d")}</th>
+              <th className="text-center py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("aboveSma50")}>&gt;50MA{sortArrow("aboveSma50")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("volumeVsAvg")}>Vol vs Avg{sortArrow("volumeVsAvg")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("finalScore")}>Score{sortArrow("finalScore")}</th>
+              <th className="text-left py-1.5 pl-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("verdict")}>Verdict{sortArrow("verdict")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((s) => {
+              const isTurnaround = s.aboveSma50 === false && (s.rs20d ?? 0) > 0 && (s.volumeVsAvg ?? 0) >= 1.2;
+              return (
+                <tr
+                  key={s.ticker}
+                  className={`border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors ${isTurnaround ? "border-l-2 border-l-amber-400 bg-amber-500/5" : ""}`}
+                >
+                  <td className="py-1.5 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-white hover:text-[#5ba3e6] transition-colors"
+                      >
+                        {s.ticker}
+                      </a>
+                      {isTurnaround && (
+                        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-400 whitespace-nowrap">
+                          Turnaround
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-1.5 pr-2 text-[#555] truncate max-w-[120px] hidden sm:table-cell">{s.companyName}</td>
+                  <td className={`py-1.5 px-2 text-right ${rsColor(s.rs20d)}`}>
+                    {s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}
+                  </td>
+                  <td className="py-1.5 px-2 text-center">
+                    {s.aboveSma50 === true ? (
+                      <span className="inline-block h-2 w-2 rounded-full bg-green-400" title="Above 50d SMA" />
+                    ) : s.aboveSma50 === false ? (
+                      <span className="inline-block h-2 w-2 rounded-full bg-red-400" title="Below 50d SMA" />
+                    ) : (
+                      <span className="text-[#444]">-</span>
+                    )}
+                  </td>
+                  <td className={`py-1.5 px-2 text-right ${s.volumeVsAvg !== null && s.volumeVsAvg >= 1.5 ? "text-amber-400" : s.volumeVsAvg !== null && s.volumeVsAvg >= 1.0 ? "text-[#a0a0a0]" : "text-[#555]"}`}>
+                    {s.volumeVsAvg !== null ? `${s.volumeVsAvg.toFixed(2)}x` : "-"}
+                  </td>
+                  <td className="py-1.5 px-2 text-right text-[#666]">
+                    {s.finalScore > 0 ? s.finalScore : "-"}
+                  </td>
+                  <td className="py-1.5 pl-2">
+                    {s.verdict ? (
+                      <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
+                        s.verdict === "PRIORITY BUY" ? "bg-green-500/15 text-green-400 border-green-500/30" :
+                        s.verdict === "KEEP" ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" :
+                        s.verdict === "WATCH" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
+                        "bg-red-500/15 text-red-400 border-red-500/30"
+                      }`}>
+                        {s.verdict}
+                      </span>
+                    ) : (
+                      <span className="text-[#444]">-</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {sorted.length === 0 && (
+        <p className="text-center text-xs text-[#555] py-4">No stocks match current filters</p>
+      )}
+    </div>
+  );
 }
 
 // ── RRG SVG Chart ──
@@ -278,11 +469,6 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
 
 function SectorDetail({ sector, stocks, prevSnapshot }: { sector: SectorRotationScore; stocks: StockInSector[]; prevSnapshot?: SectorSnapshot | null }) {
   const [open, setOpen] = useState(false);
-  const [showNoData, setShowNoData] = useState(false);
-
-  const leaders = stocks.filter((s) => s.rs20d !== null && s.rs20d > 0).sort((a, b) => (b.rs20d ?? 0) - (a.rs20d ?? 0));
-  const laggards = stocks.filter((s) => s.rs20d !== null && s.rs20d <= 0).sort((a, b) => (a.rs20d ?? 0) - (b.rs20d ?? 0));
-  const noData = stocks.filter((s) => s.rs20d === null);
 
   return (
     <div className={`border rounded-lg ${sector.stealthAccumulation ? "border-cyan-500/40" : "border-[#2a2a2a]"}`}>
@@ -406,98 +592,10 @@ function SectorDetail({ sector, stocks, prevSnapshot }: { sector: SectorRotation
             </div>
           </div>
 
-          {/* Leading / Lagging stocks */}
+          {/* Stock table */}
           {stocks.length > 0 && (
             <div className="border-t border-[#2a2a2a] pt-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Leaders */}
-                <div>
-                  <div className="text-xs font-semibold text-green-400 mb-2">
-                    Leaders ({leaders.length})
-                  </div>
-                  {leaders.length === 0 ? (
-                    <p className="text-xs text-[#555]">None</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {leaders.map((s) => (
-                        <div key={s.ticker} className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <a
-                              href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-medium text-white hover:text-[#5ba3e6] transition-colors"
-                            >
-                              {s.ticker}
-                            </a>
-                            <span className="text-[#555] truncate">{s.companyName}</span>
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className={rsColor(s.rs20d)}>
-                              {s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}
-                            </span>
-                            <span className="text-[#666] w-8 text-right">{s.finalScore}pt</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Laggards */}
-                <div>
-                  <div className="text-xs font-semibold text-red-400 mb-2">
-                    Laggards ({laggards.length})
-                  </div>
-                  {laggards.length === 0 ? (
-                    <p className="text-xs text-[#555]">None</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {laggards.map((s) => (
-                        <div key={s.ticker} className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <a
-                              href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-medium text-white hover:text-[#5ba3e6] transition-colors"
-                            >
-                              {s.ticker}
-                            </a>
-                            <span className="text-[#555] truncate">{s.companyName}</span>
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className={rsColor(s.rs20d)}>
-                              {s.rs20d !== null ? `${s.rs20d.toFixed(1)}%` : "-"}
-                            </span>
-                            <span className="text-[#666] w-8 text-right">{s.finalScore}pt</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {noData.length > 0 && (
-                <div className="mt-2">
-                  <button
-                    onClick={() => setShowNoData(!showNoData)}
-                    className="text-xs text-[#555] hover:text-[#888] transition-colors"
-                  >
-                    {showNoData ? "Hide" : "Show"} {noData.length} stocks without scan data {showNoData ? "\u25B2" : "\u25BC"}
-                  </button>
-                  {showNoData && (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {noData.map((s) => (
-                        <span key={s.ticker} className="rounded border border-[#2a2a2a] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#555]">
-                          {s.ticker}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              <SectorStockTable stocks={stocks} />
             </div>
           )}
         </div>
@@ -580,6 +678,10 @@ export default function SectorRotationPage() {
         const quote = quotes[stock.symbol];
         // Prefer pre-run RS, fall back to batch quote pctFromSma50
         const rs20d = preRun?.data.relativeStrength20d ?? quote?.pctFromSma50 ?? null;
+        const aboveSma50 = quote?.sma50 != null && quote.sma50 > 0 ? quote.price > quote.sma50 : null;
+        const volumeVsAvg = quote?.avgVolume10d != null && quote.avgVolume10d > 0
+          ? Math.round((quote.volume / quote.avgVolume10d) * 100) / 100
+          : null;
         return {
           ticker: stock.symbol,
           companyName: stock.name,
@@ -587,6 +689,9 @@ export default function SectorRotationPage() {
           pctFromAth: preRun?.data.pctFromAth ?? null,
           finalScore: preRun?.scores.finalScore ?? 0,
           verdict: preRun?.verdict ?? "",
+          price: quote?.price ?? null,
+          aboveSma50,
+          volumeVsAvg,
         };
       });
       map.set(sectorDef.displayName, stocks);

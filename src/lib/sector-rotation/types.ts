@@ -61,6 +61,6 @@ export interface SectorRotationResult {
     stocks: { ticker: string; score: number; reasons: string[] }[];
   }[];
   /** Per-stock quote data from batch fetch (price vs 50d SMA). */
-  stockQuotes: Record<string, { price: number; sma50: number | null; pctFromSma50: number | null }>;
+  stockQuotes: Record<string, { price: number; sma50: number | null; pctFromSma50: number | null; volume: number; avgVolume10d: number }>;
   correlationBreak: boolean;
 }
