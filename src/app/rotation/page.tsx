@@ -38,7 +38,7 @@ import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 
 // ── localStorage cache (4-hour TTL) ──
 
-const CACHE_KEY = "ew-rotation-tracker-v4";
+const CACHE_KEY = "ew-rotation-tracker-v5";
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 
 function loadCached(): RotationTrackerResult | null {
@@ -958,7 +958,7 @@ function actionChipColors(label: string): { bg: string; text: string; border: st
   }
 }
 
-type StockSortKey = "symbol" | "name" | "action" | "priceAtRotationStart" | "priceNow" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rsAcceleration";
+type StockSortKey = "symbol" | "name" | "action" | "priceAtRotationStart" | "priceNow" | "dailyChangePct" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rsAcceleration";
 
 function StockPerformanceTable({
   detail,
@@ -1171,6 +1171,9 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("priceNow")}>
               Current<SortArrow col="priceNow" />
             </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("dailyChangePct")}>
+              Today<SortArrow col="dailyChangePct" />
+            </th>
             <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("performancePct")}>
               % Change<SortArrow col="performancePct" />
             </th>
@@ -1216,6 +1219,10 @@ function StockPerformanceTable({
                 </td>
                 <td className="px-3 py-2 text-right text-white">
                   ${s.priceNow.toFixed(2)}
+                </td>
+                <td className={`px-3 py-2 text-right font-semibold ${perfColor(s.dailyChangePct ?? 0)}`}>
+                  {(s.dailyChangePct ?? 0) > 0 ? "+" : ""}
+                  {(s.dailyChangePct ?? 0).toFixed(1)}%
                 </td>
                 <td className={`px-3 py-2 text-right font-semibold ${perfColor(s.performancePct)}`}>
                   {s.performancePct > 0 ? "+" : ""}

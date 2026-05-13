@@ -406,7 +406,7 @@ async function fetchStockPerformance(
   rotationStartDate: string,
   symbols: string[],
   names: Map<string, string>,
-  batchQuotes: Map<string, { price: number; sma50: number | null; volume: number; avgVolume10d: number }>,
+  batchQuotes: Map<string, { price: number; sma50: number | null; volume: number; avgVolume10d: number; dailyChangePct: number }>,
   etfCloses: number[],
   etfTimestamps: number[]
 ): Promise<RotationStockPerformance[]> {
@@ -487,6 +487,7 @@ async function fetchStockPerformance(
         aboveSma50,
         volumeVsAvg,
         rsAcceleration: Math.round(rsAccel * 100) / 100,
+        dailyChangePct: Math.round(quote.dailyChangePct * 100) / 100,
         isTurnaroundCandidate: false, // set in second pass below
       });
     }
@@ -666,7 +667,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
       event.startDate,
       sectorSymbols,
       allStockNames,
-      batchQuotes as Map<string, { price: number; sma50: number | null; volume: number; avgVolume10d: number }>,
+      batchQuotes as Map<string, { price: number; sma50: number | null; volume: number; avgVolume10d: number; dailyChangePct: number }>,
       sectorEtfCloses,
       sectorEtfTimestamps
     );

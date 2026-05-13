@@ -669,6 +669,7 @@ export interface BatchQuote {
   sma200: number | null;
   volume: number;
   avgVolume10d: number;
+  dailyChangePct: number;
 }
 
 /**
@@ -744,6 +745,7 @@ export async function fetchBatchQuotes(
         sma200: (quote.twoHundredDayAverage as number) ?? null,
         volume: (quote.regularMarketVolume as number) ?? 0,
         avgVolume10d: (quote.averageDailyVolume10Day as number) ?? 0,
+        dailyChangePct: (quote.regularMarketChangePercent as number) ?? 0,
       });
     }
   }
@@ -771,6 +773,7 @@ export async function fetchBatchQuotes(
           sma200: (quote.twoHundredDayAverage as number) ?? null,
           volume: (quote.regularMarketVolume as number) ?? 0,
           avgVolume10d: (quote.averageDailyVolume10Day as number) ?? 0,
+          dailyChangePct: (quote.regularMarketChangePercent as number) ?? 0,
         });
       }
     }

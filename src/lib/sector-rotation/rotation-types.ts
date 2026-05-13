@@ -42,6 +42,7 @@ export interface RotationStockPerformance {
   aboveSma50: boolean;
   volumeVsAvg: number;
   rsAcceleration: number; // positive = catching up vs sector ETF recently
+  dailyChangePct: number; // today's % change from regularMarketChangePercent
   isTurnaroundCandidate: boolean; // lagging stock with positive RS acceleration + volume
 }
 
