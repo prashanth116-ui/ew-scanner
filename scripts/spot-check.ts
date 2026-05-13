@@ -6,7 +6,8 @@
  * Usage: npx tsx scripts/spot-check.ts
  */
 
-import { countWaves, getWaveStatusInfo } from "../src/lib/ew-wave-counter";
+import { countWaves, countWavesMultiCycle, getWaveStatusInfo } from "../src/lib/ew-wave-counter";
+import { findRecentCyclePivot } from "../src/lib/ew-structural";
 
 const BASE_URL = "https://ew-scanner.vercel.app";
 
@@ -63,6 +64,11 @@ async function main() {
   }
   process.stderr.write("\n");
 
+  // Multi-cycle stats
+  let multiCycleImproved = 0;
+  let multiCycleDifferent = 0;
+  const multiCycleDetails: { ticker: string; oldScore: number; newScore: number; oldPos: string; newPos: string; cycleSource: string }[] = [];
+
   // Now analyze each result for issues
   for (const { ticker, data, error } of results) {
     if (error) {
@@ -70,15 +76,56 @@ async function main() {
       continue;
     }
 
-    const { current, athIdx, lowIdx, series } = data;
+    const { current, athIdx, lowIdx, series, recentCycleAthIdx, recentCycleLowIdx } = data;
 
     if (!series || athIdx == null || lowIdx == null) {
       issues.push({ ticker, category: "NO_SERIES", detail: "API returned no series data" });
       continue;
     }
 
-    // Run wave counter locally (same as frontend)
-    const waveCount = countWaves(series, athIdx, lowIdx);
+    // Run both old (single-cycle) and new (multi-cycle) wave counters
+    const oldWaveCount = countWaves(series, athIdx, lowIdx);
+
+    // Try to find recent cycle pivot locally (API may not return it yet since it's deployed)
+    let localRecentAthIdx = recentCycleAthIdx;
+    let localRecentLowIdx = recentCycleLowIdx;
+    if (localRecentAthIdx == null && series.high && series.low) {
+      const pivot = findRecentCyclePivot(series.high, series.low, athIdx, lowIdx);
+      if (pivot) {
+        localRecentAthIdx = pivot.peakIdx;
+        localRecentLowIdx = pivot.troughIdx;
+      }
+    }
+
+    const multiCycle = countWavesMultiCycle(series, athIdx, lowIdx, localRecentAthIdx, localRecentLowIdx);
+    const waveCount = multiCycle.best;
+
+    // Track multi-cycle improvements
+    if (oldWaveCount && waveCount && oldWaveCount !== waveCount) {
+      multiCycleDifferent++;
+      const improved = waveCount.score > oldWaveCount.score ||
+        (waveCount.cycleSource === "recent" && oldWaveCount.cycleSource !== "recent");
+      if (improved) multiCycleImproved++;
+      multiCycleDetails.push({
+        ticker,
+        oldScore: oldWaveCount.score,
+        newScore: waveCount.score,
+        oldPos: oldWaveCount.position,
+        newPos: waveCount.position,
+        cycleSource: waveCount.cycleSource ?? "global",
+      });
+    } else if (!oldWaveCount && waveCount) {
+      multiCycleDifferent++;
+      multiCycleImproved++;
+      multiCycleDetails.push({
+        ticker,
+        oldScore: 0,
+        newScore: waveCount.score,
+        oldPos: "(no count)",
+        newPos: waveCount.position,
+        cycleSource: waveCount.cycleSource ?? "global",
+      });
+    }
 
     if (!waveCount) {
       noWaveCount++;
@@ -309,6 +356,25 @@ async function main() {
   console.log(`\n${"=".repeat(80)}`);
   console.log(`Clean stocks (no issues): ${cleanTickers.length}/${TICKERS.length}`);
   if (cleanTickers.length > 0) console.log(`  ${cleanTickers.join(", ")}`);
+
+  // Multi-cycle comparison report
+  console.log(`\n${"=".repeat(80)}`);
+  console.log("MULTI-CYCLE COMPARISON (countWaves vs countWavesMultiCycle)");
+  console.log("=".repeat(80));
+  console.log(`Stocks where multi-cycle picked a different count: ${multiCycleDifferent}`);
+  console.log(`Stocks improved by multi-cycle: ${multiCycleImproved}`);
+  if (multiCycleDetails.length > 0) {
+    console.log("\nDetails:");
+    for (const d of multiCycleDetails) {
+      const scoreDelta = d.newScore - d.oldScore;
+      const deltaStr = scoreDelta > 0 ? `+${scoreDelta}` : `${scoreDelta}`;
+      console.log(`  ${d.ticker}: score ${d.oldScore} → ${d.newScore} (${deltaStr}), cycle=${d.cycleSource}`);
+      console.log(`    old: "${d.oldPos}"`);
+      console.log(`    new: "${d.newPos}"`);
+    }
+  } else {
+    console.log("  (no differences — all stocks used the same count)");
+  }
 }
 
 main().catch(console.error);

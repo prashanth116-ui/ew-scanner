@@ -10,7 +10,7 @@ import type {
   WaveCount,
   MTFConfirmation,
 } from "./ew-types";
-import { countWaves, confirmMultiTimeframe } from "./ew-wave-counter";
+import { countWaves, countWavesMultiCycle, confirmMultiTimeframe } from "./ew-wave-counter";
 import { analyzeFibonacciEnhanced } from "./ew-fibonacci";
 import { analyzeVolume, analyzeWaveVolume } from "./ew-volume";
 import { analyzeMomentum, detectWave5Divergence } from "./ew-momentum";
@@ -138,6 +138,8 @@ export interface EnrichedQuoteInput {
   preAthLow?: number;
   preAthLowYear?: number;
   dailySeries?: PriceSeries;
+  recentCycleAthIdx?: number;
+  recentCycleLowIdx?: number;
 }
 
 interface EnhancedScoringParams extends ScoringParams {
@@ -226,10 +228,16 @@ export function scoreEnhanced(
   const volumeAnalysis = analyzeVolume(q.series, q.athIdx, q.lowIdx, recentOpts);
   const momentumAnalysis = analyzeMomentum(q.series, q.athIdx, q.lowIdx, recentOpts);
 
-  // V3: Run wave counter
+  // V3: Run wave counter — use multi-cycle when recent cycle pivot is available
   let waveCount: WaveCount | null = null;
+  let recentCycleWaveCount: WaveCount | undefined;
   try {
-    waveCount = countWaves(q.series, q.athIdx, q.lowIdx);
+    const multiCycle = countWavesMultiCycle(
+      q.series, q.athIdx, q.lowIdx,
+      q.recentCycleAthIdx, q.recentCycleLowIdx,
+    );
+    waveCount = multiCycle.best;
+    recentCycleWaveCount = multiCycle.recentCycle ?? undefined;
   } catch {
     // Wave counting is non-critical
   }
@@ -370,6 +378,7 @@ export function scoreEnhanced(
     momentumAnalysis,
     structureAnalysis,
     waveCount: waveCount ?? undefined,
+    recentCycleWaveCount,
     mtfConfirmation,
     dailyWaveCount,
     dailySeries: q.dailySeries,

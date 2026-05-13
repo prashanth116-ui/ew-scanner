@@ -17,6 +17,124 @@ export interface StructuralReferences {
   troughPrice: number;
 }
 
+export interface CyclePivot {
+  peakIdx: number;
+  peakPrice: number;
+  troughIdx: number;
+  troughPrice: number;
+  drawdownPct: number;
+  recoveryBars: number;
+}
+
+/**
+ * Find the most recent significant correction (>=15% drawdown) in the series.
+ * Unlike findStructuralReferences (which only activates for stocks near ATH),
+ * this function scans the FULL series unconditionally to find the most recent
+ * decline→recovery cycle that could anchor a forward-looking wave count.
+ *
+ * Returns null if no recent correction is found, or if the result is identical
+ * to the global ATH/low pair (within 2 bars).
+ */
+export function findRecentCyclePivot(
+  highs: number[],
+  lows: number[],
+  globalAthIdx: number,
+  globalLowIdx: number,
+): CyclePivot | null {
+  const barCount = highs.length;
+  if (barCount < 10) return null;
+
+  const MIN_RECOVERY_BARS = 10;
+  const MIN_DRAWDOWN_PCT = 15;
+
+  // Track all corrections (peak→trough >= 15% drawdown) across the full series
+  const corrections: CyclePivot[] = [];
+
+  let currentPeakIdx = 0;
+  let currentPeakPrice = highs[0];
+  let inCorrection = false;
+  let corrPeakIdx = -1;
+  let corrPeakPrice = -Infinity;
+  let corrTroughIdx = -1;
+  let corrTroughPrice = Infinity;
+
+  for (let i = 1; i < barCount; i++) {
+    if (!inCorrection) {
+      if (highs[i] > currentPeakPrice) {
+        currentPeakPrice = highs[i];
+        currentPeakIdx = i;
+      }
+      const dd = currentPeakPrice > 0
+        ? ((currentPeakPrice - lows[i]) / currentPeakPrice) * 100
+        : 0;
+      if (dd >= MIN_DRAWDOWN_PCT) {
+        inCorrection = true;
+        corrPeakIdx = currentPeakIdx;
+        corrPeakPrice = currentPeakPrice;
+        corrTroughIdx = i;
+        corrTroughPrice = lows[i];
+      }
+    } else {
+      if (lows[i] < corrTroughPrice) {
+        corrTroughPrice = lows[i];
+        corrTroughIdx = i;
+      }
+      if (highs[i] > corrPeakPrice) {
+        const recoveryBars = barCount - 1 - corrTroughIdx;
+        corrections.push({
+          peakIdx: corrPeakIdx,
+          peakPrice: corrPeakPrice,
+          troughIdx: corrTroughIdx,
+          troughPrice: corrTroughPrice,
+          drawdownPct: corrPeakPrice > 0
+            ? ((corrPeakPrice - corrTroughPrice) / corrPeakPrice) * 100
+            : 0,
+          recoveryBars,
+        });
+        inCorrection = false;
+        currentPeakIdx = i;
+        currentPeakPrice = highs[i];
+      }
+    }
+  }
+  // If still in correction at series end, save it
+  if (inCorrection) {
+    const recoveryBars = barCount - 1 - corrTroughIdx;
+    corrections.push({
+      peakIdx: corrPeakIdx,
+      peakPrice: corrPeakPrice,
+      troughIdx: corrTroughIdx,
+      troughPrice: corrTroughPrice,
+      drawdownPct: corrPeakPrice > 0
+        ? ((corrPeakPrice - corrTroughPrice) / corrPeakPrice) * 100
+        : 0,
+      recoveryBars,
+    });
+  }
+
+  if (corrections.length === 0) return null;
+
+  // Find the most recent correction with enough recovery bars
+  for (let i = corrections.length - 1; i >= 0; i--) {
+    const c = corrections[i];
+    const actualRecovery = barCount - 1 - c.troughIdx;
+    if (actualRecovery >= MIN_RECOVERY_BARS) {
+      // Skip if identical to global ATH/low pair (within 2 bars)
+      if (Math.abs(c.peakIdx - globalAthIdx) <= 2 && Math.abs(c.troughIdx - globalLowIdx) <= 2) {
+        continue;
+      }
+      return c;
+    }
+  }
+
+  // Fallback: most recent correction regardless of recovery bars
+  const last = corrections[corrections.length - 1];
+  if (Math.abs(last.peakIdx - globalAthIdx) <= 2 && Math.abs(last.troughIdx - globalLowIdx) <= 2) {
+    return null; // Same as global — no point returning it
+  }
+  return last;
+}
+
 /**
  * When post-ATH decline is trivial (<15%) and ATH is near the end of the
  * series (last 8 bars), find the most recent structural correction (>=15%
@@ -61,8 +179,8 @@ export function findStructuralReferences(
 
   // Only activate when decline is trivial AND ATH is near the end
   const decline = athValue > 0 ? ((athValue - lowValue) / athValue) * 100 : 0;
-  if (decline >= 15) return null;
-  if (athIdx < barCount - 8) return null;
+  if (decline >= 20) return null;
+  if (athIdx < barCount - 16) return null;
 
   // Minimum recovery bars needed for wave counting (15 weekly bars ~ 4 months).
   // The swing detector needs at least 4-5 swings; 15 bars reliably produces that.

@@ -51,6 +51,8 @@ interface DeepInput {
   // Pre-computed algorithmic targets from getWaveStatusInfo()
   waveTargets?: { label: string; price: number }[];
   waveStartPrice?: number;
+  // Multi-cycle context
+  cycleSource?: "global" | "recent";
   // Micro (daily) wave count
   microWavePoints?: { label: string; price: number; date: string; type: string }[];
   microWavePosition?: string;
@@ -283,6 +285,12 @@ CRITICAL FOR STRUCTURAL OVERRIDE:
 - The prior correction wave count provides structural context (support levels, cycle rhythm) but NOT forward targets.\n`;
   }
 
+  // Multi-cycle context: when wave count is from a recent cycle (not the global ATH)
+  let cycleContext = "";
+  if (data.cycleSource === "recent") {
+    cycleContext = `\nCYCLE CONTEXT: The wave count is anchored on a RECENT cycle pivot (a correction within the last 6-12 months), not the global all-time high/low from years ago. This analysis focuses on the current active wave cycle. Targets reflect where the stock is NOW in its current impulse, not its all-time position.\n`;
+  }
+
   const prompt = `You are an expert Elliott Wave analyst. Provide a deep analysis for ${data.ticker} (${data.name}).
 
 Price data:
@@ -292,7 +300,7 @@ Price data:
 - Decline: ${data.declinePct.toFixed(1)}% over ${data.durationMonths.toFixed(0)} months
 - Recovery: ${data.recoveryPct.toFixed(1)}% from low
 - Mechanical score: ${data.score}/25
-${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${impulseContext}${noWaveCountWarning}${waveCountContext}${microWaveContext}${extensionContext}${targetContext}${structuralContext}${forwardContext}
+${data.label ? `- Quick label: ${data.label}` : ""}${seriesContext}${analysisContext ? `\nTechnical analysis:${analysisContext}` : ""}${impulseContext}${noWaveCountWarning}${waveCountContext}${microWaveContext}${extensionContext}${targetContext}${structuralContext}${cycleContext}${forwardContext}
 
 Timeframes: ${data.htf} (primary) / ${data.ltf} (sub-waves)
 ${hasWavePoints ? `

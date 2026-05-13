@@ -102,6 +102,12 @@ export interface WaveCount {
   structuredPosition?: WavePosition;
   /** True if pattern is a leading or ending diagonal. */
   isDiagonal?: boolean;
+  /** Which ATH/low pair produced this count. */
+  cycleSource?: "global" | "recent";
+  /** Bars from last wave point to current bar. */
+  cycleAgeBars?: number;
+  /** True if all targets are behind current price. */
+  targetsStale?: boolean;
 }
 
 export interface FibExtension {
@@ -174,6 +180,7 @@ export interface EnhancedScoredCandidate {
   mtfConfirmation?: MTFConfirmation;
   dailyWaveCount?: WaveCount;    // Daily intermediate-degree wave count
   dailySeries?: PriceSeries;     // 1-year daily bars (for wave date lookups)
+  recentCycleWaveCount?: WaveCount;  // Wave count from recent cycle pivot
   // Series for sparkline
   series?: PriceSeries;
   athIdx?: number;

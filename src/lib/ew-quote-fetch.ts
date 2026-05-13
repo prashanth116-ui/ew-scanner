@@ -5,7 +5,7 @@
 
 import "server-only";
 
-import { findStructuralReferences } from "./ew-structural";
+import { findStructuralReferences, findRecentCyclePivot } from "./ew-structural";
 import { fetchWithRetry, getCachedChart, setCachedChart } from "@/lib/yahoo-utils";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
@@ -34,6 +34,10 @@ export interface EWQuoteResult {
   trueLowYear?: number;
   preAthLow?: number;
   preAthLowYear?: number;
+  recentCycleAthIdx?: number;
+  recentCycleLowIdx?: number;
+  recentCycleAth?: number;
+  recentCycleLow?: number;
 }
 
 /**
@@ -218,6 +222,24 @@ export async function fetchEWQuoteData(
     };
     response.athIdx = cleanAthIdx;
     response.lowIdx = cleanLowIdx;
+
+    // Multi-cycle: find recent correction pivot (independent of structural fallback)
+    const cyclePivot = findRecentCyclePivot(
+      cleanHighsForStruct, cleanLowsForStruct,
+      structAthIdx, structLowIdx,
+    );
+    if (cyclePivot) {
+      const rawPeakIdx = structCleanToRaw[cyclePivot.peakIdx];
+      const rawTroughIdx = structCleanToRaw[cyclePivot.troughIdx];
+      const cleanPeakIdx = rawToClean.get(rawPeakIdx);
+      const cleanTroughIdx = rawToClean.get(rawTroughIdx);
+      if (cleanPeakIdx != null && cleanTroughIdx != null) {
+        response.recentCycleAthIdx = cleanPeakIdx;
+        response.recentCycleLowIdx = cleanTroughIdx;
+        response.recentCycleAth = cyclePivot.peakPrice;
+        response.recentCycleLow = cyclePivot.troughPrice;
+      }
+    }
   }
 
   return response;
