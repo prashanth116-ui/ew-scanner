@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Zap, TrendingUp, BarChart3, Layers } from "lucide-react";
+import { Activity, Zap, TrendingUp, BarChart3, Layers, Crosshair } from "lucide-react";
 
 const scanners = [
   {
@@ -50,9 +50,19 @@ const scanners = [
     icon: Layers,
     color: "#ec4899",
   },
+  {
+    id: "strat",
+    href: "/strat",
+    title: "The Strat",
+    description:
+      "Rob Smith's Strat methodology — bar classification (1/2U/2D/3), combo detection, and timeframe continuity across M/W/D.",
+    icon: Crosshair,
+    color: "#f97316",
+  },
 ];
 
 function getCurrentScannerId(pathname: string): string {
+  if (pathname.startsWith("/strat")) return "strat";
   if (pathname.startsWith("/confluence")) return "confluence";
   if (pathname.startsWith("/sectors")) return "sectors";
   if (pathname.startsWith("/prerun")) return "prerun";
