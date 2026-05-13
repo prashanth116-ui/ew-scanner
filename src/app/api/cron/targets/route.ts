@@ -23,6 +23,7 @@ interface OpenSignal {
   id: string;
   scanner: string;
   ticker: string;
+  mode: string | null;
   price_at_signal: number;
   target1: number | null;
   target2: number | null;
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
     // Fetch open signals with targets that haven't been fully hit
     const { data: signals, error } = await supabase
       .from("signal_outcomes")
-      .select("id, scanner, ticker, price_at_signal, target1, target2, target3, invalidation, hit_target1, hit_target2, hit_target3, hit_invalidation")
+      .select("id, scanner, ticker, mode, price_at_signal, target1, target2, target3, invalidation, hit_target1, hit_target2, hit_target3, hit_invalidation")
       .or("target1.not.is.null,target2.not.is.null,target3.not.is.null,invalidation.not.is.null")
       .or("hit_target1.is.null,hit_target1.eq.false,hit_target2.is.null,hit_target2.eq.false,hit_target3.is.null,hit_target3.eq.false,hit_invalidation.is.null,hit_invalidation.eq.false")
       .order("signal_date", { ascending: false })
@@ -86,28 +87,42 @@ export async function GET(request: NextRequest) {
       const price = priceMap.get(signal.ticker);
       if (price == null) continue;
 
+      // Direction-aware target hit checks:
+      // Compare target to entry price to determine if upside or downside target
+      const checkHit = (target: number) =>
+        target >= signal.price_at_signal
+          ? price >= target   // Upside target
+          : price <= target;  // Downside target
+
+      const modeLabel = signal.mode ? ` ${signal.mode}` : "";
+
       // Check target1
-      if (signal.target1 != null && !signal.hit_target1 && price >= signal.target1) {
-        alerts.push(`${signal.ticker} hit T1 ($${signal.target1.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}]`);
+      if (signal.target1 != null && !signal.hit_target1 && checkHit(signal.target1)) {
+        alerts.push(`${signal.ticker} hit T1 ($${signal.target1.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}${modeLabel}]`);
         updates.push({ id: signal.id, field: "hit_target1", value: true });
       }
 
       // Check target2
-      if (signal.target2 != null && !signal.hit_target2 && price >= signal.target2) {
-        alerts.push(`${signal.ticker} hit T2 ($${signal.target2.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}]`);
+      if (signal.target2 != null && !signal.hit_target2 && checkHit(signal.target2)) {
+        alerts.push(`${signal.ticker} hit T2 ($${signal.target2.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}${modeLabel}]`);
         updates.push({ id: signal.id, field: "hit_target2", value: true });
       }
 
       // Check target3
-      if (signal.target3 != null && !signal.hit_target3 && price >= signal.target3) {
-        alerts.push(`${signal.ticker} hit T3 ($${signal.target3.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}]`);
+      if (signal.target3 != null && !signal.hit_target3 && checkHit(signal.target3)) {
+        alerts.push(`${signal.ticker} hit T3 ($${signal.target3.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}${modeLabel}]`);
         updates.push({ id: signal.id, field: "hit_target3", value: true });
       }
 
-      // Check invalidation
-      if (signal.invalidation != null && !signal.hit_invalidation && price <= signal.invalidation) {
-        alerts.push(`${signal.ticker} INVALIDATED ($${signal.invalidation.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}]`);
-        updates.push({ id: signal.id, field: "hit_invalidation", value: true });
+      // Check invalidation (direction-aware)
+      if (signal.invalidation != null && !signal.hit_invalidation) {
+        const invalidationHit = signal.invalidation < signal.price_at_signal
+          ? price <= signal.invalidation   // Below entry → bearish invalidation
+          : price >= signal.invalidation;  // Above entry → bullish invalidation
+        if (invalidationHit) {
+          alerts.push(`${signal.ticker} INVALIDATED ($${signal.invalidation.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}${modeLabel}]`);
+          updates.push({ id: signal.id, field: "hit_invalidation", value: true });
+        }
       }
     }
 

@@ -63,23 +63,38 @@ export async function GET(request: NextRequest) {
       if (daysSinceSignal >= 60) updates.price_60d = currentPrice;
       if (daysSinceSignal >= 90) updates.price_90d = currentPrice;
 
-      // Check targets
+      // Direction-aware target hit checks:
+      // Compare target to entry price to determine if upside or downside target
       if (signal.target1 != null) {
-        updates.hit_target1 = currentPrice >= signal.target1;
+        updates.hit_target1 = signal.target1 >= signal.price_at_signal
+          ? currentPrice >= signal.target1   // Upside target
+          : currentPrice <= signal.target1;  // Downside target
       }
       if (signal.target2 != null) {
-        updates.hit_target2 = currentPrice >= signal.target2;
+        updates.hit_target2 = signal.target2 >= signal.price_at_signal
+          ? currentPrice >= signal.target2
+          : currentPrice <= signal.target2;
       }
       if (signal.target3 != null) {
-        updates.hit_target3 = currentPrice >= signal.target3;
+        updates.hit_target3 = signal.target3 >= signal.price_at_signal
+          ? currentPrice >= signal.target3
+          : currentPrice <= signal.target3;
       }
       if (signal.invalidation != null) {
-        updates.hit_invalidation = currentPrice <= signal.invalidation;
+        updates.hit_invalidation = signal.invalidation < signal.price_at_signal
+          ? currentPrice <= signal.invalidation  // Below entry → bearish invalidation
+          : currentPrice >= signal.invalidation; // Above entry → bullish invalidation
       }
 
-      // Max gain/drawdown (simplified — uses current vs entry only)
-      updates.max_gain_pct = Math.max(0, returnPct);
-      updates.max_drawdown_pct = Math.min(0, returnPct);
+      // Max gain/drawdown — direction-aware for bearish signals
+      const bearish = signal.mode === "wave5";
+      if (bearish) {
+        updates.max_gain_pct = Math.max(0, -returnPct);    // Negative return = gain for bearish
+        updates.max_drawdown_pct = Math.min(0, -returnPct); // Positive return = drawdown for bearish
+      } else {
+        updates.max_gain_pct = Math.max(0, returnPct);
+        updates.max_drawdown_pct = Math.min(0, returnPct);
+      }
 
       const success = await updateSignalOutcome(signal.id, updates as Parameters<typeof updateSignalOutcome>[1]);
       if (success) updated++;
@@ -156,12 +171,14 @@ async function recomputeHitRates(): Promise<void> {
         const withPrice = group.filter((s) => s[priceField] != null);
         if (withPrice.length < 5) continue; // Need at least 5 signals for meaningful stats
 
+        const isBearish = mode === "wave5";
         const returns = withPrice.map((s) => {
           const futurePrice = s[priceField]!;
           return ((futurePrice - s.price_at_signal) / s.price_at_signal) * 100;
         });
 
-        const hitCount = returns.filter((r) => r > 0).length;
+        // Direction-aware: bearish signals "hit" when price drops (negative return)
+        const hitCount = returns.filter((r) => isBearish ? r < 0 : r > 0).length;
         const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
         const drawdowns = withPrice
           .map((s) => s.max_drawdown_pct)

@@ -694,30 +694,48 @@ function EWScannerPage() {
 
     if (signal.aborted) return;
 
-    // Record signals to Supabase (fire-and-forget)
+    // Record signals to Supabase for ALL modes (fire-and-forget)
+    // This ensures accuracy tracking covers wave2, wave4, wave5, and breakout
     const today = new Date().toISOString().slice(0, 10);
-    const signalsToRecord = modeFilteredCandidates
-      .filter((c) => c.enhancedNormalized >= 0.5)
-      .slice(0, 50)
-      .map((c) => {
-        const ath = c.trueAth ?? c.ath;
-        const fwd = computeForwardTargets(ath, c.low, c.current);
-        const allTargets = [...fwd.support, ...fwd.extensions];
-        return {
-          scanner: "ew" as const,
-          ticker: c.ticker,
-          signal_date: today,
-          price_at_signal: c.current,
-          mode,
-          signal_strength: c.confidenceTier,
-          score: c.enhancedNormalized,
-          target1: allTargets[0]?.price,
-          target2: allTargets[1]?.price,
-          target3: allTargets[2]?.price,
-          invalidation: c.low * 0.95,
-        };
-      });
-    recordSignals(signalsToRecord);
+    const allModes: ScannerMode[] = ["wave2", "wave4", "wave5", "breakout"];
+    for (const m of allModes) {
+      const filtered = m === mode
+        ? modeFilteredCandidates
+        : applyModeFilters(passingCandidates, m);
+      const signalsForMode = filtered
+        .filter((c) => c.enhancedNormalized >= 0.5)
+        .slice(0, 50)
+        .map((c) => {
+          const ath = c.trueAth ?? c.ath;
+          const fwd = computeForwardTargets(ath, c.low, c.current);
+          // Direction-aware target ordering:
+          // Bullish modes → extensions first (upside targets)
+          // Bearish wave5 → support first (downside targets)
+          const allTargets = m === "wave5"
+            ? [...fwd.support, ...fwd.extensions]
+            : [...fwd.extensions, ...fwd.support];
+          return {
+            scanner: "ew" as const,
+            ticker: c.ticker,
+            signal_date: today,
+            price_at_signal: c.current,
+            mode: m,
+            signal_strength: c.confidenceTier,
+            score: c.enhancedNormalized,
+            target1: allTargets[0]?.price,
+            target2: allTargets[1]?.price,
+            target3: allTargets[2]?.price,
+            // Direction-aware invalidation:
+            // Bullish → below low (support break), Bearish → above ATH (continued rally)
+            invalidation: m === "wave5"
+              ? Math.round((c.trueAth ?? c.ath) * 1.05 * 100) / 100
+              : Math.round(c.low * 0.95 * 100) / 100,
+          };
+        });
+      if (signalsForMode.length > 0) {
+        recordSignals(signalsForMode);
+      }
+    }
 
     setProgress("");
     setScanning(false);
