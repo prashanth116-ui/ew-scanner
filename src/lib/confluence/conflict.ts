@@ -74,6 +74,34 @@ export function detectConflicts(result: ConfluenceResult): ConflictWarning[] {
     });
   }
 
+  // Conflict 4: Strat directional conflict
+  // Strat TFC opposes overall confluence direction
+  const stratResult = result.stratResult;
+  if (stratResult) {
+    const bullishConfluence = result.scores.confluenceScore >= 0.5 && result.scores.ewNormalized >= 0.4;
+    const bearishConfluence = result.scores.confluenceScore < 0.3;
+
+    if (
+      (bullishConfluence && stratResult.tfcAlignment === "FULL_BEAR") ||
+      (bearishConfluence && stratResult.tfcAlignment === "FULL_BULL")
+    ) {
+      conflicts.push({
+        type: "strat_directional",
+        description: `Strat TFC (${stratResult.tfcAlignment === "FULL_BEAR" ? "bearish" : "bullish"}) conflicts with confluence direction`,
+        penalty: 0.05,
+      });
+    }
+
+    // Conflict 5: Strat broadening warning (informational, no penalty)
+    if (stratResult.hasBroadening) {
+      conflicts.push({
+        type: "strat_broadening",
+        description: "Broadening formation detected — volatility expanding, breakout imminent",
+        penalty: 0,
+      });
+    }
+  }
+
   return conflicts;
 }
 

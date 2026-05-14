@@ -18,8 +18,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let body: { tickers: string[] };
   try {
-    const body = (await request.json()) as { tickers: string[] };
+    body = (await request.json()) as { tickers: string[] };
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON body" },
+      { status: 400 }
+    );
+  }
+
+  try {
     const tickers = validateTickers(body.tickers).slice(0, 1500);
     if (!tickers.length) {
       return NextResponse.json(

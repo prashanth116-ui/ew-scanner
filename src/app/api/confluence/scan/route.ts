@@ -8,7 +8,9 @@ import { fetchSqueezeData } from "@/lib/squeeze-fetch";
 import { computeSqueezeScore } from "@/lib/squeeze-scoring";
 import { fetchPreRunData } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
-import type { ConfluenceScanResult, ConfluenceEWResult, ConfluenceSqueezeResult, ConfluencePreRunResult } from "@/lib/confluence/types";
+import { fetchStratData } from "@/lib/strat/data";
+import { scoreStrat } from "@/lib/strat/scoring";
+import type { ConfluenceScanResult, ConfluenceEWResult, ConfluenceSqueezeResult, ConfluencePreRunResult, ConfluenceStratResult } from "@/lib/confluence/types";
 
 const MAX_BATCH = 10;
 const FETCH_TIMEOUT = 15000;
@@ -54,16 +56,18 @@ export async function POST(request: NextRequest) {
 
     const settled = await Promise.allSettled(
       tickers.map(async (ticker): Promise<ConfluenceScanResult | null> => {
-        // Run all 3 per-ticker fetches in parallel
-        const [ewSettled, squeezeSettled, prerunSettled] = await Promise.allSettled([
+        // Run all 4 per-ticker fetches in parallel
+        const [ewSettled, squeezeSettled, prerunSettled, stratSettled] = await Promise.allSettled([
           Promise.race([fetchAndScoreEW(ticker), timeout<InternalEWResult | null>(FETCH_TIMEOUT)]),
           Promise.race([fetchAndScoreSqueeze(ticker), timeout<InternalSqueezeResult | null>(FETCH_TIMEOUT)]),
           Promise.race([fetchAndScorePreRun(ticker), timeout<InternalPreRunResult | null>(FETCH_TIMEOUT)]),
+          Promise.race([fetchAndScoreStratData(ticker), timeout<ConfluenceStratResult | null>(FETCH_TIMEOUT)]),
         ]);
 
         const ewRaw = ewSettled.status === "fulfilled" ? ewSettled.value : null;
         const squeezeRaw = squeezeSettled.status === "fulfilled" ? squeezeSettled.value : null;
         const prerunRaw = prerunSettled.status === "fulfilled" ? prerunSettled.value : null;
+        const stratResult = stratSettled.status === "fulfilled" ? stratSettled.value : null;
 
         // Need at least one scanner result
         if (!ewRaw && !squeezeRaw && !prerunRaw) return null;
@@ -102,6 +106,7 @@ export async function POST(request: NextRequest) {
           ewResult,
           squeezeResult,
           prerunResult,
+          stratResult,
         };
       })
     );
@@ -187,5 +192,24 @@ async function fetchAndScorePreRun(ticker: string): Promise<InternalPreRunResult
     shortFloat: data.shortFloat,
     daysToEarnings: data.daysToEarnings,
     _name: data.companyName,
+  };
+}
+
+async function fetchAndScoreStratData(ticker: string): Promise<ConfluenceStratResult | null> {
+  const data = await fetchStratData(ticker);
+  if (!data) return null;
+
+  const result = scoreStrat(ticker, data.companyName, data.currentPrice, data.monthly, data.weekly, data.daily);
+
+  return {
+    totalScore: result.scores.totalScore,
+    normalizedScore: Math.min(1, result.scores.totalScore / 13),
+    signal: result.signal,
+    actionDirection: result.actionDirection,
+    tfcAlignment: result.tfc.alignment,
+    comboCount: result.combos.length,
+    hasBroadening: result.broadenings.length > 0,
+    longTrigger: result.triggers.longTrigger,
+    shortTrigger: result.triggers.shortTrigger,
   };
 }

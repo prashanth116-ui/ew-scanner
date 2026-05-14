@@ -5,6 +5,7 @@ import type {
   ConfluenceSignal,
   ConfluenceWeights,
   ConfluenceThresholds,
+  ConfluenceStratResult,
 } from "./types";
 
 /**
@@ -71,4 +72,70 @@ export function computeTemporalBonus(signalAges: number[]): number {
   const freshCount = signalAges.filter((age) => age <= 7).length;
   if (freshCount >= 3) return 0.10; // +10% bonus for fresh alignment
   return 0;
+}
+
+/**
+ * Derive confluence directional bias from scanner scores.
+ * High scores in recovery-oriented scanners (EW, PreRun) → "bull".
+ * Sector weakness → "bear".
+ */
+export function deriveConfluenceBias(
+  scores: ConfluenceScores,
+  sectorQuadrant?: string | null,
+): "bull" | "bear" | "neutral" {
+  const bullish = scores.ewNormalized >= 0.4 && scores.prerunNormalized >= 0.4;
+  const bearSector = sectorQuadrant === "LAGGING" || sectorQuadrant === "WEAKENING";
+
+  if (bullish && !bearSector) return "bull";
+  if (bearSector && !bullish) return "bear";
+  return "neutral";
+}
+
+/**
+ * Apply Strat conditional modifier to confluence score.
+ * Strat is not a weighted dimension — it boosts or penalizes based on
+ * directional alignment with the existing confluence bias.
+ *
+ * +10% if Strat ACTIONABLE and direction aligns
+ * +5%  if TFC alignment matches bias
+ * -5%  if TFC alignment opposes bias
+ */
+export function applyStratModifier(
+  baseScore: number,
+  stratResult: ConfluenceStratResult | null,
+  confluenceBias: "bull" | "bear" | "neutral",
+): { adjustedScore: number; stratBonus: number } {
+  if (!stratResult || confluenceBias === "neutral") {
+    return { adjustedScore: baseScore, stratBonus: 0 };
+  }
+
+  let bonus = 0;
+
+  // +10% if Strat is ACTIONABLE and direction aligns with confluence bias
+  if (stratResult.signal === "ACTIONABLE" && stratResult.actionDirection) {
+    const stratBull = stratResult.actionDirection === "LONG" || stratResult.actionDirection === "BOTH";
+    const stratBear = stratResult.actionDirection === "SHORT" || stratResult.actionDirection === "BOTH";
+    if ((confluenceBias === "bull" && stratBull) || (confluenceBias === "bear" && stratBear)) {
+      bonus += 0.10;
+    }
+  }
+
+  // +5% if TFC is FULL_BULL/FULL_BEAR matching confluence bias
+  if (
+    (confluenceBias === "bull" && stratResult.tfcAlignment === "FULL_BULL") ||
+    (confluenceBias === "bear" && stratResult.tfcAlignment === "FULL_BEAR")
+  ) {
+    bonus += 0.05;
+  }
+
+  // -5% if Strat TFC opposes confluence bias
+  if (
+    (confluenceBias === "bull" && stratResult.tfcAlignment === "FULL_BEAR") ||
+    (confluenceBias === "bear" && stratResult.tfcAlignment === "FULL_BULL")
+  ) {
+    bonus -= 0.05;
+  }
+
+  const adjusted = Math.max(0, Math.min(1, baseScore * (1 + bonus)));
+  return { adjustedScore: Math.round(adjusted * 1000) / 1000, stratBonus: bonus };
 }

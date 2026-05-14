@@ -62,6 +62,18 @@ export interface ConfluenceSectorResult {
   trend: string;
 }
 
+export interface ConfluenceStratResult {
+  totalScore: number;        // 0-13 raw score
+  normalizedScore: number;   // 0-1 (totalScore / 13)
+  signal: string;            // "ACTIONABLE" | "SETTING_UP" | "NEUTRAL" | "CONFLICTED"
+  actionDirection: string | null;  // "LONG" | "SHORT" | "BOTH" | null
+  tfcAlignment: string;      // "FULL_BULL" | "FULL_BEAR" | "MIXED"
+  comboCount: number;        // number of active combos
+  hasBroadening: boolean;    // broadening formation detected
+  longTrigger: number | null;
+  shortTrigger: number | null;
+}
+
 export interface ConfluenceResult {
   ticker: string;
   name: string;
@@ -73,6 +85,8 @@ export interface ConfluenceResult {
   squeezeResult: ConfluenceSqueezeResult | null;
   prerunResult: ConfluencePreRunResult | null;
   sectorResult: ConfluenceSectorResult | null;
+  stratResult: ConfluenceStratResult | null;
+  stratBonus?: number;
   trending?: boolean;
 }
 
@@ -84,6 +98,7 @@ export interface ConfluenceScanResult {
   ewResult: ConfluenceEWResult | null;
   squeezeResult: ConfluenceSqueezeResult | null;
   prerunResult: ConfluencePreRunResult | null;
+  stratResult: ConfluenceStratResult | null;
 }
 
 export interface ConfluencePreset {

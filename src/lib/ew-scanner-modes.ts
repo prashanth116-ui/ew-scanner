@@ -227,6 +227,9 @@ export function applyModeFilters(
         if (c.recoveryPct < 40) return false;
         const retrace = c.fibAnalysis?.retracementDepth ?? 0;
         if (retrace < 0.786) return false;
+        // Reject if wave count shows W5 was exceeded — this stock isn't at
+        // Wave 5 exhaustion if the labeled W5 wasn't the actual peak
+        if (c.waveCount?.violations?.some(v => v.includes("Wave 5 exceeded"))) return false;
         return true;
       });
       // B3: Wave 5 momentum divergence is handled in scoring (bonus points)

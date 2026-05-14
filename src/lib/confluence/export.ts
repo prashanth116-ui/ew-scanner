@@ -26,6 +26,11 @@ export async function exportConfluenceToExcel(
     "PreRun % from ATH": r.prerunResult?.pctFromAth?.toFixed(1) ?? "-",
     "Sector Quadrant": r.sectorResult?.quadrant ?? "-",
     "Sector Trend": r.sectorResult?.trend ?? "-",
+    "Strat Score": r.stratResult ? r.stratResult.totalScore : "-",
+    "Strat Signal": r.stratResult?.signal ?? "-",
+    "Strat TFC": r.stratResult?.tfcAlignment ?? "-",
+    "Strat Direction": r.stratResult?.actionDirection ?? "-",
+    "Strat Bonus": r.stratBonus != null ? `${(r.stratBonus * 100).toFixed(0)}%` : "-",
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);

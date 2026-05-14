@@ -39,7 +39,7 @@ export function saveStratScan(
   try {
     localStorage.setItem(SCANS_KEY, JSON.stringify(trimmed));
   } catch {
-    // Quota exceeded — silently skip
+    return null; // Quota exceeded
   }
 
   return scan;

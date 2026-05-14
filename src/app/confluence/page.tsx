@@ -26,13 +26,14 @@ import type {
   ConfluenceWeights,
   ConfluenceThresholds,
   ConfluenceSignal,
+  ConfluenceStratResult,
 } from "@/lib/confluence/types";
 import {
   CONFLUENCE_PRESETS,
   DEFAULT_WEIGHTS,
   DEFAULT_THRESHOLDS,
 } from "@/lib/confluence/types";
-import { computeConfluenceScore, classifySignal } from "@/lib/confluence/scoring";
+import { computeConfluenceScore, classifySignal, deriveConfluenceBias, applyStratModifier } from "@/lib/confluence/scoring";
 import { exportConfluenceToExcel } from "@/lib/confluence/export";
 import {
   saveConfluenceScan,
@@ -58,7 +59,7 @@ import { ProgressBar } from "@/components/progress-bar";
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 1000;
 
-type SortKey = "confluence" | "ew" | "squeeze" | "prerun" | "sector" | "pass";
+type SortKey = "confluence" | "ew" | "squeeze" | "prerun" | "sector" | "strat" | "pass";
 type SortDir = "asc" | "desc";
 
 const SIGNAL_COLORS: Record<ConfluenceSignal, string> = {
@@ -126,6 +127,18 @@ function generateWhyThisStock(r: ConfluenceResult): string {
     if (r.sectorResult.trend === "UP") parts.push("sector uptrend");
   }
 
+  if (r.stratResult) {
+    if (r.stratResult.signal === "ACTIONABLE") {
+      const dir = r.stratResult.actionDirection;
+      parts.push(`Strat ${dir} trigger active`);
+    } else if (r.stratResult.tfcAlignment === "FULL_BULL") {
+      parts.push("full bull TFC alignment");
+    } else if (r.stratResult.tfcAlignment === "FULL_BEAR") {
+      parts.push("full bear TFC alignment");
+    }
+    if (r.stratResult.hasBroadening) parts.push("broadening formation");
+  }
+
   if (parts.length === 0) return "Limited data available — review individual scanner details below.";
   // Cap at 4 reasons to keep it concise
   return parts.slice(0, 4).join(" · ");
@@ -137,6 +150,7 @@ const SCANNER_LINKS: Record<string, { href: string; label: string }> = {
   squeeze: { href: "/squeeze", label: "Squeeze Scanner" },
   prerun: { href: "/pre-run", label: "Pre-Run Scanner" },
   sector: { href: "/sectors", label: "Sector Scanner" },
+  strat: { href: "/strat", label: "Strat Scanner" },
 };
 
 export default function ConfluencePage() {
@@ -154,6 +168,9 @@ export default function ConfluencePage() {
 
   // Quadrant filter
   const [quadrantFilter, setQuadrantFilter] = useState<Set<RRGQuadrant>>(new Set());
+
+  // Strat aligned filter
+  const [stratAlignedFilter, setStratAlignedFilter] = useState(false);
 
   // Scan state
   const [scanning, setScanning] = useState(false);
@@ -259,7 +276,13 @@ export default function ConfluencePage() {
         trending,
       );
 
-      const signal = classifySignal(scores);
+      // Apply Strat conditional modifier
+      const sectorQuadrant = sectorInfo?.quadrant ?? null;
+      const bias = deriveConfluenceBias(scores, sectorQuadrant);
+      const { adjustedScore, stratBonus } = applyStratModifier(scores.confluenceScore, r.stratResult ?? null, bias);
+      const adjustedScores = { ...scores, confluenceScore: adjustedScore };
+
+      const signal = classifySignal(adjustedScores);
 
       const tickerInfo = getConfluenceTickerInfo(r.ticker);
 
@@ -268,7 +291,7 @@ export default function ConfluencePage() {
         name: r.name || tickerInfo?.name || r.ticker,
         sector,
         price: r.price,
-        scores,
+        scores: adjustedScores,
         signal,
         ewResult: r.ewResult,
         squeezeResult: r.squeezeResult,
@@ -278,6 +301,8 @@ export default function ConfluencePage() {
           quadrant: sectorInfo.quadrant,
           trend: sectorInfo.trend,
         } : null,
+        stratResult: r.stratResult ?? null,
+        stratBonus: stratBonus !== 0 ? stratBonus : undefined,
         trending: trending === true ? true : undefined,
       };
     });
@@ -342,9 +367,16 @@ export default function ConfluencePage() {
       if (!signalFilter.has(r.signal)) return false;
       if (sectorFilter !== "All" && r.sector !== sectorFilter) return false;
       if (quadrantFilter.size > 0 && r.sectorResult && !quadrantFilter.has(r.sectorResult.quadrant as RRGQuadrant)) return false;
+      if (stratAlignedFilter && r.stratResult) {
+        const aligned = r.stratResult.signal === "ACTIONABLE" ||
+          r.stratResult.tfcAlignment === "FULL_BULL" ||
+          r.stratResult.tfcAlignment === "FULL_BEAR";
+        if (!aligned) return false;
+      }
+      if (stratAlignedFilter && !r.stratResult) return false;
       return true;
     });
-  }, [confluenceResults, signalFilter, sectorFilter, quadrantFilter]);
+  }, [confluenceResults, signalFilter, sectorFilter, quadrantFilter, stratAlignedFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -365,6 +397,9 @@ export default function ConfluencePage() {
           break;
         case "sector":
           cmp = a.scores.sectorNormalized - b.scores.sectorNormalized;
+          break;
+        case "strat":
+          cmp = (a.stratResult?.normalizedScore ?? 0) - (b.stratResult?.normalizedScore ?? 0);
           break;
         case "pass":
           cmp = a.scores.passCount - b.scores.passCount;
@@ -698,6 +733,21 @@ export default function ConfluencePage() {
             </div>
           </SidebarSection>
 
+          {/* Strat Aligned filter */}
+          <SidebarSection title="Strat Filter" sectionKey="strat-filter" collapsed={collapsed.has("strat-filter")} onToggle={toggleSection}>
+            <button
+              onClick={() => setStratAlignedFilter((v) => !v)}
+              className={`inline-flex items-center rounded-md px-2.5 py-1.5 text-xs font-medium border transition-colors ${
+                stratAlignedFilter
+                  ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
+                  : "text-[#a0a0a0] border-[#2a2a2a] hover:border-orange-500/30 hover:text-orange-400"
+              }`}
+            >
+              Strat Aligned Only
+            </button>
+            <p className="text-[10px] text-[#555] mt-1.5">Show only results with ACTIONABLE strat signal or full TFC alignment</p>
+          </SidebarSection>
+
           {/* Sector filter — enhanced with counts */}
           {sectorsWithCounts.length > 0 && (
             <SidebarSection title="Sector" sectionKey="sector-filter" collapsed={collapsed.has("sector-filter")} onToggle={toggleSection}>
@@ -850,6 +900,7 @@ export default function ConfluencePage() {
               setSignalFilter(new Set(["strong", "moderate", "weak"]));
               setSectorFilter("All");
               setQuadrantFilter(new Set());
+              setStratAlignedFilter(false);
             }}
             className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors"
           >
@@ -943,6 +994,7 @@ export default function ConfluencePage() {
                   { key: "squeeze", label: "Squeeze" },
                   { key: "prerun", label: "Pre-Run" },
                   { key: "sector", label: "Sector" },
+                  { key: "strat", label: "Strat" },
                 ] as { key: SortKey; label: string }[]
               ).map((s) => (
                 <button
@@ -995,7 +1047,7 @@ export default function ConfluencePage() {
           {sorted.length > 0 ? (
             <div className="space-y-2">
               {/* Clickable header row */}
-              <div className="hidden sm:grid grid-cols-[2.5rem_4rem_1fr_8rem_5rem_4rem_5rem_4rem_4rem_4rem] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-[#555]">
+              <div className="hidden sm:grid grid-cols-[2.5rem_4rem_1fr_8rem_5rem_4rem_5rem_4rem_4rem_4rem_4rem] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-[#555]">
                 <span>#</span>
                 <span>Ticker</span>
                 <span>Name</span>
@@ -1006,6 +1058,7 @@ export default function ConfluencePage() {
                 <SortHeader label="Sqz" sortKey="squeeze" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 <SortHeader label="Pre" sortKey="prerun" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 <SortHeader label="Sec" sortKey="sector" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortHeader label="Strat" sortKey="strat" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
               </div>
 
               {sorted.map((result, idx) => (
@@ -1165,12 +1218,13 @@ function ResultRow({
                   v >= (DEFAULT_THRESHOLDS.sector)
                 ) : "bg-[#222]"}`} />
               ))}
+              <div className={`w-2 h-2 rounded-full ${result.stratResult ? ((result.stratResult.normalizedScore >= 0.35) ? "bg-orange-500" : "bg-[#333]") : "bg-[#222]"}`} />
             </div>
           </div>
         </div>
 
         {/* Desktop layout */}
-        <div className="hidden sm:grid grid-cols-[2.5rem_4rem_1fr_8rem_5rem_4rem_5rem_4rem_4rem_4rem] gap-2 items-center">
+        <div className="hidden sm:grid grid-cols-[2.5rem_4rem_1fr_8rem_5rem_4rem_5rem_4rem_4rem_4rem_4rem] gap-2 items-center">
           <span className="text-xs text-[#555]">{rank}</span>
           <span className="text-sm font-bold text-white">{result.ticker}</span>
           <div className="flex items-center gap-2 min-w-0">
@@ -1190,10 +1244,15 @@ function ResultRow({
             <span className="text-[10px] font-medium text-white w-7 text-right">
               {(s.confluenceScore * 100).toFixed(0)}
             </span>
+            {result.stratBonus != null && result.stratBonus !== 0 && (
+              <span className={`text-[8px] font-semibold ${result.stratBonus > 0 ? "text-green-400" : "text-red-400"}`}>
+                {result.stratBonus > 0 ? "+" : ""}{(result.stratBonus * 100).toFixed(0)}%
+              </span>
+            )}
           </div>
           {/* Pass dots */}
           <div className="flex items-center gap-1.5">
-            <PassDots scores={s} thresholds={thresholds} />
+            <PassDots scores={s} thresholds={thresholds} stratResult={result.stratResult} />
             <span className="text-[10px] text-[#666]">{s.passCount}/4</span>
           </div>
           {/* Signal */}
@@ -1205,6 +1264,7 @@ function ResultRow({
           <ScoreCell value={s.squeezeNormalized} label="Sqz" />
           <ScoreCell value={s.prerunNormalized} label="Pre" />
           <ScoreCell value={s.sectorNormalized} label="Sec" />
+          <ScoreCell value={result.stratResult?.normalizedScore ?? 0} label="Strat" />
         </div>
       </button>
 
@@ -1226,7 +1286,7 @@ function ResultRow({
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* EW Panel */}
             <DetailPanel
               title="EW Scanner"
@@ -1360,6 +1420,47 @@ function ResultRow({
                 </div>
               )}
             </DetailPanel>
+
+            {/* Strat Panel */}
+            <DetailPanel
+              title="Strat"
+              color="#f97316"
+              available={!!result.stratResult}
+              score={result.stratResult?.normalizedScore ?? 0}
+              expanded={expandedPanel === "strat"}
+              onToggle={() => setExpandedPanel(expandedPanel === "strat" ? null : "strat")}
+            >
+              {result.stratResult ? (
+                <div className="space-y-1.5">
+                  <DetailRow label="Score" value={`${result.stratResult.totalScore}/13`} />
+                  <DetailRow label="Signal" value={result.stratResult.signal} highlight={result.stratResult.signal === "ACTIONABLE"} />
+                  <DetailRow label="TFC" value={result.stratResult.tfcAlignment.replace("_", " ")} />
+                  {result.stratResult.actionDirection && (
+                    <DetailRow label="Direction" value={result.stratResult.actionDirection} />
+                  )}
+                  <DetailRow label="Combos" value={String(result.stratResult.comboCount)} />
+                  <DetailRow label="Broadening" value={result.stratResult.hasBroadening ? "Yes" : "No"} highlight={result.stratResult.hasBroadening} />
+                  {expandedPanel === "strat" && (
+                    <div className="pt-2 border-t border-[#2a2a2a] mt-2">
+                      <div className="space-y-2">
+                        <ScoreBar size="sm" label="Score" value={result.stratResult.totalScore} max={13} color="#f97316" />
+                      </div>
+                      {result.stratResult.longTrigger != null && (
+                        <p className="text-[10px] text-[#888] mt-2">Long trigger: ${result.stratResult.longTrigger.toFixed(2)}</p>
+                      )}
+                      {result.stratResult.shortTrigger != null && (
+                        <p className="text-[10px] text-[#888]">Short trigger: ${result.stratResult.shortTrigger.toFixed(2)}</p>
+                      )}
+                      <ScannerLink scanner="strat" />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] text-[#444]">No data available</p>
+                </div>
+              )}
+            </DetailPanel>
           </div>
         </div>
       )}
@@ -1367,13 +1468,16 @@ function ResultRow({
   );
 }
 
-function PassDots({ scores, thresholds }: { scores: ConfluenceScores; thresholds: ConfluenceThresholds }) {
+function PassDots({ scores, thresholds, stratResult }: { scores: ConfluenceScores; thresholds: ConfluenceThresholds; stratResult?: ConfluenceStratResult | null }) {
   const items = [
-    { val: scores.ewNormalized, thresh: thresholds.ew, label: "EW" },
-    { val: scores.squeezeNormalized, thresh: thresholds.squeeze, label: "Sqz" },
-    { val: scores.prerunNormalized, thresh: thresholds.prerun, label: "Pre" },
-    { val: scores.sectorNormalized, thresh: thresholds.sector, label: "Sec" },
+    { val: scores.ewNormalized, thresh: thresholds.ew, label: "EW", color: null },
+    { val: scores.squeezeNormalized, thresh: thresholds.squeeze, label: "Sqz", color: null },
+    { val: scores.prerunNormalized, thresh: thresholds.prerun, label: "Pre", color: null },
+    { val: scores.sectorNormalized, thresh: thresholds.sector, label: "Sec", color: null },
   ];
+
+  const stratNorm = stratResult?.normalizedScore ?? 0;
+  const stratPass = stratNorm >= 0.35; // score 5+/13
 
   return (
     <div className="flex gap-1">
@@ -1384,6 +1488,10 @@ function PassDots({ scores, thresholds }: { scores: ConfluenceScores; thresholds
           className={`w-2.5 h-2.5 rounded-full ${item.val > 0 ? passDot(item.val >= item.thresh) : "bg-[#222]"}`}
         />
       ))}
+      <div
+        title={`Strat: ${(stratNorm * 100).toFixed(0)}% (threshold: 35%)`}
+        className={`w-2.5 h-2.5 rounded-full ${stratResult ? (stratPass ? "bg-orange-500" : "bg-[#333]") : "bg-[#222]"}`}
+      />
     </div>
   );
 }
