@@ -1280,13 +1280,26 @@ function ExpandedDetail({ result }: { result: StratResult }) {
               <div key={tf}>
                 <p className="text-[10px] text-[#666] uppercase mb-1">{tf}</p>
                 <div className="flex gap-1">
-                  {last5.map((bar, i) => (
-                    <div key={i} className={`rounded border px-1.5 py-1 text-center ${barTypeBorder(bar.barType)}`}>
-                      <span className={`block text-[10px] font-bold ${barTypeBg(bar.barType)} text-white rounded px-1`}>
-                        {bar.barType}
-                      </span>
-                    </div>
-                  ))}
+                  {last5.map((bar, i) => {
+                    const d = new Date(bar.timestamp * 1000);
+                    const dateLabel = tf === "monthly"
+                      ? d.toLocaleDateString("en-US", { month: "short" })
+                      : tf === "weekly"
+                        ? `${d.getMonth() + 1}/${d.getDate()}`
+                        : `${d.getMonth() + 1}/${d.getDate()}`;
+                    return (
+                      <div
+                        key={i}
+                        className={`rounded border px-1.5 py-1 text-center ${barTypeBorder(bar.barType)}`}
+                        title={`O:${bar.open.toFixed(2)} H:${bar.high.toFixed(2)} L:${bar.low.toFixed(2)} C:${bar.close.toFixed(2)}`}
+                      >
+                        <span className={`block text-[10px] font-bold ${barTypeBg(bar.barType)} text-white rounded px-1`}>
+                          {bar.barType}
+                        </span>
+                        <span className="block text-[8px] text-[#666] mt-0.5">{dateLabel}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
