@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, memo, Suspense } from "react";
 import {
   Search,
   Loader2,
@@ -33,7 +33,7 @@ import {
   loadStratScans,
   deleteStratScan,
 } from "@/lib/strat/storage";
-import { getStratTickers } from "@/data/strat-universe";
+import { getStratTickers, getTickersForSector, getSectorBuckets, getSectorForTicker } from "@/data/strat-universe";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 import { useSidebarState } from "@/lib/use-sidebar-state";
@@ -47,6 +47,8 @@ import { loadFromCache, saveToCache } from "@/lib/scan-cache";
 const ACCENT = "#f97316"; // orange
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 2000;
+const CACHE_KEY = "ew-strat-scan-v1";
+const CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours
 
 type SortKey = "score" | "tfc" | "combos" | "price";
 type SortDir = "asc" | "desc";
@@ -104,6 +106,7 @@ export default function StratPageWrapper() {
 
 function StratPage() {
   // Filters
+  const [sectorBucket, setSectorBucket] = useState(DEFAULT_STRAT_FILTERS.sectorBucket);
   const [tfcAlignment, setTfcAlignment] = useState(DEFAULT_STRAT_FILTERS.tfcAlignment);
   const [activeCombo, setActiveCombo] = useState(DEFAULT_STRAT_FILTERS.activeCombo);
   const [comboTimeframe, setComboTimeframe] = useState(DEFAULT_STRAT_FILTERS.comboTimeframe);
@@ -142,12 +145,23 @@ function StratPage() {
   // Copy tickers
   const [copiedToast, setCopiedToast] = useState(false);
 
+  // Cache age
+  const [cacheAge, setCacheAge] = useState<number | null>(null);
+
   // Load on mount
   useEffect(() => {
     setSavedScans(loadStratScans());
-    const cached = loadFromCache<StratResult[]>("ew-strat-scan-v1", 30 * 60 * 1000);
+    const cached = loadFromCache<StratResult[]>(CACHE_KEY, CACHE_TTL);
     if (cached && cached.length > 0) {
       setRawResults(cached);
+      // Read cache timestamp for age display
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (raw) {
+          const entry = JSON.parse(raw) as { savedAt: number };
+          setCacheAge(entry.savedAt);
+        }
+      } catch { /* ignore */ }
     }
   }, []);
 
@@ -157,8 +171,8 @@ function StratPage() {
 
   // Build filters
   const filters: StratFilters = useMemo(
-    () => ({ tfcAlignment, activeCombo, comboTimeframe, barTypeFilter, minScore, signalFilter }),
-    [tfcAlignment, activeCombo, comboTimeframe, barTypeFilter, minScore, signalFilter]
+    () => ({ sectorBucket, tfcAlignment, activeCombo, comboTimeframe, barTypeFilter, minScore, signalFilter }),
+    [sectorBucket, tfcAlignment, activeCombo, comboTimeframe, barTypeFilter, minScore, signalFilter]
   );
 
   // Filter results
@@ -168,33 +182,33 @@ function StratPage() {
       if (filters.signalFilter !== "All" && r.signal !== filters.signalFilter) return false;
       if (filters.minScore > 0 && r.scores.totalScore < filters.minScore) return false;
 
+      // Combo + timeframe filters compose: both must match on the same combo
       if (filters.activeCombo !== "All") {
-        const hasCombo = r.combos.some((c) => {
+        const matchesCombo = (c: StratCombo) => {
           if (filters.activeCombo === "2-1-2_REV") return c.name === "2-1-2U_REV" || c.name === "2-1-2D_REV";
           if (filters.activeCombo === "2-1-2_CONT") return c.name === "2-1-2U_CONT" || c.name === "2-1-2D_CONT";
           if (filters.activeCombo === "3-1-2") return c.name === "3-1-2U" || c.name === "3-1-2D";
           if (filters.activeCombo === "1-2-2_REV") return c.name === "1-2-2U_REV" || c.name === "1-2-2D_REV";
           if (filters.activeCombo === "3-2-2_REV") return c.name === "3-2-2U_REV" || c.name === "3-2-2D_REV";
           return false;
-        });
+        };
+
+        const hasCombo = r.combos.some((c) =>
+          matchesCombo(c) && (filters.comboTimeframe === "All" || c.timeframe === filters.comboTimeframe)
+        );
         if (!hasCombo) return false;
+      } else if (filters.comboTimeframe !== "All") {
+        // Timeframe-only filter: must have at least one combo in this timeframe
+        const hasInTF = r.combos.some((c) => c.timeframe === filters.comboTimeframe);
+        if (!hasInTF) return false;
       }
 
-      if (filters.comboTimeframe !== "All") {
-        if (filters.barTypeFilter !== "All") {
-          // Filter by bar type in specific timeframe
-          const tf = filters.comboTimeframe === "monthly" ? r.monthly : filters.comboTimeframe === "weekly" ? r.weekly : r.daily;
-          if (!tf || tf.currentBarType !== filters.barTypeFilter) return false;
-        } else {
-          // Just filter by having combos in this timeframe
-          if (filters.activeCombo !== "All") {
-            const hasInTF = r.combos.some((c) => c.timeframe === filters.comboTimeframe);
-            if (!hasInTF) return false;
-          }
-        }
-      } else if (filters.barTypeFilter !== "All") {
-        // Bar type filter on daily by default
-        if (!r.daily || r.daily.currentBarType !== filters.barTypeFilter) return false;
+      // Bar type filter — applies to the selected timeframe (or daily by default)
+      if (filters.barTypeFilter !== "All") {
+        const tf = filters.comboTimeframe !== "All"
+          ? (filters.comboTimeframe === "monthly" ? r.monthly : filters.comboTimeframe === "weekly" ? r.weekly : r.daily)
+          : r.daily;
+        if (!tf || tf.currentBarType !== filters.barTypeFilter) return false;
       }
 
       return true;
@@ -234,31 +248,53 @@ function StratPage() {
     return { total: filtered.length, actionable, settingUp, fullBull, fullBear };
   }, [filtered]);
 
-  // Scan
-  const runScan = useCallback(async () => {
+  // Scan (incremental: only scan tickers not already cached, unless force=true)
+  const runScan = useCallback(async (force = false) => {
     scanAbort.current?.abort();
     const controller = new AbortController();
     scanAbort.current = controller;
     const signal = controller.signal;
 
     setScanning(true);
-    setRawResults([]);
     setScannedCount(0);
 
-    const tickers = getStratTickers();
-    setTotalCount(tickers.length);
+    const tickers = getTickersForSector(sectorBucket);
 
     if (tickers.length === 0) {
       setScanning(false);
       return;
     }
 
-    const results: StratResult[] = [];
+    // Incremental: reuse cached results for tickers we already have
+    let existingResults: StratResult[] = [];
+    let tickersToScan = tickers;
 
-    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+    if (!force && rawResults.length > 0) {
+      const cachedTickers = new Set(rawResults.map((r) => r.ticker));
+      tickersToScan = tickers.filter((t) => !cachedTickers.has(t));
+      // Keep cached results that are in the current sector selection
+      const sectorTickers = new Set(tickers);
+      existingResults = rawResults.filter((r) => sectorTickers.has(r.ticker));
+
+      if (tickersToScan.length === 0) {
+        // All tickers already cached — just filter to current sector
+        setRawResults(existingResults);
+        setScanning(false);
+        setProgress("");
+        return;
+      }
+    } else {
+      setRawResults([]);
+    }
+
+    setTotalCount(tickersToScan.length);
+
+    const newResults: StratResult[] = [];
+
+    for (let i = 0; i < tickersToScan.length; i += BATCH_SIZE) {
       if (signal.aborted) break;
-      const batch = tickers.slice(i, i + BATCH_SIZE);
-      setProgress(`Fetching ${Math.min(i + BATCH_SIZE, tickers.length)}/${tickers.length}...`);
+      const batch = tickersToScan.slice(i, i + BATCH_SIZE);
+      setProgress(`Fetching ${Math.min(i + BATCH_SIZE, tickersToScan.length)}/${tickersToScan.length}...`);
 
       try {
         const res = await fetch("/api/strat/scan", {
@@ -270,24 +306,38 @@ function StratPage() {
 
         if (res.ok) {
           const data = (await res.json()) as { results: StratResult[] };
-          if (data.results) results.push(...data.results);
+          if (data.results) newResults.push(...data.results);
         }
       } catch (err) {
         if ((err as Error).name === "AbortError") break;
       }
 
-      setScannedCount(Math.min(i + BATCH_SIZE, tickers.length));
-      setRawResults([...results]);
+      setScannedCount(Math.min(i + BATCH_SIZE, tickersToScan.length));
+      // Merge existing + new during scan for live updates
+      const newTickers = new Set(newResults.map((r) => r.ticker));
+      const merged = [
+        ...existingResults.filter((r) => !newTickers.has(r.ticker)),
+        ...newResults,
+      ];
+      setRawResults(merged);
 
-      if (i + BATCH_SIZE < tickers.length && !signal.aborted) {
+      if (i + BATCH_SIZE < tickersToScan.length && !signal.aborted) {
         await new Promise((r) => setTimeout(r, BATCH_DELAY));
       }
     }
 
-    saveToCache("ew-strat-scan-v1", results);
+    // Final merge: existing (not re-scanned) + all new
+    const newTickers = new Set(newResults.map((r) => r.ticker));
+    const finalResults = [
+      ...existingResults.filter((r) => !newTickers.has(r.ticker)),
+      ...newResults,
+    ];
+    setRawResults(finalResults);
+    saveToCache(CACHE_KEY, finalResults);
+    setCacheAge(Date.now());
     setScanning(false);
     setProgress("");
-  }, []);
+  }, [sectorBucket, rawResults]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -357,6 +407,7 @@ function StratPage() {
   }, []);
 
   const handleLoadScan = useCallback((scan: SavedStratScan) => {
+    setSectorBucket(scan.filters.sectorBucket ?? "All");
     setTfcAlignment(scan.filters.tfcAlignment);
     setActiveCombo(scan.filters.activeCombo);
     setComboTimeframe(scan.filters.comboTimeframe);
@@ -369,6 +420,7 @@ function StratPage() {
   // Presets
   const applyPreset = useCallback((preset: typeof STRAT_PRESETS[number]) => {
     const f = { ...DEFAULT_STRAT_FILTERS, ...preset.filters };
+    setSectorBucket(f.sectorBucket);
     setTfcAlignment(f.tfcAlignment);
     setActiveCombo(f.activeCombo);
     setComboTimeframe(f.comboTimeframe);
@@ -378,6 +430,7 @@ function StratPage() {
   }, []);
 
   const resetFilters = useCallback(() => {
+    setSectorBucket(DEFAULT_STRAT_FILTERS.sectorBucket);
     setTfcAlignment(DEFAULT_STRAT_FILTERS.tfcAlignment);
     setActiveCombo(DEFAULT_STRAT_FILTERS.activeCombo);
     setComboTimeframe(DEFAULT_STRAT_FILTERS.comboTimeframe);
@@ -395,6 +448,18 @@ function StratPage() {
   }, [sorted]);
 
   const universeTickers = useMemo(() => getStratTickers(), []);
+  const sectorBuckets = useMemo(() => getSectorBuckets(), []);
+  const sectorTickerCount = useMemo(() => getTickersForSector(sectorBucket).length, [sectorBucket]);
+
+  // Format cache age for display
+  const cacheAgeLabel = useMemo(() => {
+    if (!cacheAge) return null;
+    const mins = Math.floor((Date.now() - cacheAge) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    return `${hrs}h ${mins % 60}m ago`;
+  }, [cacheAge]);
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
@@ -412,6 +477,24 @@ function StratPage() {
           onToggle={toggleSection}
         >
           <div className="space-y-4">
+            {/* Sector */}
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-[#a0a0a0]">Sector</span>
+                <span className="text-[#666]">{sectorBucket === "All" ? universeTickers.length : sectorTickerCount}</span>
+              </div>
+              <select
+                value={sectorBucket}
+                onChange={(e) => setSectorBucket(e.target.value)}
+                className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#f97316] focus:outline-none"
+              >
+                <option value="All">All Sectors ({universeTickers.length})</option>
+                {sectorBuckets.map((s) => (
+                  <option key={s} value={s}>{s} ({getTickersForSector(s).length})</option>
+                ))}
+              </select>
+            </div>
+
             {/* TFC Alignment */}
             <div>
               <div className="flex justify-between text-xs mb-1">
@@ -468,7 +551,7 @@ function StratPage() {
             {/* Bar Type */}
             <div>
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-[#a0a0a0]">Bar Type (Daily)</span>
+                <span className="text-[#a0a0a0]">Bar Type ({comboTimeframe !== "All" ? comboTimeframe.charAt(0).toUpperCase() + comboTimeframe.slice(1) : "Daily"})</span>
               </div>
               <select
                 value={barTypeFilter}
@@ -529,27 +612,44 @@ function StratPage() {
         </SidebarSection>
 
         {/* Scan / Cancel */}
-        <div className="flex gap-2">
-          <button
-            onClick={runScan}
-            disabled={scanning}
-            className="flex-1 flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-colors"
-            style={{ backgroundColor: ACCENT }}
-          >
-            {scanning ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-            {scanning ? "Scanning..." : "Scan"}
-          </button>
-          {scanning && (
+        <div className="space-y-2">
+          <div className="flex gap-2">
             <button
-              onClick={cancelScan}
-              className="rounded-md border border-[#2a2a2a] px-3 py-2.5 text-sm text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+              onClick={() => runScan(false)}
+              disabled={scanning}
+              className="flex-1 flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-colors"
+              style={{ backgroundColor: ACCENT }}
+              title={rawResults.length > 0 ? "Incremental scan — only fetches new tickers" : "Full scan"}
             >
-              <X className="h-4 w-4" />
+              {scanning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+              {scanning ? "Scanning..." : "Scan"}
             </button>
+            {!scanning && rawResults.length > 0 && (
+              <button
+                onClick={() => runScan(true)}
+                className="rounded-md border border-[#2a2a2a] px-3 py-2.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+                title="Force full rescan of all tickers"
+              >
+                Full
+              </button>
+            )}
+            {scanning && (
+              <button
+                onClick={cancelScan}
+                className="rounded-md border border-[#2a2a2a] px-3 py-2.5 text-sm text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {cacheAgeLabel && !scanning && (
+            <p className="text-[10px] text-[#666] text-center">
+              Last scanned {cacheAgeLabel}
+            </p>
           )}
         </div>
 
@@ -754,7 +854,7 @@ function StratPage() {
                     result={result}
                     index={idx}
                     expanded={expandedTicker === result.ticker}
-                    onToggle={() => setExpandedTicker(expandedTicker === result.ticker ? null : result.ticker)}
+                    onToggle={setExpandedTicker}
                   />
                 ))}
               </tbody>
@@ -771,13 +871,13 @@ function StratPage() {
             <TrendingUp className="mx-auto h-12 w-12 text-[#333]" />
             <h2 className="mt-4 text-lg font-semibold text-white">The Strat Scanner</h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
-              Scan {universeTickers.length} stocks for Rob Smith&apos;s Strat setups.
+              Scan {sectorTickerCount} stocks{sectorBucket !== "All" ? ` in ${sectorBucket}` : ""} for Rob Smith&apos;s Strat setups.
               Classifies bars as 1/2U/2D/3, detects combos (2-1-2, 3-1-2, etc.),
               and measures timeframe continuity across Monthly/Weekly/Daily.
             </p>
             <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
-                <p className="text-2xl font-bold text-[#f97316]">{universeTickers.length}</p>
+                <p className="text-2xl font-bold text-[#f97316]">{sectorTickerCount}</p>
                 <p className="text-[10px] text-[#666]">Stocks</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
@@ -794,7 +894,7 @@ function StratPage() {
               </div>
             </div>
             <button
-              onClick={runScan}
+              onClick={() => runScan(false)}
               className="mt-6 inline-flex items-center gap-2 rounded-md px-6 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-colors"
               style={{ backgroundColor: ACCENT }}
             >
@@ -810,7 +910,7 @@ function StratPage() {
 
 // ── Result Row ──
 
-function ResultRow({
+const ResultRow = memo(function ResultRow({
   result,
   index,
   expanded,
@@ -819,15 +919,18 @@ function ResultRow({
   result: StratResult;
   index: number;
   expanded: boolean;
-  onToggle: () => void;
+  onToggle: (ticker: string | null) => void;
 }) {
-  const actionableCombos = result.combos.filter((c) => c.isActionable);
+  const actionableCombos = useMemo(() => result.combos.filter((c) => c.isActionable), [result.combos]);
+  const handleClick = useCallback(() => {
+    onToggle(expanded ? null : result.ticker);
+  }, [onToggle, expanded, result.ticker]);
 
   return (
     <>
       <tr
         className={`border-b border-[#1a1a1a] hover:bg-[#1a1a1a] cursor-pointer transition-colors ${expanded ? "bg-[#1a1a1a]" : ""}`}
-        onClick={onToggle}
+        onClick={handleClick}
       >
         {/* # */}
         <td className="px-3 py-2.5 text-[#666]">
@@ -840,7 +943,7 @@ function ResultRow({
         {/* Ticker */}
         <td className="px-3 py-2.5">
           <span className="font-medium text-white">{result.ticker}</span>
-          <span className="text-[10px] text-[#666] ml-2 hidden sm:inline">{result.companyName}</span>
+          <span className="text-[10px] text-[#666] ml-2 hidden sm:inline" title={getSectorForTicker(result.ticker)}>{result.companyName}</span>
         </td>
 
         {/* Price */}
@@ -954,7 +1057,7 @@ function ResultRow({
       )}
     </>
   );
-}
+});
 
 // ── Bar Type Badge ──
 

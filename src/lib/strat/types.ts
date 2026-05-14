@@ -90,6 +90,7 @@ export interface StratResult {
 }
 
 export interface StratFilters {
+  sectorBucket: string;
   tfcAlignment: string;
   activeCombo: string;
   comboTimeframe: string;
@@ -99,6 +100,7 @@ export interface StratFilters {
 }
 
 export const DEFAULT_STRAT_FILTERS: StratFilters = {
+  sectorBucket: "All",
   tfcAlignment: "All",
   activeCombo: "All",
   comboTimeframe: "All",

@@ -45,6 +45,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
   ],
   strat: [
     { href: "/strat", label: "Scanner" },
+    { href: "/strat/guide", label: "Guide" },
   ],
 };
 
