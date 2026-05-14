@@ -133,6 +133,7 @@ function StratPage() {
   const [tickerSearch, setTickerSearch] = useState("");
   const [tickerSearching, setTickerSearching] = useState(false);
   const [tickerError, setTickerError] = useState<string | null>(null);
+  const [manualTickers, setManualTickers] = useState<Set<string>>(new Set());
 
   // Sort
   const [sortKey, setSortKey] = useState<SortKey>("score");
@@ -191,6 +192,9 @@ function StratPage() {
   // Filter results
   const filtered = useMemo(() => {
     return rawResults.filter((r) => {
+      // Manually searched tickers always pass filters
+      if (manualTickers.has(r.ticker)) return true;
+
       if (filters.tfcAlignment !== "All" && r.tfc.alignment !== filters.tfcAlignment) return false;
       if (filters.signalFilter !== "All" && r.signal !== filters.signalFilter) return false;
       if (filters.minScore > 0 && r.scores.totalScore < filters.minScore) return false;
@@ -226,7 +230,7 @@ function StratPage() {
 
       return true;
     });
-  }, [rawResults, filters]);
+  }, [rawResults, filters, manualTickers]);
 
   // Sort
   const sorted = useMemo(() => {
@@ -252,14 +256,14 @@ function StratPage() {
     return arr;
   }, [filtered, sortKey, sortDir]);
 
-  // Stats
+  // Stats — count from rawResults so widget numbers are stable while filtering
   const stats = useMemo(() => {
-    const actionable = filtered.filter((r) => r.signal === "ACTIONABLE").length;
-    const settingUp = filtered.filter((r) => r.signal === "SETTING_UP").length;
-    const fullBull = filtered.filter((r) => r.tfc.alignment === "FULL_BULL").length;
-    const fullBear = filtered.filter((r) => r.tfc.alignment === "FULL_BEAR").length;
+    const actionable = rawResults.filter((r) => r.signal === "ACTIONABLE").length;
+    const settingUp = rawResults.filter((r) => r.signal === "SETTING_UP").length;
+    const fullBull = rawResults.filter((r) => r.tfc.alignment === "FULL_BULL").length;
+    const fullBear = rawResults.filter((r) => r.tfc.alignment === "FULL_BEAR").length;
     return { total: filtered.length, actionable, settingUp, fullBull, fullBear };
-  }, [filtered]);
+  }, [rawResults, filtered]);
 
   // Scan (incremental: only scan tickers not already cached, unless force=true)
   const runScan = useCallback(async (force = false) => {
@@ -363,7 +367,11 @@ function StratPage() {
   const lookupTicker = useCallback(async () => {
     const ticker = tickerSearch.trim().toUpperCase();
     if (!ticker) return;
+
+    // If already in results, just expand it and scroll to it
     if (rawResults.some((r) => r.ticker === ticker)) {
+      setManualTickers((prev) => new Set(prev).add(ticker));
+      setExpandedTicker(ticker);
       setTickerSearch("");
       return;
     }
@@ -385,6 +393,8 @@ function StratPage() {
         return;
       }
       setRawResults((prev) => [data, ...prev]);
+      setManualTickers((prev) => new Set(prev).add(data.ticker));
+      setExpandedTicker(data.ticker);
       setTickerSearch("");
     } catch {
       setTickerError("Network error");
@@ -497,7 +507,7 @@ function StratPage() {
   }, [cacheAge]);
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
+    <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1800px] mx-auto">
       <SidebarShell open={sidebarOpen} onToggle={setSidebarOpen}>
         {/* Quick Presets */}
         <SidebarSection title="Quick Presets" sectionKey="presets" collapsed={collapsed.has("presets")} onToggle={toggleSection}>
@@ -795,32 +805,57 @@ function StratPage() {
           </div>
         )}
 
-        {/* Summary bar */}
+        {/* Summary bar — clickable to filter */}
         {rawResults.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
-            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-3">
+            <button
+              onClick={() => { setSignalFilter("All"); setTfcAlignment("All"); }}
+              className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
+                signalFilter === "All" && tfcAlignment === "All" ? "border-[#f97316]/40 ring-1 ring-[#f97316]/20" : "border-[#2a2a2a] hover:border-[#444]"
+              }`}
+            >
               <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">Results</p>
               <p className="text-lg font-bold text-white">
                 {stats.total}
                 <span className="text-xs font-normal text-[#666] ml-1">/ {rawResults.length}</span>
               </p>
-            </div>
-            <div className="rounded-lg border border-green-500/20 bg-[#141414] px-4 py-3">
+            </button>
+            <button
+              onClick={() => { setSignalFilter(signalFilter === "ACTIONABLE" ? "All" : "ACTIONABLE"); setTfcAlignment("All"); }}
+              className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
+                signalFilter === "ACTIONABLE" ? "border-green-500/40 ring-1 ring-green-500/20" : "border-green-500/20 hover:border-green-500/40"
+              }`}
+            >
               <p className="text-[10px] uppercase tracking-wider text-green-400/60 mb-1">Actionable</p>
               <p className="text-lg font-bold text-green-400">{stats.actionable}</p>
-            </div>
-            <div className="rounded-lg border border-amber-500/20 bg-[#141414] px-4 py-3">
+            </button>
+            <button
+              onClick={() => { setSignalFilter(signalFilter === "SETTING_UP" ? "All" : "SETTING_UP"); setTfcAlignment("All"); }}
+              className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
+                signalFilter === "SETTING_UP" ? "border-amber-500/40 ring-1 ring-amber-500/20" : "border-amber-500/20 hover:border-amber-500/40"
+              }`}
+            >
               <p className="text-[10px] uppercase tracking-wider text-amber-400/60 mb-1">Setting Up</p>
               <p className="text-lg font-bold text-amber-400">{stats.settingUp}</p>
-            </div>
-            <div className="rounded-lg border border-green-500/20 bg-[#141414] px-4 py-3">
+            </button>
+            <button
+              onClick={() => { setTfcAlignment(tfcAlignment === "FULL_BULL" ? "All" : "FULL_BULL"); setSignalFilter("All"); }}
+              className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
+                tfcAlignment === "FULL_BULL" ? "border-green-500/40 ring-1 ring-green-500/20" : "border-green-500/20 hover:border-green-500/40"
+              }`}
+            >
               <p className="text-[10px] uppercase tracking-wider text-green-400/60 mb-1">Full Bull</p>
               <p className="text-lg font-bold text-green-400">{stats.fullBull}</p>
-            </div>
-            <div className="rounded-lg border border-red-500/20 bg-[#141414] px-4 py-3">
+            </button>
+            <button
+              onClick={() => { setTfcAlignment(tfcAlignment === "FULL_BEAR" ? "All" : "FULL_BEAR"); setSignalFilter("All"); }}
+              className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
+                tfcAlignment === "FULL_BEAR" ? "border-red-500/40 ring-1 ring-red-500/20" : "border-red-500/20 hover:border-red-500/40"
+              }`}
+            >
               <p className="text-[10px] uppercase tracking-wider text-red-400/60 mb-1">Full Bear</p>
               <p className="text-lg font-bold text-red-400">{stats.fullBear}</p>
-            </div>
+            </button>
           </div>
         )}
 
@@ -872,22 +907,30 @@ function StratPage() {
         {/* Results Table */}
         {sorted.length > 0 ? (
           <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed" style={{ minWidth: "900px" }}>
               <thead>
                 <tr className="border-b border-[#2a2a2a] bg-[#141414]">
-                  <th className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-8">#</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-[#666]">Ticker</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]">Price</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-wider text-[#666]">TFC</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-wider text-[#666]">M</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-wider text-[#666]">W</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-wider text-[#666]">D</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-[#666]">Combos</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]">Long</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]">Short</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-wider text-[#666]">Score</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-wider text-[#666]">Signal</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-8"></th>
+                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-10 cursor-pointer" onClick={() => toggleSort("score")}>#</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-[140px]">Ticker</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[70px] cursor-pointer hover:text-white" onClick={() => toggleSort("price")}>
+                    Price {sortKey === "price" && <span className="text-[#f97316]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
+                  </th>
+                  <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[60px] cursor-pointer hover:text-white" onClick={() => toggleSort("tfc")}>
+                    TFC {sortKey === "tfc" && <span className="text-[#f97316]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
+                  </th>
+                  <th className="px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-8">M</th>
+                  <th className="px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-8">W</th>
+                  <th className="px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-8">D</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] cursor-pointer hover:text-white" onClick={() => toggleSort("combos")}>
+                    Combos {sortKey === "combos" && <span className="text-[#f97316]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
+                  </th>
+                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[72px]">Long</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[72px]">Short</th>
+                  <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[60px] cursor-pointer hover:text-white" onClick={() => toggleSort("score")}>
+                    Score {sortKey === "score" && <span className="text-[#f97316]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
+                  </th>
+                  <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[110px]">Signal</th>
+                  <th className="px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-8"></th>
                 </tr>
               </thead>
               <tbody>
@@ -991,7 +1034,7 @@ const ResultRow = memo(function ResultRow({
         onClick={handleClick}
       >
         {/* # */}
-        <td className="px-3 py-2.5 text-[#666]">
+        <td className="px-2 py-2 text-[#666]">
           <div className="flex items-center gap-1">
             {expanded ? <ChevronDown className="h-3 w-3 text-[#f97316]" /> : <ChevronRight className="h-3 w-3" />}
             <span className="text-xs">{index + 1}</span>
@@ -999,48 +1042,48 @@ const ResultRow = memo(function ResultRow({
         </td>
 
         {/* Ticker */}
-        <td className="px-3 py-2.5">
+        <td className="px-2 py-2">
           <span className="font-medium text-white">{result.ticker}</span>
-          <span className="text-[10px] text-[#666] ml-2 hidden sm:inline" title={getSectorForTicker(result.ticker)}>{result.companyName}</span>
+          <span className="text-[10px] text-[#666] ml-1.5 hidden lg:inline truncate" title={getSectorForTicker(result.ticker)}>{result.companyName}</span>
         </td>
 
         {/* Price */}
-        <td className="px-3 py-2.5 text-right text-[#ccc]">
-          {result.currentPrice != null ? `$${result.currentPrice.toFixed(2)}` : "—"}
+        <td className="px-2 py-2 text-right text-[#ccc] text-xs">
+          {result.currentPrice != null ? `$${result.currentPrice.toFixed(2)}` : "\u2014"}
         </td>
 
         {/* TFC dots */}
-        <td className="px-3 py-2.5">
-          <div className="flex items-center justify-center gap-1">
-            <span className={`inline-block h-2.5 w-2.5 rounded-full ${tfcDotColor(result.tfc.monthly)}`} title={`M: ${result.tfc.monthly}`} />
-            <span className={`inline-block h-2.5 w-2.5 rounded-full ${tfcDotColor(result.tfc.weekly)}`} title={`W: ${result.tfc.weekly}`} />
-            <span className={`inline-block h-2.5 w-2.5 rounded-full ${tfcDotColor(result.tfc.daily)}`} title={`D: ${result.tfc.daily}`} />
+        <td className="px-2 py-2">
+          <div className="flex items-center justify-center gap-0.5">
+            <span className={`inline-block h-2 w-2 rounded-full ${tfcDotColor(result.tfc.monthly)}`} title={`M: ${result.tfc.monthly}`} />
+            <span className={`inline-block h-2 w-2 rounded-full ${tfcDotColor(result.tfc.weekly)}`} title={`W: ${result.tfc.weekly}`} />
+            <span className={`inline-block h-2 w-2 rounded-full ${tfcDotColor(result.tfc.daily)}`} title={`D: ${result.tfc.daily}`} />
           </div>
         </td>
 
         {/* M bar type */}
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-1 py-2 text-center">
           <BarTypeBadge barType={result.monthly?.currentBarType ?? null} />
         </td>
 
         {/* W bar type */}
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-1 py-2 text-center">
           <BarTypeBadge barType={result.weekly?.currentBarType ?? null} />
         </td>
 
         {/* D bar type */}
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-1 py-2 text-center">
           <BarTypeBadge barType={result.daily?.currentBarType ?? null} />
         </td>
 
         {/* Combos */}
-        <td className="px-3 py-2.5">
+        <td className="px-2 py-2">
           {actionableCombos.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {actionableCombos.slice(0, 3).map((c, i) => (
+            <div className="flex flex-wrap gap-0.5">
+              {actionableCombos.slice(0, 2).map((c, i) => (
                 <span
                   key={i}
-                  className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                  className={`inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium ${
                     c.direction === "BULL"
                       ? "text-green-400 bg-green-500/10"
                       : "text-red-400 bg-red-500/10"
@@ -1049,43 +1092,43 @@ const ResultRow = memo(function ResultRow({
                   {c.direction === "BULL" ? "\u2191" : "\u2193"} {c.name.replace(/_/g, " ")}
                 </span>
               ))}
-              {actionableCombos.length > 3 && (
-                <span className="text-[10px] text-[#666]">+{actionableCombos.length - 3}</span>
+              {actionableCombos.length > 2 && (
+                <span className="text-[9px] text-[#666]">+{actionableCombos.length - 2}</span>
               )}
             </div>
           ) : result.combos.length > 0 ? (
-            <span className="text-[10px] text-[#666] italic">forming...</span>
+            <span className="text-[9px] text-[#666] italic">forming...</span>
           ) : (
-            <span className="text-[10px] text-[#444]">—</span>
+            <span className="text-[9px] text-[#444]">\u2014</span>
           )}
         </td>
 
         {/* Long trigger */}
-        <td className="px-3 py-2.5 text-right">
+        <td className="px-2 py-2 text-right">
           {result.triggers.longTrigger != null ? (
-            <span className="text-green-400 text-xs" title={result.triggers.longSource}>
+            <span className="text-green-400 text-[11px]" title={result.triggers.longSource}>
               ${result.triggers.longTrigger.toFixed(2)}
             </span>
           ) : (
-            <span className="text-[#444]">—</span>
+            <span className="text-[#444] text-[11px]">\u2014</span>
           )}
         </td>
 
         {/* Short trigger */}
-        <td className="px-3 py-2.5 text-right">
+        <td className="px-2 py-2 text-right">
           {result.triggers.shortTrigger != null ? (
-            <span className="text-red-400 text-xs" title={result.triggers.shortSource}>
+            <span className="text-red-400 text-[11px]" title={result.triggers.shortSource}>
               ${result.triggers.shortTrigger.toFixed(2)}
             </span>
           ) : (
-            <span className="text-[#444]">—</span>
+            <span className="text-[#444] text-[11px]">\u2014</span>
           )}
         </td>
 
         {/* Score */}
-        <td className="px-3 py-2.5">
+        <td className="px-2 py-2">
           <div className="flex items-center justify-center">
-            <div className="w-16">
+            <div className="w-12">
               <ScoreBar
                 label=""
                 value={result.scores.totalScore}
@@ -1098,35 +1141,34 @@ const ResultRow = memo(function ResultRow({
         </td>
 
         {/* Signal */}
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-2 py-2 text-center">
           {result.signal === "ACTIONABLE" && result.actionDirection ? (
-            <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium border ${signalColor(result.signal)}`}>
-              ACTIONABLE
+            <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium border whitespace-nowrap ${signalColor(result.signal)}`}>
+              {result.actionDirection === "LONG" ? "\u2191" :
+               result.actionDirection === "SHORT" ? "\u2193" : "\u2195"}
               <span className={
                 result.actionDirection === "LONG" ? "text-green-400" :
                 result.actionDirection === "SHORT" ? "text-red-400" :
                 "text-amber-400"
               }>
-                {result.actionDirection === "LONG" ? "\u2191 LONG" :
-                 result.actionDirection === "SHORT" ? "\u2193 SHORT" :
-                 "\u2195 BOTH"}
+                {result.actionDirection}
               </span>
             </span>
           ) : (
-            <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-medium border ${signalColor(result.signal)}`}>
-              {result.signal}
+            <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-medium border whitespace-nowrap ${signalColor(result.signal)}`}>
+              {result.signal === "SETTING_UP" ? "SETTING UP" : result.signal}
             </span>
           )}
         </td>
 
         {/* Watchlist */}
-        <td className="px-3 py-2.5 text-center relative">
+        <td className="px-1 py-2 text-center relative">
           <button
             onClick={(e) => { e.stopPropagation(); onWlMenuToggle(wlMenuOpen ? null : result.ticker); }}
-            className="rounded p-1 text-[#555] hover:text-[#f97316] transition-colors"
+            className="rounded p-0.5 text-[#555] hover:text-[#f97316] transition-colors"
             title="Add to watchlist"
           >
-            <List className="h-3.5 w-3.5" />
+            <List className="h-3 w-3" />
           </button>
           {wlMenuOpen && (
             <div
