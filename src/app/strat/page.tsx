@@ -23,6 +23,7 @@ import type {
   StratBarType,
   StratTimeframe,
   StratPMG,
+  StratBroadening,
 } from "@/lib/strat/types";
 import {
   DEFAULT_STRAT_FILTERS,
@@ -120,6 +121,7 @@ function StratPage() {
   const [barTypeFilter, setBarTypeFilter] = useState(DEFAULT_STRAT_FILTERS.barTypeFilter);
   const [minScore, setMinScore] = useState(DEFAULT_STRAT_FILTERS.minScore);
   const [signalFilter, setSignalFilter] = useState(DEFAULT_STRAT_FILTERS.signalFilter);
+  const [hasBroadening, setHasBroadening] = useState(DEFAULT_STRAT_FILTERS.hasBroadening);
 
   // Scan state
   const [scanning, setScanning] = useState(false);
@@ -185,8 +187,8 @@ function StratPage() {
 
   // Build filters
   const filters: StratFilters = useMemo(
-    () => ({ sectorBucket, tfcAlignment, activeCombo, comboTimeframe, barTypeFilter, minScore, signalFilter }),
-    [sectorBucket, tfcAlignment, activeCombo, comboTimeframe, barTypeFilter, minScore, signalFilter]
+    () => ({ sectorBucket, tfcAlignment, activeCombo, comboTimeframe, barTypeFilter, minScore, signalFilter, hasBroadening }),
+    [sectorBucket, tfcAlignment, activeCombo, comboTimeframe, barTypeFilter, minScore, signalFilter, hasBroadening]
   );
 
   // Filter results
@@ -219,6 +221,10 @@ function StratPage() {
         const hasInTF = r.combos.some((c) => c.timeframe === filters.comboTimeframe);
         if (!hasInTF) return false;
       }
+
+      // Broadening filter
+      if (filters.hasBroadening === "Yes" && r.broadenings.length === 0) return false;
+      if (filters.hasBroadening === "No" && r.broadenings.length > 0) return false;
 
       // Bar type filter — applies to the selected timeframe (or daily by default)
       if (filters.barTypeFilter !== "All") {
@@ -262,7 +268,8 @@ function StratPage() {
     const settingUp = rawResults.filter((r) => r.signal === "SETTING_UP").length;
     const fullBull = rawResults.filter((r) => r.tfc.alignment === "FULL_BULL").length;
     const fullBear = rawResults.filter((r) => r.tfc.alignment === "FULL_BEAR").length;
-    return { total: filtered.length, actionable, settingUp, fullBull, fullBear };
+    const broadening = rawResults.filter((r) => r.broadenings.length > 0).length;
+    return { total: filtered.length, actionable, settingUp, fullBull, fullBear, broadening };
   }, [rawResults, filtered]);
 
   // Scan (incremental: only scan tickers not already cached, unless force=true)
@@ -437,6 +444,7 @@ function StratPage() {
     setBarTypeFilter(scan.filters.barTypeFilter);
     setMinScore(scan.filters.minScore);
     setSignalFilter(scan.filters.signalFilter);
+    setHasBroadening(scan.filters.hasBroadening ?? "All");
     setRawResults(scan.results);
   }, []);
 
@@ -450,6 +458,7 @@ function StratPage() {
     setBarTypeFilter(f.barTypeFilter);
     setMinScore(f.minScore);
     setSignalFilter(f.signalFilter);
+    setHasBroadening(f.hasBroadening);
   }, []);
 
   const resetFilters = useCallback(() => {
@@ -460,6 +469,7 @@ function StratPage() {
     setBarTypeFilter(DEFAULT_STRAT_FILTERS.barTypeFilter);
     setMinScore(DEFAULT_STRAT_FILTERS.minScore);
     setSignalFilter(DEFAULT_STRAT_FILTERS.signalFilter);
+    setHasBroadening(DEFAULT_STRAT_FILTERS.hasBroadening);
   }, []);
 
   const copyTickers = useCallback(() => {
@@ -646,6 +656,22 @@ function StratPage() {
               </select>
             </div>
 
+            {/* Broadening */}
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-[#a0a0a0]">Broadening</span>
+              </div>
+              <select
+                value={hasBroadening}
+                onChange={(e) => setHasBroadening(e.target.value)}
+                className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#f97316] focus:outline-none"
+              >
+                <option value="All">All</option>
+                <option value="Yes">Has Broadening</option>
+                <option value="No">No Broadening</option>
+              </select>
+            </div>
+
             {/* Reset */}
             <button
               onClick={resetFilters}
@@ -807,7 +833,7 @@ function StratPage() {
 
         {/* Summary bar — clickable to filter */}
         {rawResults.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
             <button
               onClick={() => { setSignalFilter("All"); setTfcAlignment("All"); }}
               className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
@@ -855,6 +881,15 @@ function StratPage() {
             >
               <p className="text-[10px] uppercase tracking-wider text-red-400/60 mb-1">Full Bear</p>
               <p className="text-lg font-bold text-red-400">{stats.fullBear}</p>
+            </button>
+            <button
+              onClick={() => { setHasBroadening(hasBroadening === "Yes" ? "All" : "Yes"); setSignalFilter("All"); setTfcAlignment("All"); }}
+              className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
+                hasBroadening === "Yes" ? "border-amber-500/40 ring-1 ring-amber-500/20" : "border-amber-500/20 hover:border-amber-500/40"
+              }`}
+            >
+              <p className="text-[10px] uppercase tracking-wider text-amber-400/60 mb-1">Broadening</p>
+              <p className="text-lg font-bold text-amber-400">{stats.broadening}</p>
             </button>
           </div>
         )}
@@ -1142,23 +1177,33 @@ const ResultRow = memo(function ResultRow({
 
         {/* Signal */}
         <td className="px-2 py-2 text-center">
-          {result.signal === "ACTIONABLE" && result.actionDirection ? (
-            <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium border whitespace-nowrap ${signalColor(result.signal)}`}>
-              {result.actionDirection === "LONG" ? "\u2191" :
-               result.actionDirection === "SHORT" ? "\u2193" : "\u2195"}
-              <span className={
-                result.actionDirection === "LONG" ? "text-green-400" :
-                result.actionDirection === "SHORT" ? "text-red-400" :
-                "text-amber-400"
-              }>
-                {result.actionDirection}
+          <div className="flex items-center justify-center gap-1">
+            {result.signal === "ACTIONABLE" && result.actionDirection ? (
+              <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium border whitespace-nowrap ${signalColor(result.signal)}`}>
+                {result.actionDirection === "LONG" ? "\u2191" :
+                 result.actionDirection === "SHORT" ? "\u2193" : "\u2195"}
+                <span className={
+                  result.actionDirection === "LONG" ? "text-green-400" :
+                  result.actionDirection === "SHORT" ? "text-red-400" :
+                  "text-amber-400"
+                }>
+                  {result.actionDirection}
+                </span>
               </span>
-            </span>
-          ) : (
-            <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-medium border whitespace-nowrap ${signalColor(result.signal)}`}>
-              {result.signal === "SETTING_UP" ? "SETTING UP" : result.signal}
-            </span>
-          )}
+            ) : (
+              <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-medium border whitespace-nowrap ${signalColor(result.signal)}`}>
+                {result.signal === "SETTING_UP" ? "SETTING UP" : result.signal}
+              </span>
+            )}
+            {result.broadenings.length > 0 && (
+              <span
+                className="text-amber-400 text-[11px] leading-none"
+                title={`Broadening: ${result.broadenings.map((b) => `${b.barCount} bars, ${b.rangeExpansion}x expansion (${b.timeframe})`).join("; ")}`}
+              >
+                ◇
+              </span>
+            )}
+          </div>
         </td>
 
         {/* Watchlist */}
@@ -1226,7 +1271,7 @@ function BarTypeBadge({ barType }: { barType: StratBarType | null }) {
 
 function ExpandedDetail({ result }: { result: StratResult }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
       {/* All Combos */}
       <div>
         <h4 className="text-xs font-medium text-[#888] mb-2 uppercase tracking-wider">Combos ({result.combos.length})</h4>
@@ -1390,6 +1435,58 @@ function ExpandedDetail({ result }: { result: StratResult }) {
               )}
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Broadening Formations */}
+      <div>
+        <h4 className="text-xs font-medium text-[#888] mb-2 uppercase tracking-wider">Broadening Formations</h4>
+        {result.broadenings.length > 0 ? (
+          <div className="space-y-2">
+            {result.broadenings.map((b, i) => (
+              <div key={i} className="rounded border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-amber-400 text-sm">◇</span>
+                  <span className="text-xs font-medium text-white capitalize">{b.timeframe}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
+                    b.strength === "STRONG"
+                      ? "text-amber-300 bg-amber-500/20 border border-amber-500/30"
+                      : "text-amber-400/70 bg-amber-500/10 border border-amber-500/20"
+                  }`}>
+                    {b.strength}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                  <div>
+                    <span className="text-[#666]">Bars: </span>
+                    <span className="text-white">{b.barCount}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#666]">Expansion: </span>
+                    <span className="text-white">{b.rangeExpansion}x</span>
+                  </div>
+                  <div>
+                    <span className="text-[#666]">New Highs: </span>
+                    <span className="text-green-400">{b.newHighCount}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#666]">New Lows: </span>
+                    <span className="text-red-400">{b.newLowCount}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#666]">Upper: </span>
+                    <span className="text-white">${b.upperBound.toFixed(2)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#666]">Lower: </span>
+                    <span className="text-white">${b.lowerBound.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-[#555]">No broadening detected</p>
         )}
       </div>
     </div>

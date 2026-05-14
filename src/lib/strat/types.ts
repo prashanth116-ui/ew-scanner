@@ -68,6 +68,17 @@ export interface StratPMG {
   timeframe: string;
 }
 
+export interface StratBroadening {
+  timeframe: "monthly" | "weekly" | "daily";
+  barCount: number;
+  newHighCount: number;
+  newLowCount: number;
+  rangeExpansion: number;
+  upperBound: number;
+  lowerBound: number;
+  strength: "STRONG" | "MODERATE";
+}
+
 export interface StratResult {
   ticker: string;
   companyName: string;
@@ -79,6 +90,7 @@ export interface StratResult {
   combos: StratCombo[];
   triggers: StratTriggers;
   pmgs: StratPMG[];
+  broadenings: StratBroadening[];
   scores: {
     tfcScore: number;
     comboScore: number;
@@ -100,6 +112,7 @@ export interface StratFilters {
   barTypeFilter: string;
   minScore: number;
   signalFilter: string;
+  hasBroadening: string;
 }
 
 export const DEFAULT_STRAT_FILTERS: StratFilters = {
@@ -110,6 +123,7 @@ export const DEFAULT_STRAT_FILTERS: StratFilters = {
   barTypeFilter: "All",
   minScore: 0,
   signalFilter: "All",
+  hasBroadening: "All",
 };
 
 export interface StratPreset {

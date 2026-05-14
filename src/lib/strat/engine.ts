@@ -12,6 +12,7 @@ import type {
   TFCAlignment,
   StratTriggers,
   StratPMG,
+  StratBroadening,
   StratBar,
 } from "./types";
 
@@ -91,7 +92,7 @@ export function classifyBars(
 
 interface ComboPattern {
   name: StratComboName;
-  sequence: [StratBarType | StratBarType[], StratBarType | StratBarType[], StratBarType];
+  sequence: [StratBarType, StratBarType, StratBarType];
   direction: "BULL" | "BEAR";
   description: string;
 }
@@ -107,17 +108,12 @@ const COMBO_PATTERNS: ComboPattern[] = [
   { name: "3-1-2U", sequence: ["3", "1", "2U"], direction: "BULL", description: "3-1-2 Bullish" },
   { name: "3-1-2D", sequence: ["3", "1", "2D"], direction: "BEAR", description: "3-1-2 Bearish" },
   // 1-2-2 Reversals
-  { name: "1-2-2U_REV", sequence: [["1"], ["2D"], "2U"], direction: "BULL", description: "1-2-2 Bullish Reversal" },
-  { name: "1-2-2D_REV", sequence: [["1"], ["2U"], "2D"], direction: "BEAR", description: "1-2-2 Bearish Reversal" },
+  { name: "1-2-2U_REV", sequence: ["1", "2D", "2U"], direction: "BULL", description: "1-2-2 Bullish Reversal" },
+  { name: "1-2-2D_REV", sequence: ["1", "2U", "2D"], direction: "BEAR", description: "1-2-2 Bearish Reversal" },
   // 3-2-2 Reversals
-  { name: "3-2-2U_REV", sequence: [["3"], ["2D"], "2U"], direction: "BULL", description: "3-2-2 Bullish Reversal" },
-  { name: "3-2-2D_REV", sequence: [["3"], ["2U"], "2D"], direction: "BEAR", description: "3-2-2 Bearish Reversal" },
+  { name: "3-2-2U_REV", sequence: ["3", "2D", "2U"], direction: "BULL", description: "3-2-2 Bullish Reversal" },
+  { name: "3-2-2D_REV", sequence: ["3", "2U", "2D"], direction: "BEAR", description: "3-2-2 Bearish Reversal" },
 ];
-
-function matchesType(actual: StratBarType, pattern: StratBarType | StratBarType[]): boolean {
-  if (Array.isArray(pattern)) return pattern.includes(actual);
-  return actual === pattern;
-}
 
 /** Detect all active combos from last 3 classified bars in a timeframe. */
 export function detectCombos(
@@ -132,30 +128,16 @@ export function detectCombos(
 
   for (const pattern of COMBO_PATTERNS) {
     if (
-      matchesType(bar0.barType, pattern.sequence[0]) &&
-      matchesType(bar1.barType, pattern.sequence[1]) &&
-      matchesType(bar2.barType, pattern.sequence[2])
+      bar0.barType === pattern.sequence[0] &&
+      bar1.barType === pattern.sequence[1] &&
+      bar2.barType === pattern.sequence[2]
     ) {
-      // Determine trigger levels based on combo type
-      let triggerHigh: number;
-      let triggerLow: number;
-
-      if (pattern.name.startsWith("2-1-") || pattern.name.startsWith("3-1-")) {
-        // Inside bar triggers
-        triggerHigh = bar1.high;
-        triggerLow = bar1.low;
-      } else if (pattern.name.startsWith("1-2-")) {
-        // Prior bar triggers
-        triggerHigh = bar1.high;
-        triggerLow = bar1.low;
-      } else if (pattern.name.startsWith("3-2-")) {
-        // 3-bar range triggers
-        triggerHigh = bar0.high;
-        triggerLow = bar0.low;
-      } else {
-        triggerHigh = bar1.high;
-        triggerLow = bar1.low;
-      }
+      // Trigger levels: bar1 (middle bar) high/low for all patterns.
+      // 2-1-2/3-1-2: inside bar defines breakout levels.
+      // 1-2-2: prior bar defines the level to reclaim.
+      // 3-2-2: middle bar (not the outside bar) defines the reversal confirmation level.
+      const triggerHigh = bar1.high;
+      const triggerLow = bar1.low;
 
       combos.push({
         name: pattern.name,
@@ -170,26 +152,78 @@ export function detectCombos(
     }
   }
 
-  // Detect forming combos: if last bar is "1", a 2-1-? or 3-1-? is setting up
+  // Detect forming combos: if last bar is "1", a 2-1-? or 3-1-? is setting up.
+  // Inside bars can break either way, so generate both bull and bear forming combos.
   if (bars.length >= 2) {
     const last2 = bars.slice(-2);
     const [prevBar, curBar] = last2;
 
     if (curBar.barType === "1") {
-      // Inside bar forming — potential 2-1-2 or 3-1-2 setup
-      if (prevBar.barType === "2D" || prevBar.barType === "2U" || prevBar.barType === "3") {
-        const setupDir = prevBar.barType === "2D" ? "BULL" : prevBar.barType === "2U" ? "BEAR" : "BULL";
-        const setupName = prevBar.barType === "3" ? "3-1-2" : "2-1-2";
-
+      if (prevBar.barType === "2D") {
+        // 2D → 1 → could form 2U reversal (bull) or 2D continuation (bear)
         combos.push({
-          name: `${setupName}${setupDir === "BULL" ? "U" : "D"}_${prevBar.barType === "2D" || prevBar.barType === "3" ? "REV" : "CONT"}` as StratComboName,
+          name: "2-1-2U_REV",
           timeframe,
-          direction: setupDir,
+          direction: "BULL",
           barSequence: [prevBar.barType, curBar.barType],
           triggerHigh: curBar.high,
           triggerLow: curBar.low,
-          isActionable: false, // Setup forming, not yet triggered
-          description: `${setupName} ${setupDir === "BULL" ? "Bullish" : "Bearish"} forming`,
+          isActionable: false,
+          description: "2-1-2 Bullish Reversal forming",
+        });
+        combos.push({
+          name: "2-1-2D_CONT",
+          timeframe,
+          direction: "BEAR",
+          barSequence: [prevBar.barType, curBar.barType],
+          triggerHigh: curBar.high,
+          triggerLow: curBar.low,
+          isActionable: false,
+          description: "2-1-2 Bearish Continuation forming",
+        });
+      } else if (prevBar.barType === "2U") {
+        // 2U → 1 → could form 2D reversal (bear) or 2U continuation (bull)
+        combos.push({
+          name: "2-1-2D_REV",
+          timeframe,
+          direction: "BEAR",
+          barSequence: [prevBar.barType, curBar.barType],
+          triggerHigh: curBar.high,
+          triggerLow: curBar.low,
+          isActionable: false,
+          description: "2-1-2 Bearish Reversal forming",
+        });
+        combos.push({
+          name: "2-1-2U_CONT",
+          timeframe,
+          direction: "BULL",
+          barSequence: [prevBar.barType, curBar.barType],
+          triggerHigh: curBar.high,
+          triggerLow: curBar.low,
+          isActionable: false,
+          description: "2-1-2 Bullish Continuation forming",
+        });
+      } else if (prevBar.barType === "3") {
+        // 3 → 1 → could form 3-1-2U (bull) or 3-1-2D (bear)
+        combos.push({
+          name: "3-1-2U",
+          timeframe,
+          direction: "BULL",
+          barSequence: [prevBar.barType, curBar.barType],
+          triggerHigh: curBar.high,
+          triggerLow: curBar.low,
+          isActionable: false,
+          description: "3-1-2 Bullish forming",
+        });
+        combos.push({
+          name: "3-1-2D",
+          timeframe,
+          direction: "BEAR",
+          barSequence: [prevBar.barType, curBar.barType],
+          triggerHigh: curBar.high,
+          triggerLow: curBar.low,
+          isActionable: false,
+          description: "3-1-2 Bearish forming",
         });
       }
     }
@@ -314,4 +348,67 @@ export function computeTriggers(combos: StratCombo[]): StratTriggers {
   }
 
   return { longTrigger, shortTrigger, longSource, shortSource };
+}
+
+/** Detect broadening formations — expanding price envelope over 3+ bars. */
+export function detectBroadening(
+  bars: StratBar[],
+  timeframe: "monthly" | "weekly" | "daily"
+): StratBroadening[] {
+  if (bars.length < 4) return [];
+
+  const lookback = Math.min(8, bars.length);
+  const recentBars = bars.slice(-lookback);
+
+  let runningHigh = recentBars[0].high;
+  let runningLow = recentBars[0].low;
+  let newHighCount = 0;
+  let newLowCount = 0;
+  let firstExpansionIdx = -1;
+  let lastExpansionIdx = -1;
+
+  for (let i = 1; i < recentBars.length; i++) {
+    const madeNewHigh = recentBars[i].high > runningHigh;
+    const madeNewLow = recentBars[i].low < runningLow;
+
+    if (madeNewHigh) {
+      runningHigh = recentBars[i].high;
+      newHighCount++;
+      if (firstExpansionIdx === -1) firstExpansionIdx = i;
+      lastExpansionIdx = i;
+    }
+
+    if (madeNewLow) {
+      runningLow = recentBars[i].low;
+      newLowCount++;
+      if (firstExpansionIdx === -1) firstExpansionIdx = i;
+      lastExpansionIdx = i;
+    }
+  }
+
+  // Need both sides expanding: at least 2 new highs AND 2 new lows
+  if (newHighCount >= 2 && newLowCount >= 2) {
+    const barCount = lastExpansionIdx - firstExpansionIdx + 1;
+    const refBar = recentBars[firstExpansionIdx];
+    const initialRange = refBar.high - refBar.low;
+    const finalRange = runningHigh - runningLow;
+    const expansion = initialRange > 0 ? finalRange / initialRange : 0;
+    const strength: "STRONG" | "MODERATE" =
+      barCount >= 5 || expansion >= 2.0 ? "STRONG" : "MODERATE";
+
+    return [
+      {
+        timeframe,
+        barCount,
+        newHighCount,
+        newLowCount,
+        rangeExpansion: Math.round(expansion * 100) / 100,
+        upperBound: runningHigh,
+        lowerBound: runningLow,
+        strength,
+      },
+    ];
+  }
+
+  return [];
 }

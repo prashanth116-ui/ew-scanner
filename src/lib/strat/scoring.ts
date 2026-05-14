@@ -10,12 +10,14 @@ import type {
   StratCombo,
   StratTFC,
   StratPMG,
+  StratBroadening,
   StratTriggers,
 } from "./types";
 import {
   detectCombos,
   computeTFC,
   detectPMG,
+  detectBroadening,
   computeTriggers,
   barDirection,
 } from "./engine";
@@ -165,6 +167,12 @@ export function scoreStrat(
   if (weekly) allPMGs.push(...detectPMG(weekly.bars, "weekly"));
   if (daily) allPMGs.push(...detectPMG(daily.bars, "daily"));
 
+  // Detect broadenings
+  const allBroadenings: StratBroadening[] = [];
+  if (monthly) allBroadenings.push(...detectBroadening(monthly.bars, "monthly"));
+  if (weekly) allBroadenings.push(...detectBroadening(weekly.bars, "weekly"));
+  if (daily) allBroadenings.push(...detectBroadening(daily.bars, "daily"));
+
   // Compute triggers
   const triggers = computeTriggers(allCombos);
 
@@ -194,6 +202,7 @@ export function scoreStrat(
     combos: allCombos,
     triggers,
     pmgs: allPMGs,
+    broadenings: allBroadenings,
     scores: {
       tfcScore,
       comboScore,

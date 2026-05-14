@@ -23,6 +23,7 @@ const SECTIONS = [
   { id: "combos", label: "Combos" },
   { id: "forming-setups", label: "Forming Setups" },
   { id: "pmg", label: "PMG" },
+  { id: "broadening", label: "Broadening" },
   { id: "scoring", label: "Scoring" },
   { id: "signals", label: "Signals" },
   { id: "filters", label: "Filters" },
@@ -578,7 +579,109 @@ export default function StratGuidePage() {
           </Tip>
         </Section>
 
-        {/* Section 7: Scoring System */}
+        {/* Section 7: Broadening Formations */}
+        <Section
+          id="broadening"
+          title="Broadening Formations"
+          icon={<Activity className="h-5 w-5 text-orange-400" />}
+        >
+          <p>
+            A <strong className="text-white">broadening formation</strong> is an expanding price
+            envelope where the range widens progressively over multiple bars. Price makes higher highs
+            AND lower lows &mdash; the market is expanding in both directions simultaneously, signaling
+            increasing volatility and indecision.
+          </p>
+
+          <SubSection title="Detection Rules">
+            <ul className="list-inside list-disc space-y-1 text-[#c0c0c0]">
+              <li>Scans the <strong className="text-white">last 8 bars</strong> in each timeframe</li>
+              <li>Requires at least <strong className="text-white">2 new highs AND 2 new lows</strong> within the lookback window</li>
+              <li>Measures <strong className="text-white">range expansion</strong> &mdash; the ratio of the final range to the initial range at first expansion</li>
+              <li>Detected independently on monthly, weekly, and daily timeframes</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Strength Levels">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#333]">
+                    <th className="px-3 py-2 text-left text-[#a0a0a0]">Strength</th>
+                    <th className="px-3 py-2 text-left text-[#a0a0a0]">Criteria</th>
+                    <th className="px-3 py-2 text-left text-[#a0a0a0]">Meaning</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#222]">
+                    <td className="px-3 py-2">
+                      <span className="rounded px-2 py-0.5 text-[10px] font-medium text-amber-300 bg-amber-500/20 border border-amber-500/30">STRONG</span>
+                    </td>
+                    <td className="px-3 py-2 text-white">5+ bars or 2.0x+ expansion</td>
+                    <td className="px-3 py-2">Extended formation with significant range widening. High probability of a powerful breakout.</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">
+                      <span className="rounded px-2 py-0.5 text-[10px] font-medium text-amber-400/70 bg-amber-500/10 border border-amber-500/20">MODERATE</span>
+                    </td>
+                    <td className="px-3 py-2 text-white">Below STRONG thresholds</td>
+                    <td className="px-3 py-2">Developing broadening pattern. Volatility expanding but formation is still early.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Bar Type Examples">
+            <p>
+              Broadening formations often appear as sequences involving outside bars (3) and
+              directional bars that alternate or expand. Common examples:
+            </p>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-[#c0c0c0]">
+              <li>
+                <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold bg-green-500 text-white mr-0.5">2U</span>
+                <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold bg-orange-500 text-white mr-0.5">3</span>
+                <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold bg-orange-500 text-white mr-0.5">3</span>
+                <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold bg-red-500 text-white">2D</span>
+                &mdash; Consecutive outside bars with continued expansion
+              </li>
+              <li>
+                <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold bg-red-500 text-white mr-0.5">2D</span>
+                <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold bg-green-500 text-white mr-0.5">2U</span>
+                <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold bg-red-500 text-white mr-0.5">2D</span>
+                <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold bg-green-500 text-white mr-0.5">2U</span>
+                <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold bg-orange-500 text-white">3</span>
+                &mdash; Alternating directional bars with widening envelope
+              </li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="How to Trade Broadening Formations">
+            <ol className="list-inside list-decimal space-y-1.5 text-[#c0c0c0]">
+              <li><strong className="text-white">Identify the broadening</strong> via the ◇ diamond indicator in the scanner or the expanded detail panel</li>
+              <li><strong className="text-white">Wait for the breakout direction</strong> &mdash; broadening formations are non-directional; the breakout determines the trade direction</li>
+              <li><strong className="text-white">Use a combo trigger as your entry</strong> &mdash; a 2-1-2 or 3-1-2 combo that forms at the boundary of the broadening is a high-conviction setup</li>
+              <li><strong className="text-white">Expect a large move</strong> &mdash; the stored energy from the expanding range tends to produce powerful breakouts</li>
+            </ol>
+          </SubSection>
+
+          <SubSection title="Broadening + PMG">
+            <p>
+              A broadening formation at a <strong className="text-white">PMG level</strong> is an
+              extremely powerful setup. The multiple tests of the same level (PMG) combined with
+              expanding volatility (broadening) create maximum stored energy. When the level finally
+              breaks, the move is often the most explosive of any Strat pattern.
+            </p>
+          </SubSection>
+
+          <Tip>
+            Broadening formations don&rsquo;t affect the 0&ndash;13 score &mdash; they&rsquo;re a
+            structural indicator that supplements the directional scoring. Use the
+            &ldquo;Has Broadening&rdquo; filter or click the Broadening stat widget to isolate
+            stocks with expanding volatility.
+          </Tip>
+        </Section>
+
+        {/* Section 8: Scoring System */}
         <Section
           id="scoring"
           title="Scoring System"
