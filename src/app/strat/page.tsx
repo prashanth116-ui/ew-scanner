@@ -1282,16 +1282,16 @@ function ExpandedDetail({ result }: { result: StratResult }) {
                 <div className="flex gap-1">
                   {last5.map((bar, i) => {
                     const d = new Date(bar.timestamp * 1000);
+                    // Use UTC to avoid timezone shift (Yahoo timestamps are midnight UTC)
+                    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
                     const dateLabel = tf === "monthly"
-                      ? d.toLocaleDateString("en-US", { month: "short" })
-                      : tf === "weekly"
-                        ? `${d.getMonth() + 1}/${d.getDate()}`
-                        : `${d.getMonth() + 1}/${d.getDate()}`;
+                      ? months[d.getUTCMonth()]
+                      : `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
                     return (
                       <div
                         key={i}
                         className={`rounded border px-1.5 py-1 text-center ${barTypeBorder(bar.barType)}`}
-                        title={`O:${bar.open.toFixed(2)} H:${bar.high.toFixed(2)} L:${bar.low.toFixed(2)} C:${bar.close.toFixed(2)}`}
+                        title={`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")} | O:${bar.open.toFixed(2)} H:${bar.high.toFixed(2)} L:${bar.low.toFixed(2)} C:${bar.close.toFixed(2)}`}
                       >
                         <span className={`block text-[10px] font-bold ${barTypeBg(bar.barType)} text-white rounded px-1`}>
                           {bar.barType}
