@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Copy,
   Check,
+  List,
 } from "lucide-react";
 import type {
   StratResult,
@@ -33,6 +34,12 @@ import {
   loadStratScans,
   deleteStratScan,
 } from "@/lib/strat/storage";
+import {
+  loadStratWatchlists,
+  saveStratWatchlist,
+  addToStratWatchlist,
+} from "@/lib/strat/watchlist";
+import type { StratWatchlist } from "@/lib/strat/types";
 import { getStratTickers, getTickersForSector, getSectorBuckets, getSectorForTicker } from "@/data/strat-universe";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
@@ -148,9 +155,15 @@ function StratPage() {
   // Cache age
   const [cacheAge, setCacheAge] = useState<number | null>(null);
 
+  // Watchlist
+  const [watchlists, setWatchlists] = useState<StratWatchlist[]>([]);
+  const [wlMenuTicker, setWlMenuTicker] = useState<string | null>(null);
+  const [wlToast, setWlToast] = useState<string | null>(null);
+
   // Load on mount
   useEffect(() => {
     setSavedScans(loadStratScans());
+    setWatchlists(loadStratWatchlists());
     const cached = loadFromCache<StratResult[]>(CACHE_KEY, CACHE_TTL);
     if (cached && cached.length > 0) {
       setRawResults(cached);
@@ -447,6 +460,28 @@ function StratPage() {
     });
   }, [sorted]);
 
+  const handleAddToWatchlist = useCallback((watchlistId: string, result: StratResult) => {
+    const ok = addToStratWatchlist(watchlistId, result);
+    if (ok) {
+      setWlToast(`Added ${result.ticker}`);
+      setTimeout(() => setWlToast(null), 2000);
+    }
+    setWlMenuTicker(null);
+    setWatchlists(loadStratWatchlists());
+  }, []);
+
+  const handleCreateAndAdd = useCallback((result: StratResult) => {
+    const name = `Strat ${new Date().toLocaleDateString()}`;
+    const wl = saveStratWatchlist(name);
+    if (wl) {
+      addToStratWatchlist(wl.id, result);
+      setWlToast(`Created "${name}" and added ${result.ticker}`);
+      setTimeout(() => setWlToast(null), 2000);
+    }
+    setWlMenuTicker(null);
+    setWatchlists(loadStratWatchlists());
+  }, []);
+
   const universeTickers = useMemo(() => getStratTickers(), []);
   const sectorBuckets = useMemo(() => getSectorBuckets(), []);
   const sectorTickerCount = useMemo(() => getTickersForSector(sectorBucket).length, [sectorBucket]);
@@ -741,6 +776,13 @@ function StratPage() {
 
       {/* Main Content */}
       <main className="flex-1 min-w-0">
+        {/* Watchlist toast */}
+        {wlToast && (
+          <div className="fixed bottom-4 right-4 z-50 rounded-md bg-[#f97316] px-4 py-2 text-sm text-white shadow-lg">
+            {wlToast}
+          </div>
+        )}
+
         {/* Progress */}
         {scanning && (
           <div className="mb-4">
@@ -845,6 +887,7 @@ function StratPage() {
                   <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]">Short</th>
                   <th className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-wider text-[#666]">Score</th>
                   <th className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-wider text-[#666]">Signal</th>
+                  <th className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-8"></th>
                 </tr>
               </thead>
               <tbody>
@@ -855,6 +898,11 @@ function StratPage() {
                     index={idx}
                     expanded={expandedTicker === result.ticker}
                     onToggle={setExpandedTicker}
+                    watchlists={watchlists}
+                    wlMenuOpen={wlMenuTicker === result.ticker}
+                    onWlMenuToggle={setWlMenuTicker}
+                    onAddToWatchlist={handleAddToWatchlist}
+                    onCreateAndAdd={handleCreateAndAdd}
                   />
                 ))}
               </tbody>
@@ -889,7 +937,7 @@ function StratPage() {
                 <p className="text-[10px] text-[#666]">Combo Types</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
-                <p className="text-2xl font-bold text-[#f97316]">0-10</p>
+                <p className="text-2xl font-bold text-[#f97316]">0-13</p>
                 <p className="text-[10px] text-[#666]">Score Range</p>
               </div>
             </div>
@@ -915,11 +963,21 @@ const ResultRow = memo(function ResultRow({
   index,
   expanded,
   onToggle,
+  watchlists,
+  wlMenuOpen,
+  onWlMenuToggle,
+  onAddToWatchlist,
+  onCreateAndAdd,
 }: {
   result: StratResult;
   index: number;
   expanded: boolean;
   onToggle: (ticker: string | null) => void;
+  watchlists: StratWatchlist[];
+  wlMenuOpen: boolean;
+  onWlMenuToggle: (ticker: string | null) => void;
+  onAddToWatchlist: (watchlistId: string, result: StratResult) => void;
+  onCreateAndAdd: (result: StratResult) => void;
 }) {
   const actionableCombos = useMemo(() => result.combos.filter((c) => c.isActionable), [result.combos]);
   const handleClick = useCallback(() => {
@@ -1041,16 +1099,68 @@ const ResultRow = memo(function ResultRow({
 
         {/* Signal */}
         <td className="px-3 py-2.5 text-center">
-          <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-medium border ${signalColor(result.signal)}`}>
-            {result.signal}
-          </span>
+          {result.signal === "ACTIONABLE" && result.actionDirection ? (
+            <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium border ${signalColor(result.signal)}`}>
+              ACTIONABLE
+              <span className={
+                result.actionDirection === "LONG" ? "text-green-400" :
+                result.actionDirection === "SHORT" ? "text-red-400" :
+                "text-amber-400"
+              }>
+                {result.actionDirection === "LONG" ? "\u2191 LONG" :
+                 result.actionDirection === "SHORT" ? "\u2193 SHORT" :
+                 "\u2195 BOTH"}
+              </span>
+            </span>
+          ) : (
+            <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-medium border ${signalColor(result.signal)}`}>
+              {result.signal}
+            </span>
+          )}
+        </td>
+
+        {/* Watchlist */}
+        <td className="px-3 py-2.5 text-center relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); onWlMenuToggle(wlMenuOpen ? null : result.ticker); }}
+            className="rounded p-1 text-[#555] hover:text-[#f97316] transition-colors"
+            title="Add to watchlist"
+          >
+            <List className="h-3.5 w-3.5" />
+          </button>
+          {wlMenuOpen && (
+            <div
+              className="absolute right-0 top-full z-20 mt-1 w-48 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] py-1 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {watchlists.length > 0 ? (
+                watchlists.map((wl) => (
+                  <button
+                    key={wl.id}
+                    onClick={() => onAddToWatchlist(wl.id, result)}
+                    className="block w-full px-3 py-1.5 text-left text-xs text-[#a0a0a0] hover:bg-[#262626] hover:text-white truncate"
+                  >
+                    {wl.name} ({wl.items.length})
+                  </button>
+                ))
+              ) : null}
+              <div className="border-t border-[#2a2a2a] mt-1 pt-1">
+                <button
+                  onClick={() => onCreateAndAdd(result)}
+                  className="block w-full px-3 py-1.5 text-left text-xs text-[#f97316] hover:bg-[#262626]"
+                >
+                  + New Watchlist
+                </button>
+              </div>
+            </div>
+          )}
         </td>
       </tr>
 
       {/* Expanded detail */}
       {expanded && (
         <tr>
-          <td colSpan={12} className="bg-[#111] border-b border-[#2a2a2a] px-6 py-4">
+          <td colSpan={13} className="bg-[#111] border-b border-[#2a2a2a] px-6 py-4">
             <ExpandedDetail result={result} />
           </td>
         </tr>
@@ -1144,11 +1254,31 @@ function ExpandedDetail({ result }: { result: StratResult }) {
 
       {/* Score Breakdown + PMGs */}
       <div>
+        {/* Direction summary */}
+        {result.actionDirection && (
+          <div className="mb-3 rounded border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2">
+            <span className="text-[10px] text-[#888] uppercase tracking-wider mr-2">Primary Direction:</span>
+            <span className={`text-xs font-medium ${
+              result.actionDirection === "LONG" ? "text-green-400" :
+              result.actionDirection === "SHORT" ? "text-red-400" :
+              "text-amber-400"
+            }`}>
+              {result.actionDirection}
+            </span>
+            <span className="text-[10px] text-[#666] ml-2">
+              ({result.combos.filter((c) => c.isActionable && c.direction === "BULL").length} BULL,{" "}
+              {result.combos.filter((c) => c.isActionable && c.direction === "BEAR").length} BEAR)
+            </span>
+          </div>
+        )}
+
         <h4 className="text-xs font-medium text-[#888] mb-2 uppercase tracking-wider">Score Breakdown</h4>
         <div className="space-y-1.5">
           <ScoreBar label="TFC" value={result.scores.tfcScore} max={3} color="#f97316" size="sm" />
           <ScoreBar label="Combo" value={result.scores.comboScore} max={5} color="#f97316" size="sm" />
           <ScoreBar label="Action" value={result.scores.actionabilityScore} max={2} color="#f97316" size="sm" />
+          <ScoreBar label="PMG" value={result.scores.pmgScore} max={2} color="#f97316" size="sm" />
+          <ScoreBar label="Volume" value={result.scores.volumeScore} max={1} color="#f97316" size="sm" />
           <div className="border-t border-[#222] pt-1.5 mt-1.5">
             <ScoreBar label="Total" value={result.scores.totalScore} max={MAX_STRAT_SCORE} color="#f97316" size="sm" />
           </div>
@@ -1159,15 +1289,29 @@ function ExpandedDetail({ result }: { result: StratResult }) {
           <div className="mt-4">
             <h4 className="text-xs font-medium text-[#888] mb-2 uppercase tracking-wider">PMG Levels</h4>
             <div className="space-y-1">
-              {result.pmgs.map((pmg, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs">
-                  <span className={pmg.side === "HIGH" ? "text-green-400" : "text-red-400"}>
-                    {pmg.side}
-                  </span>
-                  <span className="text-white">${pmg.level.toFixed(2)}</span>
-                  <span className="text-[#666]">{pmg.testCount}x ({pmg.timeframe})</span>
-                </div>
-              ))}
+              {result.pmgs.map((pmg, i) => {
+                const TOLERANCE = 0.003;
+                const matchesTrigger = (
+                  (pmg.side === "HIGH" && result.triggers.longTrigger != null &&
+                    Math.abs(pmg.level - result.triggers.longTrigger) / result.triggers.longTrigger <= TOLERANCE) ||
+                  (pmg.side === "LOW" && result.triggers.shortTrigger != null &&
+                    Math.abs(pmg.level - result.triggers.shortTrigger) / result.triggers.shortTrigger <= TOLERANCE)
+                );
+                return (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span className={pmg.side === "HIGH" ? "text-green-400" : "text-red-400"}>
+                      {pmg.side}
+                    </span>
+                    <span className="text-white">${pmg.level.toFixed(2)}</span>
+                    <span className="text-[#666]">{pmg.testCount}x ({pmg.timeframe})</span>
+                    {matchesTrigger && (
+                      <span className="rounded bg-[#f97316]/10 border border-[#f97316]/30 px-1.5 py-0.5 text-[9px] font-medium text-[#f97316]">
+                        PMG {pmg.testCount}x
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

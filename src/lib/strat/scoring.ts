@@ -1,6 +1,6 @@
 /**
  * Strat scoring engine.
- * Total score: 0-10 (TFC 0-3 + Combo 0-5 + Actionability 0-2).
+ * Total score: 0-13 (TFC 0-3 + Combo 0-5 + Actionability 0-2 + PMG 0-2 + Volume 0-1).
  */
 
 import type {
@@ -9,6 +9,8 @@ import type {
   StratTimeframe,
   StratCombo,
   StratTFC,
+  StratPMG,
+  StratTriggers,
 } from "./types";
 import {
   detectCombos,
@@ -42,6 +44,11 @@ function scoreCombo(combos: StratCombo[], tfc: StratTFC): number {
   const tfcDir = tfc.alignment === "FULL_BULL" ? "BULL" : tfc.alignment === "FULL_BEAR" ? "BEAR" : null;
   if (tfcDir && combos.some((c) => c.direction === tfcDir && c.isActionable)) score++;
 
+  // +1 for multi-TF combo alignment: actionable combos in 2+ different timeframes share direction
+  const bullTFs = new Set(combos.filter((c) => c.isActionable && c.direction === "BULL").map((c) => c.timeframe));
+  const bearTFs = new Set(combos.filter((c) => c.isActionable && c.direction === "BEAR").map((c) => c.timeframe));
+  if (bullTFs.size >= 2 || bearTFs.size >= 2) score++;
+
   return Math.min(5, score);
 }
 
@@ -60,14 +67,73 @@ function scoreActionability(combos: StratCombo[], tfc: StratTFC): number {
   return score;
 }
 
+/** Score PMG + trigger coincidence: 0-2. */
+function scorePMG(
+  pmgs: StratPMG[],
+  triggers: StratTriggers,
+  combos: StratCombo[]
+): number {
+  if (pmgs.length === 0) return 0;
+
+  const TOLERANCE = 0.003; // 0.3%
+  let score = 0;
+
+  const hasBullCombo = combos.some((c) => c.isActionable && c.direction === "BULL");
+  const hasBearCombo = combos.some((c) => c.isActionable && c.direction === "BEAR");
+
+  // +1 if any PMG HIGH level ~ longTrigger and BULL combo exists
+  if (triggers.longTrigger != null && hasBullCombo) {
+    const triggerVal = triggers.longTrigger;
+    if (pmgs.some((p) => p.side === "HIGH" && Math.abs(p.level - triggerVal) / triggerVal <= TOLERANCE)) {
+      score++;
+    }
+  }
+
+  // +1 if any PMG LOW level ~ shortTrigger and BEAR combo exists
+  if (triggers.shortTrigger != null && hasBearCombo) {
+    const triggerVal = triggers.shortTrigger;
+    if (pmgs.some((p) => p.side === "LOW" && Math.abs(p.level - triggerVal) / triggerVal <= TOLERANCE)) {
+      score++;
+    }
+  }
+
+  return Math.min(2, score);
+}
+
+/** Score volume confirmation: 0-1. */
+function scoreVolume(daily: StratTimeframe | null): number {
+  if (!daily || daily.bars.length < 2) return 0;
+
+  const volumes = daily.bars.map((b) => b.volume).filter((v) => v > 0);
+  if (volumes.length < 2) return 0;
+
+  const avg = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+  const lastBar = daily.bars[daily.bars.length - 1];
+
+  // +1 if last bar volume >= 1.5x average
+  if (lastBar.volume >= avg * 1.5) return 1;
+  return 0;
+}
+
+/** Compute dominant actionable direction from combos. */
+function computeActionDirection(combos: StratCombo[]): StratResult["actionDirection"] {
+  const bullActionable = combos.filter((c) => c.isActionable && c.direction === "BULL");
+  const bearActionable = combos.filter((c) => c.isActionable && c.direction === "BEAR");
+
+  if (bullActionable.length > 0 && bearActionable.length > 0) return "BOTH";
+  if (bullActionable.length > 0) return "LONG";
+  if (bearActionable.length > 0) return "SHORT";
+  return null;
+}
+
 /** Classify signal based on score and combos. */
 function classifySignal(totalScore: number, combos: StratCombo[]): StratSignal {
   const hasActionable = combos.some((c) => c.isActionable);
   const hasAnyCombo = combos.length > 0;
 
-  if (totalScore >= 7 && hasActionable) return "ACTIONABLE";
-  if (totalScore >= 4 || hasAnyCombo) return "SETTING_UP";
-  if (totalScore <= 1 && !hasAnyCombo) return "NEUTRAL";
+  if (totalScore >= 8 && hasActionable) return "ACTIONABLE";
+  if (totalScore >= 5 || hasAnyCombo) return "SETTING_UP";
+  if (totalScore <= 2 && !hasAnyCombo) return "NEUTRAL";
   return "CONFLICTED";
 }
 
@@ -106,11 +172,16 @@ export function scoreStrat(
   const tfcScore = scoreTFC(tfc);
   const comboScore = scoreCombo(allCombos, tfc);
   const actionabilityScore = scoreActionability(allCombos, tfc);
-  const totalScore = tfcScore + comboScore + actionabilityScore;
-  const normalizedScore = Math.min(10, totalScore);
+  const pmgScore = scorePMG(allPMGs, triggers, allCombos);
+  const volumeScore = scoreVolume(daily);
+  const totalScore = tfcScore + comboScore + actionabilityScore + pmgScore + volumeScore;
+  const normalizedScore = Math.min(13, totalScore);
 
   // Signal classification
   const signal = classifySignal(totalScore, allCombos);
+
+  // Action direction
+  const actionDirection = computeActionDirection(allCombos);
 
   return {
     ticker,
@@ -127,9 +198,12 @@ export function scoreStrat(
       tfcScore,
       comboScore,
       actionabilityScore,
+      pmgScore,
+      volumeScore,
       totalScore,
       normalizedScore,
     },
     signal,
+    actionDirection,
   };
 }

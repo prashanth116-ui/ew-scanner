@@ -83,10 +83,13 @@ export interface StratResult {
     tfcScore: number;
     comboScore: number;
     actionabilityScore: number;
+    pmgScore: number;
+    volumeScore: number;
     totalScore: number;
     normalizedScore: number;
   };
   signal: StratSignal;
+  actionDirection: "LONG" | "SHORT" | "BOTH" | null;
 }
 
 export interface StratFilters {
@@ -122,14 +125,14 @@ export const STRAT_PRESETS: StratPreset[] = [
     name: "Full Bull TFC",
     shortName: "Bull TFC",
     description: "All 3 timeframes aligned bullish. Strongest long setups.",
-    filters: { tfcAlignment: "FULL_BULL", minScore: 4 },
+    filters: { tfcAlignment: "FULL_BULL", minScore: 5 },
     recommended: true,
   },
   {
     name: "Full Bear TFC",
     shortName: "Bear TFC",
     description: "All 3 timeframes aligned bearish. Strongest short setups.",
-    filters: { tfcAlignment: "FULL_BEAR", minScore: 4 },
+    filters: { tfcAlignment: "FULL_BEAR", minScore: 5 },
   },
   {
     name: "2-1-2 Reversals",
@@ -147,7 +150,7 @@ export const STRAT_PRESETS: StratPreset[] = [
     name: "Actionable Now",
     shortName: "Actionable",
     description: "Only stocks with triggered combos and high scores.",
-    filters: { signalFilter: "ACTIONABLE", minScore: 7 },
+    filters: { signalFilter: "ACTIONABLE", minScore: 8 },
   },
   {
     name: "Wide Net",
@@ -166,4 +169,26 @@ export interface SavedStratScan {
   results: StratResult[];
 }
 
-export const MAX_STRAT_SCORE = 10;
+export const MAX_STRAT_SCORE = 13;
+
+// ── Watchlist types ──
+
+export interface StratWatchlistItem {
+  ticker: string;
+  name: string;
+  addedAt: string;
+  scoreAtAdd: number;
+  signalAtAdd: StratSignal;
+  tfcAtAdd: TFCAlignment;
+  directionAtAdd: "BULL" | "BEAR" | "MIXED";
+  longTrigger: number | null;
+  shortTrigger: number | null;
+}
+
+export interface StratWatchlist {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  items: StratWatchlistItem[];
+}

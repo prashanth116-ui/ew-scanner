@@ -585,7 +585,7 @@ export default function StratGuidePage() {
           icon={<SlidersHorizontal className="h-5 w-5 text-orange-400" />}
         >
           <p>
-            Each stock gets a composite score from 0&ndash;10 based on three dimensions. Higher scores
+            Each stock gets a composite score from 0&ndash;13 based on five dimensions. Higher scores
             indicate stronger, more actionable setups.
           </p>
 
@@ -609,14 +609,32 @@ export default function StratGuidePage() {
                   <td className="px-3 py-2">0&ndash;5</td>
                   <td className="px-3 py-2">
                     +1 if any combo exists, +1 for reversal combo, +1 for weekly actionable,
-                    +2 for monthly actionable, +1 if combo direction matches TFC.
+                    +2 for monthly actionable, +1 if combo direction matches TFC,
+                    +1 if actionable combos in 2+ timeframes share the same direction.
                   </td>
                 </tr>
-                <tr>
+                <tr className="border-b border-[#222]">
                   <td className="px-3 py-2 text-white font-medium">Actionability</td>
                   <td className="px-3 py-2">0&ndash;2</td>
                   <td className="px-3 py-2">
                     +1 if any actionable trigger exists, +1 if trigger aligns with TFC direction.
+                  </td>
+                </tr>
+                <tr className="border-b border-[#222]">
+                  <td className="px-3 py-2 text-white font-medium">PMG Coincidence</td>
+                  <td className="px-3 py-2">0&ndash;2</td>
+                  <td className="px-3 py-2">
+                    +1 if a PMG HIGH level is within 0.3% of the long trigger (and a BULL combo exists),
+                    +1 if a PMG LOW level is within 0.3% of the short trigger (and a BEAR combo exists).
+                    Heavy testing at the breakout level confirms high breakout probability.
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2 text-white font-medium">Volume</td>
+                  <td className="px-3 py-2">0&ndash;1</td>
+                  <td className="px-3 py-2">
+                    +1 if the last daily bar&rsquo;s volume is 1.5x or more above the average volume
+                    of all available bars. Above-average volume confirms institutional participation.
                   </td>
                 </tr>
               </tbody>
@@ -626,9 +644,14 @@ export default function StratGuidePage() {
           <SubSection title="Score Breakdown Examples">
             <div className="space-y-2 text-[#c0c0c0]">
               <p>
-                <strong className="text-white">Score 10 (perfect)</strong>: Full Bull TFC (3) + monthly
-                reversal combo matching TFC direction (5) + actionable trigger aligned with TFC (2) = 10.
+                <strong className="text-white">Score 13 (perfect)</strong>: Full Bull TFC (3) + monthly
+                reversal combo matching TFC direction with multi-TF alignment (5) + actionable trigger
+                aligned with TFC (2) + PMG at both triggers (2) + above-average volume (1) = 13.
                 This is the highest-conviction setup The Strat can produce.
+              </p>
+              <p>
+                <strong className="text-white">Score 8 (actionable)</strong>: Full Bull TFC (3) + daily
+                reversal combo matching TFC (3) + actionable trigger (2) = 8. Clear setup with trigger levels.
               </p>
               <p>
                 <strong className="text-white">Score 4 (moderate)</strong>: Mixed TFC with 2 aligned (2)
@@ -642,8 +665,8 @@ export default function StratGuidePage() {
           </SubSection>
 
           <Tip>
-            Use the Min Score slider in the sidebar to filter out noise. A threshold of 4+ is a good
-            starting point. Raise to 7+ for only the strongest setups.
+            Use the Min Score slider in the sidebar to filter out noise. A threshold of 5+ is a good
+            starting point. Raise to 8+ for only the strongest setups.
           </Tip>
         </Section>
 
@@ -671,21 +694,21 @@ export default function StratGuidePage() {
                   <td className="px-3 py-2">
                     <span className="rounded px-2 py-0.5 text-[10px] font-medium border text-green-400 border-green-500/30 bg-green-500/10">ACTIONABLE</span>
                   </td>
-                  <td className="px-3 py-2 text-white">Score &ge; 7 + actionable combo</td>
-                  <td className="px-3 py-2">Complete pattern with trigger levels. Ready to trade with defined entry/stop.</td>
+                  <td className="px-3 py-2 text-white">Score &ge; 8 + actionable combo</td>
+                  <td className="px-3 py-2">Complete pattern with trigger levels and direction shown (LONG/SHORT/BOTH). Ready to trade.</td>
                 </tr>
                 <tr className="border-b border-[#222]">
                   <td className="px-3 py-2">
                     <span className="rounded px-2 py-0.5 text-[10px] font-medium border text-amber-400 border-amber-500/30 bg-amber-500/10">SETTING UP</span>
                   </td>
-                  <td className="px-3 py-2 text-white">Score &ge; 4 or has any combo</td>
+                  <td className="px-3 py-2 text-white">Score &ge; 5 or has any combo</td>
                   <td className="px-3 py-2">Pattern forming or moderate alignment. Add to watchlist, wait for trigger.</td>
                 </tr>
                 <tr className="border-b border-[#222]">
                   <td className="px-3 py-2">
                     <span className="rounded px-2 py-0.5 text-[10px] font-medium border text-[#888] border-[#333] bg-[#1a1a1a]">NEUTRAL</span>
                   </td>
-                  <td className="px-3 py-2 text-white">Score &le; 1 + no combos</td>
+                  <td className="px-3 py-2 text-white">Score &le; 2 + no combos</td>
                   <td className="px-3 py-2">No meaningful setup. Price action is directionless or not forming any pattern.</td>
                 </tr>
                 <tr>
@@ -755,8 +778,8 @@ export default function StratGuidePage() {
                 </tr>
                 <tr className="border-b border-[#222]">
                   <td className="px-3 py-2 text-white">Min Score</td>
-                  <td className="px-3 py-2">0&ndash;10 slider</td>
-                  <td className="px-3 py-2">Hide stocks below this total score. 4+ recommended for focused screening.</td>
+                  <td className="px-3 py-2">0&ndash;13 slider</td>
+                  <td className="px-3 py-2">Hide stocks below this total score. 5+ recommended for focused screening.</td>
                 </tr>
                 <tr>
                   <td className="px-3 py-2 text-white">Signal</td>
@@ -774,7 +797,7 @@ export default function StratGuidePage() {
               <li><strong className="text-white">Full Bear TFC</strong> &mdash; TFC=FULL_BEAR, Score &ge; 4. The strongest short setups.</li>
               <li><strong className="text-white">2-1-2 Reversals</strong> &mdash; Combo=2-1-2 REV. Classic reversal patterns in any timeframe.</li>
               <li><strong className="text-white">Inside Day Breakout</strong> &mdash; Bar type=1, Daily. Stocks coiling with inside bars today.</li>
-              <li><strong className="text-white">Actionable Now</strong> &mdash; Signal=ACTIONABLE, Score &ge; 7. Only triggered, high-score setups.</li>
+              <li><strong className="text-white">Actionable Now</strong> &mdash; Signal=ACTIONABLE, Score &ge; 8. Only triggered, high-score setups with direction shown.</li>
               <li><strong className="text-white">Wide Net</strong> &mdash; All defaults. Maximum results for broad exploration.</li>
             </ul>
           </SubSection>
