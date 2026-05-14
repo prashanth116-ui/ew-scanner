@@ -56,8 +56,9 @@ import { PresetList } from "@/components/preset-list";
 import { ScoreBar } from "@/components/score-bar";
 import { ProgressBar } from "@/components/progress-bar";
 
-const BATCH_SIZE = 10;
-const BATCH_DELAY = 1000;
+const BATCH_SIZE = 25;
+const BATCH_DELAY = 300;
+const CONCURRENT_BATCHES = 3;
 
 type SortKey = "confluence" | "ew" | "squeeze" | "prerun" | "sector" | "strat" | "pass";
 type SortDir = "asc" | "desc";
@@ -464,36 +465,56 @@ export default function ConfluencePage() {
     }
 
     const results: ConfluenceScanResult[] = [];
+    const stride = BATCH_SIZE * CONCURRENT_BATCHES;
 
-    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+    for (let i = 0; i < tickers.length; i += stride) {
       if (signal.aborted) break;
-      const batch = tickers.slice(i, i + BATCH_SIZE);
-      setProgress(
-        `Scanning ${Math.min(i + BATCH_SIZE, tickers.length)}/${tickers.length}...`
-      );
+
+      // Build up to CONCURRENT_BATCHES fetch promises
+      const batchPromises: Promise<ConfluenceScanResult[]>[] = [];
+      for (let j = 0; j < CONCURRENT_BATCHES; j++) {
+        const start = i + j * BATCH_SIZE;
+        if (start >= tickers.length) break;
+        const batch = tickers.slice(start, start + BATCH_SIZE);
+        batchPromises.push(
+          fetch("/api/confluence/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tickers: batch }),
+            signal,
+          })
+            .then(async (res) => {
+              if (res.ok) {
+                const data = (await res.json()) as { results: ConfluenceScanResult[] };
+                return data.results ?? [];
+              }
+              return [];
+            })
+            .catch((err) => {
+              if ((err as Error).name === "AbortError") throw err;
+              return [];
+            })
+        );
+      }
+
+      const tickerEnd = Math.min(i + stride, tickers.length);
+      setProgress(`Scanning ${tickerEnd}/${tickers.length}...`);
 
       try {
-        const res = await fetch("/api/confluence/scan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tickers: batch }),
-          signal,
-        });
-
-        if (res.ok) {
-          const data = (await res.json()) as { results: ConfluenceScanResult[] };
-          if (data.results) {
-            results.push(...data.results);
+        const settled = await Promise.allSettled(batchPromises);
+        for (const r of settled) {
+          if (r.status === "fulfilled") {
+            results.push(...r.value);
           }
         }
       } catch (err) {
         if ((err as Error).name === "AbortError") break;
       }
 
-      setScannedCount(Math.min(i + BATCH_SIZE, tickers.length));
+      setScannedCount(tickerEnd);
       setRawResults([...results]);
 
-      if (i + BATCH_SIZE < tickers.length && !signal.aborted) {
+      if (tickerEnd < tickers.length && !signal.aborted) {
         await new Promise((r) => setTimeout(r, BATCH_DELAY));
       }
     }
@@ -916,7 +937,7 @@ export default function ConfluencePage() {
               <ProgressBar
                 current={scannedCount}
                 total={totalCount}
-                label={`${progress}${totalCount > 200 && scannedCount > 0 && scannedCount < totalCount ? ` (~${Math.ceil(((totalCount - scannedCount) / BATCH_SIZE) * (BATCH_DELAY / 1000) / 60)}min left)` : ""}`}
+                label={`${progress}${totalCount > 200 && scannedCount > 0 && scannedCount < totalCount ? ` (~${Math.ceil(((totalCount - scannedCount) / (BATCH_SIZE * CONCURRENT_BATCHES)) * (BATCH_DELAY / 1000) / 60)}min left)` : ""}`}
                 color="bg-[#ec4899]"
               />
             </div>

@@ -6,7 +6,7 @@
 import "server-only";
 
 import { findStructuralReferences, findRecentCyclePivot } from "./ew-structural";
-import { fetchWithRetry, getCachedChart, setCachedChart } from "@/lib/yahoo-utils";
+import { fetchWithRetry, deduplicatedChartFetch } from "@/lib/yahoo-utils";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
 const UA =
@@ -50,29 +50,32 @@ export async function fetchEWQuoteData(
 ): Promise<EWQuoteResult | null> {
   const { detail = true } = options;
 
-  // Check chart cache first (shared with Pre-Run via yahoo-utils)
-  const cached = getCachedChart(ticker, "5y", "1wk");
+  // Deduplicated fetch — prevents duplicate HTTP requests when multiple scanners
+  // request the same chart concurrently (e.g. EW + PreRun both need AAPL:5y:1wk)
   let data: Record<string, unknown>;
 
-  if (cached) {
-    data = cached as Record<string, unknown>;
-  } else {
-    const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?interval=1wk&range=5y&includePrePost=false`;
-    let res: Response;
-    try {
-      res = await fetchWithRetry(
-        url,
-        { headers: { "User-Agent": UA } },
-        { timeout: 15000, retries: 1 }
-      );
-    } catch {
-      return null;
-    }
+  try {
+    const raw = await deduplicatedChartFetch(ticker, "5y", "1wk", async () => {
+      const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?interval=1wk&range=5y&includePrePost=false`;
+      let res: Response;
+      try {
+        res = await fetchWithRetry(
+          url,
+          { headers: { "User-Agent": UA } },
+          { timeout: 15000, retries: 1 }
+        );
+      } catch {
+        return null;
+      }
 
-    if (!res.ok) return null;
+      if (!res.ok) return null;
 
-    data = await res.json();
-    setCachedChart(ticker, "5y", "1wk", data);
+      return await res.json();
+    });
+    if (!raw) return null;
+    data = raw as Record<string, unknown>;
+  } catch {
+    return null;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

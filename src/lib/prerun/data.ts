@@ -8,7 +8,7 @@ import "server-only";
 import type { PreRunStockData } from "./types";
 import { getYahooCrumb, invalidateCrumbCache } from "../squeeze-fetch";
 import { getSectorForTicker, getSectorETF } from "@/data/prerun-universe";
-import { fetchWithRetry, extractRaw, getCachedChart, setCachedChart } from "@/lib/yahoo-utils";
+import { fetchWithRetry, extractRaw, deduplicatedChartFetch } from "@/lib/yahoo-utils";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -17,6 +17,23 @@ const YAHOO_SUMMARY =
   "https://query1.finance.yahoo.com/v10/finance/quoteSummary";
 const YAHOO_CHART =
   "https://query1.finance.yahoo.com/v8/finance/chart";
+
+// ── Finnhub response cache (30-min TTL) ──
+// Earnings calendar, insider buys, and beat streaks are stable for hours.
+// Eliminates ~4,173 redundant HTTP calls on repeated confluence scans.
+const _finnhubCache = new Map<string, { data: unknown; ts: number }>();
+const FINNHUB_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+function getFinnhubCached<T>(key: string): T | undefined {
+  const entry = _finnhubCache.get(key);
+  if (entry && Date.now() - entry.ts < FINNHUB_CACHE_TTL) return entry.data as T;
+  if (entry) _finnhubCache.delete(key);
+  return undefined;
+}
+
+function setFinnhubCached(key: string, data: unknown): void {
+  _finnhubCache.set(key, { data, ts: Date.now() });
+}
 
 /** Fetch quoteSummary modules from Yahoo Finance. */
 async function fetchYahooSummary(
@@ -72,31 +89,34 @@ export async function fetchYahooChart(
   lows: number[];
   timestamps: number[];
 } | null> {
-  // Check shared chart cache (avoids duplicate 5y weekly fetches in confluence)
-  const cached = getCachedChart(ticker, range, interval);
+  // Deduplicated fetch — prevents duplicate HTTP requests when multiple scanners
+  // request the same chart concurrently (e.g. EW + PreRun both need AAPL:5y:1wk)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let data: any;
 
-  if (cached) {
-    data = cached;
-  } else {
-    const auth = await getYahooCrumb();
-    if (!auth) return null;
+  try {
+    data = await deduplicatedChartFetch(ticker, range, interval, async () => {
+      const auth = await getYahooCrumb();
+      if (!auth) return null;
 
-    const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&crumb=${encodeURIComponent(auth.crumb)}`;
-    let res: Response;
-    try {
-      res = await fetchWithRetry(url, {
-        headers: { "User-Agent": UA, Cookie: auth.cookie },
-      });
-    } catch {
-      return null;
-    }
-    if (!res.ok) return null;
+      const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&crumb=${encodeURIComponent(auth.crumb)}`;
+      let res: Response;
+      try {
+        res = await fetchWithRetry(url, {
+          headers: { "User-Agent": UA, Cookie: auth.cookie },
+        });
+      } catch {
+        return null;
+      }
+      if (!res.ok) return null;
 
-    data = await res.json();
-    setCachedChart(ticker, range, interval, data);
+      return await res.json();
+    });
+  } catch {
+    return null;
   }
+
+  if (!data) return null;
 
   const chart = (data as {
     chart?: {
@@ -132,6 +152,10 @@ export async function fetchYahooChart(
 async function fetchFinnhubEarnings(
   ticker: string
 ): Promise<string | null> {
+  const cacheKey = `earnings:${ticker.toUpperCase()}`;
+  const cached = getFinnhubCached<string | null>(cacheKey);
+  if (cached !== undefined) return cached;
+
   const key = process.env.FINNHUB_API_KEY;
   if (!key) return null;
 
@@ -151,7 +175,9 @@ async function fetchFinnhubEarnings(
     const entry = data?.earningsCalendar?.find(
       (e) => e.symbol?.toUpperCase() === ticker.toUpperCase()
     );
-    return entry?.date ?? null;
+    const result = entry?.date ?? null;
+    setFinnhubCached(cacheKey, result);
+    return result;
   } catch {
     return null;
   }
@@ -161,6 +187,10 @@ async function fetchFinnhubEarnings(
 async function fetchFinnhubInsiderTransactions(
   ticker: string
 ): Promise<number> {
+  const cacheKey = `insider:${ticker.toUpperCase()}`;
+  const cached = getFinnhubCached<number>(cacheKey);
+  if (cached !== undefined) return cached;
+
   const key = process.env.FINNHUB_API_KEY;
   if (!key) return 0;
 
@@ -189,6 +219,7 @@ async function fetchFinnhubInsiderTransactions(
         buyCount++;
       }
     }
+    setFinnhubCached(cacheKey, buyCount);
     return buyCount;
   } catch {
     return 0;
@@ -199,6 +230,10 @@ async function fetchFinnhubInsiderTransactions(
 async function fetchFinnhubEarningsSurprises(
   ticker: string
 ): Promise<number> {
+  const cacheKey = `surprises:${ticker.toUpperCase()}`;
+  const cached = getFinnhubCached<number>(cacheKey);
+  if (cached !== undefined) return cached;
+
   const key = process.env.FINNHUB_API_KEY;
   if (!key) return 0;
 
@@ -227,6 +262,7 @@ async function fetchFinnhubEarningsSurprises(
         break; // Streak broken
       }
     }
+    setFinnhubCached(cacheKey, streak);
     return streak;
   } catch {
     return 0;

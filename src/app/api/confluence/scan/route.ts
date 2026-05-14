@@ -12,7 +12,7 @@ import { fetchStratData } from "@/lib/strat/data";
 import { scoreStrat } from "@/lib/strat/scoring";
 import type { ConfluenceScanResult, ConfluenceEWResult, ConfluenceSqueezeResult, ConfluencePreRunResult, ConfluenceStratResult } from "@/lib/confluence/types";
 
-const MAX_BATCH = 10;
+const MAX_BATCH = 25;
 const FETCH_TIMEOUT = 15000;
 
 /** Create a timeout promise that rejects after ms. */
@@ -34,7 +34,7 @@ interface InternalPreRunResult extends ConfluencePreRunResult {
 }
 
 export async function POST(request: NextRequest) {
-  const rl = rateLimit(`confluence-scan:${getClientKey(request)}`, 10, 60_000);
+  const rl = rateLimit(`confluence-scan:${getClientKey(request)}`, 120, 60_000);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded" },
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const tickers = validateTickers(body.tickers).slice(0, MAX_BATCH);
     if (!tickers.length) {
       return NextResponse.json(
-        { error: "tickers array required (valid A-Z tickers, max 10)" },
+        { error: "tickers array required (valid A-Z tickers, max 25)" },
         { status: 400 }
       );
     }

@@ -44,10 +44,10 @@ export async function fetchWithRetry(
 }
 
 // ── Request-scoped Yahoo chart cache ──
-// Short TTL (60s) — prevents duplicate chart fetches when confluence runs
-// EW + Pre-Run in parallel for the same ticker (both need 5y weekly chart).
+// 5-min TTL — keeps chart data warm across all confluence scan batches.
+// Chart data (weekly/monthly candles) doesn't change within a scan session.
 const _chartCache = new Map<string, { data: unknown; ts: number }>();
-const CHART_CACHE_TTL = 60_000; // 60 seconds
+const CHART_CACHE_TTL = 300_000; // 5 minutes
 
 /** Cache key for Yahoo chart requests. */
 function chartCacheKey(ticker: string, range: string, interval: string): string {
@@ -67,6 +67,47 @@ export function getCachedChart(ticker: string, range: string, interval: string):
 export function setCachedChart(ticker: string, range: string, interval: string, data: unknown): void {
   const key = chartCacheKey(ticker, range, interval);
   _chartCache.set(key, { data, ts: Date.now() });
+}
+
+// ── In-flight request deduplication for chart fetches ──
+// When multiple scanners request the same chart simultaneously (e.g. EW + PreRun
+// both need AAPL:5y:1wk), return the same in-flight Promise instead of firing
+// duplicate HTTP requests.
+const _pendingCharts = new Map<string, Promise<unknown>>();
+
+/**
+ * Deduplicated chart fetch: checks result cache, then in-flight map, then calls fetcher.
+ * Prevents duplicate HTTP requests when multiple scanners request the same chart concurrently.
+ */
+export function deduplicatedChartFetch(
+  ticker: string,
+  range: string,
+  interval: string,
+  fetcher: () => Promise<unknown>,
+): Promise<unknown> {
+  // 1. Check result cache
+  const cached = getCachedChart(ticker, range, interval);
+  if (cached) return Promise.resolve(cached);
+
+  // 2. Check in-flight requests
+  const key = chartCacheKey(ticker, range, interval);
+  const pending = _pendingCharts.get(key);
+  if (pending) return pending;
+
+  // 3. Start new fetch, store the Promise
+  const promise = fetcher()
+    .then((data) => {
+      if (data != null) {
+        setCachedChart(ticker, range, interval, data);
+      }
+      return data;
+    })
+    .finally(() => {
+      _pendingCharts.delete(key);
+    });
+
+  _pendingCharts.set(key, promise);
+  return promise;
 }
 
 /** Extract raw numeric value from Yahoo Finance API responses (handles {raw: N} wrapper). */
