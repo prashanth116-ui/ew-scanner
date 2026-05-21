@@ -12,6 +12,8 @@ import type {
   PreRunRisk,
   SavedPreRunScan,
   PreRunFilters,
+  MultiTFM2Result,
+  EmaTimeframe,
 } from "./types";
 
 const WATCHLIST_KEY = "ew-scanner-prerun-watchlist";
@@ -312,4 +314,68 @@ export function seedWatchlistIfEmpty(): void {
   }));
 
   persistWatchlist(items);
+}
+
+// ── Multi-TF M2 Cache ──
+// Split TTL: HTF (1d, 1wk, 1mo) = 24 hours, LTF (15m, 1h, 4h) = 30 minutes
+
+const MULTI_TF_CACHE_KEY = "ew-prerun-multi-tf-m2";
+const LTF_TTL = 30 * 60 * 1000; // 30 minutes
+const HTF_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+const HTF_TIMEFRAMES: EmaTimeframe[] = ["1d", "1wk", "1mo"];
+
+interface MultiTFCacheEntry {
+  results: MultiTFM2Result[];
+  savedAt: number;
+}
+
+export function saveMultiTFCache(results: MultiTFM2Result[]): void {
+  if (!isClient()) return;
+  try {
+    const entry: MultiTFCacheEntry = { results, savedAt: Date.now() };
+    localStorage.setItem(MULTI_TF_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    // Quota exceeded — silently skip
+  }
+}
+
+/**
+ * Load multi-TF cache with split TTL.
+ * Returns { results, staleTimeframes } where staleTimeframes lists
+ * the LTF timeframes that need refetching (expired 30min TTL).
+ */
+export function loadMultiTFCache(): {
+  results: MultiTFM2Result[];
+  staleTimeframes: EmaTimeframe[];
+} | null {
+  if (!isClient()) return null;
+  try {
+    const raw = localStorage.getItem(MULTI_TF_CACHE_KEY);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as MultiTFCacheEntry;
+    const age = Date.now() - entry.savedAt;
+
+    // If even HTF data is stale, return null (full refetch needed)
+    if (age > HTF_TTL) {
+      localStorage.removeItem(MULTI_TF_CACHE_KEY);
+      return null;
+    }
+
+    // If LTF data is stale, return results but mark LTF timeframes as stale
+    const staleTimeframes: EmaTimeframe[] = [];
+    if (age > LTF_TTL) {
+      // Mark non-HTF timeframes as stale
+      const allTfs: EmaTimeframe[] = ["15m", "1h", "4h", "1d", "1wk", "1mo"];
+      for (const tf of allTfs) {
+        if (!HTF_TIMEFRAMES.includes(tf)) {
+          staleTimeframes.push(tf);
+        }
+      }
+    }
+
+    return { results: entry.results, staleTimeframes };
+  } catch {
+    return null;
+  }
 }

@@ -16,6 +16,7 @@ import {
   FileDown,
   Sparkles,
   Copy,
+  Layers,
 } from "lucide-react";
 import Link from "next/link";
 import type {
@@ -23,9 +24,10 @@ import type {
   PreRunFilters,
   SavedPreRunScan,
   PreRunCriteriaFilter,
+  MultiTFM2Result,
 } from "@/lib/prerun/types";
 import type { EmaTimeframe } from "@/lib/prerun/types";
-import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE } from "@/lib/prerun/types";
+import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES } from "@/lib/prerun/types";
 import {
   savePreRunScan,
   loadPreRunScans,
@@ -33,6 +35,8 @@ import {
   addToPreRunWatchlist,
   seedWatchlistIfEmpty,
   saveScanResults,
+  saveMultiTFCache,
+  loadMultiTFCache,
 } from "@/lib/prerun/storage";
 import { exportPreRunToExcel } from "@/lib/prerun/export";
 import {
@@ -102,6 +106,12 @@ function PreRunPage() {
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
 
+  // Multi-TF M2 state
+  const [multiTFResults, setMultiTFResults] = useState<Map<string, MultiTFM2Result>>(new Map());
+  const [showMultiTF, setShowMultiTF] = useState(false);
+  const [multiTFScanning, setMultiTFScanning] = useState(false);
+  const [multiTFProgress, setMultiTFProgress] = useState("");
+
   // Scan state
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState("");
@@ -146,6 +156,13 @@ function PreRunPage() {
     const cached = loadFromCache<PreRunResult[]>("ew-prerun-scan-v1", 30 * 60 * 1000);
     if (cached && cached.length > 0) {
       setRawResults(cached);
+    }
+    // Load multi-TF cache
+    const tfCache = loadMultiTFCache();
+    if (tfCache && tfCache.results.length > 0) {
+      const map = new Map<string, MultiTFM2Result>();
+      for (const r of tfCache.results) map.set(r.ticker, r);
+      setMultiTFResults(map);
     }
   }, []);
 
@@ -231,6 +248,87 @@ function PreRunPage() {
     return { total: filtered.length, priority, keep, watch };
   }, [filtered]);
 
+  // Phase 2: Multi-TF M2 scan for candidate tickers
+  const runMultiTFPhase2 = useCallback(async (candidates: PreRunResult[]) => {
+    if (candidates.length === 0) return;
+
+    setMultiTFScanning(true);
+    setMultiTFProgress(`Fetching M2 for ${candidates.length} candidates across 5 timeframes...`);
+
+    const candidateTickers = candidates.map((r) => r.data.ticker);
+    // Skip 1d — already have it from Phase 1
+    const timeframes: EmaTimeframe[] = ["15m", "1h", "4h", "1wk", "1mo"];
+
+    // Also populate 1d results from Phase 1 data
+    const phase1Map = new Map<string, MultiTFM2Result>();
+    for (const r of candidates) {
+      const d = r.data;
+      phase1Map.set(d.ticker, {
+        ticker: d.ticker,
+        timeframes: {
+          "1d": {
+            scoreM2: r.scores.scoreM2,
+            trendStrength: d.emaM2TrendStrength,
+            bullishCross: d.emaM2BullishCross,
+            priceAboveBoth: d.emaM2PriceAboveBoth,
+            dataPoints: d.emaM2DataPoints,
+          },
+        },
+      });
+    }
+
+    try {
+      // Batch tickers in groups of 10 for the API
+      const PHASE2_BATCH = 10;
+      for (let i = 0; i < candidateTickers.length; i += PHASE2_BATCH) {
+        const batch = candidateTickers.slice(i, i + PHASE2_BATCH);
+        setMultiTFProgress(
+          `M2 Phase 2: ${Math.min(i + PHASE2_BATCH, candidateTickers.length)}/${candidateTickers.length} tickers...`
+        );
+
+        try {
+          const res = await fetch("/api/prerun/m2", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tickers: batch, timeframes }),
+          });
+
+          if (res.ok) {
+            const data = (await res.json()) as { results: MultiTFM2Result[] };
+            if (data.results) {
+              for (const tfResult of data.results) {
+                const existing = phase1Map.get(tfResult.ticker);
+                if (existing) {
+                  // Merge Phase 2 timeframes into Phase 1 entry
+                  existing.timeframes = { ...existing.timeframes, ...tfResult.timeframes };
+                } else {
+                  phase1Map.set(tfResult.ticker, tfResult);
+                }
+              }
+            }
+          }
+        } catch {
+          // Continue on error — partial results are fine
+        }
+
+        // Update state progressively
+        setMultiTFResults(new Map(phase1Map));
+
+        if (i + PHASE2_BATCH < candidateTickers.length) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+
+      // Save to cache
+      saveMultiTFCache(Array.from(phase1Map.values()));
+    } catch {
+      // Non-critical — Phase 1 results still valid
+    }
+
+    setMultiTFScanning(false);
+    setMultiTFProgress("");
+  }, []);
+
   // Scan
   const runScan = useCallback(async () => {
     scanAbort.current?.abort();
@@ -241,6 +339,7 @@ function PreRunPage() {
     setScanning(true);
     setRawResults([]);
     setScannedCount(0);
+    if (showMultiTF) setMultiTFResults(new Map());
 
     const tickers = getTickersForSector(sectorBucket);
     setTotalCount(tickers.length);
@@ -250,20 +349,23 @@ function PreRunPage() {
       return;
     }
 
+    // For multi-TF presets, force Phase 1 to use 1d (free — reuses chart3mo)
+    const phase1Timeframe: EmaTimeframe = showMultiTF ? "1d" : emaTimeframe;
+
     const results: PreRunResult[] = [];
 
     for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
       if (signal.aborted) break;
       const batch = tickers.slice(i, i + BATCH_SIZE);
       setProgress(
-        `Fetching ${Math.min(i + BATCH_SIZE, tickers.length)}/${tickers.length}...`
+        `${showMultiTF ? "Phase 1: " : ""}Fetching ${Math.min(i + BATCH_SIZE, tickers.length)}/${tickers.length}...`
       );
 
       try {
         const res = await fetch("/api/prerun/scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tickers: batch, emaTimeframe }),
+          body: JSON.stringify({ tickers: batch, emaTimeframe: phase1Timeframe }),
           signal,
         });
 
@@ -290,13 +392,30 @@ function PreRunPage() {
     saveToCache("ew-prerun-scan-v1", results);
     setScanning(false);
     setProgress("");
-  }, [sectorBucket, emaTimeframe]);
+
+    // Phase 2: Multi-TF M2 scan for candidates that pass filters
+    if (showMultiTF && !signal.aborted && results.length > 0) {
+      // Filter candidates using current criteria filters
+      const candidates = results.filter((r) => {
+        if (r.scores.finalScore < minScore) return false;
+        for (const cf of criteriaFilters) {
+          const key = `score${cf.criterion}` as keyof typeof r.scores;
+          const val = r.scores[key];
+          if (typeof val === "number" && val < cf.min) return false;
+        }
+        return true;
+      });
+      runMultiTFPhase2(candidates);
+    }
+  }, [sectorBucket, emaTimeframe, showMultiTF, criteriaFilters, minScore, runMultiTFPhase2]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
     scanAbort.current = null;
     setScanning(false);
+    setMultiTFScanning(false);
     setProgress("");
+    setMultiTFProgress("");
   }, []);
 
   // Ticker search
@@ -401,6 +520,7 @@ function PreRunPage() {
     setVerdictFilter(f.verdict);
     setEmaTimeframe(f.emaTimeframe);
     setCriteriaFilters(preset.criteriaFilters ?? []);
+    setShowMultiTF(preset.multiTF ?? false);
   }, []);
 
   // Add to watchlist
@@ -851,6 +971,18 @@ function PreRunPage() {
                 <span className="hidden sm:inline">Export</span>
               </button>
               <button
+                onClick={() => setShowMultiTF((v) => !v)}
+                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs transition-colors ${
+                  showMultiTF
+                    ? "bg-purple-500/10 text-purple-400 border border-purple-500/30"
+                    : "border border-[#2a2a2a] text-[#a0a0a0] hover:text-white hover:border-[#444]"
+                }`}
+                title="Toggle multi-timeframe M2 table"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Multi-TF</span>
+              </button>
+              <button
                 onClick={copyWatchlist}
                 className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
                 title="Copy all visible tickers to clipboard"
@@ -875,6 +1007,27 @@ function PreRunPage() {
         {addError && (
           <div className="mb-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
             {addError}
+          </div>
+        )}
+
+        {/* Multi-TF M2 Table */}
+        {showMultiTF && multiTFResults.size > 0 && (
+          <MultiTFTable
+            results={multiTFResults}
+            scanning={multiTFScanning}
+            progress={multiTFProgress}
+          />
+        )}
+
+        {/* Multi-TF Phase 2 progress */}
+        {multiTFScanning && (
+          <div className="mb-4">
+            <ProgressBar
+              current={0}
+              total={0}
+              label={multiTFProgress}
+              color="bg-purple-500"
+            />
           </div>
         )}
 
@@ -1186,6 +1339,147 @@ const ResultCard = memo(function ResultCard({
           )}
           AI Score
         </button>
+      </div>
+    </div>
+  );
+});
+
+// -- Multi-TF M2 Table Component --
+
+const TF_LABELS: EmaTimeframe[] = ["15m", "1h", "4h", "1d", "1wk", "1mo"];
+
+function trendColor(trend: string | null | undefined): string {
+  switch (trend) {
+    case "strong": return "text-green-400 bg-green-500/10";
+    case "moderate": return "text-amber-400 bg-amber-500/10";
+    case "weak": return "text-orange-400 bg-orange-500/10";
+    case "bearish": return "text-red-400 bg-red-500/10";
+    default: return "text-[#555] bg-[#0f0f0f]";
+  }
+}
+
+function scoreDisplay(score: number): { text: string; color: string } {
+  if (score === 2) return { text: "2", color: "text-green-400 font-bold" };
+  if (score === 1) return { text: "1", color: "text-amber-400" };
+  return { text: "0", color: "text-[#555]" };
+}
+
+const MultiTFTable = memo(function MultiTFTable({
+  results,
+  scanning,
+  progress,
+}: {
+  results: Map<string, MultiTFM2Result>;
+  scanning: boolean;
+  progress: string;
+}) {
+  // Sort by total M2 score across timeframes (descending), tie-break by ticker
+  const sorted = useMemo(() => {
+    const entries = Array.from(results.values());
+    return entries
+      .map((r) => {
+        let totalScore = 0;
+        let bestTF: EmaTimeframe | null = null;
+        let bestScore = -1;
+        for (const tf of TF_LABELS) {
+          const tfr = r.timeframes[tf];
+          if (tfr) {
+            totalScore += tfr.scoreM2;
+            // Tie-break: prefer faster timeframe
+            if (tfr.scoreM2 > bestScore) {
+              bestScore = tfr.scoreM2;
+              bestTF = tf;
+            }
+          }
+        }
+        return { ...r, totalScore, bestTF };
+      })
+      .sort((a, b) => b.totalScore - a.totalScore || a.ticker.localeCompare(b.ticker));
+  }, [results]);
+
+  if (sorted.length === 0 && !scanning) return null;
+
+  return (
+    <div className="mb-4 rounded-lg border border-purple-500/20 bg-[#141414] overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
+        <div className="flex items-center gap-2">
+          <Layers className="h-4 w-4 text-purple-400" />
+          <h3 className="text-sm font-medium text-white">
+            Multi-Timeframe M2 EMA
+          </h3>
+          <span className="text-[10px] text-[#666]">
+            {sorted.length} stocks
+          </span>
+        </div>
+        {scanning && (
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
+            <span className="text-[10px] text-purple-400">{progress}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-[#2a2a2a] text-[#666]">
+              <th className="py-2 pl-4 pr-2 text-left font-medium sticky left-0 bg-[#141414] z-10">Ticker</th>
+              {TF_LABELS.map((tf) => (
+                <th key={tf} className="py-2 px-3 text-center font-medium whitespace-nowrap">{tf}</th>
+              ))}
+              <th className="py-2 px-3 text-center font-medium">Total</th>
+              <th className="py-2 px-3 pr-4 text-center font-medium">Best TF</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((row) => (
+              <tr key={row.ticker} className="border-b border-[#2a2a2a]/50 hover:bg-[#1a1a1a] transition-colors">
+                <td className="py-1.5 pl-4 pr-2 font-medium text-white sticky left-0 bg-[#141414] z-10">
+                  {row.ticker}
+                </td>
+                {TF_LABELS.map((tf) => {
+                  const tfr = row.timeframes[tf];
+                  if (!tfr) {
+                    return (
+                      <td key={tf} className="py-1.5 px-3 text-center">
+                        <span className="text-[#333]">&mdash;</span>
+                      </td>
+                    );
+                  }
+                  const sd = scoreDisplay(tfr.scoreM2);
+                  return (
+                    <td key={tf} className="py-1.5 px-3 text-center">
+                      <div
+                        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${trendColor(tfr.trendStrength)}`}
+                        title={`Score: ${tfr.scoreM2}/2 | Trend: ${tfr.trendStrength ?? "n/a"} | Cross: ${tfr.bullishCross ? "yes" : "no"} | Above: ${tfr.priceAboveBoth ? "yes" : "no"} | Bars: ${tfr.dataPoints ?? "?"}`}
+                      >
+                        <span className={sd.color}>{sd.text}</span>
+                        <span className="text-[9px] opacity-70">
+                          {tfr.trendStrength?.[0]?.toUpperCase() ?? "?"}
+                        </span>
+                      </div>
+                    </td>
+                  );
+                })}
+                <td className="py-1.5 px-3 text-center">
+                  <span className={`font-bold ${row.totalScore >= 8 ? "text-green-400" : row.totalScore >= 5 ? "text-amber-400" : "text-[#a0a0a0]"}`}>
+                    {row.totalScore}
+                  </span>
+                  <span className="text-[#555]">/12</span>
+                </td>
+                <td className="py-1.5 px-3 pr-4 text-center">
+                  {row.bestTF ? (
+                    <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-purple-400 font-medium">
+                      {row.bestTF}
+                    </span>
+                  ) : (
+                    <span className="text-[#333]">&mdash;</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

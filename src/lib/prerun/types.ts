@@ -4,6 +4,21 @@ export type PreRunVerdict = "PRIORITY" | "KEEP" | "WATCH" | "DISCARD";
 export type PreRunRisk = "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
 export type EmaTimeframe = "15m" | "1h" | "4h" | "1d" | "1wk" | "1mo";
 
+export const ALL_EMA_TIMEFRAMES: readonly EmaTimeframe[] = ["15m", "1h", "4h", "1d", "1wk", "1mo"] as const;
+
+export interface M2TimeframeResult {
+  scoreM2: number;
+  trendStrength: "strong" | "moderate" | "weak" | "bearish" | null;
+  bullishCross: boolean | null;
+  priceAboveBoth: boolean | null;
+  dataPoints: number | null;
+}
+
+export interface MultiTFM2Result {
+  ticker: string;
+  timeframes: Partial<Record<EmaTimeframe, M2TimeframeResult | null>>;
+}
+
 export interface PreRunStockData {
   ticker: string;
   companyName: string;
@@ -202,6 +217,7 @@ export interface PreRunPreset {
   filters: Partial<PreRunFilters>;
   criteriaFilters?: PreRunCriteriaFilter[];
   recommended?: boolean;
+  multiTF?: boolean;
 }
 
 export const PRERUN_PRESETS: PreRunPreset[] = [
@@ -236,5 +252,6 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
       { criterion: "K", min: 1 },
       { criterion: "L", min: 1 },
     ],
+    multiTF: true,
   },
 ];

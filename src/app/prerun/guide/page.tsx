@@ -534,6 +534,16 @@ export default function PreRunGuidePage() {
               score1="Bullish EMA alignment (EMA-10 > EMA-20) or price above both EMAs."
               score0="Bearish alignment — EMA-10 below EMA-20 and price below both. No momentum confirmation."
             />
+            <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 px-4 py-3">
+              <p className="text-xs font-medium text-purple-400 mb-1">Multi-Timeframe M2 Table</p>
+              <p className="text-xs text-[#a0a0a0]">
+                The <strong className="text-white">Early Mover</strong> preset auto-enables a multi-timeframe M2 view.
+                After the base scan (Phase 1), a second pass fetches EMA 10/20 signals at 15m, 1h, 4h, 1d, 1wk, and 1mo
+                for candidates that pass the criteria gates. The resulting table shows which timeframes confirm bullish
+                momentum per stock — stocks with high M2 scores across multiple timeframes have the strongest timing signal.
+                Toggle the &ldquo;Multi-TF&rdquo; button manually for any preset.
+              </p>
+            </div>
             <CriterionRow
               letter="N"
               label="Range Coil / Tight Closes Near Top"

@@ -5,7 +5,7 @@
 
 import "server-only";
 
-import type { PreRunStockData, EmaTimeframe } from "./types";
+import type { PreRunStockData, EmaTimeframe, M2TimeframeResult } from "./types";
 import { getYahooCrumb, invalidateCrumbCache } from "../squeeze-fetch";
 import { getSectorForTicker, getSectorETF } from "@/data/prerun-universe";
 import { fetchWithRetry, extractRaw, deduplicatedChartFetch } from "@/lib/yahoo-utils";
@@ -530,7 +530,7 @@ function calcEmaReclaimData(closes: number[]): {
 }
 
 /** Compute EMA 10/20 timing signal from chart closes (any timeframe). */
-function calcEmaSignal(closes: number[]): {
+export function calcEmaSignal(closes: number[]): {
   ema10: number | null;
   ema20: number | null;
   bullishCross: boolean;
@@ -935,7 +935,7 @@ export async function prefetchSectorETFs(): Promise<void> {
 }
 
 /** Yahoo Finance API config for each M2 EMA timeframe. */
-const TIMEFRAME_CONFIG: Record<EmaTimeframe, { range: string; interval: string; reuse?: "chart3mo" | "chart5y"; aggregate?: number }> = {
+export const TIMEFRAME_CONFIG: Record<EmaTimeframe, { range: string; interval: string; reuse?: "chart3mo" | "chart5y"; aggregate?: number }> = {
   "15m": { range: "1mo", interval: "15m" },
   "1h":  { range: "1mo", interval: "1h" },
   "4h":  { range: "2y",  interval: "1h", aggregate: 4 },
@@ -945,7 +945,7 @@ const TIMEFRAME_CONFIG: Record<EmaTimeframe, { range: string; interval: string; 
 };
 
 /** Aggregate 1h closes to 4h by taking every Nth close. */
-function aggregate4hCloses(closes: number[], n: number): number[] {
+export function aggregate4hCloses(closes: number[], n: number): number[] {
   const result: number[] = [];
   for (let i = n - 1; i < closes.length; i += n) {
     result.push(closes[i]);
@@ -1258,4 +1258,51 @@ export async function fetchPreRunData(
     analystRevisionTrend,
     lastUpdated: new Date().toISOString(),
   };
+}
+
+/**
+ * Lightweight M2-only fetch for a single ticker at a specific timeframe.
+ * Only fetches chart data needed for EMA 10/20 — no fundamentals, no scoring, no gates.
+ * Used by the multi-TF Phase 2 scan to minimize API calls.
+ */
+export async function fetchM2Only(
+  ticker: string,
+  emaTimeframe: EmaTimeframe
+): Promise<M2TimeframeResult | null> {
+  const tfConfig = TIMEFRAME_CONFIG[emaTimeframe];
+
+  try {
+    let closes: number[] | null = null;
+
+    // For reuse timeframes (1d uses chart3mo, 1wk uses chart5y), we still need to fetch
+    // since this is a standalone call without the main fetchPreRunData context
+    const chart = await fetchYahooChart(ticker, tfConfig.range, tfConfig.interval);
+    if (chart) {
+      closes = tfConfig.aggregate
+        ? aggregate4hCloses(chart.closes, tfConfig.aggregate)
+        : chart.closes;
+    }
+
+    if (!closes || closes.length < 20) return null;
+
+    const sig = calcEmaSignal(closes);
+
+    // Score M2 using same logic as autoScorePreRun
+    let scoreM2 = 0;
+    if (sig.bullishCross && sig.priceAboveBoth && sig.crossedWithin5Bars) {
+      scoreM2 = 2;
+    } else if (sig.bullishCross || sig.priceAboveBoth) {
+      scoreM2 = 1;
+    }
+
+    return {
+      scoreM2,
+      trendStrength: sig.trendStrength,
+      bullishCross: sig.bullishCross,
+      priceAboveBoth: sig.priceAboveBoth,
+      dataPoints: sig.dataPoints,
+    };
+  } catch {
+    return null;
+  }
 }
