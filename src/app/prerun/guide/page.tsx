@@ -196,7 +196,7 @@ function QuickReferenceCard() {
           {/* Criteria Table */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
-              15 Criteria (max 32 pts + sector modifier)
+              17 Criteria (max 36 pts + sector modifier)
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -227,6 +227,8 @@ function QuickReferenceCard() {
                     { l: "M", name: "EMA Reclaim", max: 2, s0: "Below both EMAs", s1: "Above one EMA", s2: "Above 21+50 EMA, crossed <20d" },
                     { l: "N", name: "Range Coil", max: 2, s0: "No coiling", s1: "Near top OR ATR contracting", s2: "Near top + ATR contracting" },
                     { l: "O", name: "Failed Breakdown Recovery", max: 2, s0: "No breakdown event", s1: "Wick test + held", s2: "Broke below + recovered <3 bars" },
+                    { l: "P", name: "Analyst Revision Trend", max: 2, s0: "Declining estimates", s1: "Stable estimates", s2: "Analysts upgrading" },
+                    { l: "Q", name: "Short Squeeze Probability", max: 2, s0: "<2 signals", s1: "2 of 4 signals", s2: "3+ signals (SI+turnover+insider+options)" },
                   ].map((c) => (
                     <tr key={c.l} className="border-b border-[#2a2a2a]/50">
                       <td className="py-1.5 pr-2">
@@ -406,13 +408,14 @@ export default function PreRunGuidePage() {
         </Section>
 
         {/* 15 Criteria */}
-        <Section icon={Layers} title="Layer 2: Fifteen Criteria (max 32 Points + Sector Modifier)">
+        <Section icon={Layers} title="Layer 2: Seventeen Criteria (max 36 Points + Sector Modifier)">
           <p>
             Each criterion scores 0-2 (B and C expanded to 0-3 for higher
-            predictive weight). Total possible: 32 points + sector momentum
+            predictive weight). Total possible: 36 points + sector momentum
             modifier (&plusmn;1). Criteria A, B, C are highest weight. Criteria L-O
             power the &ldquo;Stage 1&rarr;2 / base breakout&rdquo; preset for identifying
-            stocks transitioning from accumulation to markup.
+            stocks transitioning from accumulation to markup. Criteria P-Q
+            capture analyst consensus shifts and composite squeeze signals.
           </p>
           <div className="space-y-3 pt-2">
             <CriterionRow
@@ -536,6 +539,22 @@ export default function PreRunGuidePage() {
               score2="Price broke below 50-day SMA within last 20 days but recovered above it within 3 candles — and held."
               score1="Price tested but didn't close below 50-day SMA (wick only), and recovered."
               score0="No failed breakdown, or breakdown occurred and has not recovered."
+            />
+            <CriterionRow
+              letter="P"
+              label="Analyst Revision Trend"
+              weight="MEDIUM"
+              score2="Analysts upgrading estimates. Bullish consensus shift not yet fully priced in."
+              score1="Estimates stable — no meaningful revision activity."
+              score0="Analysts declining/downgrading estimates. Negative sentiment."
+            />
+            <CriterionRow
+              letter="Q"
+              label="Short Squeeze Probability"
+              weight="MEDIUM"
+              score2="3+ of 4 composite signals: SI% ≥15, float turnover ≥0.8x, insider buys, and bullish P/C ratio."
+              score1="2 of 4 composite signals present. Some squeeze ingredients."
+              score0="Fewer than 2 signals. Squeeze unlikely."
             />
           </div>
           <p className="mt-3 text-xs text-[#666]">
@@ -739,9 +758,6 @@ export default function PreRunGuidePage() {
               <tbody className="text-[#c0c0c0]">
                 {[
                   { name: "SNDK", ath: "40%", si: "15%", score: "15", use: "Classic multi-bagger: deep base + high SI + catalyst" },
-                  { name: "Earnings", ath: "--", si: "--", score: "15", use: "PRIORITY stocks with earnings within 14 days" },
-                  { name: "Semis", ath: "--", si: "--", score: "11", use: "All semiconductor stocks in the universe" },
-                  { name: "Software", ath: "--", si: "--", score: "11", use: "All Software & Cloud stocks (~170)" },
                   { name: "High SI", ath: "0%", si: "20%", score: "11", use: "Maximum squeeze fuel, any ATH discount" },
                   { name: "Wide Net", ath: "0%", si: "0%", score: "11", use: "Relaxed filters for initial screening" },
                   { name: "Pre-Run Base", ath: "30%", si: "5%", score: "11", use: "Stage 1\u21922: base + EMA reclaim + coiling (A\u22652, F/J/K\u22651)" },

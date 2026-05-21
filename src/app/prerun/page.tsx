@@ -887,7 +887,7 @@ function PreRunPage() {
             </h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
               Screen {getTickersForSector("All").length} stocks across {sectorBuckets.length} sectors
-              for multi-bagger setups. Scores 15 criteria through 3 hard gates with pattern matching.
+              for multi-bagger setups. Scores 17 criteria through 3 hard gates with pattern matching.
             </p>
             <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
@@ -895,7 +895,7 @@ function PreRunPage() {
                 <p className="text-[10px] text-[#666]">Stocks</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
-                <p className="text-2xl font-bold text-[#10b981]">15</p>
+                <p className="text-2xl font-bold text-[#10b981]">17</p>
                 <p className="text-[10px] text-[#666]">Score Criteria</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
@@ -958,10 +958,10 @@ const ResultCard = memo(function ResultCard({
   const g = result.gates;
   const isPriority = result.verdict === "PRIORITY";
 
-  const criteriaLabels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"] as const;
-  const criteriaValues = [s.scoreA, s.scoreB, s.scoreC, s.scoreD, s.scoreE, s.scoreF, s.scoreG, s.scoreH, s.scoreI, s.scoreJ, s.scoreK, s.scoreL, s.scoreM, s.scoreN, s.scoreO];
-  const criteriaMaxes = [2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
-  const criteriaNames = ["Base", "SI", "Catalyst", "Earnings", "Coverage", "Volume", "Index", "Insider", "Options", "RelStr", "Breakout", "HigherLows", "EMAReclaim", "RangeCoil", "FailedBD"];
+  const criteriaLabels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q"] as const;
+  const criteriaValues = [s.scoreA, s.scoreB, s.scoreC, s.scoreD, s.scoreE, s.scoreF, s.scoreG, s.scoreH, s.scoreI, s.scoreJ, s.scoreK, s.scoreL, s.scoreM, s.scoreN, s.scoreO, s.scoreP, s.scoreQ];
+  const criteriaMaxes = [2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
+  const criteriaNames = ["Base", "SI", "Catalyst", "Earnings", "Coverage", "Volume", "Index", "Insider", "Options", "RelStr", "Breakout", "HigherLows", "EMAReclaim", "RangeCoil", "FailedBD", "Revisions", "Squeeze"];
 
   return (
     <div

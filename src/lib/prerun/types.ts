@@ -198,24 +198,6 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     recommended: true,
   },
   {
-    name: "Earnings <14d",
-    shortName: "Earnings",
-    description: "Shows only PRIORITY tier — stocks with earnings within 14 days.",
-    filters: { earningsWithin: 14, minScore: 15, verdict: "PRIORITY" },
-  },
-  {
-    name: "Sector Scan: Semis",
-    shortName: "Semis",
-    description: "Scans all semiconductor stocks in the universe.",
-    filters: { sectorBucket: "Semiconductors", minScore: 11 },
-  },
-  {
-    name: "Sector Scan: Software",
-    shortName: "Software",
-    description: "Scans all Software & Cloud stocks. Largest sector bucket (~170 stocks).",
-    filters: { sectorBucket: "Software & Cloud", minScore: 11 },
-  },
-  {
     name: "High SI",
     shortName: "High SI",
     description: "Min 20% short float, any ATH discount. Maximum squeeze fuel.",

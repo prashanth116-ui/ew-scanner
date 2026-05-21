@@ -28,7 +28,7 @@ const scanners = [
     href: "/prerun",
     title: "Pre-Run Scanner",
     description:
-      "Multi-bagger candidates scored across 15 criteria — beaten-down stocks with structural catalysts.",
+      "Multi-bagger candidates scored across 17 criteria — beaten-down stocks with structural catalysts.",
     icon: TrendingUp,
     color: "#10b981",
   },
