@@ -24,6 +24,7 @@ import type {
   SavedPreRunScan,
   PreRunCriteriaFilter,
 } from "@/lib/prerun/types";
+import type { EmaTimeframe } from "@/lib/prerun/types";
 import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE } from "@/lib/prerun/types";
 import {
   savePreRunScan,
@@ -96,6 +97,7 @@ function PreRunPage() {
   const [sectorBucket, setSectorBucket] = useState(DEFAULT_PRERUN_FILTERS.sectorBucket);
   const [earningsWithin, setEarningsWithin] = useState(DEFAULT_PRERUN_FILTERS.earningsWithin);
   const [verdictFilter, setVerdictFilter] = useState(DEFAULT_PRERUN_FILTERS.verdict);
+  const [emaTimeframe, setEmaTimeframe] = useState<EmaTimeframe>(DEFAULT_PRERUN_FILTERS.emaTimeframe);
 
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
@@ -164,8 +166,9 @@ function PreRunPage() {
       sectorBucket,
       earningsWithin,
       verdict: verdictFilter,
+      emaTimeframe,
     }),
-    [minPctFromAth, minShortFloat, maxMarketCap, minScore, sectorBucket, earningsWithin, verdictFilter]
+    [minPctFromAth, minShortFloat, maxMarketCap, minScore, sectorBucket, earningsWithin, verdictFilter, emaTimeframe]
   );
 
   // Helper to get a criterion score by letter
@@ -260,7 +263,7 @@ function PreRunPage() {
         const res = await fetch("/api/prerun/scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tickers: batch }),
+          body: JSON.stringify({ tickers: batch, emaTimeframe }),
           signal,
         });
 
@@ -287,7 +290,7 @@ function PreRunPage() {
     saveToCache("ew-prerun-scan-v1", results);
     setScanning(false);
     setProgress("");
-  }, [sectorBucket]);
+  }, [sectorBucket, emaTimeframe]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -311,7 +314,7 @@ function PreRunPage() {
     setTickerError(null);
 
     try {
-      const res = await fetch(`/api/prerun/stock?ticker=${encodeURIComponent(ticker)}`);
+      const res = await fetch(`/api/prerun/stock?ticker=${encodeURIComponent(ticker)}&emaTimeframe=${emaTimeframe}`);
       if (!res.ok) {
         setTickerError(`Could not find "${ticker}"`);
         setTickerSearching(false);
@@ -329,7 +332,7 @@ function PreRunPage() {
       setTickerError("Network error");
     }
     setTickerSearching(false);
-  }, [tickerSearch, rawResults]);
+  }, [tickerSearch, rawResults, emaTimeframe]);
 
   // AI Score
   const requestAiScore = useCallback(async (result: PreRunResult) => {
@@ -382,6 +385,7 @@ function PreRunPage() {
     setSectorBucket(scan.filters.sectorBucket);
     setEarningsWithin(scan.filters.earningsWithin);
     setVerdictFilter(scan.filters.verdict);
+    setEmaTimeframe(scan.filters.emaTimeframe ?? "15m");
     setRawResults(scan.candidates);
   }, []);
 
@@ -395,6 +399,7 @@ function PreRunPage() {
     setSectorBucket(f.sectorBucket);
     setEarningsWithin(f.earningsWithin);
     setVerdictFilter(f.verdict);
+    setEmaTimeframe(f.emaTimeframe);
     setCriteriaFilters(preset.criteriaFilters ?? []);
   }, []);
 
@@ -579,6 +584,25 @@ function PreRunPage() {
                 </select>
               </div>
               {/* Reset */}
+              {/* M2 EMA Timeframe */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">M2 EMA Timeframe</span>
+                  <span className="text-white">{emaTimeframe}</span>
+                </div>
+                <select
+                  value={emaTimeframe}
+                  onChange={(e) => setEmaTimeframe(e.target.value as EmaTimeframe)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#5ba3e6] focus:outline-none"
+                >
+                  <option value="15m">15m</option>
+                  <option value="1h">1h</option>
+                  <option value="4h">4h</option>
+                  <option value="1d">1d</option>
+                  <option value="1wk">1wk</option>
+                  <option value="1mo">1mo</option>
+                </select>
+              </div>
               <button
                 onClick={() => {
                   setMinPctFromAth(DEFAULT_PRERUN_FILTERS.minPctFromAth);
@@ -588,6 +612,7 @@ function PreRunPage() {
                   setSectorBucket(DEFAULT_PRERUN_FILTERS.sectorBucket);
                   setEarningsWithin(DEFAULT_PRERUN_FILTERS.earningsWithin);
                   setVerdictFilter(DEFAULT_PRERUN_FILTERS.verdict);
+                  setEmaTimeframe(DEFAULT_PRERUN_FILTERS.emaTimeframe);
                   setCriteriaFilters([]);
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
@@ -887,7 +912,7 @@ function PreRunPage() {
             </h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
               Screen {getTickersForSector("All").length} stocks across {sectorBuckets.length} sectors
-              for multi-bagger setups. Scores 17 criteria through 3 hard gates with pattern matching.
+              for multi-bagger setups. Scores 18 criteria through 3 hard gates with pattern matching.
             </p>
             <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
@@ -895,7 +920,7 @@ function PreRunPage() {
                 <p className="text-[10px] text-[#666]">Stocks</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
-                <p className="text-2xl font-bold text-[#10b981]">17</p>
+                <p className="text-2xl font-bold text-[#10b981]">18</p>
                 <p className="text-[10px] text-[#666]">Score Criteria</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
@@ -958,10 +983,11 @@ const ResultCard = memo(function ResultCard({
   const g = result.gates;
   const isPriority = result.verdict === "PRIORITY";
 
-  const criteriaLabels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q"] as const;
-  const criteriaValues = [s.scoreA, s.scoreB, s.scoreC, s.scoreD, s.scoreE, s.scoreF, s.scoreG, s.scoreH, s.scoreI, s.scoreJ, s.scoreK, s.scoreL, s.scoreM, s.scoreN, s.scoreO, s.scoreP, s.scoreQ];
-  const criteriaMaxes = [2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
-  const criteriaNames = ["Base", "SI", "Catalyst", "Earnings", "Coverage", "Volume", "Index", "Insider", "Options", "RelStr", "Breakout", "HigherLows", "EMAReclaim", "RangeCoil", "FailedBD", "Revisions", "Squeeze"];
+  const criteriaLabels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "M2", "N", "O", "P", "Q"] as const;
+  const criteriaValues = [s.scoreA, s.scoreB, s.scoreC, s.scoreD, s.scoreE, s.scoreF, s.scoreG, s.scoreH, s.scoreI, s.scoreJ, s.scoreK, s.scoreL, s.scoreM, s.scoreM2, s.scoreN, s.scoreO, s.scoreP, s.scoreQ];
+  const criteriaMaxes = [2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
+  const emaTfLabel = d.emaM2Timeframe ?? "15m";
+  const criteriaNames = ["Base", "SI", "Catalyst", "Earnings", "Coverage", "Volume", "Index", "Insider", "Options", "RelStr", "Breakout", "HigherLows", "EMAReclaim", `${emaTfLabel}EMA`, "RangeCoil", "FailedBD", "Revisions", "Squeeze"];
 
   return (
     <div

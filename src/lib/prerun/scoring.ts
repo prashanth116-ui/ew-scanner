@@ -1,8 +1,8 @@
 /**
  * Pre-Run scoring engine.
- * 3 hard gates + 17 criteria (A-Q) with weighted scoring.
- * B and C expanded to 0-3. All others 0-2. Max raw = 36.
- * Sector momentum modifier: +1/0/-1. Final max ~37.
+ * 3 hard gates + 18 criteria (A-Q + M2) with weighted scoring.
+ * B and C expanded to 0-3. All others 0-2. Max raw = 38.
+ * Sector momentum modifier: +1/0/-1. Final max ~39.
  */
 
 import type {
@@ -198,6 +198,23 @@ export function scoreM(data: PreRunStockData): number {
   return 0;
 }
 
+/** Criterion M2: EMA 10/20 Timing Signal (0-2).
+ *  Multi-timeframe momentum confirmation for daily-level base breakouts. */
+export function scoreM2(data: PreRunStockData): number {
+  const bullish = data.emaM2BullishCross;
+  const recentCross = data.emaM2CrossedWithin5Bars;
+  const aboveBoth = data.emaM2PriceAboveBoth;
+
+  if (bullish === null || aboveBoth === null) return 0;
+
+  // Score 2: Bullish cross + price above both EMAs + crossover within last 5 bars
+  if (bullish && aboveBoth && recentCross === true) return 2;
+  // Score 1: Bullish alignment (EMA10 > EMA20) or price above both
+  if (bullish || aboveBoth) return 1;
+  // Score 0: Bearish alignment
+  return 0;
+}
+
 /** Criterion N: Range Coil / Tight Closes Near Top (0-2). */
 export function scoreN(data: PreRunStockData): number {
   const nearTop = data.closesNearRangeTop;
@@ -290,13 +307,14 @@ export function scorePreRun(
   const sK = scoreK(data);
   const sL = scoreL(data);
   const sM = scoreM(data);
+  const sM2 = scoreM2(data);
   const sN = scoreN(data);
   const sO = scoreO(data);
   const sP = scoreP(data);
   const sQ = scoreQ(data);
   const sMod = calcSectorModifier(data);
 
-  const totalScore = sA + sB + sC + sD + sE + sF + sG + sH + sI + sJ + sK + sL + sM + sN + sO + sP + sQ + sMod;
+  const totalScore = sA + sB + sC + sD + sE + sF + sG + sH + sI + sJ + sK + sL + sM + sM2 + sN + sO + sP + sQ + sMod;
   const finalScore = gatesPass ? totalScore : 0;
 
   let verdict: PreRunVerdict = "DISCARD";
@@ -330,6 +348,7 @@ export function scorePreRun(
       scoreK: sK,
       scoreL: sL,
       scoreM: sM,
+      scoreM2: sM2,
       scoreN: sN,
       scoreO: sO,
       scoreP: sP,

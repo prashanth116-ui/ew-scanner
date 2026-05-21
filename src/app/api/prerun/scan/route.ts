@@ -4,6 +4,7 @@ import { logError } from "@/lib/error-logger";
 import { validateTickers } from "@/lib/api-utils";
 import { fetchPreRunData } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
+import type { EmaTimeframe } from "@/lib/prerun/types";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 1000; // 1s between batches for rate limiting
@@ -18,8 +19,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { tickers: string[] };
+    const body = (await request.json()) as { tickers: string[]; emaTimeframe?: EmaTimeframe };
     const tickers = validateTickers(body.tickers).slice(0, 1500);
+    const emaTimeframe = body.emaTimeframe ?? "15m";
     if (!tickers.length) {
       return NextResponse.json({ error: "tickers array required (valid A-Z tickers)" }, { status: 400 });
     }
@@ -30,7 +32,7 @@ export async function POST(request: NextRequest) {
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
-          const data = await fetchPreRunData(ticker);
+          const data = await fetchPreRunData(ticker, emaTimeframe);
           if (!data) return null;
           return autoScorePreRun(data);
         })

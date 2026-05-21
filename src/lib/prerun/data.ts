@@ -5,7 +5,7 @@
 
 import "server-only";
 
-import type { PreRunStockData } from "./types";
+import type { PreRunStockData, EmaTimeframe } from "./types";
 import { getYahooCrumb, invalidateCrumbCache } from "../squeeze-fetch";
 import { getSectorForTicker, getSectorETF } from "@/data/prerun-universe";
 import { fetchWithRetry, extractRaw, deduplicatedChartFetch } from "@/lib/yahoo-utils";
@@ -529,6 +529,75 @@ function calcEmaReclaimData(closes: number[]): {
   return { aboveEma21, aboveEma50, crossoverWithin20d };
 }
 
+/** Compute EMA 10/20 timing signal from chart closes (any timeframe). */
+function calcEmaSignal(closes: number[]): {
+  ema10: number | null;
+  ema20: number | null;
+  bullishCross: boolean;
+  crossedWithin5Bars: boolean;
+  priceAboveBoth: boolean;
+  spreadPct: number | null;
+  trendStrength: "strong" | "moderate" | "weak" | "bearish" | null;
+  barsSinceCross: number | null;
+  dataPoints: number;
+} {
+  const result = {
+    ema10: null as number | null,
+    ema20: null as number | null,
+    bullishCross: false,
+    crossedWithin5Bars: false,
+    priceAboveBoth: false,
+    spreadPct: null as number | null,
+    trendStrength: null as "strong" | "moderate" | "weak" | "bearish" | null,
+    barsSinceCross: null as number | null,
+    dataPoints: closes.length,
+  };
+
+  if (closes.length < 20) return result;
+
+  const ema10 = calcEMA(closes, 10);
+  const ema20 = calcEMA(closes, 20);
+  const lastIdx = closes.length - 1;
+  const price = closes[lastIdx];
+
+  result.ema10 = ema10[lastIdx];
+  result.ema20 = ema20[lastIdx];
+  result.bullishCross = ema10[lastIdx] > ema20[lastIdx];
+  result.priceAboveBoth = price > ema10[lastIdx] && price > ema20[lastIdx];
+
+  // Spread %
+  if (price > 0) {
+    result.spreadPct = ((ema10[lastIdx] - ema20[lastIdx]) / price) * 100;
+  }
+
+  // Find most recent crossover (EMA10 crossing EMA20)
+  let barsSinceCross: number | null = null;
+  for (let i = lastIdx; i >= 1; i--) {
+    const curAbove = ema10[i] > ema20[i];
+    const prevAbove = ema10[i - 1] > ema20[i - 1];
+    if (curAbove !== prevAbove) {
+      barsSinceCross = lastIdx - i;
+      break;
+    }
+  }
+  result.barsSinceCross = barsSinceCross;
+  result.crossedWithin5Bars = barsSinceCross !== null && barsSinceCross <= 5 && result.bullishCross;
+
+  // Trend strength classification
+  const spread = result.spreadPct ?? 0;
+  if (!result.bullishCross) {
+    result.trendStrength = "bearish";
+  } else if (spread > 0.15 && result.priceAboveBoth) {
+    result.trendStrength = "strong";
+  } else if (spread > 0.05 || result.priceAboveBoth) {
+    result.trendStrength = "moderate";
+  } else {
+    result.trendStrength = "weak";
+  }
+
+  return result;
+}
+
 /** Compute range coil data from chart. */
 function calcRangeCoilData(closes: number[], highs: number[], lows: number[]): {
   closesNearTop: boolean;
@@ -865,9 +934,29 @@ export async function prefetchSectorETFs(): Promise<void> {
   }
 }
 
+/** Yahoo Finance API config for each M2 EMA timeframe. */
+const TIMEFRAME_CONFIG: Record<EmaTimeframe, { range: string; interval: string; reuse?: "chart3mo" | "chart5y"; aggregate?: number }> = {
+  "15m": { range: "1mo", interval: "15m" },
+  "1h":  { range: "1mo", interval: "1h" },
+  "4h":  { range: "2y",  interval: "1h", aggregate: 4 },
+  "1d":  { range: "3mo", interval: "1d", reuse: "chart3mo" },
+  "1wk": { range: "5y",  interval: "1wk", reuse: "chart5y" },
+  "1mo": { range: "5y",  interval: "1mo" },
+};
+
+/** Aggregate 1h closes to 4h by taking every Nth close. */
+function aggregate4hCloses(closes: number[], n: number): number[] {
+  const result: number[] = [];
+  for (let i = n - 1; i < closes.length; i += n) {
+    result.push(closes[i]);
+  }
+  return result;
+}
+
 /** Main function: fetch all data for a single ticker. */
 export async function fetchPreRunData(
-  ticker: string
+  ticker: string,
+  emaTimeframe: EmaTimeframe = "15m",
 ): Promise<PreRunStockData | null> {
   // Fetch Yahoo summary + 3mo chart + 5y chart + Finnhub data in parallel
   // Use allSettled so a timeout on any source doesn't crash the entire ticker
@@ -1044,6 +1133,58 @@ export async function fetchPreRunData(
   let atrContracting: boolean | null = null;
   let failedBreakdownRecovery: number | null = null;
 
+  // M2: EMA 10/20 timing signal (multi-timeframe)
+  let emaM2Ema10: number | null = null;
+  let emaM2Ema20: number | null = null;
+  let emaM2BullishCross: boolean | null = null;
+  let emaM2CrossedWithin5Bars: boolean | null = null;
+  let emaM2PriceAboveBoth: boolean | null = null;
+  let emaM2SpreadPct: number | null = null;
+  let emaM2TrendStrength: "strong" | "moderate" | "weak" | "bearish" | null = null;
+  let emaM2BarsSinceCross: number | null = null;
+  let emaM2DataPoints: number | null = null;
+
+  const tfConfig = TIMEFRAME_CONFIG[emaTimeframe];
+  // Gate: for intraday timeframes (15m, 1h, 4h), only fetch if ≥30% from ATH
+  // For 1d/1wk (reuse existing chart), no gate needed. For 1mo, low API cost.
+  const needsApiGate = !tfConfig.reuse && emaTimeframe !== "1mo";
+  const gate1PassLocal = pctFromAth !== null && pctFromAth >= 30;
+  const shouldFetchEma = !needsApiGate || gate1PassLocal;
+
+  if (shouldFetchEma) {
+    try {
+      let emaCloses: number[] | null = null;
+
+      if (tfConfig.reuse === "chart3mo" && chart3mo) {
+        emaCloses = chart3mo.closes;
+      } else if (tfConfig.reuse === "chart5y" && chart5y) {
+        emaCloses = chart5y.closes;
+      } else {
+        const emaChart = await fetchYahooChart(ticker, tfConfig.range, tfConfig.interval);
+        if (emaChart) {
+          emaCloses = tfConfig.aggregate
+            ? aggregate4hCloses(emaChart.closes, tfConfig.aggregate)
+            : emaChart.closes;
+        }
+      }
+
+      if (emaCloses && emaCloses.length >= 20) {
+        const sig = calcEmaSignal(emaCloses);
+        emaM2Ema10 = sig.ema10;
+        emaM2Ema20 = sig.ema20;
+        emaM2BullishCross = sig.bullishCross;
+        emaM2CrossedWithin5Bars = sig.crossedWithin5Bars;
+        emaM2PriceAboveBoth = sig.priceAboveBoth;
+        emaM2SpreadPct = sig.spreadPct;
+        emaM2TrendStrength = sig.trendStrength;
+        emaM2BarsSinceCross = sig.barsSinceCross;
+        emaM2DataPoints = sig.dataPoints;
+      }
+    } catch {
+      // EMA data is optional — if it fails, M2 scores 0
+    }
+  }
+
   if (chart3mo && chart3mo.closes.length >= 20) {
     // L: Higher Lows
     higherLowsCount = calcHigherLowsCount(chart3mo.lows);
@@ -1100,6 +1241,17 @@ export async function fetchPreRunData(
     aboveEma21,
     aboveEma50,
     emaCrossoverWithin20d,
+    // M2: EMA timing (multi-timeframe)
+    emaM2Ema10,
+    emaM2Ema20,
+    emaM2BullishCross,
+    emaM2CrossedWithin5Bars,
+    emaM2PriceAboveBoth,
+    emaM2SpreadPct,
+    emaM2TrendStrength,
+    emaM2BarsSinceCross,
+    emaM2DataPoints,
+    emaM2Timeframe: emaTimeframe,
     closesNearRangeTop,
     atrContracting,
     failedBreakdownRecovery,

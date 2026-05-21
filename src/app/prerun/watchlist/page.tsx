@@ -43,6 +43,17 @@ const SCORE_LABELS: Record<string, string> = {
   scoreE: "E: Institutional Under-Own",
   scoreF: "F: Volume Accumulation",
   scoreG: "G: Index Inclusion",
+  scoreH: "H: Insider Buying",
+  scoreI: "I: Options Flow",
+  scoreJ: "J: Rel Strength vs Sector",
+  scoreK: "K: Breakout Proximity",
+  scoreL: "L: Higher Lows",
+  scoreM: "M: EMA Reclaim",
+  scoreM2: "M2: EMA Timing",
+  scoreN: "N: Range Coil",
+  scoreO: "O: Failed Breakdown",
+  scoreP: "P: Analyst Revisions",
+  scoreQ: "Q: Short Squeeze",
 };
 
 const VERDICT_BORDER: Record<PreRunVerdict, string> = {

@@ -2,6 +2,7 @@
 
 export type PreRunVerdict = "PRIORITY" | "KEEP" | "WATCH" | "DISCARD";
 export type PreRunRisk = "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
+export type EmaTimeframe = "15m" | "1h" | "4h" | "1d" | "1wk" | "1mo";
 
 export interface PreRunStockData {
   ticker: string;
@@ -38,6 +39,17 @@ export interface PreRunStockData {
   aboveEma21: boolean | null;              // M: Is price currently above 21 EMA
   aboveEma50: boolean | null;              // M: Is price currently above 50 EMA
   emaCrossoverWithin20d: boolean | null;   // M: Did price cross above both EMAs within last 20 trading days
+  // M2: EMA 10/20 timing signal (multi-timeframe)
+  emaM2Ema10: number | null;               // M2: Current EMA-10 value
+  emaM2Ema20: number | null;               // M2: Current EMA-20 value
+  emaM2BullishCross: boolean | null;       // M2: EMA-10 > EMA-20 (bullish alignment)
+  emaM2CrossedWithin5Bars: boolean | null; // M2: Crossover occurred within last 5 bars
+  emaM2PriceAboveBoth: boolean | null;     // M2: Current price above both EMAs
+  emaM2SpreadPct: number | null;           // M2: (EMA10 - EMA20) / price × 100
+  emaM2TrendStrength: "strong" | "moderate" | "weak" | "bearish" | null; // M2: trend classification
+  emaM2BarsSinceCross: number | null;      // M2: how many bars since last cross
+  emaM2DataPoints: number | null;          // M2: number of bars available
+  emaM2Timeframe: EmaTimeframe | null;     // M2: which timeframe was used
   closesNearRangeTop: boolean | null;      // N: Are last 5 closes in upper 25% of 13-week range
   atrContracting: boolean | null;          // N: Is 5-day ATR < 20-day ATR
   failedBreakdownRecovery: number | null;  // O: 0=none, 1=wick test only, 2=broke below + recovered in 3 bars
@@ -65,17 +77,18 @@ export interface PreRunScores {
   scoreK: number; // Breakout proximity (0-2)
   scoreL: number; // Higher lows (0-2)
   scoreM: number; // EMA reclaim (0-2)
+  scoreM2: number; // 15m EMA timing signal (0-2)
   scoreN: number; // Range coil / tight closes near top (0-2)
   scoreO: number; // Failed breakdown recovery (0-2)
   scoreP: number; // Earnings revision momentum (0-2)
   scoreQ: number; // Short squeeze probability (0-2)
   sectorModifier: number; // +1/0/-1 based on sector momentum
-  totalScore: number; // Sum of A-Q + sector modifier (max 36 + modifier)
+  totalScore: number; // Sum of A-Q + M2 + sector modifier (max 38 + modifier)
   finalScore: number; // 0 if any gate fails, else totalScore
 }
 
 /** Maximum possible raw score (before sector modifier). */
-export const MAX_SCORE = 36;
+export const MAX_SCORE = 38;
 
 export interface PreRunResult {
   data: PreRunStockData;
@@ -163,6 +176,7 @@ export interface PreRunFilters {
   sectorBucket: string; // "All" or specific bucket name
   earningsWithin: number; // 0 = any, else days
   verdict: string; // "All" | "KEEP" | "WATCH" | "PRIORITY"
+  emaTimeframe: EmaTimeframe;
 }
 
 export const DEFAULT_PRERUN_FILTERS: PreRunFilters = {
@@ -173,10 +187,11 @@ export const DEFAULT_PRERUN_FILTERS: PreRunFilters = {
   sectorBucket: "All",
   earningsWithin: 0,
   verdict: "All",
+  emaTimeframe: "15m",
 };
 
 export interface PreRunCriteriaFilter {
-  criterion: string; // "A" | "B" | ... | "O"
+  criterion: string; // "A" | "B" | ... | "Q" | "M2"
   min: number;       // minimum score for this criterion
 }
 
@@ -210,14 +225,14 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 11 },
   },
   {
-    name: "Pre-Run Base",
-    shortName: "Pre-Run Base",
-    description: "Stage 1→2 / base breakout. Big base → EMA reclaim → coiling near breakout. ARM, DELL, NBIS, DOCN structure.",
-    filters: { minPctFromAth: 30, minScore: 11, verdict: "All", sectorBucket: "All" },
+    name: "Early Mover",
+    shortName: "Early Mover",
+    description: "Stage 1→2 breakout with EMA momentum confirmation. Big base + EMA reclaim + timing alignment.",
+    filters: { minPctFromAth: 30, minScore: 14, verdict: "All", sectorBucket: "All" },
     criteriaFilters: [
       { criterion: "A", min: 2 },
-      { criterion: "F", min: 1 },
-      { criterion: "J", min: 1 },
+      { criterion: "M", min: 1 },
+      { criterion: "M2", min: 1 },
       { criterion: "K", min: 1 },
     ],
   },

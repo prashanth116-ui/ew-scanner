@@ -3,6 +3,7 @@ import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
+import type { EmaTimeframe } from "@/lib/prerun/types";
 
 export async function GET(request: NextRequest) {
   const rl = rateLimit(`prerun-stock:${getClientKey(request)}`, 60, 60_000);
@@ -17,9 +18,10 @@ export async function GET(request: NextRequest) {
   if (!ticker) {
     return NextResponse.json({ error: "ticker param required" }, { status: 400 });
   }
+  const emaTimeframe = (request.nextUrl.searchParams.get("emaTimeframe") ?? "15m") as EmaTimeframe;
 
   try {
-    const data = await fetchPreRunData(ticker);
+    const data = await fetchPreRunData(ticker, emaTimeframe);
     if (!data) {
       return NextResponse.json({ error: "No data found" }, { status: 404 });
     }

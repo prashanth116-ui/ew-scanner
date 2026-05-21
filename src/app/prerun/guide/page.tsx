@@ -196,7 +196,7 @@ function QuickReferenceCard() {
           {/* Criteria Table */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
-              17 Criteria (max 36 pts + sector modifier)
+              18 Criteria (max 38 pts + sector modifier)
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -225,6 +225,7 @@ function QuickReferenceCard() {
                     { l: "K", name: "Breakout Proximity", max: 2, s0: ">10% below resist", s1: "5-10% below", s2: "<5% (coiling)" },
                     { l: "L", name: "Higher Lows", max: 2, s0: "No HL pattern", s1: "2 of 3 swing lows higher", s2: "3 consecutive higher lows" },
                     { l: "M", name: "EMA Reclaim", max: 2, s0: "Below both EMAs", s1: "Above one EMA", s2: "Above 21+50 EMA, crossed <20d" },
+                    { l: "M2", name: "EMA Timing", max: 2, s0: "Bearish EMA alignment", s1: "EMA10>EMA20 or price above both", s2: "Bullish cross + above both + <5 bars" },
                     { l: "N", name: "Range Coil", max: 2, s0: "No coiling", s1: "Near top OR ATR contracting", s2: "Near top + ATR contracting" },
                     { l: "O", name: "Failed Breakdown Recovery", max: 2, s0: "No breakdown event", s1: "Wick test + held", s2: "Broke below + recovered <3 bars" },
                     { l: "P", name: "Analyst Revision Trend", max: 2, s0: "Declining estimates", s1: "Stable estimates", s2: "Analysts upgrading" },
@@ -408,14 +409,15 @@ export default function PreRunGuidePage() {
         </Section>
 
         {/* 15 Criteria */}
-        <Section icon={Layers} title="Layer 2: Seventeen Criteria (max 36 Points + Sector Modifier)">
+        <Section icon={Layers} title="Layer 2: Eighteen Criteria (max 38 Points + Sector Modifier)">
           <p>
             Each criterion scores 0-2 (B and C expanded to 0-3 for higher
-            predictive weight). Total possible: 36 points + sector momentum
+            predictive weight). Total possible: 38 points + sector momentum
             modifier (&plusmn;1). Criteria A, B, C are highest weight. Criteria L-O
             power the &ldquo;Stage 1&rarr;2 / base breakout&rdquo; preset for identifying
-            stocks transitioning from accumulation to markup. Criteria P-Q
-            capture analyst consensus shifts and composite squeeze signals.
+            stocks transitioning from accumulation to markup. M2 adds
+            EMA timing confirmation with selectable timeframe (15m, 1h, 4h, 1d, 1wk, 1mo).
+            Criteria P-Q capture analyst consensus shifts and composite squeeze signals.
           </p>
           <div className="space-y-3 pt-2">
             <CriterionRow
@@ -525,6 +527,14 @@ export default function PreRunGuidePage() {
               score0="Price below both the 21 EMA and 50 EMA. Still in downtrend."
             />
             <CriterionRow
+              letter="M2"
+              label="EMA Timing (Multi-Timeframe)"
+              weight="MEDIUM"
+              score2="EMA-10 > EMA-20, price above both, and bullish crossover within last 5 bars. Active momentum."
+              score1="Bullish EMA alignment (EMA-10 > EMA-20) or price above both EMAs."
+              score0="Bearish alignment — EMA-10 below EMA-20 and price below both. No momentum confirmation."
+            />
+            <CriterionRow
               letter="N"
               label="Range Coil / Tight Closes Near Top"
               weight="MEDIUM"
@@ -562,7 +572,7 @@ export default function PreRunGuidePage() {
             <br />
             <strong className="text-[#a0a0a0]">Sector modifier:</strong> +1 if sector ETF 20d return &gt; +5% (tailwind), -1 if &lt; -5% (headwind).
             <br />
-            <strong className="text-[#a0a0a0]">Stage 1&rarr;2 / Base breakout:</strong> Criteria L-O are designed to identify stocks transitioning from Stage 1 (accumulation/base) to Stage 2 (markup). The &ldquo;Pre-Run Base&rdquo; preset enforces A=2, F&ge;1, J&ge;1, K&ge;1 to surface only stocks with confirmed base + volume + relative strength + proximity to breakout.
+            <strong className="text-[#a0a0a0]">Stage 1&rarr;2 / Base breakout:</strong> Criteria L-O are designed to identify stocks transitioning from Stage 1 (accumulation/base) to Stage 2 (markup). The &ldquo;Early Mover&rdquo; preset enforces A&ge;2, M&ge;1, M2&ge;1, K&ge;1 to surface stocks with confirmed base + EMA reclaim + EMA timing + proximity to breakout.
           </p>
         </Section>
 
@@ -760,7 +770,7 @@ export default function PreRunGuidePage() {
                   { name: "SNDK", ath: "40%", si: "15%", score: "15", use: "Classic multi-bagger: deep base + high SI + catalyst" },
                   { name: "High SI", ath: "0%", si: "20%", score: "11", use: "Maximum squeeze fuel, any ATH discount" },
                   { name: "Wide Net", ath: "0%", si: "0%", score: "11", use: "Relaxed filters for initial screening" },
-                  { name: "Pre-Run Base", ath: "30%", si: "5%", score: "11", use: "Stage 1\u21922: base + EMA reclaim + coiling (A\u22652, F/J/K\u22651)" },
+                  { name: "Early Mover", ath: "30%", si: "5%", score: "14", use: "Stage 1\u21922: base + EMA reclaim + EMA timing (A\u22652, M/M2/K\u22651)" },
                 ].map((p) => (
                   <tr key={p.name} className="border-b border-[#2a2a2a]/50">
                     <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{p.name}</td>

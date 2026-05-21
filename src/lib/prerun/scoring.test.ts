@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scoreA, scoreB, scoreD, scoreE, scoreF, scoreH, scoreI, scoreJ, scoreK, calcSectorModifier, scorePreRun, autoScorePreRun } from "./scoring";
+import { scoreA, scoreB, scoreD, scoreE, scoreF, scoreH, scoreI, scoreJ, scoreK, scoreM2, calcSectorModifier, scorePreRun, autoScorePreRun } from "./scoring";
 import type { PreRunStockData } from "./types";
 
 /** Helper: create a minimal PreRunStockData with overrides. */
@@ -36,6 +36,16 @@ function makeData(overrides: Partial<PreRunStockData> = {}): PreRunStockData {
     aboveEma21: null,
     aboveEma50: null,
     emaCrossoverWithin20d: null,
+    emaM2Ema10: null,
+    emaM2Ema20: null,
+    emaM2BullishCross: null,
+    emaM2CrossedWithin5Bars: null,
+    emaM2PriceAboveBoth: null,
+    emaM2SpreadPct: null,
+    emaM2TrendStrength: null,
+    emaM2BarsSinceCross: null,
+    emaM2DataPoints: null,
+    emaM2Timeframe: null,
     closesNearRangeTop: null,
     atrContracting: null,
     failedBreakdownRecovery: null,
@@ -280,6 +290,71 @@ describe("scoreK", () => {
 
   it("returns 0 when null", () => {
     expect(scoreK(makeData({ pctFromBaseHigh: null }))).toBe(0);
+  });
+});
+
+// ── Score M2: EMA timing ──
+
+describe("scoreM2", () => {
+  it("returns 2 for bullish cross + above both + recent crossover", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: true,
+      emaM2PriceAboveBoth: true,
+      emaM2CrossedWithin5Bars: true,
+    }))).toBe(2);
+  });
+
+  it("returns 1 for bullish alignment only (EMA10 > EMA20)", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: true,
+      emaM2PriceAboveBoth: false,
+      emaM2CrossedWithin5Bars: false,
+    }))).toBe(1);
+  });
+
+  it("returns 1 for price above both EMAs but bearish cross order", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: false,
+      emaM2PriceAboveBoth: true,
+      emaM2CrossedWithin5Bars: false,
+    }))).toBe(1);
+  });
+
+  it("returns 1 for bullish cross + above both but crossover NOT within 5 bars", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: true,
+      emaM2PriceAboveBoth: true,
+      emaM2CrossedWithin5Bars: false,
+    }))).toBe(1);
+  });
+
+  it("returns 0 for bearish alignment (EMA10 < EMA20, price below both)", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: false,
+      emaM2PriceAboveBoth: false,
+      emaM2CrossedWithin5Bars: false,
+    }))).toBe(0);
+  });
+
+  it("returns 0 when data is null (no EMA data available)", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: null,
+      emaM2PriceAboveBoth: null,
+    }))).toBe(0);
+  });
+
+  it("returns 0 when only bullishCross is null", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: null,
+      emaM2PriceAboveBoth: true,
+    }))).toBe(0);
+  });
+
+  it("returns 0 when only priceAboveBoth is null", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: true,
+      emaM2PriceAboveBoth: null,
+    }))).toBe(0);
   });
 });
 

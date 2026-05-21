@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     const prompt = `You are a stock analyst evaluating whether ${ticker}${companyName ? ` (${companyName})` : ""} has a structural narrative catalyst that is NOT yet priced in by the market.
 
 ${recentNews ? `Recent news/context:\n${recentNews}\n` : ""}
-This is for a Pre-Run Scanner that identifies stocks building bases 40%+ below ATH that could become multi-baggers. The scanner scores 17 criteria (A-Q) including short interest, insider buying, options flow, relative sector strength, breakout proximity, higher lows, EMA reclaim, range coil, failed breakdown recovery, analyst revision trend, and short squeeze probability.
+This is for a Pre-Run Scanner that identifies stocks building bases 40%+ below ATH that could become multi-baggers. The scanner scores 18 criteria (A-Q + M2) including short interest, insider buying, options flow, relative sector strength, breakout proximity, higher lows, EMA reclaim, 15-minute EMA timing, range coil, failed breakdown recovery, analyst revision trend, and short squeeze probability.
 
 Score the narrative catalyst on this expanded scale:
 - 3: Multiple converging catalysts — structural shift + near-term trigger + sector tailwind (rare)
