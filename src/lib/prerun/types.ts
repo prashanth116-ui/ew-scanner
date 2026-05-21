@@ -227,13 +227,14 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
   {
     name: "Early Mover",
     shortName: "Early Mover",
-    description: "Stage 1→2 breakout with EMA momentum confirmation. Big base + EMA reclaim + timing alignment.",
-    filters: { minPctFromAth: 30, minScore: 14, verdict: "All", sectorBucket: "All" },
+    description: "Stage 1→2 breakout: base structure + EMA reclaim + timing + higher lows + near breakout.",
+    filters: { minPctFromAth: 40, minShortFloat: 0, minScore: 14, verdict: "All", sectorBucket: "All" },
     criteriaFilters: [
-      { criterion: "A", min: 2 },
+      { criterion: "A", min: 1 },
       { criterion: "M", min: 1 },
       { criterion: "M2", min: 1 },
       { criterion: "K", min: 1 },
+      { criterion: "L", min: 1 },
     ],
   },
 ];

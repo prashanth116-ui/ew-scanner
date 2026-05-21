@@ -572,7 +572,7 @@ export default function PreRunGuidePage() {
             <br />
             <strong className="text-[#a0a0a0]">Sector modifier:</strong> +1 if sector ETF 20d return &gt; +5% (tailwind), -1 if &lt; -5% (headwind).
             <br />
-            <strong className="text-[#a0a0a0]">Stage 1&rarr;2 / Base breakout:</strong> Criteria L-O are designed to identify stocks transitioning from Stage 1 (accumulation/base) to Stage 2 (markup). The &ldquo;Early Mover&rdquo; preset enforces A&ge;2, M&ge;1, M2&ge;1, K&ge;1 to surface stocks with confirmed base + EMA reclaim + EMA timing + proximity to breakout.
+            <strong className="text-[#a0a0a0]">Stage 1&rarr;2 / Base breakout:</strong> Criteria L-O are designed to identify stocks transitioning from Stage 1 (accumulation/base) to Stage 2 (markup). The &ldquo;Early Mover&rdquo; preset enforces A&ge;1, M&ge;1, M2&ge;1, K&ge;1, L&ge;1 to surface stocks with confirmed base + EMA reclaim + EMA timing + higher lows + proximity to breakout.
           </p>
         </Section>
 
@@ -770,7 +770,7 @@ export default function PreRunGuidePage() {
                   { name: "SNDK", ath: "40%", si: "15%", score: "15", use: "Classic multi-bagger: deep base + high SI + catalyst" },
                   { name: "High SI", ath: "0%", si: "20%", score: "11", use: "Maximum squeeze fuel, any ATH discount" },
                   { name: "Wide Net", ath: "0%", si: "0%", score: "11", use: "Relaxed filters for initial screening" },
-                  { name: "Early Mover", ath: "30%", si: "5%", score: "14", use: "Stage 1\u21922: base + EMA reclaim + EMA timing (A\u22652, M/M2/K\u22651)" },
+                  { name: "Early Mover", ath: "40%", si: "Any", score: "14", use: "Stage 1\u21922: base + EMA reclaim + timing + higher lows (A/M/M2/K/L\u22651)" },
                 ].map((p) => (
                   <tr key={p.name} className="border-b border-[#2a2a2a]/50">
                     <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{p.name}</td>
