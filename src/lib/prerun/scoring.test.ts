@@ -382,8 +382,8 @@ describe("calcSectorModifier", () => {
 // ── Full scoring pipeline ──
 
 describe("scorePreRun", () => {
-  it("returns DISCARD when gate1 fails (pctFromAth < 40)", () => {
-    const data = makeData({ pctFromAth: 30, sma20: 10, currentPrice: 10 });
+  it("returns DISCARD when gate1 fails (pctFromAth < 20)", () => {
+    const data = makeData({ pctFromAth: 15, sma20: 10, currentPrice: 10 });
     const result = scorePreRun(data, true, 1, 1);
     expect(result.gates.gate1).toBe(false);
     expect(result.scores.finalScore).toBe(0);

@@ -17,7 +17,7 @@ import { matchBestPattern, type PatternMatchResult } from "./patterns";
 /** Gate 1: Has the run already happened? */
 export function evaluateGate1(data: PreRunStockData): boolean {
   if (data.pctFromAth === null) return false;
-  return data.pctFromAth >= 40;
+  return data.pctFromAth >= 20;
 }
 
 /** Gate 2: Existential risk? (manual — passed from watchlist). */
@@ -398,7 +398,7 @@ export function sectorQuadrantGate(
  * @returns Adjusted gate1 threshold (default 40)
  */
 export function dynamicGate1Threshold(medianPctFromAth: number | null): number {
-  const BASE_THRESHOLD = 40;
+  const BASE_THRESHOLD = 20;
   if (medianPctFromAth == null) return BASE_THRESHOLD;
   // If median drawdown is high (bear market), raise threshold
   return Math.max(30, medianPctFromAth + 15);

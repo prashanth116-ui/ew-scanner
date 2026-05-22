@@ -176,7 +176,7 @@ function QuickReferenceCard() {
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-1.5 pr-3 font-medium text-white">G1</td>
                     <td className="py-1.5 pr-3">Not already run</td>
-                    <td className="py-1.5">&ge;40% below ATH</td>
+                    <td className="py-1.5">&ge;20% below ATH</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-1.5 pr-3 font-medium text-white">G2</td>
@@ -390,7 +390,7 @@ export default function PreRunGuidePage() {
             <GateRow
               gate="G1"
               label="Has the run already happened?"
-              passDesc="Stock is 40%+ below its 52-week high. Sitting in a multi-month base with room to run."
+              passDesc="Stock is 20%+ below its 52-week high. Sitting in a base with room to run."
               failDesc="Already up 4x+ from base and near all-time highs. The move you wanted to catch already happened."
             />
             <GateRow
@@ -779,8 +779,8 @@ export default function PreRunGuidePage() {
                 {[
                   { name: "SNDK", ath: "40%", si: "15%", score: "15", use: "Classic multi-bagger: deep base + high SI + catalyst" },
                   { name: "High SI", ath: "0%", si: "20%", score: "11", use: "Maximum squeeze fuel, any ATH discount" },
-                  { name: "Wide Net", ath: "0%", si: "0%", score: "11", use: "Relaxed filters for initial screening" },
                   { name: "Early Mover", ath: "40%", si: "Any", score: "14", use: "Stage 1\u21922: base + EMA reclaim + timing + higher lows (A/M/M2/K/L\u22651)" },
+                  { name: "Pullback Buy", ath: "20%", si: "Any", score: "11", use: "20-35% pullback from ATH with EMA timing + volume (M2/F\u22651)" },
                 ].map((p) => (
                   <tr key={p.name} className="border-b border-[#2a2a2a]/50">
                     <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{p.name}</td>
@@ -794,7 +794,7 @@ export default function PreRunGuidePage() {
             </table>
           </div>
           <p className="mt-2 text-xs text-[#666]">
-            <strong className="text-[#a0a0a0]">Default filters:</strong> 40% from ATH, 5% SI, score &ge;11.
+            <strong className="text-[#a0a0a0]">Default filters:</strong> 20% from ATH, score &ge;11.
             Presets override only the values shown &mdash; unspecified filters use defaults.
           </p>
         </Section>

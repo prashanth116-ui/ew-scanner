@@ -73,7 +73,7 @@ export interface PreRunStockData {
 }
 
 export interface PreRunGates {
-  gate1: boolean; // Not already run (40%+ below all-time high)
+  gate1: boolean; // Not already run (20%+ below all-time high)
   gate2: boolean; // No existential risk (manual)
   gate3: boolean; // Base forming, not freefall
 }
@@ -195,8 +195,8 @@ export interface PreRunFilters {
 }
 
 export const DEFAULT_PRERUN_FILTERS: PreRunFilters = {
-  minPctFromAth: 40,
-  minShortFloat: 5,
+  minPctFromAth: 20,
+  minShortFloat: 0,
   maxMarketCap: 0,
   minScore: 11,
   sectorBucket: "All",
@@ -235,12 +235,6 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     filters: { minShortFloat: 20, minPctFromAth: 0, minScore: 11 },
   },
   {
-    name: "Wide Net",
-    shortName: "Wide Net",
-    description: "Relaxed filters, score ≥11. Good for initial screening.",
-    filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 11 },
-  },
-  {
     name: "Early Mover",
     shortName: "Early Mover",
     description: "Stage 1→2 breakout: base structure + EMA reclaim + timing + higher lows + near breakout.",
@@ -251,6 +245,17 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
       { criterion: "M2", min: 1 },
       { criterion: "K", min: 1 },
       { criterion: "L", min: 1 },
+    ],
+    multiTF: true,
+  },
+  {
+    name: "Pullback Buy",
+    shortName: "Pullback",
+    description: "Catch 20-35% pullbacks from ATH before base forms. Needs M2 timing + volume signal.",
+    filters: { minPctFromAth: 20, minShortFloat: 0, minScore: 11, verdict: "All", sectorBucket: "All" },
+    criteriaFilters: [
+      { criterion: "M2", min: 1 },
+      { criterion: "F", min: 1 },
     ],
     multiTF: true,
   },
