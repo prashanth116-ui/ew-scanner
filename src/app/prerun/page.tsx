@@ -1430,7 +1430,7 @@ const MultiTFTable = memo(function MultiTFTable({
             Multi-Timeframe M2 EMA
           </h3>
           <span className="text-[10px] text-[#666]">
-            {sorted.length} stocks
+            {sorted.length}{activeFilterCount > 0 ? `/${results.size}` : ""} stocks
           </span>
           {activeFilterCount > 0 && (
             <>
@@ -1490,8 +1490,11 @@ const MultiTFTable = memo(function MultiTFTable({
           <tbody>
             {sorted.length === 0 && activeFilterCount > 0 && (
               <tr>
-                <td colSpan={TF_LABELS.length + 3} className="py-6 text-center text-[#555] text-xs">
-                  No stocks match current filters
+                <td colSpan={TF_LABELS.length + 3} className="py-6 text-center text-xs">
+                  <span className="text-[#555]">No stocks match current filters</span>
+                  {scanning && (
+                    <span className="block mt-1 text-[#444]">Scan in progress — results may appear as data loads</span>
+                  )}
                 </td>
               </tr>
             )}

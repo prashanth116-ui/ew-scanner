@@ -184,6 +184,42 @@ describe("rowPassesTFFilters", () => {
     const filters = { ...INIT_TF_FILTERS, "15m": "0" as TFFilterValue };
     expect(rowPassesTFFilters(row, filters)).toBe(false);
   });
+
+  // Partial data scenarios — when API fails for some timeframes
+  describe("partial data (API failures)", () => {
+    const preset: Record<string, TFFilterValue> = {
+      ...INIT_TF_FILTERS,
+      "15m": "2",
+      "4h": "lte1",
+      "12h": "lte1",
+      "1d": "lte1",
+      "1wk": "lte1",
+      "1mo": "lte1",
+    };
+
+    it("fails when 4h is missing even though stock would qualify", () => {
+      // Stock has 15m=2 and all present higher TFs are 0, but 4h failed to fetch
+      const row = makeRow("PLTR", {
+        "15m": 2, "1h": 0, /* 4h missing */ "12h": 0, "1d": 0, "1wk": 0, "1mo": 0,
+      });
+      // lte1 filter on missing 4h → fails (defensive: missing ≠ 0)
+      expect(rowPassesTFFilters(row, preset)).toBe(false);
+    });
+
+    it("passes when only unfiltered timeframes are missing", () => {
+      // 1h is "any" in the preset, so missing 1h doesn't matter
+      const row = makeRow("SOFI", {
+        "15m": 2, /* 1h missing */ "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0,
+      });
+      expect(rowPassesTFFilters(row, preset)).toBe(true);
+    });
+
+    it("Phase 1 only data (only 1d present) fails preset", () => {
+      // Phase 2 completely failed — only 1d from Phase 1
+      const row = makeRow("RIVN", { "1d": 0 });
+      expect(rowPassesTFFilters(row, preset)).toBe(false);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
