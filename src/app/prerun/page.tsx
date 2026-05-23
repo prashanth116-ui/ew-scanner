@@ -28,6 +28,7 @@ import type {
 } from "@/lib/prerun/types";
 import type { EmaTimeframe } from "@/lib/prerun/types";
 import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES } from "@/lib/prerun/types";
+import { type TFFilterValue, TF_FILTER_OPTIONS, INIT_TF_FILTERS, matchesTFFilter } from "@/lib/prerun/tf-filters";
 import {
   savePreRunScan,
   loadPreRunScans,
@@ -1375,33 +1376,6 @@ function scoreDisplay(score: number): { text: string; color: string } {
   if (score === 2) return { text: "2", color: "text-green-400 font-bold" };
   if (score === 1) return { text: "1", color: "text-amber-400" };
   return { text: "0", color: "text-[#555]" };
-}
-
-type TFFilterValue = "any" | "0" | "1" | "2" | "lte1" | "gte1";
-
-const TF_FILTER_OPTIONS: { value: TFFilterValue; label: string }[] = [
-  { value: "any", label: "Any" },
-  { value: "0", label: "=0" },
-  { value: "1", label: "=1" },
-  { value: "2", label: "=2" },
-  { value: "lte1", label: "≤1" },
-  { value: "gte1", label: "≥1" },
-];
-
-const INIT_TF_FILTERS: Record<EmaTimeframe, TFFilterValue> = {
-  "15m": "any", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
-};
-
-function matchesTFFilter(score: number | undefined | null, filter: TFFilterValue): boolean {
-  if (filter === "any") return true;
-  if (score == null) return false;
-  switch (filter) {
-    case "0": return score === 0;
-    case "1": return score === 1;
-    case "2": return score === 2;
-    case "lte1": return score <= 1;
-    case "gte1": return score >= 1;
-  }
 }
 
 const MultiTFTable = memo(function MultiTFTable({
