@@ -280,6 +280,8 @@ function PreRunPage() {
             bullishCross: d.emaM2BullishCross,
             priceAboveBoth: d.emaM2PriceAboveBoth,
             dataPoints: d.emaM2DataPoints,
+            displacementNearCross: d.emaM2DisplacementNearCross,
+            fvgNearCross: d.emaM2FvgNearCross,
           },
         },
       });

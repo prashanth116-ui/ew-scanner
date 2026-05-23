@@ -598,6 +598,68 @@ export function calcEmaSignal(closes: number[]): {
   return result;
 }
 
+/**
+ * Detect displacement candle + bullish FVG near an EMA crossover.
+ * Displacement: candle body >= 1.5x the 20-bar average body ending at the cross bar.
+ * Bullish FVG: highs[i-2] < lows[i] (gap up not filled by middle candle).
+ * Lookback window: 5 bars before cross to 30 bars after cross.
+ */
+export function calcDisplacementAndFVG(
+  opens: number[],
+  highs: number[],
+  lows: number[],
+  closes: number[],
+  barsSinceCross: number | null
+): { displacementNearCross: boolean; fvgNearCross: boolean } {
+  if (barsSinceCross === null || closes.length < 20) {
+    return { displacementNearCross: false, fvgNearCross: false };
+  }
+
+  const lastIdx = closes.length - 1;
+  const crossIdx = lastIdx - barsSinceCross;
+  if (crossIdx < 0 || crossIdx >= closes.length) {
+    return { displacementNearCross: false, fvgNearCross: false };
+  }
+
+  // 20-bar average body ending at cross bar
+  const avgStart = Math.max(0, crossIdx - 19);
+  let bodySum = 0;
+  let bodyCount = 0;
+  for (let i = avgStart; i <= crossIdx; i++) {
+    bodySum += Math.abs(closes[i] - opens[i]);
+    bodyCount++;
+  }
+  const avgBody = bodyCount > 0 ? bodySum / bodyCount : 0;
+
+  // Scan window: 5 bars before cross to 30 bars after cross
+  const scanStart = Math.max(0, crossIdx - 5);
+  const scanEnd = Math.min(lastIdx, crossIdx + 30);
+
+  let displacementNearCross = false;
+  let fvgNearCross = false;
+
+  for (let i = scanStart; i <= scanEnd; i++) {
+    // Displacement: bullish candle body >= 1.5x average
+    if (!displacementNearCross && avgBody > 0) {
+      const body = closes[i] - opens[i]; // positive = bullish
+      if (body > 0 && body >= 1.5 * avgBody) {
+        displacementNearCross = true;
+      }
+    }
+
+    // Bullish FVG: highs[i-2] < lows[i] (gap between candle i-2 high and candle i low)
+    if (!fvgNearCross && i >= 2) {
+      if (highs[i - 2] < lows[i]) {
+        fvgNearCross = true;
+      }
+    }
+
+    if (displacementNearCross && fvgNearCross) break;
+  }
+
+  return { displacementNearCross, fvgNearCross };
+}
+
 /** Compute range coil data from chart. */
 function calcRangeCoilData(closes: number[], highs: number[], lows: number[]): {
   closesNearTop: boolean;
@@ -953,6 +1015,26 @@ export function aggregate4hCloses(closes: number[], n: number): number[] {
   return result;
 }
 
+/** Aggregate 1h OHLC to 4h bars. Opens from first bar, highs/lows from max/min, closes from last bar. */
+export function aggregate4hOHLC(
+  opens: number[], highs: number[], lows: number[], closes: number[], n: number
+): { opens: number[]; highs: number[]; lows: number[]; closes: number[] } {
+  const aO: number[] = [], aH: number[] = [], aL: number[] = [], aC: number[] = [];
+  for (let i = n - 1; i < closes.length; i += n) {
+    const start = i - n + 1;
+    aO.push(opens[start]);
+    aC.push(closes[i]);
+    let hi = highs[start], lo = lows[start];
+    for (let j = start + 1; j <= i; j++) {
+      if (highs[j] > hi) hi = highs[j];
+      if (lows[j] < lo) lo = lows[j];
+    }
+    aH.push(hi);
+    aL.push(lo);
+  }
+  return { opens: aO, highs: aH, lows: aL, closes: aC };
+}
+
 /** Main function: fetch all data for a single ticker. */
 export async function fetchPreRunData(
   ticker: string,
@@ -1143,6 +1225,8 @@ export async function fetchPreRunData(
   let emaM2TrendStrength: "strong" | "moderate" | "weak" | "bearish" | null = null;
   let emaM2BarsSinceCross: number | null = null;
   let emaM2DataPoints: number | null = null;
+  let emaM2DisplacementNearCross: boolean | null = null;
+  let emaM2FvgNearCross: boolean | null = null;
 
   const tfConfig = TIMEFRAME_CONFIG[emaTimeframe];
   // Gate: for intraday timeframes (15m, 1h, 4h), only fetch if ≥30% from ATH
@@ -1154,17 +1238,35 @@ export async function fetchPreRunData(
   if (shouldFetchEma) {
     try {
       let emaCloses: number[] | null = null;
+      let emaOpens: number[] | null = null;
+      let emaHighs: number[] | null = null;
+      let emaLows: number[] | null = null;
 
       if (tfConfig.reuse === "chart3mo" && chart3mo) {
         emaCloses = chart3mo.closes;
+        emaOpens = chart3mo.opens;
+        emaHighs = chart3mo.highs;
+        emaLows = chart3mo.lows;
       } else if (tfConfig.reuse === "chart5y" && chart5y) {
         emaCloses = chart5y.closes;
+        emaOpens = chart5y.opens;
+        emaHighs = chart5y.highs;
+        emaLows = chart5y.lows;
       } else {
         const emaChart = await fetchYahooChart(ticker, tfConfig.range, tfConfig.interval);
         if (emaChart) {
-          emaCloses = tfConfig.aggregate
-            ? aggregate4hCloses(emaChart.closes, tfConfig.aggregate)
-            : emaChart.closes;
+          if (tfConfig.aggregate) {
+            const agg = aggregate4hOHLC(emaChart.opens, emaChart.highs, emaChart.lows, emaChart.closes, tfConfig.aggregate);
+            emaOpens = agg.opens;
+            emaHighs = agg.highs;
+            emaLows = agg.lows;
+            emaCloses = agg.closes;
+          } else {
+            emaCloses = emaChart.closes;
+            emaOpens = emaChart.opens;
+            emaHighs = emaChart.highs;
+            emaLows = emaChart.lows;
+          }
         }
       }
 
@@ -1179,6 +1281,12 @@ export async function fetchPreRunData(
         emaM2TrendStrength = sig.trendStrength;
         emaM2BarsSinceCross = sig.barsSinceCross;
         emaM2DataPoints = sig.dataPoints;
+
+        if (emaOpens && emaHighs && emaLows) {
+          const dfvg = calcDisplacementAndFVG(emaOpens, emaHighs, emaLows, emaCloses, sig.barsSinceCross);
+          emaM2DisplacementNearCross = dfvg.displacementNearCross;
+          emaM2FvgNearCross = dfvg.fvgNearCross;
+        }
       }
     } catch {
       // EMA data is optional — if it fails, M2 scores 0
@@ -1251,6 +1359,8 @@ export async function fetchPreRunData(
     emaM2TrendStrength,
     emaM2BarsSinceCross,
     emaM2DataPoints,
+    emaM2DisplacementNearCross,
+    emaM2FvgNearCross,
     emaM2Timeframe: emaTimeframe,
     closesNearRangeTop,
     atrContracting,
@@ -1273,23 +1383,45 @@ export async function fetchM2Only(
 
   try {
     let closes: number[] | null = null;
+    let emaOpens: number[] | null = null;
+    let emaHighs: number[] | null = null;
+    let emaLows: number[] | null = null;
 
     // For reuse timeframes (1d uses chart3mo, 1wk uses chart5y), we still need to fetch
     // since this is a standalone call without the main fetchPreRunData context
     const chart = await fetchYahooChart(ticker, tfConfig.range, tfConfig.interval);
     if (chart) {
-      closes = tfConfig.aggregate
-        ? aggregate4hCloses(chart.closes, tfConfig.aggregate)
-        : chart.closes;
+      if (tfConfig.aggregate) {
+        const agg = aggregate4hOHLC(chart.opens, chart.highs, chart.lows, chart.closes, tfConfig.aggregate);
+        emaOpens = agg.opens;
+        emaHighs = agg.highs;
+        emaLows = agg.lows;
+        closes = agg.closes;
+      } else {
+        closes = chart.closes;
+        emaOpens = chart.opens;
+        emaHighs = chart.highs;
+        emaLows = chart.lows;
+      }
     }
 
     if (!closes || closes.length < 20) return null;
 
     const sig = calcEmaSignal(closes);
 
-    // Score M2 using same logic as autoScorePreRun
+    // Displacement + FVG detection
+    let displacementNearCross: boolean | null = null;
+    let fvgNearCross: boolean | null = null;
+    if (emaOpens && emaHighs && emaLows) {
+      const dfvg = calcDisplacementAndFVG(emaOpens, emaHighs, emaLows, closes, sig.barsSinceCross);
+      displacementNearCross = dfvg.displacementNearCross;
+      fvgNearCross = dfvg.fvgNearCross;
+    }
+
+    // Score M2 using same logic as scoreM2() in scoring.ts
+    const hasDisplacementFVG = displacementNearCross === true && fvgNearCross === true;
     let scoreM2 = 0;
-    if (sig.bullishCross && sig.priceAboveBoth && sig.crossedWithin5Bars) {
+    if (sig.bullishCross && sig.priceAboveBoth && (sig.crossedWithin5Bars || hasDisplacementFVG)) {
       scoreM2 = 2;
     } else if (sig.bullishCross || sig.priceAboveBoth) {
       scoreM2 = 1;
@@ -1301,6 +1433,8 @@ export async function fetchM2Only(
       bullishCross: sig.bullishCross,
       priceAboveBoth: sig.priceAboveBoth,
       dataPoints: sig.dataPoints,
+      displacementNearCross,
+      fvgNearCross,
     };
   } catch {
     return null;

@@ -12,6 +12,8 @@ export interface M2TimeframeResult {
   bullishCross: boolean | null;
   priceAboveBoth: boolean | null;
   dataPoints: number | null;
+  displacementNearCross: boolean | null;
+  fvgNearCross: boolean | null;
 }
 
 export interface MultiTFM2Result {
@@ -64,6 +66,8 @@ export interface PreRunStockData {
   emaM2TrendStrength: "strong" | "moderate" | "weak" | "bearish" | null; // M2: trend classification
   emaM2BarsSinceCross: number | null;      // M2: how many bars since last cross
   emaM2DataPoints: number | null;          // M2: number of bars available
+  emaM2DisplacementNearCross: boolean | null; // M2: displacement candle near EMA cross
+  emaM2FvgNearCross: boolean | null;          // M2: bullish FVG near EMA cross
   emaM2Timeframe: EmaTimeframe | null;     // M2: which timeframe was used
   closesNearRangeTop: boolean | null;      // N: Are last 5 closes in upper 25% of 13-week range
   atrContracting: boolean | null;          // N: Is 5-day ATR < 20-day ATR

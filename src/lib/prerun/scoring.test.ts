@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// Mock server-only so we can import pure functions from data.ts in tests
+vi.mock("server-only", () => ({}));
+
 import { scoreA, scoreB, scoreD, scoreE, scoreF, scoreH, scoreI, scoreJ, scoreK, scoreM2, calcSectorModifier, scorePreRun, autoScorePreRun } from "./scoring";
+import { calcDisplacementAndFVG } from "./data";
 import type { PreRunStockData } from "./types";
 
 /** Helper: create a minimal PreRunStockData with overrides. */
@@ -45,6 +50,8 @@ function makeData(overrides: Partial<PreRunStockData> = {}): PreRunStockData {
     emaM2TrendStrength: null,
     emaM2BarsSinceCross: null,
     emaM2DataPoints: null,
+    emaM2DisplacementNearCross: null,
+    emaM2FvgNearCross: null,
     emaM2Timeframe: null,
     closesNearRangeTop: null,
     atrContracting: null,
@@ -356,6 +363,68 @@ describe("scoreM2", () => {
       emaM2PriceAboveBoth: null,
     }))).toBe(0);
   });
+
+  // ── Displacement + FVG alternative path ──
+
+  it("returns 2 for bullish + aboveBoth + displacement+FVG (no recent cross)", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: true,
+      emaM2PriceAboveBoth: true,
+      emaM2CrossedWithin5Bars: false,
+      emaM2DisplacementNearCross: true,
+      emaM2FvgNearCross: true,
+    }))).toBe(2);
+  });
+
+  it("returns 1 for displacement+FVG without bullish cross", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: false,
+      emaM2PriceAboveBoth: true,
+      emaM2CrossedWithin5Bars: false,
+      emaM2DisplacementNearCross: true,
+      emaM2FvgNearCross: true,
+    }))).toBe(1);
+  });
+
+  it("returns 1 for displacement only (no FVG)", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: true,
+      emaM2PriceAboveBoth: true,
+      emaM2CrossedWithin5Bars: false,
+      emaM2DisplacementNearCross: true,
+      emaM2FvgNearCross: false,
+    }))).toBe(1);
+  });
+
+  it("returns 1 for FVG only (no displacement)", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: true,
+      emaM2PriceAboveBoth: true,
+      emaM2CrossedWithin5Bars: false,
+      emaM2DisplacementNearCross: false,
+      emaM2FvgNearCross: true,
+    }))).toBe(1);
+  });
+
+  it("returns 2 for recent cross + null displacement/FVG (backward compat)", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: true,
+      emaM2PriceAboveBoth: true,
+      emaM2CrossedWithin5Bars: true,
+      emaM2DisplacementNearCross: null,
+      emaM2FvgNearCross: null,
+    }))).toBe(2);
+  });
+
+  it("returns 2 for recent cross + displacement+FVG (both paths satisfied)", () => {
+    expect(scoreM2(makeData({
+      emaM2BullishCross: true,
+      emaM2PriceAboveBoth: true,
+      emaM2CrossedWithin5Bars: true,
+      emaM2DisplacementNearCross: true,
+      emaM2FvgNearCross: true,
+    }))).toBe(2);
+  });
 });
 
 // ── Sector modifier ──
@@ -515,5 +584,77 @@ describe("autoScorePreRun", () => {
     const result = autoScorePreRun(data);
     expect(result.gates.gate2).toBe(true);
     expect(result.scores.scoreC).toBe(1);
+  });
+});
+
+// ── calcDisplacementAndFVG ──
+
+describe("calcDisplacementAndFVG", () => {
+  // Helper: build OHLC arrays of length n with uniform candles
+  function uniformBars(n: number, base = 100, bodySize = 1) {
+    const opens = Array.from({ length: n }, (_, i) => base + i);
+    const closes = opens.map(o => o + bodySize);
+    const highs = closes.map(c => c + 0.5);
+    const lows = opens.map(o => o - 0.5);
+    return { opens, highs, lows, closes };
+  }
+
+  it("detects displacement candle near cross", () => {
+    const n = 30;
+    const { opens, highs, lows, closes } = uniformBars(n);
+    // barsSinceCross = 5 → cross at index 24
+    // Insert a big bullish candle at index 26 (within +30 window)
+    // Avg body = 1.0, so need body >= 1.5
+    closes[26] = opens[26] + 3; // body = 3, which is 3x avg
+    highs[26] = closes[26] + 0.5;
+
+    const result = calcDisplacementAndFVG(opens, highs, lows, closes, 5);
+    expect(result.displacementNearCross).toBe(true);
+  });
+
+  it("detects bullish FVG near cross", () => {
+    const n = 30;
+    const { opens, highs, lows, closes } = uniformBars(n);
+    // barsSinceCross = 5 → cross at index 24
+    // Bullish FVG at index 27: highs[25] < lows[27]
+    lows[27] = highs[25] + 1; // gap up
+    opens[27] = lows[27] + 0.1;
+    closes[27] = opens[27] + 1;
+    highs[27] = closes[27] + 0.5;
+
+    const result = calcDisplacementAndFVG(opens, highs, lows, closes, 5);
+    expect(result.fvgNearCross).toBe(true);
+  });
+
+  it("returns false for both when barsSinceCross is null", () => {
+    const { opens, highs, lows, closes } = uniformBars(30);
+    const result = calcDisplacementAndFVG(opens, highs, lows, closes, null);
+    expect(result.displacementNearCross).toBe(false);
+    expect(result.fvgNearCross).toBe(false);
+  });
+
+  it("returns false when no displacement or FVG present", () => {
+    const { opens, highs, lows, closes } = uniformBars(30);
+    const result = calcDisplacementAndFVG(opens, highs, lows, closes, 5);
+    expect(result.displacementNearCross).toBe(false);
+    expect(result.fvgNearCross).toBe(false);
+  });
+
+  it("returns false when array too short", () => {
+    const { opens, highs, lows, closes } = uniformBars(10);
+    const result = calcDisplacementAndFVG(opens, highs, lows, closes, 2);
+    expect(result.displacementNearCross).toBe(false);
+    expect(result.fvgNearCross).toBe(false);
+  });
+
+  it("handles cross at edge of array (barsSinceCross = 0)", () => {
+    const n = 30;
+    const { opens, highs, lows, closes } = uniformBars(n);
+    // Cross at last bar — displacement window is 5 bars before last bar
+    closes[27] = opens[27] + 3; // displacement candle 3 bars before last
+    highs[27] = closes[27] + 0.5;
+
+    const result = calcDisplacementAndFVG(opens, highs, lows, closes, 0);
+    expect(result.displacementNearCross).toBe(true);
   });
 });

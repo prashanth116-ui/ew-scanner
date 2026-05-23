@@ -199,16 +199,20 @@ export function scoreM(data: PreRunStockData): number {
 }
 
 /** Criterion M2: EMA 10/20 Timing Signal (0-2).
- *  Multi-timeframe momentum confirmation for daily-level base breakouts. */
+ *  Multi-timeframe momentum confirmation for daily-level base breakouts.
+ *  Score 2 via recent cross OR displacement+FVG near cross (additive path). */
 export function scoreM2(data: PreRunStockData): number {
   const bullish = data.emaM2BullishCross;
   const recentCross = data.emaM2CrossedWithin5Bars;
   const aboveBoth = data.emaM2PriceAboveBoth;
+  const displacement = data.emaM2DisplacementNearCross;
+  const fvg = data.emaM2FvgNearCross;
 
   if (bullish === null || aboveBoth === null) return 0;
 
-  // Score 2: Bullish cross + price above both EMAs + crossover within last 5 bars
-  if (bullish && aboveBoth && recentCross === true) return 2;
+  // Score 2: Bullish cross + price above both EMAs + (recent crossover OR displacement+FVG)
+  const hasDisplacementFVG = displacement === true && fvg === true;
+  if (bullish && aboveBoth && (recentCross === true || hasDisplacementFVG)) return 2;
   // Score 1: Bullish alignment (EMA10 > EMA20) or price above both
   if (bullish || aboveBoth) return 1;
   // Score 0: Bearish alignment
