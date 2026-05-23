@@ -261,11 +261,11 @@ function PreRunPage() {
     if (candidates.length === 0) return;
 
     setMultiTFScanning(true);
-    setMultiTFProgress(`Fetching M2 for ${candidates.length} candidates across 5 timeframes...`);
+    setMultiTFProgress(`Fetching M2 for ${candidates.length} candidates across 6 timeframes...`);
 
     const candidateTickers = candidates.map((r) => r.data.ticker);
     // Skip 1d — already have it from Phase 1
-    const timeframes: EmaTimeframe[] = ["15m", "1h", "4h", "1wk", "1mo"];
+    const timeframes: EmaTimeframe[] = ["15m", "1h", "4h", "12h", "1wk", "1mo"];
 
     // Also populate 1d results from Phase 1 data
     const phase1Map = new Map<string, MultiTFM2Result>();
@@ -729,6 +729,7 @@ function PreRunPage() {
                   <option value="15m">15m</option>
                   <option value="1h">1h</option>
                   <option value="4h">4h</option>
+                  <option value="12h">12h</option>
                   <option value="1d">1d</option>
                   <option value="1wk">1wk</option>
                   <option value="1mo">1mo</option>
@@ -1358,7 +1359,7 @@ const ResultCard = memo(function ResultCard({
 
 // -- Multi-TF M2 Table Component --
 
-const TF_LABELS: EmaTimeframe[] = ["15m", "1h", "4h", "1d", "1wk", "1mo"];
+const TF_LABELS: EmaTimeframe[] = ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"];
 
 function trendColor(trend: string | null | undefined): string {
   switch (trend) {
@@ -1477,7 +1478,7 @@ const MultiTFTable = memo(function MultiTFTable({
                   <span className={`font-bold ${row.totalScore >= 8 ? "text-green-400" : row.totalScore >= 5 ? "text-amber-400" : "text-[#a0a0a0]"}`}>
                     {row.totalScore}
                   </span>
-                  <span className="text-[#555]">/12</span>
+                  <span className="text-[#555]">/14</span>
                 </td>
                 <td className="py-1.5 px-3 pr-4 text-center">
                   {row.bestTF ? (

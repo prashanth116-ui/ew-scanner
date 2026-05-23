@@ -2,9 +2,9 @@
 
 export type PreRunVerdict = "PRIORITY" | "KEEP" | "WATCH" | "DISCARD";
 export type PreRunRisk = "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
-export type EmaTimeframe = "15m" | "1h" | "4h" | "1d" | "1wk" | "1mo";
+export type EmaTimeframe = "15m" | "1h" | "4h" | "12h" | "1d" | "1wk" | "1mo";
 
-export const ALL_EMA_TIMEFRAMES: readonly EmaTimeframe[] = ["15m", "1h", "4h", "1d", "1wk", "1mo"] as const;
+export const ALL_EMA_TIMEFRAMES: readonly EmaTimeframe[] = ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"] as const;
 
 export interface M2TimeframeResult {
   scoreM2: number;

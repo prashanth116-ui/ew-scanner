@@ -80,7 +80,8 @@ async function fetchYahooSummary(
 export async function fetchYahooChart(
   ticker: string,
   range = "3mo",
-  interval = "1d"
+  interval = "1d",
+  includePrePost = false,
 ): Promise<{
   closes: number[];
   volumes: number[];
@@ -94,12 +95,19 @@ export async function fetchYahooChart(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let data: any;
 
+  // Use a distinct cache key when includePrePost is true to avoid collisions
+  // (e.g. 12h's "2y:1h:prepost" vs 4h's "2y:1h")
+  const cacheInterval = includePrePost ? `${interval}:prepost` : interval;
+
   try {
-    data = await deduplicatedChartFetch(ticker, range, interval, async () => {
+    data = await deduplicatedChartFetch(ticker, range, cacheInterval, async () => {
       const auth = await getYahooCrumb();
       if (!auth) return null;
 
-      const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&crumb=${encodeURIComponent(auth.crumb)}`;
+      let url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&crumb=${encodeURIComponent(auth.crumb)}`;
+      if (includePrePost) {
+        url += "&includePrePost=true";
+      }
       let res: Response;
       try {
         res = await fetchWithRetry(url, {
@@ -997,10 +1005,11 @@ export async function prefetchSectorETFs(): Promise<void> {
 }
 
 /** Yahoo Finance API config for each M2 EMA timeframe. */
-export const TIMEFRAME_CONFIG: Record<EmaTimeframe, { range: string; interval: string; reuse?: "chart3mo" | "chart5y"; aggregate?: number }> = {
+export const TIMEFRAME_CONFIG: Record<EmaTimeframe, { range: string; interval: string; reuse?: "chart3mo" | "chart5y"; aggregate?: number; includePrePost?: boolean }> = {
   "15m": { range: "1mo", interval: "15m" },
   "1h":  { range: "1mo", interval: "1h" },
   "4h":  { range: "2y",  interval: "1h", aggregate: 4 },
+  "12h": { range: "2y",  interval: "1h", aggregate: 12, includePrePost: true },
   "1d":  { range: "3mo", interval: "1d", reuse: "chart3mo" },
   "1wk": { range: "5y",  interval: "1wk", reuse: "chart5y" },
   "1mo": { range: "5y",  interval: "1mo" },
@@ -1253,7 +1262,7 @@ export async function fetchPreRunData(
         emaHighs = chart5y.highs;
         emaLows = chart5y.lows;
       } else {
-        const emaChart = await fetchYahooChart(ticker, tfConfig.range, tfConfig.interval);
+        const emaChart = await fetchYahooChart(ticker, tfConfig.range, tfConfig.interval, tfConfig.includePrePost);
         if (emaChart) {
           if (tfConfig.aggregate) {
             const agg = aggregate4hOHLC(emaChart.opens, emaChart.highs, emaChart.lows, emaChart.closes, tfConfig.aggregate);
@@ -1389,7 +1398,7 @@ export async function fetchM2Only(
 
     // For reuse timeframes (1d uses chart3mo, 1wk uses chart5y), we still need to fetch
     // since this is a standalone call without the main fetchPreRunData context
-    const chart = await fetchYahooChart(ticker, tfConfig.range, tfConfig.interval);
+    const chart = await fetchYahooChart(ticker, tfConfig.range, tfConfig.interval, tfConfig.includePrePost);
     if (chart) {
       if (tfConfig.aggregate) {
         const agg = aggregate4hOHLC(chart.opens, chart.highs, chart.lows, chart.closes, tfConfig.aggregate);
