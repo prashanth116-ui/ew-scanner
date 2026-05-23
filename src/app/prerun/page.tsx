@@ -1377,6 +1377,33 @@ function scoreDisplay(score: number): { text: string; color: string } {
   return { text: "0", color: "text-[#555]" };
 }
 
+type TFFilterValue = "any" | "0" | "1" | "2" | "lte1" | "gte1";
+
+const TF_FILTER_OPTIONS: { value: TFFilterValue; label: string }[] = [
+  { value: "any", label: "Any" },
+  { value: "0", label: "=0" },
+  { value: "1", label: "=1" },
+  { value: "2", label: "=2" },
+  { value: "lte1", label: "≤1" },
+  { value: "gte1", label: "≥1" },
+];
+
+const INIT_TF_FILTERS: Record<EmaTimeframe, TFFilterValue> = {
+  "15m": "any", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
+};
+
+function matchesTFFilter(score: number | undefined | null, filter: TFFilterValue): boolean {
+  if (filter === "any") return true;
+  if (score == null) return false;
+  switch (filter) {
+    case "0": return score === 0;
+    case "1": return score === 1;
+    case "2": return score === 2;
+    case "lte1": return score <= 1;
+    case "gte1": return score >= 1;
+  }
+}
+
 const MultiTFTable = memo(function MultiTFTable({
   results,
   scanning,
@@ -1386,6 +1413,13 @@ const MultiTFTable = memo(function MultiTFTable({
   scanning: boolean;
   progress: string;
 }) {
+  const [tfFilters, setTFFilters] = useState<Record<EmaTimeframe, TFFilterValue>>({ ...INIT_TF_FILTERS });
+
+  const activeFilterCount = useMemo(
+    () => TF_LABELS.filter((tf) => tfFilters[tf] !== "any").length,
+    [tfFilters],
+  );
+
   // Sort by total M2 score across timeframes (descending), tie-break by ticker
   const sorted = useMemo(() => {
     const entries = Array.from(results.values());
@@ -1407,8 +1441,16 @@ const MultiTFTable = memo(function MultiTFTable({
         }
         return { ...r, totalScore, bestTF };
       })
+      .filter((row) =>
+        TF_LABELS.every((tf) => {
+          const filter = tfFilters[tf];
+          if (filter === "any") return true;
+          const tfr = row.timeframes[tf];
+          return matchesTFFilter(tfr?.scoreM2 ?? null, filter);
+        }),
+      )
       .sort((a, b) => b.totalScore - a.totalScore || a.ticker.localeCompare(b.ticker));
-  }, [results]);
+  }, [results, tfFilters]);
 
   if (sorted.length === 0 && !scanning) return null;
 
@@ -1423,6 +1465,19 @@ const MultiTFTable = memo(function MultiTFTable({
           <span className="text-[10px] text-[#666]">
             {sorted.length} stocks
           </span>
+          {activeFilterCount > 0 && (
+            <>
+              <span className="text-[10px] text-purple-400">
+                {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""}
+              </span>
+              <button
+                onClick={() => setTFFilters({ ...INIT_TF_FILTERS })}
+                className="text-[10px] text-[#888] hover:text-white transition-colors"
+              >
+                Reset
+              </button>
+            </>
+          )}
         </div>
         {scanning && (
           <div className="flex items-center gap-2">
@@ -1438,7 +1493,28 @@ const MultiTFTable = memo(function MultiTFTable({
             <tr className="border-b border-[#2a2a2a] text-[#666]">
               <th className="py-2 pl-4 pr-2 text-left font-medium sticky left-0 bg-[#141414] z-10">Ticker</th>
               {TF_LABELS.map((tf) => (
-                <th key={tf} className="py-2 px-3 text-center font-medium whitespace-nowrap">{tf}</th>
+                <th key={tf} className="py-1.5 px-1.5 text-center font-medium whitespace-nowrap">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span>{tf}</span>
+                    <select
+                      value={tfFilters[tf]}
+                      onChange={(e) =>
+                        setTFFilters((prev) => ({ ...prev, [tf]: e.target.value as TFFilterValue }))
+                      }
+                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
+                        tfFilters[tf] !== "any"
+                          ? "border-purple-500/50 text-purple-300"
+                          : "border-[#333] text-[#666]"
+                      }`}
+                    >
+                      {TF_FILTER_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </th>
               ))}
               <th className="py-2 px-3 text-center font-medium">Total</th>
               <th className="py-2 px-3 pr-4 text-center font-medium">Best TF</th>
