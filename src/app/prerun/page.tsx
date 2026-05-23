@@ -106,6 +106,9 @@ function PreRunPage() {
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
 
+  // Gate 3 skip (for Pullback Buy — shows stocks below SMA20)
+  const [skipGate3, setSkipGate3] = useState(false);
+
   // Multi-TF M2 state
   const [multiTFResults, setMultiTFResults] = useState<Map<string, MultiTFM2Result>>(new Map());
   const [showMultiTF, setShowMultiTF] = useState(false);
@@ -201,7 +204,12 @@ function PreRunPage() {
       if (filters.minPctFromAth > 0 && (r.data.pctFromAth ?? 0) < filters.minPctFromAth) return false;
       if (filters.minShortFloat > 0 && (r.data.shortFloat ?? 0) < filters.minShortFloat) return false;
       if (filters.maxMarketCap > 0 && (r.data.marketCap ?? Infinity) > filters.maxMarketCap) return false;
-      if (filters.minScore > 0 && r.scores.finalScore < filters.minScore) return false;
+      if (skipGate3) {
+        if (!r.gates.gate1) return false;
+        if (filters.minScore > 0 && r.scores.totalScore < filters.minScore) return false;
+      } else {
+        if (filters.minScore > 0 && r.scores.finalScore < filters.minScore) return false;
+      }
       if (filters.earningsWithin > 0 && (r.data.daysToEarnings === null || r.data.daysToEarnings > filters.earningsWithin)) return false;
       if (filters.verdict !== "All" && r.verdict !== filters.verdict) return false;
       if (filters.sectorBucket !== "All") {
@@ -215,7 +223,7 @@ function PreRunPage() {
       }
       return true;
     });
-  }, [rawResults, filters, criteriaFilters, getCriterionScore]);
+  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate3]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -521,6 +529,7 @@ function PreRunPage() {
     setEmaTimeframe(f.emaTimeframe);
     setCriteriaFilters(preset.criteriaFilters ?? []);
     setShowMultiTF(preset.multiTF ?? false);
+    setSkipGate3(preset.skipGate3 ?? false);
   }, []);
 
   // Add to watchlist
@@ -734,6 +743,7 @@ function PreRunPage() {
                   setVerdictFilter(DEFAULT_PRERUN_FILTERS.verdict);
                   setEmaTimeframe(DEFAULT_PRERUN_FILTERS.emaTimeframe);
                   setCriteriaFilters([]);
+                  setSkipGate3(false);
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >

@@ -218,6 +218,7 @@ export interface PreRunPreset {
   criteriaFilters?: PreRunCriteriaFilter[];
   recommended?: boolean;
   multiTF?: boolean;
+  skipGate3?: boolean;
 }
 
 export const PRERUN_PRESETS: PreRunPreset[] = [
@@ -258,5 +259,6 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
       { criterion: "F", min: 1 },
     ],
     multiTF: true,
+    skipGate3: true,
   },
 ];
