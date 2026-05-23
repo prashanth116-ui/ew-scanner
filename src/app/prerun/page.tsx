@@ -28,7 +28,7 @@ import type {
 } from "@/lib/prerun/types";
 import type { EmaTimeframe } from "@/lib/prerun/types";
 import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES } from "@/lib/prerun/types";
-import { type TFFilterValue, TF_FILTER_OPTIONS, INIT_TF_FILTERS, matchesTFFilter } from "@/lib/prerun/tf-filters";
+import { type TFFilterValue, TF_FILTER_OPTIONS, INIT_TF_FILTERS, rowPassesTFFilters } from "@/lib/prerun/tf-filters";
 import {
   savePreRunScan,
   loadPreRunScans,
@@ -1415,18 +1415,11 @@ const MultiTFTable = memo(function MultiTFTable({
         }
         return { ...r, totalScore, bestTF };
       })
-      .filter((row) =>
-        TF_LABELS.every((tf) => {
-          const filter = tfFilters[tf];
-          if (filter === "any") return true;
-          const tfr = row.timeframes[tf];
-          return matchesTFFilter(tfr?.scoreM2 ?? null, filter);
-        }),
-      )
+      .filter((row) => rowPassesTFFilters(row, tfFilters))
       .sort((a, b) => b.totalScore - a.totalScore || a.ticker.localeCompare(b.ticker));
   }, [results, tfFilters]);
 
-  if (sorted.length === 0 && !scanning) return null;
+  if (results.size === 0 && !scanning) return null;
 
   return (
     <div className="mb-4 rounded-lg border border-purple-500/20 bg-[#141414] overflow-hidden">
@@ -1495,6 +1488,13 @@ const MultiTFTable = memo(function MultiTFTable({
             </tr>
           </thead>
           <tbody>
+            {sorted.length === 0 && activeFilterCount > 0 && (
+              <tr>
+                <td colSpan={TF_LABELS.length + 3} className="py-6 text-center text-[#555] text-xs">
+                  No stocks match current filters
+                </td>
+              </tr>
+            )}
             {sorted.map((row) => (
               <tr key={row.ticker} className="border-b border-[#2a2a2a]/50 hover:bg-[#1a1a1a] transition-colors">
                 <td className="py-1.5 pl-4 pr-2 font-medium text-white sticky left-0 bg-[#141414] z-10">
