@@ -317,7 +317,7 @@ export function seedWatchlistIfEmpty(): void {
 }
 
 // ── Multi-TF M2 Cache ──
-// Split TTL: HTF (1d, 1wk, 1mo) = 24 hours, LTF (15m, 1h, 4h) = 30 minutes
+// Split TTL: HTF (1d, 1wk, 1mo) = 24 hours, LTF (15m, 1h, 4h, 12h) = 30 minutes
 
 const MULTI_TF_CACHE_KEY = "ew-prerun-multi-tf-m2";
 const LTF_TTL = 30 * 60 * 1000; // 30 minutes
@@ -366,7 +366,7 @@ export function loadMultiTFCache(): {
     const staleTimeframes: EmaTimeframe[] = [];
     if (age > LTF_TTL) {
       // Mark non-HTF timeframes as stale
-      const allTfs: EmaTimeframe[] = ["15m", "1h", "4h", "1d", "1wk", "1mo"];
+      const allTfs: EmaTimeframe[] = ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"];
       for (const tf of allTfs) {
         if (!HTF_TIMEFRAMES.includes(tf)) {
           staleTimeframes.push(tf);

@@ -1238,7 +1238,7 @@ export async function fetchPreRunData(
   let emaM2FvgNearCross: boolean | null = null;
 
   const tfConfig = TIMEFRAME_CONFIG[emaTimeframe];
-  // Gate: for intraday timeframes (15m, 1h, 4h), only fetch if ≥30% from ATH
+  // Gate: for intraday timeframes (15m, 1h, 4h, 12h), only fetch if ≥30% from ATH
   // For 1d/1wk (reuse existing chart), no gate needed. For 1mo, low API cost.
   const needsApiGate = !tfConfig.reuse && emaTimeframe !== "1mo";
   const gate1PassLocal = pctFromAth !== null && pctFromAth >= 30;

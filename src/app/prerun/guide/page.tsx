@@ -416,7 +416,7 @@ export default function PreRunGuidePage() {
             modifier (&plusmn;1). Criteria A, B, C are highest weight. Criteria L-O
             power the &ldquo;Stage 1&rarr;2 / base breakout&rdquo; preset for identifying
             stocks transitioning from accumulation to markup. M2 adds
-            EMA timing confirmation with selectable timeframe (15m, 1h, 4h, 1d, 1wk, 1mo).
+            EMA timing confirmation with selectable timeframe (15m, 1h, 4h, 12h, 1d, 1wk, 1mo).
             Criteria P-Q capture analyst consensus shifts and composite squeeze signals.
           </p>
           <div className="space-y-3 pt-2">
@@ -538,7 +538,7 @@ export default function PreRunGuidePage() {
               <p className="text-xs font-medium text-purple-400 mb-1">Multi-Timeframe M2 Table</p>
               <p className="text-xs text-[#a0a0a0]">
                 The <strong className="text-white">Early Mover</strong> preset auto-enables a multi-timeframe M2 view.
-                After the base scan (Phase 1), a second pass fetches EMA 10/20 signals at 15m, 1h, 4h, 1d, 1wk, and 1mo
+                After the base scan (Phase 1), a second pass fetches EMA 10/20 signals at 15m, 1h, 4h, 12h, 1d, 1wk, and 1mo
                 for candidates that pass the criteria gates. The resulting table shows which timeframes confirm bullish
                 momentum per stock — stocks with high M2 scores across multiple timeframes have the strongest timing signal.
                 Toggle the &ldquo;Multi-TF&rdquo; button manually for any preset.
