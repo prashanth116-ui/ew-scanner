@@ -1542,9 +1542,14 @@ const MultiTFTable = memo(function MultiTFTable({
                     <span>{tf}</span>
                     <select
                       value={tfFilters[tf]}
-                      onChange={(e) =>
-                        setTFFilters((prev) => ({ ...prev, [tf]: e.target.value as TFFilterValue }))
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value as TFFilterValue;
+                        setTFFilters((prev) => ({ ...prev, [tf]: val }));
+                        // score=2 requires bullish cross (EMA10>EMA20), conv=yes requires EMA10<EMA20 — mutually exclusive
+                        if (val === "2" && convFilters[tf] === "yes") {
+                          setConvFilters((prev) => ({ ...prev, [tf]: "any" as BoolFilterValue }));
+                        }
+                      }}
                       className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
                         tfFilters[tf] !== "any"
                           ? "border-purple-500/50 text-purple-300"
@@ -1592,11 +1597,14 @@ const MultiTFTable = memo(function MultiTFTable({
                       onChange={(e) =>
                         setVolFilters((prev) => ({ ...prev, [tf]: e.target.value as VolFilterValue }))
                       }
-                      title="Volume ratio filter"
-                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
-                        volFilters[tf] !== "any"
-                          ? "border-purple-500/50 text-purple-300"
-                          : "border-[#222] text-[#555]"
+                      title={tf === "1d" ? "Not available \u2014 1d uses Phase 1 data" : "Volume ratio filter"}
+                      disabled={tf === "1d"}
+                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none ${
+                        tf === "1d"
+                          ? "opacity-30 cursor-not-allowed"
+                          : volFilters[tf] !== "any"
+                            ? "border-purple-500/50 text-purple-300 cursor-pointer"
+                            : "border-[#222] text-[#555] cursor-pointer"
                       }`}
                     >
                       {VOL_FILTER_OPTIONS.map((opt) => (
@@ -1607,14 +1615,22 @@ const MultiTFTable = memo(function MultiTFTable({
                     </select>
                     <select
                       value={convFilters[tf]}
-                      onChange={(e) =>
-                        setConvFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
-                      }
-                      title="EMA converging filter"
-                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
-                        convFilters[tf] !== "any"
-                          ? "border-purple-500/50 text-purple-300"
-                          : "border-[#222] text-[#555]"
+                      onChange={(e) => {
+                        const val = e.target.value as BoolFilterValue;
+                        setConvFilters((prev) => ({ ...prev, [tf]: val }));
+                        // conv=yes requires EMA10<EMA20, score=2 requires EMA10>EMA20 — mutually exclusive
+                        if (val === "yes" && tfFilters[tf] === "2") {
+                          setTFFilters((prev) => ({ ...prev, [tf]: "any" as TFFilterValue }));
+                        }
+                      }}
+                      title={tf === "1d" ? "Not available \u2014 1d uses Phase 1 data" : "EMA converging filter"}
+                      disabled={tf === "1d"}
+                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none ${
+                        tf === "1d"
+                          ? "opacity-30 cursor-not-allowed"
+                          : convFilters[tf] !== "any"
+                            ? "border-purple-500/50 text-purple-300 cursor-pointer"
+                            : "border-[#222] text-[#555] cursor-pointer"
                       }`}
                     >
                       <option value="any">Conv</option>
@@ -1626,11 +1642,14 @@ const MultiTFTable = memo(function MultiTFTable({
                       onChange={(e) =>
                         setSqueezeFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
                       }
-                      title="Volatility squeeze filter"
-                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
-                        squeezeFilters[tf] !== "any"
-                          ? "border-purple-500/50 text-purple-300"
-                          : "border-[#222] text-[#555]"
+                      title={tf === "1d" ? "Not available \u2014 1d uses Phase 1 data" : "Volatility squeeze filter"}
+                      disabled={tf === "1d"}
+                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none ${
+                        tf === "1d"
+                          ? "opacity-30 cursor-not-allowed"
+                          : squeezeFilters[tf] !== "any"
+                            ? "border-purple-500/50 text-purple-300 cursor-pointer"
+                            : "border-[#222] text-[#555] cursor-pointer"
                       }`}
                     >
                       <option value="any">Sqz</option>

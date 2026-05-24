@@ -141,44 +141,44 @@ describe("rowPassesTFFilters", () => {
     const earlyMover = TF_FILTER_PRESETS.find((p) => p.id === "early_mover")!;
     const preset = earlyMover.filters;
 
-    it("passes: 15m=2, all higher TFs 0", () => {
+    it("passes: 15m=2, daily=1 (partially turning), wk/mo=0", () => {
       const row = makeRow("TSLA", {
-        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0,
+        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
-    it("passes: 15m=2, higher TFs mix of 0 and 1", () => {
+    it("passes: 15m=2, daily=1, higher TFs mix of 0 and 1", () => {
       const row = makeRow("NVDA", {
-        "15m": 2, "1h": 1, "4h": 1, "12h": 0, "1d": 0, "1wk": 1, "1mo": 0,
+        "15m": 2, "1h": 1, "4h": 1, "12h": 0, "1d": 1, "1wk": 1, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
     it("fails: 15m=1 (not strong enough)", () => {
       const row = makeRow("AMD", {
-        "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0,
+        "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
 
-    it("passes: 15m=2 with 4h/1d already moved (only wk/mo constrained)", () => {
+    it("fails: 15m=2 but 1d=2 (daily already fully confirmed)", () => {
       const row = makeRow("META", {
         "15m": 2, "1h": 1, "4h": 2, "12h": 0, "1d": 2, "1wk": 0, "1mo": 0,
       });
-      expect(rowPassesTFFilters(row, preset)).toBe(true);
+      expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
 
     it("fails: 15m=2 but 1wk=2 (weekly already caught up)", () => {
       const row = makeRow("GOOG", {
-        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 2, "1mo": 0,
+        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
 
     it("fails: missing 15m data treated as not passing", () => {
       const row = makeRow("COIN", {
-        "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0,
+        "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
@@ -212,16 +212,16 @@ describe("rowPassesTFFilters", () => {
     const preset = earlyMover.filters;
 
     it("passes when 4h is missing (4h is 'any' in preset)", () => {
-      // 4h/12h/1d are "any" in preset — only wk/mo constrained
+      // 4h/12h are "any" in preset — only 1d/wk/mo constrained
       const row = makeRow("PLTR", {
-        "15m": 2, "1h": 0, /* 4h missing */ "12h": 0, "1d": 0, "1wk": 0, "1mo": 0,
+        "15m": 2, "1h": 0, /* 4h missing */ "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
     it("fails when 1wk is missing (1wk is 'lte1' in preset)", () => {
       const row = makeRow("PLTR", {
-        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, /* 1wk missing */ "1mo": 0,
+        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 1, /* 1wk missing */ "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
@@ -229,14 +229,14 @@ describe("rowPassesTFFilters", () => {
     it("passes when only unfiltered timeframes are missing", () => {
       // 1h is "any" in the preset, so missing 1h doesn't matter
       const row = makeRow("SOFI", {
-        "15m": 2, /* 1h missing */ "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0,
+        "15m": 2, /* 1h missing */ "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
     it("Phase 1 only data (only 1d present) fails preset", () => {
       // Phase 2 completely failed — only 1d from Phase 1
-      const row = makeRow("RIVN", { "1d": 0 });
+      const row = makeRow("RIVN", { "1d": 1 });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
   });
@@ -425,7 +425,7 @@ describe("constants", () => {
     expect(em!.filters["15m"]).toBe("2");
     expect(em!.filters["1h"]).toBe("any");
     expect(em!.filters["4h"]).toBe("any");
-    expect(em!.filters["1d"]).toBe("any");
+    expect(em!.filters["1d"]).toBe("1");
     expect(em!.filters["1wk"]).toBe("lte1");
     expect(em!.filters["1mo"]).toBe("lte1");
   });
@@ -627,5 +627,113 @@ describe("rowPassesTFFilters with leading filters", () => {
   it("null leading filters behaves like all-any", () => {
     const row = makeRow("X", { "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
     expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, undefined)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration: preset + Phase 1 compatibility
+// ---------------------------------------------------------------------------
+
+describe("preset vs Phase 1 pipeline compatibility", () => {
+  // Phase 1 guarantees: daily M2 >= 1 (from criteriaFilters M2 >= 1).
+  // All presets must be able to match at least one row with realistic Phase-1-consistent data.
+
+  function makeLeadingRow(
+    ticker: string,
+    data: Record<string, { score: number; volRatio?: number; conv?: boolean; sqz?: boolean }>,
+  ): MultiTFM2Result {
+    const timeframes: MultiTFM2Result["timeframes"] = {};
+    for (const [tf, d] of Object.entries(data)) {
+      timeframes[tf as keyof typeof timeframes] = makeTFR(d.score, null, {
+        volumeRatio: d.volRatio ?? null,
+        converging: d.conv ?? null,
+        squeezed: d.sqz ?? null,
+      });
+    }
+    return { ticker, timeframes };
+  }
+
+  it("every preset matches at least one Phase-1-consistent row", () => {
+    // Realistic rows that would pass Phase 1 gates (daily M2 >= 1)
+    const phase1Rows: MultiTFM2Result[] = [
+      // Stock turning: 15m crossed, daily partially turning, wk/mo still bearish
+      makeLeadingRow("TURN", {
+        "15m": { score: 2, volRatio: 2.0, conv: false },
+        "1h": { score: 1, conv: true },
+        "4h": { score: 0 }, "12h": { score: 0 },
+        "1d": { score: 1 },
+        "1wk": { score: 0 }, "1mo": { score: 0 },
+      }),
+      // Fresh cascade: both 15m + 1h crossed, daily partial, wk/mo zero
+      makeLeadingRow("CASC", {
+        "15m": { score: 2 },
+        "1h": { score: 2 },
+        "4h": { score: 0 }, "12h": { score: 0 },
+        "1d": { score: 1 },
+        "1wk": { score: 0 }, "1mo": { score: 0 },
+      }),
+      // Pre-cross setup: 15m converging with volume, not yet crossed
+      makeLeadingRow("PREX", {
+        "15m": { score: 0, volRatio: 2.5, conv: true },
+        "1h": { score: 0 },
+        "4h": { score: 0 }, "12h": { score: 0 },
+        "1d": { score: 1 },
+        "1wk": { score: 0 }, "1mo": { score: 0 },
+      }),
+      // Coiled: 1h squeezed + converging
+      makeLeadingRow("COIL", {
+        "15m": { score: 1 },
+        "1h": { score: 0, sqz: true, conv: true },
+        "4h": { score: 0 }, "12h": { score: 0 },
+        "1d": { score: 1 },
+        "1wk": { score: 0 }, "1mo": { score: 0 },
+      }),
+      // Confirmed: 15m + 1h both active, wk/mo lagging
+      makeLeadingRow("CONF", {
+        "15m": { score: 2 },
+        "1h": { score: 1 },
+        "4h": { score: 1 }, "12h": { score: 0 },
+        "1d": { score: 2 },
+        "1wk": { score: 1 }, "1mo": { score: 0 },
+      }),
+    ];
+
+    for (const preset of TF_FILTER_PRESETS) {
+      const matches = phase1Rows.filter((row) =>
+        rowPassesTFFilters(row, preset.filters, preset.trendFilters, preset.leadingFilters)
+      );
+      expect(
+        matches.length,
+        `Preset "${preset.id}" should match at least one Phase-1-consistent row, but matched ${matches.length}. ` +
+        `This likely means the preset filters are incompatible with Phase 1 gates (daily M2 >= 1).`
+      ).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("no preset uses score or leading filters on 1d that would conflict with null leading data", () => {
+    // Phase 1 provides 1d score/trend but NOT leading indicators (vol/conv/squeeze are null).
+    // No preset should require non-"any" leading filters on 1d.
+    for (const preset of TF_FILTER_PRESETS) {
+      const volOn1d = preset.leadingFilters?.vol?.["1d"] ?? "any";
+      const convOn1d = preset.leadingFilters?.conv?.["1d"] ?? "any";
+      const sqzOn1d = preset.leadingFilters?.squeeze?.["1d"] ?? "any";
+      expect(volOn1d, `Preset "${preset.id}" has vol filter on 1d — 1d has no leading data`).toBe("any");
+      expect(convOn1d, `Preset "${preset.id}" has conv filter on 1d — 1d has no leading data`).toBe("any");
+      expect(sqzOn1d, `Preset "${preset.id}" has squeeze filter on 1d — 1d has no leading data`).toBe("any");
+    }
+  });
+
+  it("no preset sets conv=yes on same TF as score=2 (mutually exclusive)", () => {
+    // conv=yes requires EMA10 < EMA20, score=2 requires EMA10 > EMA20
+    for (const preset of TF_FILTER_PRESETS) {
+      for (const tf of ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"] as const) {
+        const score = preset.filters[tf];
+        const conv = preset.leadingFilters?.conv?.[tf] ?? "any";
+        expect(
+          score === "2" && conv === "yes",
+          `Preset "${preset.id}" has score=2 AND conv=yes on ${tf} — these are mutually exclusive`
+        ).toBe(false);
+      }
+    }
   });
 });

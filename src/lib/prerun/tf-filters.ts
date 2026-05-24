@@ -67,9 +67,9 @@ export const TF_FILTER_PRESETS: TFFilterPreset[] = [
   {
     id: "early_mover",
     label: "Early Mover",
-    description: "15m momentum firing, weekly/monthly haven't caught up yet",
+    description: "15m momentum firing, daily only partially turning, weekly/monthly haven't caught up",
     filters: {
-      "15m": "2", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "lte1", "1mo": "lte1",
+      "15m": "2", "1h": "any", "4h": "any", "12h": "any", "1d": "1", "1wk": "lte1", "1mo": "lte1",
     },
   },
   {
@@ -91,7 +91,7 @@ export const TF_FILTER_PRESETS: TFFilterPreset[] = [
   {
     id: "cascade",
     label: "Cascade",
-    description: "Fresh crosses on 15m + 1h, weekly/monthly haven't caught up yet",
+    description: "Fresh crosses on 15m + 1h (rare \u2014 both must cross within hours), weekly/monthly lagging",
     filters: {
       "15m": "2", "1h": "2", "4h": "any", "12h": "any", "1d": "any", "1wk": "lte1", "1mo": "lte1",
     },
@@ -99,7 +99,7 @@ export const TF_FILTER_PRESETS: TFFilterPreset[] = [
   {
     id: "pre_cross",
     label: "Pre-Cross",
-    description: "15m converging + vol >1.5x, not yet crossed \u2014 setup forming before EMA cross",
+    description: "15m converging + vol >1.5x, not yet crossed \u2014 setup forming before EMA cross (scan-time sensitive)",
     filters: {
       "15m": "lte1", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
     },
