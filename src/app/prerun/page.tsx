@@ -1401,43 +1401,38 @@ const MultiTFTable = memo(function MultiTFTable({
   const [tfFilters, setTFFilters] = useState<Record<EmaTimeframe, TFFilterValue>>({ ...INIT_TF_FILTERS });
   const [trendFilters, setTrendFilters] = useState<Record<EmaTimeframe, TrendFilterValue>>({ ...INIT_TREND_FILTERS });
 
-  // Quality filters (Phase 1)
-  const [dispFilters, setDispFilters] = useState<Record<EmaTimeframe, BoolFilterValue>>({ ...INIT_BOOL_FILTERS });
-  const [fvgFilters, setFvgFilters] = useState<Record<EmaTimeframe, BoolFilterValue>>({ ...INIT_BOOL_FILTERS });
-
-  // Leading indicator filters (Phase 3)
-  const [showLeading, setShowLeading] = useState(false);
+  // Leading indicator filters (Vol, Conv, Squeeze)
   const [volFilters, setVolFilters] = useState<Record<EmaTimeframe, VolFilterValue>>({ ...INIT_VOL_FILTERS });
   const [convFilters, setConvFilters] = useState<Record<EmaTimeframe, BoolFilterValue>>({ ...INIT_BOOL_FILTERS });
   const [squeezeFilters, setSqueezeFilters] = useState<Record<EmaTimeframe, BoolFilterValue>>({ ...INIT_BOOL_FILTERS });
 
   const leadingFilters = useMemo((): LeadingFilters => ({
-    disp: dispFilters,
-    fvg: fvgFilters,
     vol: volFilters,
     conv: convFilters,
     squeeze: squeezeFilters,
-  }), [dispFilters, fvgFilters, volFilters, convFilters, squeezeFilters]);
+  }), [volFilters, convFilters, squeezeFilters]);
+
+  // Show badges in cells when any leading filter is active
+  const anyLeadingActive = useMemo(() =>
+    TF_LABELS.some((tf) => volFilters[tf] !== "any" || convFilters[tf] !== "any" || squeezeFilters[tf] !== "any"),
+    [volFilters, convFilters, squeezeFilters],
+  );
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
     for (const tf of TF_LABELS) {
       if (tfFilters[tf] !== "any") count++;
       if (trendFilters[tf] !== "any") count++;
-      if (dispFilters[tf] !== "any") count++;
-      if (fvgFilters[tf] !== "any") count++;
       if (volFilters[tf] !== "any") count++;
       if (convFilters[tf] !== "any") count++;
       if (squeezeFilters[tf] !== "any") count++;
     }
     return count;
-  }, [tfFilters, trendFilters, dispFilters, fvgFilters, volFilters, convFilters, squeezeFilters]);
+  }, [tfFilters, trendFilters, volFilters, convFilters, squeezeFilters]);
 
   const resetAllFilters = useCallback(() => {
     setTFFilters({ ...INIT_TF_FILTERS });
     setTrendFilters({ ...INIT_TREND_FILTERS });
-    setDispFilters({ ...INIT_BOOL_FILTERS });
-    setFvgFilters({ ...INIT_BOOL_FILTERS });
     setVolFilters({ ...INIT_VOL_FILTERS });
     setConvFilters({ ...INIT_BOOL_FILTERS });
     setSqueezeFilters({ ...INIT_BOOL_FILTERS });
@@ -1485,8 +1480,6 @@ const MultiTFTable = memo(function MultiTFTable({
             const isActive = activeFilterCount > 0 &&
               TF_LABELS.every((tf) => tfFilters[tf] === p.filters[tf]) &&
               TF_LABELS.every((tf) => trendFilters[tf] === (p.trendFilters?.[tf] ?? "any")) &&
-              TF_LABELS.every((tf) => dispFilters[tf] === (p.leadingFilters?.disp?.[tf] ?? "any")) &&
-              TF_LABELS.every((tf) => fvgFilters[tf] === (p.leadingFilters?.fvg?.[tf] ?? "any")) &&
               TF_LABELS.every((tf) => volFilters[tf] === (p.leadingFilters?.vol?.[tf] ?? "any")) &&
               TF_LABELS.every((tf) => convFilters[tf] === (p.leadingFilters?.conv?.[tf] ?? "any")) &&
               TF_LABELS.every((tf) => squeezeFilters[tf] === (p.leadingFilters?.squeeze?.[tf] ?? "any"));
@@ -1499,15 +1492,9 @@ const MultiTFTable = memo(function MultiTFTable({
                   } else {
                     setTFFilters({ ...p.filters });
                     setTrendFilters(p.trendFilters ? { ...p.trendFilters } : { ...INIT_TREND_FILTERS });
-                    setDispFilters(p.leadingFilters?.disp ? { ...p.leadingFilters.disp } : { ...INIT_BOOL_FILTERS });
-                    setFvgFilters(p.leadingFilters?.fvg ? { ...p.leadingFilters.fvg } : { ...INIT_BOOL_FILTERS });
                     setVolFilters(p.leadingFilters?.vol ? { ...p.leadingFilters.vol } : { ...INIT_VOL_FILTERS });
                     setConvFilters(p.leadingFilters?.conv ? { ...p.leadingFilters.conv } : { ...INIT_BOOL_FILTERS });
                     setSqueezeFilters(p.leadingFilters?.squeeze ? { ...p.leadingFilters.squeeze } : { ...INIT_BOOL_FILTERS });
-                    // Auto-show leading row if preset uses leading filters
-                    if (p.leadingFilters?.vol || p.leadingFilters?.conv || p.leadingFilters?.squeeze) {
-                      setShowLeading(true);
-                    }
                   }
                 }}
                 title={p.description}
@@ -1535,25 +1522,12 @@ const MultiTFTable = memo(function MultiTFTable({
             </>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowLeading((v) => !v)}
-            className={`text-[10px] rounded px-1.5 py-0.5 border transition-colors ${
-              showLeading
-                ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-300"
-                : "border-[#333] text-[#666] hover:text-white hover:border-[#555]"
-            }`}
-            title="Toggle leading indicator filters & badges"
-          >
-            Leading
-          </button>
-          {scanning && (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
-              <span className="text-[10px] text-purple-400">{progress}</span>
-            </>
-          )}
-        </div>
+        {scanning && (
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
+            <span className="text-[10px] text-purple-400">{progress}</span>
+          </div>
+        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -1607,41 +1581,59 @@ const MultiTFTable = memo(function MultiTFTable({
               <th className="py-2 px-3 pr-4 text-center font-medium">Best TF</th>
             </tr>
 
-            {/* Quality filter row (Disp + FVG) */}
+            {/* Leading indicator filter row (Vol + Conv + Squeeze) */}
             <tr className="border-b border-[#2a2a2a]/50 text-[#555]">
-              <th className="py-1 pl-4 pr-2 text-left text-[9px] font-normal sticky left-0 bg-[#141414] z-10">Quality</th>
+              <th className="py-1 pl-4 pr-2 text-left text-[9px] font-normal sticky left-0 bg-[#141414] z-10">Leading</th>
               {TF_LABELS.map((tf) => (
                 <th key={tf} className="py-1 px-1.5 text-center whitespace-nowrap">
                   <div className="flex flex-col items-center gap-0.5">
                     <select
-                      value={dispFilters[tf]}
+                      value={volFilters[tf]}
                       onChange={(e) =>
-                        setDispFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
+                        setVolFilters((prev) => ({ ...prev, [tf]: e.target.value as VolFilterValue }))
                       }
-                      title="Displacement near cross"
+                      title="Volume ratio filter"
                       className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
-                        dispFilters[tf] !== "any"
-                          ? "border-amber-500/50 text-amber-300"
+                        volFilters[tf] !== "any"
+                          ? "border-purple-500/50 text-purple-300"
                           : "border-[#222] text-[#555]"
                       }`}
                     >
-                      <option value="any">Disp</option>
+                      {VOL_FILTER_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.value === "any" ? "Vol" : opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={convFilters[tf]}
+                      onChange={(e) =>
+                        setConvFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
+                      }
+                      title="EMA converging filter"
+                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
+                        convFilters[tf] !== "any"
+                          ? "border-purple-500/50 text-purple-300"
+                          : "border-[#222] text-[#555]"
+                      }`}
+                    >
+                      <option value="any">Conv</option>
                       <option value="yes">Yes</option>
                       <option value="no">No</option>
                     </select>
                     <select
-                      value={fvgFilters[tf]}
+                      value={squeezeFilters[tf]}
                       onChange={(e) =>
-                        setFvgFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
+                        setSqueezeFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
                       }
-                      title="FVG near cross"
+                      title="Volatility squeeze filter"
                       className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
-                        fvgFilters[tf] !== "any"
-                          ? "border-amber-500/50 text-amber-300"
+                        squeezeFilters[tf] !== "any"
+                          ? "border-purple-500/50 text-purple-300"
                           : "border-[#222] text-[#555]"
                       }`}
                     >
-                      <option value="any">FVG</option>
+                      <option value="any">Sqz</option>
                       <option value="yes">Yes</option>
                       <option value="no">No</option>
                     </select>
@@ -1651,71 +1643,6 @@ const MultiTFTable = memo(function MultiTFTable({
               <th className="py-1 px-3" />
               <th className="py-1 px-3 pr-4" />
             </tr>
-
-            {/* Leading indicator filter row (Vol + Conv + Squeeze) - toggleable */}
-            {showLeading && (
-              <tr className="border-b border-cyan-500/10 text-[#555]">
-                <th className="py-1 pl-4 pr-2 text-left text-[9px] font-normal sticky left-0 bg-[#141414] z-10 text-cyan-400/60">Leading</th>
-                {TF_LABELS.map((tf) => (
-                  <th key={tf} className="py-1 px-1.5 text-center whitespace-nowrap">
-                    <div className="flex flex-col items-center gap-0.5">
-                      <select
-                        value={volFilters[tf]}
-                        onChange={(e) =>
-                          setVolFilters((prev) => ({ ...prev, [tf]: e.target.value as VolFilterValue }))
-                        }
-                        title="Volume ratio filter"
-                        className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
-                          volFilters[tf] !== "any"
-                            ? "border-cyan-500/50 text-cyan-300"
-                            : "border-[#222] text-[#555]"
-                        }`}
-                      >
-                        {VOL_FILTER_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.value === "any" ? "Vol" : opt.label}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={convFilters[tf]}
-                        onChange={(e) =>
-                          setConvFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
-                        }
-                        title="EMA converging filter"
-                        className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
-                          convFilters[tf] !== "any"
-                            ? "border-cyan-500/50 text-cyan-300"
-                            : "border-[#222] text-[#555]"
-                        }`}
-                      >
-                        <option value="any">Conv</option>
-                        <option value="yes">Yes</option>
-                        <option value="no">No</option>
-                      </select>
-                      <select
-                        value={squeezeFilters[tf]}
-                        onChange={(e) =>
-                          setSqueezeFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
-                        }
-                        title="Volatility squeeze filter"
-                        className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
-                          squeezeFilters[tf] !== "any"
-                            ? "border-cyan-500/50 text-cyan-300"
-                            : "border-[#222] text-[#555]"
-                        }`}
-                      >
-                        <option value="any">Sqz</option>
-                        <option value="yes">Yes</option>
-                        <option value="no">No</option>
-                      </select>
-                    </div>
-                  </th>
-                ))}
-                <th className="py-1 px-3" />
-                <th className="py-1 px-3 pr-4" />
-              </tr>
-            )}
           </thead>
           <tbody>
             {sorted.length === 0 && activeFilterCount > 0 && (
@@ -1743,10 +1670,10 @@ const MultiTFTable = memo(function MultiTFTable({
                     );
                   }
                   const sd = scoreDisplay(tfr.scoreM2);
-                  // Leading indicator badges (only when toggle is on)
-                  const hasVol = showLeading && tfr.volumeRatio != null && tfr.volumeRatio > 1.5;
-                  const hasConv = showLeading && tfr.converging === true;
-                  const hasSqz = showLeading && tfr.squeezed === true;
+                  // Leading indicator badges (only when any leading filter is active)
+                  const hasVol = anyLeadingActive && tfr.volumeRatio != null && tfr.volumeRatio > 1.5;
+                  const hasConv = anyLeadingActive && tfr.converging === true;
+                  const hasSqz = anyLeadingActive && tfr.squeezed === true;
                   return (
                     <td key={tf} className="py-1.5 px-1.5 text-center">
                       <div className="flex flex-col items-center gap-0.5">
