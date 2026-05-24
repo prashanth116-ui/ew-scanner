@@ -28,7 +28,7 @@ import type {
 } from "@/lib/prerun/types";
 import type { EmaTimeframe } from "@/lib/prerun/types";
 import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES } from "@/lib/prerun/types";
-import { type TFFilterValue, TF_FILTER_OPTIONS, INIT_TF_FILTERS, rowPassesTFFilters } from "@/lib/prerun/tf-filters";
+import { type TFFilterValue, TF_FILTER_OPTIONS, INIT_TF_FILTERS, TF_FILTER_PRESETS, rowPassesTFFilters } from "@/lib/prerun/tf-filters";
 import {
   savePreRunScan,
   loadPreRunScans,
@@ -1432,6 +1432,24 @@ const MultiTFTable = memo(function MultiTFTable({
           <span className="text-[10px] text-[#666]">
             {sorted.length}{activeFilterCount > 0 ? `/${results.size}` : ""} stocks
           </span>
+          {TF_FILTER_PRESETS.map((p) => {
+            const isActive = activeFilterCount > 0 &&
+              TF_LABELS.every((tf) => tfFilters[tf] === p.filters[tf]);
+            return (
+              <button
+                key={p.id}
+                onClick={() => setTFFilters(isActive ? { ...INIT_TF_FILTERS } : { ...p.filters })}
+                title={p.description}
+                className={`text-[10px] rounded px-1.5 py-0.5 border transition-colors ${
+                  isActive
+                    ? "border-purple-500/50 bg-purple-500/10 text-purple-300"
+                    : "border-[#333] text-[#666] hover:text-white hover:border-[#555]"
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
           {activeFilterCount > 0 && (
             <>
               <span className="text-[10px] text-purple-400">

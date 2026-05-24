@@ -4,6 +4,7 @@ import {
   rowPassesTFFilters,
   INIT_TF_FILTERS,
   TF_FILTER_OPTIONS,
+  TF_FILTER_PRESETS,
   type TFFilterValue,
 } from "./tf-filters";
 import type { MultiTFM2Result, M2TimeframeResult } from "./types";
@@ -108,17 +109,10 @@ describe("rowPassesTFFilters", () => {
     expect(rowPassesTFFilters(row, filtersFail)).toBe(false);
   });
 
-  // The key preset: 15m=2, higher TFs ≤1 ("about to move")
-  describe("preset: 15m=2, higher TFs ≤1", () => {
-    const preset: Record<string, TFFilterValue> = {
-      ...INIT_TF_FILTERS,
-      "15m": "2",
-      "4h": "lte1",
-      "12h": "lte1",
-      "1d": "lte1",
-      "1wk": "lte1",
-      "1mo": "lte1",
-    };
+  // The key preset: Early Mover (15m=2, higher TFs ≤1)
+  describe("preset: Early Mover", () => {
+    const earlyMover = TF_FILTER_PRESETS.find((p) => p.id === "early_mover")!;
+    const preset = earlyMover.filters;
 
     it("passes: 15m=2, all higher TFs 0", () => {
       const row = makeRow("TSLA", {
@@ -187,15 +181,8 @@ describe("rowPassesTFFilters", () => {
 
   // Partial data scenarios — when API fails for some timeframes
   describe("partial data (API failures)", () => {
-    const preset: Record<string, TFFilterValue> = {
-      ...INIT_TF_FILTERS,
-      "15m": "2",
-      "4h": "lte1",
-      "12h": "lte1",
-      "1d": "lte1",
-      "1wk": "lte1",
-      "1mo": "lte1",
-    };
+    const earlyMover = TF_FILTER_PRESETS.find((p) => p.id === "early_mover")!;
+    const preset = earlyMover.filters;
 
     it("fails when 4h is missing even though stock would qualify", () => {
       // Stock has 15m=2 and all present higher TFs are 0, but 4h failed to fetch
@@ -239,5 +226,26 @@ describe("constants", () => {
     expect(TF_FILTER_OPTIONS).toHaveLength(6);
     const values = TF_FILTER_OPTIONS.map((o) => o.value);
     expect(values).toEqual(["any", "0", "1", "2", "lte1", "gte1"]);
+  });
+
+  it("every preset has all 7 timeframes with valid filter values", () => {
+    const validValues = new Set(TF_FILTER_OPTIONS.map((o) => o.value));
+    const tfs = ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"];
+    for (const preset of TF_FILTER_PRESETS) {
+      for (const tf of tfs) {
+        const val = preset.filters[tf as keyof typeof preset.filters];
+        expect(val, `${preset.id}.${tf}`).toBeDefined();
+        expect(validValues.has(val), `${preset.id}.${tf}=${val} is not a valid filter value`).toBe(true);
+      }
+    }
+  });
+
+  it("early_mover preset exists with correct structure", () => {
+    const em = TF_FILTER_PRESETS.find((p) => p.id === "early_mover");
+    expect(em).toBeDefined();
+    expect(em!.filters["15m"]).toBe("2");
+    expect(em!.filters["1h"]).toBe("any");
+    expect(em!.filters["4h"]).toBe("lte1");
+    expect(em!.filters["1wk"]).toBe("lte1");
   });
 });

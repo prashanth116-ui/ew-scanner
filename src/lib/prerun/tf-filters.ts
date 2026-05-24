@@ -16,6 +16,24 @@ export const INIT_TF_FILTERS: Record<EmaTimeframe, TFFilterValue> = {
   "15m": "any", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
 };
 
+export interface TFFilterPreset {
+  id: string;
+  label: string;
+  description: string;
+  filters: Record<EmaTimeframe, TFFilterValue>;
+}
+
+export const TF_FILTER_PRESETS: TFFilterPreset[] = [
+  {
+    id: "early_mover",
+    label: "Early Mover",
+    description: "15m momentum firing, higher TFs haven't caught up",
+    filters: {
+      "15m": "2", "1h": "any", "4h": "lte1", "12h": "lte1", "1d": "lte1", "1wk": "lte1", "1mo": "lte1",
+    },
+  },
+];
+
 export function matchesTFFilter(score: number | undefined | null, filter: TFFilterValue): boolean {
   if (filter === "any") return true;
   if (score == null) return false;
