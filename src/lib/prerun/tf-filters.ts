@@ -107,9 +107,9 @@ export const TF_FILTER_PRESETS: TFFilterPreset[] = [
   {
     id: "pre_cross",
     label: "Pre-Cross",
-    description: "15m converging + vol >1.5x \u2014 setup forming before EMA cross",
+    description: "15m converging + vol >1.5x, not yet crossed \u2014 setup forming before EMA cross",
     filters: {
-      "15m": "any", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
+      "15m": "lte1", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
     },
     leadingFilters: {
       conv: { "15m": "yes", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any" },

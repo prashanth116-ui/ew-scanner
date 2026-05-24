@@ -541,6 +541,8 @@ function calcEmaReclaimData(closes: number[]): {
 export function calcEmaSignal(closes: number[]): {
   ema10: number | null;
   ema20: number | null;
+  ema10Array: number[] | null;
+  ema20Array: number[] | null;
   bullishCross: boolean;
   crossedWithin5Bars: boolean;
   priceAboveBoth: boolean;
@@ -552,6 +554,8 @@ export function calcEmaSignal(closes: number[]): {
   const result = {
     ema10: null as number | null,
     ema20: null as number | null,
+    ema10Array: null as number[] | null,
+    ema20Array: null as number[] | null,
     bullishCross: false,
     crossedWithin5Bars: false,
     priceAboveBoth: false,
@@ -565,6 +569,8 @@ export function calcEmaSignal(closes: number[]): {
 
   const ema10 = calcEMA(closes, 10);
   const ema20 = calcEMA(closes, 20);
+  result.ema10Array = ema10;
+  result.ema20Array = ema20;
   const lastIdx = closes.length - 1;
   const price = closes[lastIdx];
 
@@ -1031,15 +1037,22 @@ export function calcVolumeSurge(
   return { volumeRatio: lastVol / avg };
 }
 
-/** Detect EMA 10/20 convergence: are the EMAs getting closer together? */
+/**
+ * Detect bullish EMA 10/20 convergence: EMA10 below EMA20 and gap narrowing.
+ * Accepts pre-computed EMA arrays to avoid recomputing them (calcEmaSignal already computes these).
+ * Only flags bullish convergence — bearish convergence (EMA10 dropping toward EMA20 from above)
+ * is not a pre-cross setup.
+ */
 export function calcEmaConvergence(
   closes: number[],
-  lookback = 5
+  lookback = 5,
+  precomputedEma10?: number[],
+  precomputedEma20?: number[],
 ): { converging: boolean | null; spreadDelta: number | null } {
   if (closes.length < 20 + lookback) return { converging: null, spreadDelta: null };
 
-  const ema10 = calcEMA(closes, 10);
-  const ema20 = calcEMA(closes, 20);
+  const ema10 = precomputedEma10 ?? calcEMA(closes, 10);
+  const ema20 = precomputedEma20 ?? calcEMA(closes, 20);
   const lastIdx = closes.length - 1;
   const pastIdx = lastIdx - lookback;
 
@@ -1051,8 +1064,11 @@ export function calcEmaConvergence(
     ? ((spreadNow - spreadPast) / price) * 100
     : null;
 
+  // Only flag bullish convergence: EMA10 still below EMA20 but gap narrowing
+  const isBelowAndClosing = ema10[lastIdx] < ema20[lastIdx] && spreadNow < spreadPast;
+
   return {
-    converging: spreadNow < spreadPast,
+    converging: isBelowAndClosing,
     spreadDelta,
   };
 }
@@ -1484,9 +1500,9 @@ export async function fetchM2Only(
       fvgNearCross = dfvg.fvgNearCross;
     }
 
-    // Leading indicators
+    // Leading indicators (reuse EMA arrays from calcEmaSignal to avoid recomputation)
     const volSurge = volumes ? calcVolumeSurge(volumes) : { volumeRatio: null };
-    const convergence = calcEmaConvergence(closes);
+    const convergence = calcEmaConvergence(closes, 5, sig.ema10Array ?? undefined, sig.ema20Array ?? undefined);
     const squeeze = emaHighs && emaLows
       ? calcVolatilitySqueeze(emaHighs, emaLows, closes)
       : { squeezed: null, atrRatio: null };

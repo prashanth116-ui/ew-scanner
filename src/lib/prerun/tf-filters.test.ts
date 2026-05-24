@@ -406,12 +406,15 @@ describe("constants", () => {
     }
   });
 
-  it("pre_cross and coiled presets exist", () => {
+  it("pre_cross preset exists with correct structure", () => {
     const preCross = TF_FILTER_PRESETS.find((p) => p.id === "pre_cross");
     expect(preCross).toBeDefined();
+    expect(preCross!.filters["15m"]).toBe("lte1"); // excludes already-crossed stocks
     expect(preCross!.leadingFilters?.conv?.["15m"]).toBe("yes");
     expect(preCross!.leadingFilters?.vol?.["15m"]).toBe("gt1.5");
+  });
 
+  it("coiled preset exists with correct structure", () => {
     const coiled = TF_FILTER_PRESETS.find((p) => p.id === "coiled");
     expect(coiled).toBeDefined();
     expect(coiled!.leadingFilters?.squeeze?.["1h"]).toBe("yes");
