@@ -6,8 +6,8 @@ import { fetchPreRunData } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
 import type { EmaTimeframe } from "@/lib/prerun/types";
 
-const BATCH_SIZE = 10;
-const BATCH_DELAY = 1000; // 1s between batches for rate limiting
+const BATCH_SIZE = 25;
+const BATCH_DELAY = 300;
 
 export async function POST(request: NextRequest) {
   const rl = rateLimit(`prerun-scan:${getClientKey(request)}`, 30, 60_000);

@@ -6,8 +6,8 @@ import { fetchM2Only } from "@/lib/prerun/data";
 import type { EmaTimeframe, MultiTFM2Result, M2TimeframeResult } from "@/lib/prerun/types";
 import { ALL_EMA_TIMEFRAMES } from "@/lib/prerun/types";
 
-const BATCH_SIZE = 10;
-const BATCH_DELAY = 1000;
+const BATCH_SIZE = 25;
+const BATCH_DELAY = 300;
 
 export async function POST(request: NextRequest) {
   const rl = rateLimit(`prerun-m2:${getClientKey(request)}`, 30, 60_000);

@@ -62,8 +62,8 @@ import { PresetList } from "@/components/preset-list";
 import { ProgressBar } from "@/components/progress-bar";
 import { loadFromCache, saveToCache } from "@/lib/scan-cache";
 
-const BATCH_SIZE = 10;
-const BATCH_DELAY = 2000;
+const BATCH_SIZE = 25;
+const BATCH_DELAY = 500;
 
 type SortKey = "score" | "pctFromAth" | "shortFloat" | "earnings";
 type SortDir = "asc" | "desc";
@@ -301,7 +301,7 @@ function PreRunPage() {
 
     try {
       // Batch tickers in groups of 10 for the API
-      const PHASE2_BATCH = 10;
+      const PHASE2_BATCH = 25;
       for (let i = 0; i < candidateTickers.length; i += PHASE2_BATCH) {
         const batch = candidateTickers.slice(i, i + PHASE2_BATCH);
         setMultiTFProgress(
@@ -337,7 +337,7 @@ function PreRunPage() {
         setMultiTFResults(new Map(phase1Map));
 
         if (i + PHASE2_BATCH < candidateTickers.length) {
-          await new Promise((r) => setTimeout(r, 1000));
+          await new Promise((r) => setTimeout(r, 300));
         }
       }
 
