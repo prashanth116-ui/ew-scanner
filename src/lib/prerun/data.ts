@@ -693,18 +693,10 @@ function calcRangeCoilData(closes: number[], highs: number[], lows: number[]): {
     closesNearTop = last5.every((c) => c >= threshold);
   }
 
-  // ATR contraction: 5-day ATR < 20-day ATR
-  const atrFull = calcATRArray(highs, lows, closes, 1); // individual TRs
-  let atrContracting = false;
-  if (atrFull.length >= 20) {
-    const last5TR = atrFull.slice(-5);
-    const last20TR = atrFull.slice(-20);
-    const atr5 = last5TR.reduce((a, b) => a + b, 0) / 5;
-    const atr20 = last20TR.reduce((a, b) => a + b, 0) / 20;
-    atrContracting = atr5 < atr20;
-  }
+  // ATR contraction: reuse calcVolatilitySqueeze
+  const { squeezed } = calcVolatilitySqueeze(highs, lows, closes);
 
-  return { closesNearTop, atrContracting };
+  return { closesNearTop, atrContracting: squeezed === true };
 }
 
 /** Compute failed breakdown recovery score from chart data. */
@@ -1015,13 +1007,75 @@ export const TIMEFRAME_CONFIG: Record<EmaTimeframe, { range: string; interval: s
   "1mo": { range: "5y",  interval: "1mo" },
 };
 
-/** Aggregate 1h closes to 4h by taking every Nth close. */
-export function aggregate4hCloses(closes: number[], n: number): number[] {
+/** Aggregate 1h volumes to Nh bars by summing groups of N. */
+export function aggregateVolumes(volumes: number[], n: number): number[] {
   const result: number[] = [];
-  for (let i = n - 1; i < closes.length; i += n) {
-    result.push(closes[i]);
+  for (let i = n - 1; i < volumes.length; i += n) {
+    let sum = 0;
+    for (let j = i - n + 1; j <= i; j++) sum += volumes[j];
+    result.push(sum);
   }
   return result;
+}
+
+/** Calculate volume surge ratio: last bar volume / 20-bar avg volume. */
+export function calcVolumeSurge(
+  volumes: number[],
+  period = 20
+): { volumeRatio: number | null } {
+  if (volumes.length < period + 1) return { volumeRatio: null };
+  const lastVol = volumes[volumes.length - 1];
+  const avgSlice = volumes.slice(-(period + 1), -1);
+  const avg = avgSlice.reduce((a, b) => a + b, 0) / avgSlice.length;
+  if (avg === 0) return { volumeRatio: null };
+  return { volumeRatio: lastVol / avg };
+}
+
+/** Detect EMA 10/20 convergence: are the EMAs getting closer together? */
+export function calcEmaConvergence(
+  closes: number[],
+  lookback = 5
+): { converging: boolean | null; spreadDelta: number | null } {
+  if (closes.length < 20 + lookback) return { converging: null, spreadDelta: null };
+
+  const ema10 = calcEMA(closes, 10);
+  const ema20 = calcEMA(closes, 20);
+  const lastIdx = closes.length - 1;
+  const pastIdx = lastIdx - lookback;
+
+  const spreadNow = Math.abs(ema10[lastIdx] - ema20[lastIdx]);
+  const spreadPast = Math.abs(ema10[pastIdx] - ema20[pastIdx]);
+
+  const price = closes[lastIdx];
+  const spreadDelta = price > 0
+    ? ((spreadNow - spreadPast) / price) * 100
+    : null;
+
+  return {
+    converging: spreadNow < spreadPast,
+    spreadDelta,
+  };
+}
+
+/** Detect volatility squeeze: ATR(5) < ATR(20). */
+export function calcVolatilitySqueeze(
+  highs: number[],
+  lows: number[],
+  closes: number[]
+): { squeezed: boolean | null; atrRatio: number | null } {
+  if (closes.length < 21) return { squeezed: null, atrRatio: null };
+
+  const atr = calcATRArray(highs, lows, closes, 1); // individual TRs
+  if (atr.length < 20) return { squeezed: null, atrRatio: null };
+
+  const last5TR = atr.slice(-5);
+  const last20TR = atr.slice(-20);
+  const atr5 = last5TR.reduce((a, b) => a + b, 0) / 5;
+  const atr20 = last20TR.reduce((a, b) => a + b, 0) / 20;
+
+  if (atr20 === 0) return { squeezed: null, atrRatio: null };
+  const ratio = atr5 / atr20;
+  return { squeezed: ratio < 1.0, atrRatio: ratio };
 }
 
 /** Aggregate 1h OHLC to 4h bars. Opens from first bar, highs/lows from max/min, closes from last bar. */
@@ -1395,6 +1449,7 @@ export async function fetchM2Only(
     let emaOpens: number[] | null = null;
     let emaHighs: number[] | null = null;
     let emaLows: number[] | null = null;
+    let volumes: number[] | null = null;
 
     // For reuse timeframes (1d uses chart3mo, 1wk uses chart5y), we still need to fetch
     // since this is a standalone call without the main fetchPreRunData context
@@ -1406,11 +1461,13 @@ export async function fetchM2Only(
         emaHighs = agg.highs;
         emaLows = agg.lows;
         closes = agg.closes;
+        volumes = aggregateVolumes(chart.volumes, tfConfig.aggregate);
       } else {
         closes = chart.closes;
         emaOpens = chart.opens;
         emaHighs = chart.highs;
         emaLows = chart.lows;
+        volumes = chart.volumes;
       }
     }
 
@@ -1426,6 +1483,13 @@ export async function fetchM2Only(
       displacementNearCross = dfvg.displacementNearCross;
       fvgNearCross = dfvg.fvgNearCross;
     }
+
+    // Leading indicators
+    const volSurge = volumes ? calcVolumeSurge(volumes) : { volumeRatio: null };
+    const convergence = calcEmaConvergence(closes);
+    const squeeze = emaHighs && emaLows
+      ? calcVolatilitySqueeze(emaHighs, emaLows, closes)
+      : { squeezed: null, atrRatio: null };
 
     // Score M2 using same logic as scoreM2() in scoring.ts
     const hasDisplacementFVG = displacementNearCross === true && fvgNearCross === true;
@@ -1444,6 +1508,11 @@ export async function fetchM2Only(
       dataPoints: sig.dataPoints,
       displacementNearCross,
       fvgNearCross,
+      volumeRatio: volSurge.volumeRatio,
+      converging: convergence.converging,
+      spreadDelta: convergence.spreadDelta,
+      squeezed: squeeze.squeezed,
+      atrRatio: squeeze.atrRatio,
     };
   } catch {
     return null;

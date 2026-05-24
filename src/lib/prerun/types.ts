@@ -14,6 +14,12 @@ export interface M2TimeframeResult {
   dataPoints: number | null;
   displacementNearCross: boolean | null;
   fvgNearCross: boolean | null;
+  // Leading indicators
+  volumeRatio: number | null;       // last bar vol / 20-bar avg vol
+  converging: boolean | null;       // EMA spread narrowing toward cross
+  spreadDelta: number | null;       // rate of change in EMA spread (tooltip detail)
+  squeezed: boolean | null;         // ATR(5) < ATR(20) = volatility compression
+  atrRatio: number | null;          // ATR(5) / ATR(20) for graduated display
 }
 
 export interface MultiTFM2Result {

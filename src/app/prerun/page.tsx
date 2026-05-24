@@ -28,7 +28,13 @@ import type {
 } from "@/lib/prerun/types";
 import type { EmaTimeframe } from "@/lib/prerun/types";
 import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES } from "@/lib/prerun/types";
-import { type TFFilterValue, type TrendFilterValue, TF_FILTER_OPTIONS, TREND_FILTER_OPTIONS, INIT_TF_FILTERS, INIT_TREND_FILTERS, TF_FILTER_PRESETS, rowPassesTFFilters } from "@/lib/prerun/tf-filters";
+import {
+  type TFFilterValue, type TrendFilterValue, type BoolFilterValue, type VolFilterValue,
+  type LeadingFilters,
+  TF_FILTER_OPTIONS, TREND_FILTER_OPTIONS, VOL_FILTER_OPTIONS,
+  INIT_TF_FILTERS, INIT_TREND_FILTERS, INIT_BOOL_FILTERS, INIT_VOL_FILTERS,
+  TF_FILTER_PRESETS, rowPassesTFFilters,
+} from "@/lib/prerun/tf-filters";
 import {
   savePreRunScan,
   loadPreRunScans,
@@ -283,6 +289,11 @@ function PreRunPage() {
             dataPoints: d.emaM2DataPoints,
             displacementNearCross: d.emaM2DisplacementNearCross,
             fvgNearCross: d.emaM2FvgNearCross,
+            volumeRatio: null,
+            converging: null,
+            spreadDelta: null,
+            squeezed: null,
+            atrRatio: null,
           },
         },
       });
@@ -1390,10 +1401,47 @@ const MultiTFTable = memo(function MultiTFTable({
   const [tfFilters, setTFFilters] = useState<Record<EmaTimeframe, TFFilterValue>>({ ...INIT_TF_FILTERS });
   const [trendFilters, setTrendFilters] = useState<Record<EmaTimeframe, TrendFilterValue>>({ ...INIT_TREND_FILTERS });
 
-  const activeFilterCount = useMemo(
-    () => TF_LABELS.filter((tf) => tfFilters[tf] !== "any" || trendFilters[tf] !== "any").length,
-    [tfFilters, trendFilters],
-  );
+  // Quality filters (Phase 1)
+  const [dispFilters, setDispFilters] = useState<Record<EmaTimeframe, BoolFilterValue>>({ ...INIT_BOOL_FILTERS });
+  const [fvgFilters, setFvgFilters] = useState<Record<EmaTimeframe, BoolFilterValue>>({ ...INIT_BOOL_FILTERS });
+
+  // Leading indicator filters (Phase 3)
+  const [showLeading, setShowLeading] = useState(false);
+  const [volFilters, setVolFilters] = useState<Record<EmaTimeframe, VolFilterValue>>({ ...INIT_VOL_FILTERS });
+  const [convFilters, setConvFilters] = useState<Record<EmaTimeframe, BoolFilterValue>>({ ...INIT_BOOL_FILTERS });
+  const [squeezeFilters, setSqueezeFilters] = useState<Record<EmaTimeframe, BoolFilterValue>>({ ...INIT_BOOL_FILTERS });
+
+  const leadingFilters = useMemo((): LeadingFilters => ({
+    disp: dispFilters,
+    fvg: fvgFilters,
+    vol: volFilters,
+    conv: convFilters,
+    squeeze: squeezeFilters,
+  }), [dispFilters, fvgFilters, volFilters, convFilters, squeezeFilters]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    for (const tf of TF_LABELS) {
+      if (tfFilters[tf] !== "any") count++;
+      if (trendFilters[tf] !== "any") count++;
+      if (dispFilters[tf] !== "any") count++;
+      if (fvgFilters[tf] !== "any") count++;
+      if (volFilters[tf] !== "any") count++;
+      if (convFilters[tf] !== "any") count++;
+      if (squeezeFilters[tf] !== "any") count++;
+    }
+    return count;
+  }, [tfFilters, trendFilters, dispFilters, fvgFilters, volFilters, convFilters, squeezeFilters]);
+
+  const resetAllFilters = useCallback(() => {
+    setTFFilters({ ...INIT_TF_FILTERS });
+    setTrendFilters({ ...INIT_TREND_FILTERS });
+    setDispFilters({ ...INIT_BOOL_FILTERS });
+    setFvgFilters({ ...INIT_BOOL_FILTERS });
+    setVolFilters({ ...INIT_VOL_FILTERS });
+    setConvFilters({ ...INIT_BOOL_FILTERS });
+    setSqueezeFilters({ ...INIT_BOOL_FILTERS });
+  }, []);
 
   // Sort by total M2 score across timeframes (descending), tie-break by ticker
   const sorted = useMemo(() => {
@@ -1416,16 +1464,16 @@ const MultiTFTable = memo(function MultiTFTable({
         }
         return { ...r, totalScore, bestTF };
       })
-      .filter((row) => rowPassesTFFilters(row, tfFilters, trendFilters))
+      .filter((row) => rowPassesTFFilters(row, tfFilters, trendFilters, leadingFilters))
       .sort((a, b) => b.totalScore - a.totalScore || a.ticker.localeCompare(b.ticker));
-  }, [results, tfFilters, trendFilters]);
+  }, [results, tfFilters, trendFilters, leadingFilters]);
 
   if (results.size === 0 && !scanning) return null;
 
   return (
     <div className="mb-4 rounded-lg border border-purple-500/20 bg-[#141414] overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Layers className="h-4 w-4 text-purple-400" />
           <h3 className="text-sm font-medium text-white">
             Multi-Timeframe M2 EMA
@@ -1436,17 +1484,30 @@ const MultiTFTable = memo(function MultiTFTable({
           {TF_FILTER_PRESETS.map((p) => {
             const isActive = activeFilterCount > 0 &&
               TF_LABELS.every((tf) => tfFilters[tf] === p.filters[tf]) &&
-              TF_LABELS.every((tf) => trendFilters[tf] === (p.trendFilters?.[tf] ?? "any"));
+              TF_LABELS.every((tf) => trendFilters[tf] === (p.trendFilters?.[tf] ?? "any")) &&
+              TF_LABELS.every((tf) => dispFilters[tf] === (p.leadingFilters?.disp?.[tf] ?? "any")) &&
+              TF_LABELS.every((tf) => fvgFilters[tf] === (p.leadingFilters?.fvg?.[tf] ?? "any")) &&
+              TF_LABELS.every((tf) => volFilters[tf] === (p.leadingFilters?.vol?.[tf] ?? "any")) &&
+              TF_LABELS.every((tf) => convFilters[tf] === (p.leadingFilters?.conv?.[tf] ?? "any")) &&
+              TF_LABELS.every((tf) => squeezeFilters[tf] === (p.leadingFilters?.squeeze?.[tf] ?? "any"));
             return (
               <button
                 key={p.id}
                 onClick={() => {
                   if (isActive) {
-                    setTFFilters({ ...INIT_TF_FILTERS });
-                    setTrendFilters({ ...INIT_TREND_FILTERS });
+                    resetAllFilters();
                   } else {
                     setTFFilters({ ...p.filters });
                     setTrendFilters(p.trendFilters ? { ...p.trendFilters } : { ...INIT_TREND_FILTERS });
+                    setDispFilters(p.leadingFilters?.disp ? { ...p.leadingFilters.disp } : { ...INIT_BOOL_FILTERS });
+                    setFvgFilters(p.leadingFilters?.fvg ? { ...p.leadingFilters.fvg } : { ...INIT_BOOL_FILTERS });
+                    setVolFilters(p.leadingFilters?.vol ? { ...p.leadingFilters.vol } : { ...INIT_VOL_FILTERS });
+                    setConvFilters(p.leadingFilters?.conv ? { ...p.leadingFilters.conv } : { ...INIT_BOOL_FILTERS });
+                    setSqueezeFilters(p.leadingFilters?.squeeze ? { ...p.leadingFilters.squeeze } : { ...INIT_BOOL_FILTERS });
+                    // Auto-show leading row if preset uses leading filters
+                    if (p.leadingFilters?.vol || p.leadingFilters?.conv || p.leadingFilters?.squeeze) {
+                      setShowLeading(true);
+                    }
                   }
                 }}
                 title={p.description}
@@ -1466,7 +1527,7 @@ const MultiTFTable = memo(function MultiTFTable({
                 {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""}
               </span>
               <button
-                onClick={() => { setTFFilters({ ...INIT_TF_FILTERS }); setTrendFilters({ ...INIT_TREND_FILTERS }); }}
+                onClick={resetAllFilters}
                 className="text-[10px] text-[#888] hover:text-white transition-colors"
               >
                 Reset
@@ -1474,17 +1535,31 @@ const MultiTFTable = memo(function MultiTFTable({
             </>
           )}
         </div>
-        {scanning && (
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
-            <span className="text-[10px] text-purple-400">{progress}</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowLeading((v) => !v)}
+            className={`text-[10px] rounded px-1.5 py-0.5 border transition-colors ${
+              showLeading
+                ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-300"
+                : "border-[#333] text-[#666] hover:text-white hover:border-[#555]"
+            }`}
+            title="Toggle leading indicator filters & badges"
+          >
+            Leading
+          </button>
+          {scanning && (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
+              <span className="text-[10px] text-purple-400">{progress}</span>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
+            {/* Score + Trend filter row */}
             <tr className="border-b border-[#2a2a2a] text-[#666]">
               <th className="py-2 pl-4 pr-2 text-left font-medium sticky left-0 bg-[#141414] z-10">Ticker</th>
               {TF_LABELS.map((tf) => (
@@ -1531,6 +1606,116 @@ const MultiTFTable = memo(function MultiTFTable({
               <th className="py-2 px-3 text-center font-medium">Total</th>
               <th className="py-2 px-3 pr-4 text-center font-medium">Best TF</th>
             </tr>
+
+            {/* Quality filter row (Disp + FVG) */}
+            <tr className="border-b border-[#2a2a2a]/50 text-[#555]">
+              <th className="py-1 pl-4 pr-2 text-left text-[9px] font-normal sticky left-0 bg-[#141414] z-10">Quality</th>
+              {TF_LABELS.map((tf) => (
+                <th key={tf} className="py-1 px-1.5 text-center whitespace-nowrap">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <select
+                      value={dispFilters[tf]}
+                      onChange={(e) =>
+                        setDispFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
+                      }
+                      title="Displacement near cross"
+                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
+                        dispFilters[tf] !== "any"
+                          ? "border-amber-500/50 text-amber-300"
+                          : "border-[#222] text-[#555]"
+                      }`}
+                    >
+                      <option value="any">Disp</option>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
+                    </select>
+                    <select
+                      value={fvgFilters[tf]}
+                      onChange={(e) =>
+                        setFvgFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
+                      }
+                      title="FVG near cross"
+                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
+                        fvgFilters[tf] !== "any"
+                          ? "border-amber-500/50 text-amber-300"
+                          : "border-[#222] text-[#555]"
+                      }`}
+                    >
+                      <option value="any">FVG</option>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
+                    </select>
+                  </div>
+                </th>
+              ))}
+              <th className="py-1 px-3" />
+              <th className="py-1 px-3 pr-4" />
+            </tr>
+
+            {/* Leading indicator filter row (Vol + Conv + Squeeze) - toggleable */}
+            {showLeading && (
+              <tr className="border-b border-cyan-500/10 text-[#555]">
+                <th className="py-1 pl-4 pr-2 text-left text-[9px] font-normal sticky left-0 bg-[#141414] z-10 text-cyan-400/60">Leading</th>
+                {TF_LABELS.map((tf) => (
+                  <th key={tf} className="py-1 px-1.5 text-center whitespace-nowrap">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <select
+                        value={volFilters[tf]}
+                        onChange={(e) =>
+                          setVolFilters((prev) => ({ ...prev, [tf]: e.target.value as VolFilterValue }))
+                        }
+                        title="Volume ratio filter"
+                        className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
+                          volFilters[tf] !== "any"
+                            ? "border-cyan-500/50 text-cyan-300"
+                            : "border-[#222] text-[#555]"
+                        }`}
+                      >
+                        {VOL_FILTER_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.value === "any" ? "Vol" : opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={convFilters[tf]}
+                        onChange={(e) =>
+                          setConvFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
+                        }
+                        title="EMA converging filter"
+                        className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
+                          convFilters[tf] !== "any"
+                            ? "border-cyan-500/50 text-cyan-300"
+                            : "border-[#222] text-[#555]"
+                        }`}
+                      >
+                        <option value="any">Conv</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                      </select>
+                      <select
+                        value={squeezeFilters[tf]}
+                        onChange={(e) =>
+                          setSqueezeFilters((prev) => ({ ...prev, [tf]: e.target.value as BoolFilterValue }))
+                        }
+                        title="Volatility squeeze filter"
+                        className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
+                          squeezeFilters[tf] !== "any"
+                            ? "border-cyan-500/50 text-cyan-300"
+                            : "border-[#222] text-[#555]"
+                        }`}
+                      >
+                        <option value="any">Sqz</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                      </select>
+                    </div>
+                  </th>
+                ))}
+                <th className="py-1 px-3" />
+                <th className="py-1 px-3 pr-4" />
+              </tr>
+            )}
           </thead>
           <tbody>
             {sorted.length === 0 && activeFilterCount > 0 && (
@@ -1558,16 +1743,50 @@ const MultiTFTable = memo(function MultiTFTable({
                     );
                   }
                   const sd = scoreDisplay(tfr.scoreM2);
+                  // Leading indicator badges
+                  const hasVol = tfr.volumeRatio != null && tfr.volumeRatio > 1.5;
+                  const hasConv = tfr.converging === true;
+                  const hasSqz = tfr.squeezed === true;
+                  const hasDisp = tfr.displacementNearCross === true;
+                  const hasFvg = tfr.fvgNearCross === true;
                   return (
-                    <td key={tf} className="py-1.5 px-3 text-center">
-                      <div
-                        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${trendColor(tfr.trendStrength)}`}
-                        title={`Score: ${tfr.scoreM2}/2 | Trend: ${tfr.trendStrength ?? "n/a"} | Cross: ${tfr.bullishCross ? "yes" : "no"} | Above: ${tfr.priceAboveBoth ? "yes" : "no"} | Bars: ${tfr.dataPoints ?? "?"}`}
-                      >
-                        <span className={sd.color}>{sd.text}</span>
-                        <span className="text-[9px] opacity-70">
-                          {tfr.trendStrength?.[0]?.toUpperCase() ?? "?"}
-                        </span>
+                    <td key={tf} className="py-1.5 px-1.5 text-center">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <div
+                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${trendColor(tfr.trendStrength)}`}
+                          title={`Score: ${tfr.scoreM2}/2 | Trend: ${tfr.trendStrength ?? "n/a"} | Cross: ${tfr.bullishCross ? "yes" : "no"} | Above: ${tfr.priceAboveBoth ? "yes" : "no"} | Bars: ${tfr.dataPoints ?? "?"}`}
+                        >
+                          <span className={sd.color}>{sd.text}</span>
+                          <span className="text-[9px] opacity-70">
+                            {tfr.trendStrength?.[0]?.toUpperCase() ?? "?"}
+                          </span>
+                        </div>
+                        {/* Quality + Leading badges */}
+                        {(showLeading || hasDisp || hasFvg) && (hasVol || hasConv || hasSqz || hasDisp || hasFvg) && (
+                          <div className="flex items-center gap-0.5 flex-wrap justify-center">
+                            {hasDisp && (
+                              <span className="text-[8px] text-amber-400/80" title="Displacement near cross">D</span>
+                            )}
+                            {hasFvg && (
+                              <span className="text-[8px] text-amber-400/80" title="FVG near cross">F</span>
+                            )}
+                            {showLeading && hasVol && (
+                              <span className="text-[8px] text-cyan-400" title={`Volume: ${tfr.volumeRatio!.toFixed(1)}x avg`}>
+                                V:{tfr.volumeRatio!.toFixed(1)}x
+                              </span>
+                            )}
+                            {showLeading && hasConv && (
+                              <span className="text-[8px] text-cyan-400" title={`EMAs converging${tfr.spreadDelta != null ? ` (${tfr.spreadDelta.toFixed(3)}%)` : ""}`}>
+                                {"\u2197"}
+                              </span>
+                            )}
+                            {showLeading && hasSqz && (
+                              <span className="text-[8px] text-cyan-400" title={`Squeezed: ATR ratio ${tfr.atrRatio?.toFixed(2)}`}>
+                                {"\u25C6"}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
                   );

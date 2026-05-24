@@ -2,14 +2,23 @@ import { describe, it, expect } from "vitest";
 import {
   matchesTFFilter,
   matchesTrendFilter,
+  matchesBoolFilter,
+  matchesVolFilter,
   rowPassesTFFilters,
   INIT_TF_FILTERS,
   INIT_TREND_FILTERS,
+  INIT_BOOL_FILTERS,
+  INIT_VOL_FILTERS,
   TF_FILTER_OPTIONS,
   TREND_FILTER_OPTIONS,
+  BOOL_FILTER_OPTIONS,
+  VOL_FILTER_OPTIONS,
   TF_FILTER_PRESETS,
   type TFFilterValue,
   type TrendFilterValue,
+  type BoolFilterValue,
+  type VolFilterValue,
+  type LeadingFilters,
 } from "./tf-filters";
 import type { MultiTFM2Result, M2TimeframeResult } from "./types";
 
@@ -17,7 +26,7 @@ import type { MultiTFM2Result, M2TimeframeResult } from "./types";
 // helpers
 // ---------------------------------------------------------------------------
 
-function makeTFR(scoreM2: number, trendStrength: M2TimeframeResult["trendStrength"] = null): M2TimeframeResult {
+function makeTFR(scoreM2: number, trendStrength: M2TimeframeResult["trendStrength"] = null, extra?: Partial<M2TimeframeResult>): M2TimeframeResult {
   return {
     scoreM2,
     trendStrength,
@@ -26,6 +35,12 @@ function makeTFR(scoreM2: number, trendStrength: M2TimeframeResult["trendStrengt
     dataPoints: null,
     displacementNearCross: null,
     fvgNearCross: null,
+    volumeRatio: null,
+    converging: null,
+    spreadDelta: null,
+    squeezed: null,
+    atrRatio: null,
+    ...extra,
   };
 }
 
@@ -355,6 +370,30 @@ describe("constants", () => {
     }
   });
 
+  it("BOOL_FILTER_OPTIONS has 3 options", () => {
+    expect(BOOL_FILTER_OPTIONS).toHaveLength(3);
+    expect(BOOL_FILTER_OPTIONS.map((o) => o.value)).toEqual(["any", "yes", "no"]);
+  });
+
+  it("VOL_FILTER_OPTIONS has 4 options", () => {
+    expect(VOL_FILTER_OPTIONS).toHaveLength(4);
+    expect(VOL_FILTER_OPTIONS.map((o) => o.value)).toEqual(["any", "gt1.5", "gt2", "gt3"]);
+  });
+
+  it("INIT_BOOL_FILTERS has all 7 timeframes set to any", () => {
+    const tfs = ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"];
+    for (const tf of tfs) {
+      expect(INIT_BOOL_FILTERS[tf as keyof typeof INIT_BOOL_FILTERS]).toBe("any");
+    }
+  });
+
+  it("INIT_VOL_FILTERS has all 7 timeframes set to any", () => {
+    const tfs = ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"];
+    for (const tf of tfs) {
+      expect(INIT_VOL_FILTERS[tf as keyof typeof INIT_VOL_FILTERS]).toBe("any");
+    }
+  });
+
   it("every preset has all 7 timeframes with valid filter values", () => {
     const validValues = new Set(TF_FILTER_OPTIONS.map((o) => o.value));
     const tfs = ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"];
@@ -365,6 +404,18 @@ describe("constants", () => {
         expect(validValues.has(val), `${preset.id}.${tf}=${val} is not a valid filter value`).toBe(true);
       }
     }
+  });
+
+  it("pre_cross and coiled presets exist", () => {
+    const preCross = TF_FILTER_PRESETS.find((p) => p.id === "pre_cross");
+    expect(preCross).toBeDefined();
+    expect(preCross!.leadingFilters?.conv?.["15m"]).toBe("yes");
+    expect(preCross!.leadingFilters?.vol?.["15m"]).toBe("gt1.5");
+
+    const coiled = TF_FILTER_PRESETS.find((p) => p.id === "coiled");
+    expect(coiled).toBeDefined();
+    expect(coiled!.leadingFilters?.squeeze?.["1h"]).toBe("yes");
+    expect(coiled!.leadingFilters?.conv?.["1h"]).toBe("yes");
   });
 
   it("early_mover preset exists with correct structure", () => {
@@ -414,5 +465,178 @@ describe("constants", () => {
     // 1h=1 fails cascade
     const row2 = makeRow("F", { "15m": 2, "1h": 1, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
     expect(rowPassesTFFilters(row2, p.filters)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// matchesBoolFilter
+// ---------------------------------------------------------------------------
+
+describe("matchesBoolFilter", () => {
+  it('"any" passes every value including null', () => {
+    expect(matchesBoolFilter(true, "any")).toBe(true);
+    expect(matchesBoolFilter(false, "any")).toBe(true);
+    expect(matchesBoolFilter(null, "any")).toBe(true);
+    expect(matchesBoolFilter(undefined, "any")).toBe(true);
+  });
+
+  it('"yes" matches only true', () => {
+    expect(matchesBoolFilter(true, "yes")).toBe(true);
+    expect(matchesBoolFilter(false, "yes")).toBe(false);
+    expect(matchesBoolFilter(null, "yes")).toBe(false);
+  });
+
+  it('"no" matches only false', () => {
+    expect(matchesBoolFilter(false, "no")).toBe(true);
+    expect(matchesBoolFilter(true, "no")).toBe(false);
+    expect(matchesBoolFilter(null, "no")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// matchesVolFilter
+// ---------------------------------------------------------------------------
+
+describe("matchesVolFilter", () => {
+  it('"any" passes every value including null', () => {
+    expect(matchesVolFilter(0.5, "any")).toBe(true);
+    expect(matchesVolFilter(5, "any")).toBe(true);
+    expect(matchesVolFilter(null, "any")).toBe(true);
+    expect(matchesVolFilter(undefined, "any")).toBe(true);
+  });
+
+  it('"gt1.5" matches ratios above 1.5', () => {
+    expect(matchesVolFilter(1.6, "gt1.5")).toBe(true);
+    expect(matchesVolFilter(2.0, "gt1.5")).toBe(true);
+    expect(matchesVolFilter(1.5, "gt1.5")).toBe(false);
+    expect(matchesVolFilter(1.0, "gt1.5")).toBe(false);
+    expect(matchesVolFilter(null, "gt1.5")).toBe(false);
+  });
+
+  it('"gt2" matches ratios above 2', () => {
+    expect(matchesVolFilter(2.1, "gt2")).toBe(true);
+    expect(matchesVolFilter(2.0, "gt2")).toBe(false);
+    expect(matchesVolFilter(1.5, "gt2")).toBe(false);
+  });
+
+  it('"gt3" matches ratios above 3', () => {
+    expect(matchesVolFilter(3.1, "gt3")).toBe(true);
+    expect(matchesVolFilter(3.0, "gt3")).toBe(false);
+    expect(matchesVolFilter(2.5, "gt3")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rowPassesTFFilters with leading filters
+// ---------------------------------------------------------------------------
+
+describe("rowPassesTFFilters with leading filters", () => {
+  function makeLeadingRow(
+    ticker: string,
+    data: Record<string, { score: number; volRatio?: number; conv?: boolean; sqz?: boolean; disp?: boolean; fvg?: boolean }>,
+  ): MultiTFM2Result {
+    const timeframes: MultiTFM2Result["timeframes"] = {};
+    for (const [tf, d] of Object.entries(data)) {
+      timeframes[tf as keyof typeof timeframes] = makeTFR(d.score, null, {
+        volumeRatio: d.volRatio ?? null,
+        converging: d.conv ?? null,
+        squeezed: d.sqz ?? null,
+        displacementNearCross: d.disp ?? null,
+        fvgNearCross: d.fvg ?? null,
+      });
+    }
+    return { ticker, timeframes };
+  }
+
+  it("volume filter on 15m works", () => {
+    const row = makeLeadingRow("X", {
+      "15m": { score: 1, volRatio: 2.5 },
+      "1h": { score: 0 }, "4h": { score: 0 }, "12h": { score: 0 },
+      "1d": { score: 0 }, "1wk": { score: 0 }, "1mo": { score: 0 },
+    });
+    const leading: LeadingFilters = {
+      vol: { ...INIT_VOL_FILTERS, "15m": "gt2" },
+    };
+    expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, leading)).toBe(true);
+
+    const leading2: LeadingFilters = {
+      vol: { ...INIT_VOL_FILTERS, "15m": "gt3" },
+    };
+    expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, leading2)).toBe(false);
+  });
+
+  it("converging filter works", () => {
+    const row = makeLeadingRow("Y", {
+      "15m": { score: 1, conv: true },
+      "1h": { score: 0, conv: false },
+      "4h": { score: 0 }, "12h": { score: 0 },
+      "1d": { score: 0 }, "1wk": { score: 0 }, "1mo": { score: 0 },
+    });
+    const leading: LeadingFilters = {
+      conv: { ...INIT_BOOL_FILTERS, "15m": "yes" },
+    };
+    expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, leading)).toBe(true);
+
+    const leading2: LeadingFilters = {
+      conv: { ...INIT_BOOL_FILTERS, "1h": "yes" },
+    };
+    expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, leading2)).toBe(false);
+  });
+
+  it("squeeze filter works", () => {
+    const row = makeLeadingRow("Z", {
+      "15m": { score: 0 },
+      "1h": { score: 0, sqz: true },
+      "4h": { score: 0 }, "12h": { score: 0 },
+      "1d": { score: 0 }, "1wk": { score: 0 }, "1mo": { score: 0 },
+    });
+    const leading: LeadingFilters = {
+      squeeze: { ...INIT_BOOL_FILTERS, "1h": "yes" },
+    };
+    expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, leading)).toBe(true);
+  });
+
+  it("displacement filter works", () => {
+    const row = makeLeadingRow("W", {
+      "15m": { score: 2, disp: true, fvg: false },
+      "1h": { score: 0 }, "4h": { score: 0 }, "12h": { score: 0 },
+      "1d": { score: 0 }, "1wk": { score: 0 }, "1mo": { score: 0 },
+    });
+    const leading: LeadingFilters = {
+      disp: { ...INIT_BOOL_FILTERS, "15m": "yes" },
+    };
+    expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, leading)).toBe(true);
+
+    const leading2: LeadingFilters = {
+      fvg: { ...INIT_BOOL_FILTERS, "15m": "yes" },
+    };
+    expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, leading2)).toBe(false);
+  });
+
+  it("combined score + leading filters work", () => {
+    const row = makeLeadingRow("COMBO", {
+      "15m": { score: 2, volRatio: 2.0, conv: true },
+      "1h": { score: 0 }, "4h": { score: 0 }, "12h": { score: 0 },
+      "1d": { score: 0 }, "1wk": { score: 0 }, "1mo": { score: 0 },
+    });
+    const scoreFilters = { ...INIT_TF_FILTERS, "15m": "2" as TFFilterValue };
+    const leading: LeadingFilters = {
+      vol: { ...INIT_VOL_FILTERS, "15m": "gt1.5" },
+      conv: { ...INIT_BOOL_FILTERS, "15m": "yes" },
+    };
+    expect(rowPassesTFFilters(row, scoreFilters, undefined, leading)).toBe(true);
+
+    // Score matches but vol doesn't
+    const row2 = makeLeadingRow("COMBO2", {
+      "15m": { score: 2, volRatio: 1.0, conv: true },
+      "1h": { score: 0 }, "4h": { score: 0 }, "12h": { score: 0 },
+      "1d": { score: 0 }, "1wk": { score: 0 }, "1mo": { score: 0 },
+    });
+    expect(rowPassesTFFilters(row2, scoreFilters, undefined, leading)).toBe(false);
+  });
+
+  it("null leading filters behaves like all-any", () => {
+    const row = makeRow("X", { "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
+    expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, undefined)).toBe(true);
   });
 });
