@@ -162,16 +162,16 @@ describe("rowPassesTFFilters", () => {
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
 
-    it("fails: 15m=2 but 4h=2 (higher TF already moved)", () => {
+    it("passes: 15m=2 with 4h/1d already moved (only wk/mo constrained)", () => {
       const row = makeRow("META", {
-        "15m": 2, "1h": 1, "4h": 2, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0,
+        "15m": 2, "1h": 1, "4h": 2, "12h": 0, "1d": 2, "1wk": 0, "1mo": 0,
       });
-      expect(rowPassesTFFilters(row, preset)).toBe(false);
+      expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
-    it("fails: 15m=2 but 1d=2 (daily already strong)", () => {
+    it("fails: 15m=2 but 1wk=2 (weekly already caught up)", () => {
       const row = makeRow("GOOG", {
-        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 2, "1wk": 0, "1mo": 0,
+        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 2, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
@@ -211,12 +211,18 @@ describe("rowPassesTFFilters", () => {
     const earlyMover = TF_FILTER_PRESETS.find((p) => p.id === "early_mover")!;
     const preset = earlyMover.filters;
 
-    it("fails when 4h is missing even though stock would qualify", () => {
-      // Stock has 15m=2 and all present higher TFs are 0, but 4h failed to fetch
+    it("passes when 4h is missing (4h is 'any' in preset)", () => {
+      // 4h/12h/1d are "any" in preset — only wk/mo constrained
       const row = makeRow("PLTR", {
         "15m": 2, "1h": 0, /* 4h missing */ "12h": 0, "1d": 0, "1wk": 0, "1mo": 0,
       });
-      // lte1 filter on missing 4h → fails (defensive: missing ≠ 0)
+      expect(rowPassesTFFilters(row, preset)).toBe(true);
+    });
+
+    it("fails when 1wk is missing (1wk is 'lte1' in preset)", () => {
+      const row = makeRow("PLTR", {
+        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, /* 1wk missing */ "1mo": 0,
+      });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
 
@@ -418,15 +424,18 @@ describe("constants", () => {
     expect(em).toBeDefined();
     expect(em!.filters["15m"]).toBe("2");
     expect(em!.filters["1h"]).toBe("any");
-    expect(em!.filters["4h"]).toBe("lte1");
+    expect(em!.filters["4h"]).toBe("any");
+    expect(em!.filters["1d"]).toBe("any");
     expect(em!.filters["1wk"]).toBe("lte1");
+    expect(em!.filters["1mo"]).toBe("lte1");
   });
 
   it("confirmed preset requires 1h≥1", () => {
     const p = TF_FILTER_PRESETS.find((p) => p.id === "confirmed")!;
     expect(p.filters["15m"]).toBe("2");
     expect(p.filters["1h"]).toBe("gte1");
-    expect(p.filters["4h"]).toBe("lte1");
+    expect(p.filters["4h"]).toBe("any");
+    expect(p.filters["1wk"]).toBe("lte1");
 
     // 1h=0 fails confirmed
     const row0 = makeRow("A", { "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
@@ -436,17 +445,21 @@ describe("constants", () => {
     expect(rowPassesTFFilters(row1, p.filters)).toBe(true);
   });
 
-  it("stealth preset requires higher TFs exactly 0", () => {
+  it("stealth preset requires wk/mo exactly 0", () => {
     const p = TF_FILTER_PRESETS.find((p) => p.id === "stealth")!;
-    expect(p.filters["4h"]).toBe("0");
+    expect(p.filters["4h"]).toBe("any");
+    expect(p.filters["1wk"]).toBe("0");
     expect(p.filters["1mo"]).toBe("0");
 
-    // All higher TFs at 0 passes
+    // wk=0, mo=0 passes
     const row = makeRow("C", { "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
     expect(rowPassesTFFilters(row, p.filters)).toBe(true);
-    // 4h=1 fails (not zero)
-    const row2 = makeRow("D", { "15m": 2, "1h": 0, "4h": 1, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
+    // wk=1 fails (not zero)
+    const row2 = makeRow("D", { "15m": 2, "1h": 0, "4h": 1, "12h": 0, "1d": 0, "1wk": 1, "1mo": 0 });
     expect(rowPassesTFFilters(row2, p.filters)).toBe(false);
+    // 4h=1 is fine since 4h is "any"
+    const row3 = makeRow("E", { "15m": 2, "1h": 0, "4h": 1, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
+    expect(rowPassesTFFilters(row3, p.filters)).toBe(true);
   });
 
   it("cascade preset requires both 15m=2 and 1h=2", () => {

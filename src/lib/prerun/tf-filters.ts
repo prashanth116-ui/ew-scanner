@@ -67,33 +67,33 @@ export const TF_FILTER_PRESETS: TFFilterPreset[] = [
   {
     id: "early_mover",
     label: "Early Mover",
-    description: "15m momentum firing, higher TFs haven't caught up",
+    description: "15m momentum firing, weekly/monthly haven't caught up yet",
     filters: {
-      "15m": "2", "1h": "any", "4h": "lte1", "12h": "lte1", "1d": "lte1", "1wk": "lte1", "1mo": "lte1",
+      "15m": "2", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "lte1", "1mo": "lte1",
     },
   },
   {
     id: "confirmed",
     label: "Confirmed",
-    description: "15m + 1h both showing momentum, higher TFs still lagging",
+    description: "15m + 1h both showing momentum, weekly/monthly still lagging",
     filters: {
-      "15m": "2", "1h": "gte1", "4h": "lte1", "12h": "lte1", "1d": "lte1", "1wk": "lte1", "1mo": "lte1",
+      "15m": "2", "1h": "gte1", "4h": "any", "12h": "any", "1d": "any", "1wk": "lte1", "1mo": "lte1",
     },
   },
   {
     id: "stealth",
     label: "Stealth",
-    description: "15m momentum firing, all higher TFs still at zero \u2014 earliest possible signal",
+    description: "15m momentum firing, weekly + monthly still at zero",
     filters: {
-      "15m": "2", "1h": "any", "4h": "0", "12h": "0", "1d": "0", "1wk": "0", "1mo": "0",
+      "15m": "2", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "0", "1mo": "0",
     },
   },
   {
     id: "cascade",
     label: "Cascade",
-    description: "Fresh crosses on both 15m and 1h, higher TFs haven't caught up yet",
+    description: "Fresh crosses on 15m + 1h, weekly/monthly haven't caught up yet",
     filters: {
-      "15m": "2", "1h": "2", "4h": "lte1", "12h": "lte1", "1d": "lte1", "1wk": "lte1", "1mo": "lte1",
+      "15m": "2", "1h": "2", "4h": "any", "12h": "any", "1d": "any", "1wk": "lte1", "1mo": "lte1",
     },
   },
   {
