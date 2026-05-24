@@ -67,31 +67,31 @@ export const TF_FILTER_PRESETS: TFFilterPreset[] = [
   {
     id: "early_mover",
     label: "Early Mover",
-    description: "15m momentum firing, daily only partially turning, weekly/monthly haven't caught up",
+    description: "15m bullish, weekly/monthly haven't caught up yet",
     filters: {
-      "15m": "2", "1h": "any", "4h": "any", "12h": "any", "1d": "1", "1wk": "lte1", "1mo": "lte1",
+      "15m": "gte1", "1h": "any", "4h": "any", "12h": "any", "1d": "gte1", "1wk": "lte1", "1mo": "lte1",
     },
   },
   {
     id: "confirmed",
     label: "Confirmed",
-    description: "15m + 1h both showing momentum, weekly/monthly still lagging",
+    description: "15m + 1h both bullish, weekly/monthly still lagging",
     filters: {
-      "15m": "2", "1h": "gte1", "4h": "any", "12h": "any", "1d": "any", "1wk": "lte1", "1mo": "lte1",
+      "15m": "gte1", "1h": "gte1", "4h": "any", "12h": "any", "1d": "any", "1wk": "lte1", "1mo": "lte1",
     },
   },
   {
     id: "stealth",
     label: "Stealth",
-    description: "15m momentum firing, weekly + monthly still at zero",
+    description: "15m bullish, weekly + monthly still at zero",
     filters: {
-      "15m": "2", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "0", "1mo": "0",
+      "15m": "gte1", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "0", "1mo": "0",
     },
   },
   {
     id: "cascade",
     label: "Cascade",
-    description: "Fresh crosses on 15m + 1h (rare \u2014 both must cross within hours), weekly/monthly lagging",
+    description: "Fresh crosses on 15m + 1h (rare \u2014 both must score 2 simultaneously)",
     filters: {
       "15m": "2", "1h": "2", "4h": "any", "12h": "any", "1d": "any", "1wk": "lte1", "1mo": "lte1",
     },

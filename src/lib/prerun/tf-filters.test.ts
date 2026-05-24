@@ -141,37 +141,37 @@ describe("rowPassesTFFilters", () => {
     const earlyMover = TF_FILTER_PRESETS.find((p) => p.id === "early_mover")!;
     const preset = earlyMover.filters;
 
-    it("passes: 15m=2, daily=1 (partially turning), wk/mo=0", () => {
+    it("passes: 15m=1 (bullish), daily=1, wk/mo=0", () => {
       const row = makeRow("TSLA", {
-        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
-      });
-      expect(rowPassesTFFilters(row, preset)).toBe(true);
-    });
-
-    it("passes: 15m=2, daily=1, higher TFs mix of 0 and 1", () => {
-      const row = makeRow("NVDA", {
-        "15m": 2, "1h": 1, "4h": 1, "12h": 0, "1d": 1, "1wk": 1, "1mo": 0,
-      });
-      expect(rowPassesTFFilters(row, preset)).toBe(true);
-    });
-
-    it("fails: 15m=1 (not strong enough)", () => {
-      const row = makeRow("AMD", {
         "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
-      expect(rowPassesTFFilters(row, preset)).toBe(false);
+      expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
-    it("fails: 15m=2 but 1d=2 (daily already fully confirmed)", () => {
-      const row = makeRow("META", {
-        "15m": 2, "1h": 1, "4h": 2, "12h": 0, "1d": 2, "1wk": 0, "1mo": 0,
+    it("passes: 15m=2 (strong), daily=2, higher TFs mix", () => {
+      const row = makeRow("NVDA", {
+        "15m": 2, "1h": 1, "4h": 1, "12h": 0, "1d": 2, "1wk": 1, "1mo": 0,
+      });
+      expect(rowPassesTFFilters(row, preset)).toBe(true);
+    });
+
+    it("fails: 15m=0 (bearish on 15m)", () => {
+      const row = makeRow("AMD", {
+        "15m": 0, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
 
-    it("fails: 15m=2 but 1wk=2 (weekly already caught up)", () => {
+    it("fails: 1d=0 (daily not bullish at all)", () => {
+      const row = makeRow("META", {
+        "15m": 1, "1h": 1, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0,
+      });
+      expect(rowPassesTFFilters(row, preset)).toBe(false);
+    });
+
+    it("fails: 15m=1 but 1wk=2 (weekly already caught up)", () => {
       const row = makeRow("GOOG", {
-        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 0,
+        "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
@@ -422,44 +422,45 @@ describe("constants", () => {
   it("early_mover preset exists with correct structure", () => {
     const em = TF_FILTER_PRESETS.find((p) => p.id === "early_mover");
     expect(em).toBeDefined();
-    expect(em!.filters["15m"]).toBe("2");
+    expect(em!.filters["15m"]).toBe("gte1");
     expect(em!.filters["1h"]).toBe("any");
     expect(em!.filters["4h"]).toBe("any");
-    expect(em!.filters["1d"]).toBe("1");
+    expect(em!.filters["1d"]).toBe("gte1");
     expect(em!.filters["1wk"]).toBe("lte1");
     expect(em!.filters["1mo"]).toBe("lte1");
   });
 
-  it("confirmed preset requires 1h≥1", () => {
+  it("confirmed preset requires 15m≥1 and 1h≥1", () => {
     const p = TF_FILTER_PRESETS.find((p) => p.id === "confirmed")!;
-    expect(p.filters["15m"]).toBe("2");
+    expect(p.filters["15m"]).toBe("gte1");
     expect(p.filters["1h"]).toBe("gte1");
     expect(p.filters["4h"]).toBe("any");
     expect(p.filters["1wk"]).toBe("lte1");
 
     // 1h=0 fails confirmed
-    const row0 = makeRow("A", { "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
+    const row0 = makeRow("A", { "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
     expect(rowPassesTFFilters(row0, p.filters)).toBe(false);
     // 1h=1 passes
-    const row1 = makeRow("B", { "15m": 2, "1h": 1, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
+    const row1 = makeRow("B", { "15m": 1, "1h": 1, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
     expect(rowPassesTFFilters(row1, p.filters)).toBe(true);
   });
 
-  it("stealth preset requires wk/mo exactly 0", () => {
+  it("stealth preset requires 15m≥1 and wk/mo exactly 0", () => {
     const p = TF_FILTER_PRESETS.find((p) => p.id === "stealth")!;
+    expect(p.filters["15m"]).toBe("gte1");
     expect(p.filters["4h"]).toBe("any");
     expect(p.filters["1wk"]).toBe("0");
     expect(p.filters["1mo"]).toBe("0");
 
-    // wk=0, mo=0 passes
-    const row = makeRow("C", { "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
+    // 15m=1, wk=0, mo=0 passes
+    const row = makeRow("C", { "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
     expect(rowPassesTFFilters(row, p.filters)).toBe(true);
     // wk=1 fails (not zero)
-    const row2 = makeRow("D", { "15m": 2, "1h": 0, "4h": 1, "12h": 0, "1d": 0, "1wk": 1, "1mo": 0 });
+    const row2 = makeRow("D", { "15m": 1, "1h": 0, "4h": 1, "12h": 0, "1d": 1, "1wk": 1, "1mo": 0 });
     expect(rowPassesTFFilters(row2, p.filters)).toBe(false);
-    // 4h=1 is fine since 4h is "any"
-    const row3 = makeRow("E", { "15m": 2, "1h": 0, "4h": 1, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
-    expect(rowPassesTFFilters(row3, p.filters)).toBe(true);
+    // 15m=0 fails
+    const row3 = makeRow("E", { "15m": 0, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
+    expect(rowPassesTFFilters(row3, p.filters)).toBe(false);
   });
 
   it("cascade preset requires both 15m=2 and 1h=2", () => {
