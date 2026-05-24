@@ -136,14 +136,14 @@ describe("rowPassesTFFilters", () => {
     expect(rowPassesTFFilters(row, filtersFail)).toBe(false);
   });
 
-  // The key preset: Early Mover (15m=2, higher TFs ≤1)
+  // The key preset: Early Mover (15m≥1, 1d≥1, rest any)
   describe("preset: Early Mover", () => {
     const earlyMover = TF_FILTER_PRESETS.find((p) => p.id === "early_mover")!;
     const preset = earlyMover.filters;
 
-    it("passes: 15m=1 (bullish), daily=1, wk/mo=0", () => {
+    it("passes: 15m=1, daily=1, any wk/mo", () => {
       const row = makeRow("TSLA", {
-        "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
+        "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
@@ -169,11 +169,11 @@ describe("rowPassesTFFilters", () => {
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
 
-    it("fails: 15m=1 but 1wk=2 (weekly already caught up)", () => {
+    it("passes: 15m=1 with 1wk=2 (weekly already bullish — no longer excluded)", () => {
       const row = makeRow("GOOG", {
         "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 0,
       });
-      expect(rowPassesTFFilters(row, preset)).toBe(false);
+      expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
     it("fails: missing 15m data treated as not passing", () => {
@@ -212,18 +212,17 @@ describe("rowPassesTFFilters", () => {
     const preset = earlyMover.filters;
 
     it("passes when 4h is missing (4h is 'any' in preset)", () => {
-      // 4h/12h are "any" in preset — only 1d/wk/mo constrained
       const row = makeRow("PLTR", {
         "15m": 2, "1h": 0, /* 4h missing */ "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
-    it("fails when 1wk is missing (1wk is 'lte1' in preset)", () => {
+    it("passes when 1wk is missing (1wk is 'any' in preset)", () => {
       const row = makeRow("PLTR", {
         "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 1, /* 1wk missing */ "1mo": 0,
       });
-      expect(rowPassesTFFilters(row, preset)).toBe(false);
+      expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
     it("passes when only unfiltered timeframes are missing", () => {
@@ -426,8 +425,8 @@ describe("constants", () => {
     expect(em!.filters["1h"]).toBe("any");
     expect(em!.filters["4h"]).toBe("any");
     expect(em!.filters["1d"]).toBe("gte1");
-    expect(em!.filters["1wk"]).toBe("lte1");
-    expect(em!.filters["1mo"]).toBe("lte1");
+    expect(em!.filters["1wk"]).toBe("any");
+    expect(em!.filters["1mo"]).toBe("any");
   });
 
   it("confirmed preset requires 15m≥1 and 1h≥1", () => {
@@ -435,44 +434,50 @@ describe("constants", () => {
     expect(p.filters["15m"]).toBe("gte1");
     expect(p.filters["1h"]).toBe("gte1");
     expect(p.filters["4h"]).toBe("any");
-    expect(p.filters["1wk"]).toBe("lte1");
+    expect(p.filters["1wk"]).toBe("any");
 
     // 1h=0 fails confirmed
-    const row0 = makeRow("A", { "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
+    const row0 = makeRow("A", { "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
     expect(rowPassesTFFilters(row0, p.filters)).toBe(false);
-    // 1h=1 passes
-    const row1 = makeRow("B", { "15m": 1, "1h": 1, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
+    // 1h=1 passes (even with wk/mo already bullish)
+    const row1 = makeRow("B", { "15m": 1, "1h": 1, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
     expect(rowPassesTFFilters(row1, p.filters)).toBe(true);
   });
 
-  it("stealth preset requires 15m≥1 and wk/mo exactly 0", () => {
+  it("stealth preset requires 15m≥1 and 1h≤1 (early signal before hourly confirms)", () => {
     const p = TF_FILTER_PRESETS.find((p) => p.id === "stealth")!;
     expect(p.filters["15m"]).toBe("gte1");
+    expect(p.filters["1h"]).toBe("lte1");
     expect(p.filters["4h"]).toBe("any");
-    expect(p.filters["1wk"]).toBe("0");
-    expect(p.filters["1mo"]).toBe("0");
+    expect(p.filters["1wk"]).toBe("any");
+    expect(p.filters["1mo"]).toBe("any");
 
-    // 15m=1, wk=0, mo=0 passes
-    const row = makeRow("C", { "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
+    // 15m=1, 1h=0 passes (1h hasn't turned yet)
+    const row = makeRow("C", { "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
     expect(rowPassesTFFilters(row, p.filters)).toBe(true);
-    // wk=1 fails (not zero)
-    const row2 = makeRow("D", { "15m": 1, "1h": 0, "4h": 1, "12h": 0, "1d": 1, "1wk": 1, "1mo": 0 });
-    expect(rowPassesTFFilters(row2, p.filters)).toBe(false);
-    // 15m=0 fails
-    const row3 = makeRow("E", { "15m": 0, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
+    // 15m=1, 1h=1 passes (1h partial, ≤1)
+    const row2 = makeRow("D", { "15m": 1, "1h": 1, "4h": 1, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
+    expect(rowPassesTFFilters(row2, p.filters)).toBe(true);
+    // 15m=1, 1h=2 fails (1h already fully crossed — not stealth)
+    const row3 = makeRow("E", { "15m": 1, "1h": 2, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 0 });
     expect(rowPassesTFFilters(row3, p.filters)).toBe(false);
+    // 15m=0 fails
+    const row4 = makeRow("F", { "15m": 0, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
+    expect(rowPassesTFFilters(row4, p.filters)).toBe(false);
   });
 
   it("cascade preset requires both 15m=2 and 1h=2", () => {
     const p = TF_FILTER_PRESETS.find((p) => p.id === "cascade")!;
     expect(p.filters["15m"]).toBe("2");
     expect(p.filters["1h"]).toBe("2");
+    expect(p.filters["1wk"]).toBe("any");
+    expect(p.filters["1mo"]).toBe("any");
 
-    // Both 15m=2 and 1h=2 passes
-    const row = makeRow("E", { "15m": 2, "1h": 2, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
+    // Both 15m=2 and 1h=2 passes (even with wk/mo already bullish)
+    const row = makeRow("E", { "15m": 2, "1h": 2, "4h": 0, "12h": 0, "1d": 2, "1wk": 2, "1mo": 2 });
     expect(rowPassesTFFilters(row, p.filters)).toBe(true);
     // 1h=1 fails cascade
-    const row2 = makeRow("F", { "15m": 2, "1h": 1, "4h": 0, "12h": 0, "1d": 0, "1wk": 0, "1mo": 0 });
+    const row2 = makeRow("F", { "15m": 2, "1h": 1, "4h": 0, "12h": 0, "1d": 2, "1wk": 2, "1mo": 0 });
     expect(rowPassesTFFilters(row2, p.filters)).toBe(false);
   });
 });
@@ -655,31 +660,32 @@ describe("preset vs Phase 1 pipeline compatibility", () => {
   }
 
   it("every preset matches at least one Phase-1-consistent row", () => {
-    // Realistic rows that would pass Phase 1 gates (daily M2 >= 1)
+    // Realistic Phase 1 candidates: recovering for weeks/months, so wk/mo often already bullish (score 2).
+    // Phase 1 gates: pctFromAth >= 20%, higher lows, near breakout, above EMAs → daily M2 >= 1.
     const phase1Rows: MultiTFM2Result[] = [
-      // Stock turning: 15m crossed, daily partially turning, wk/mo still bearish
+      // Typical Phase 1 candidate: recovering stock, wk/mo already turned
       makeLeadingRow("TURN", {
         "15m": { score: 2, volRatio: 2.0, conv: false },
         "1h": { score: 1, conv: true },
-        "4h": { score: 0 }, "12h": { score: 0 },
+        "4h": { score: 1 }, "12h": { score: 1 },
         "1d": { score: 1 },
-        "1wk": { score: 0 }, "1mo": { score: 0 },
+        "1wk": { score: 2 }, "1mo": { score: 2 },
       }),
-      // Fresh cascade: both 15m + 1h crossed, daily partial, wk/mo zero
+      // Fresh cascade: both 15m + 1h just crossed
       makeLeadingRow("CASC", {
         "15m": { score: 2 },
         "1h": { score: 2 },
-        "4h": { score: 0 }, "12h": { score: 0 },
-        "1d": { score: 1 },
-        "1wk": { score: 0 }, "1mo": { score: 0 },
+        "4h": { score: 1 }, "12h": { score: 0 },
+        "1d": { score: 2 },
+        "1wk": { score: 2 }, "1mo": { score: 1 },
       }),
       // Pre-cross setup: 15m converging with volume, not yet crossed
       makeLeadingRow("PREX", {
         "15m": { score: 0, volRatio: 2.5, conv: true },
         "1h": { score: 0 },
-        "4h": { score: 0 }, "12h": { score: 0 },
+        "4h": { score: 1 }, "12h": { score: 0 },
         "1d": { score: 1 },
-        "1wk": { score: 0 }, "1mo": { score: 0 },
+        "1wk": { score: 2 }, "1mo": { score: 1 },
       }),
       // Coiled: 1h squeezed + converging
       makeLeadingRow("COIL", {
@@ -687,15 +693,23 @@ describe("preset vs Phase 1 pipeline compatibility", () => {
         "1h": { score: 0, sqz: true, conv: true },
         "4h": { score: 0 }, "12h": { score: 0 },
         "1d": { score: 1 },
-        "1wk": { score: 0 }, "1mo": { score: 0 },
+        "1wk": { score: 1 }, "1mo": { score: 0 },
       }),
-      // Confirmed: 15m + 1h both active, wk/mo lagging
+      // Stealth: 15m bullish but 1h hasn't fully turned yet
+      makeLeadingRow("STLTH", {
+        "15m": { score: 1 },
+        "1h": { score: 0 },
+        "4h": { score: 1 }, "12h": { score: 0 },
+        "1d": { score: 2 },
+        "1wk": { score: 2 }, "1mo": { score: 2 },
+      }),
+      // Confirmed: 15m + 1h both active
       makeLeadingRow("CONF", {
         "15m": { score: 2 },
         "1h": { score: 1 },
         "4h": { score: 1 }, "12h": { score: 0 },
         "1d": { score: 2 },
-        "1wk": { score: 1 }, "1mo": { score: 0 },
+        "1wk": { score: 2 }, "1mo": { score: 2 },
       }),
     ];
 
