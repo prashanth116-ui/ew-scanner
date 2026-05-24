@@ -1743,44 +1743,35 @@ const MultiTFTable = memo(function MultiTFTable({
                     );
                   }
                   const sd = scoreDisplay(tfr.scoreM2);
-                  // Leading indicator badges
-                  const hasVol = tfr.volumeRatio != null && tfr.volumeRatio > 1.5;
-                  const hasConv = tfr.converging === true;
-                  const hasSqz = tfr.squeezed === true;
-                  const hasDisp = tfr.displacementNearCross === true;
-                  const hasFvg = tfr.fvgNearCross === true;
+                  // Leading indicator badges (only when toggle is on)
+                  const hasVol = showLeading && tfr.volumeRatio != null && tfr.volumeRatio > 1.5;
+                  const hasConv = showLeading && tfr.converging === true;
+                  const hasSqz = showLeading && tfr.squeezed === true;
                   return (
                     <td key={tf} className="py-1.5 px-1.5 text-center">
                       <div className="flex flex-col items-center gap-0.5">
                         <div
                           className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${trendColor(tfr.trendStrength)}`}
-                          title={`Score: ${tfr.scoreM2}/2 | Trend: ${tfr.trendStrength ?? "n/a"} | Cross: ${tfr.bullishCross ? "yes" : "no"} | Above: ${tfr.priceAboveBoth ? "yes" : "no"} | Bars: ${tfr.dataPoints ?? "?"}`}
+                          title={`Score: ${tfr.scoreM2}/2 | Trend: ${tfr.trendStrength ?? "n/a"} | Cross: ${tfr.bullishCross ? "yes" : "no"} | Above: ${tfr.priceAboveBoth ? "yes" : "no"} | Disp: ${tfr.displacementNearCross ? "yes" : "no"} | FVG: ${tfr.fvgNearCross ? "yes" : "no"} | Bars: ${tfr.dataPoints ?? "?"}`}
                         >
                           <span className={sd.color}>{sd.text}</span>
                           <span className="text-[9px] opacity-70">
                             {tfr.trendStrength?.[0]?.toUpperCase() ?? "?"}
                           </span>
                         </div>
-                        {/* Quality + Leading badges */}
-                        {(showLeading || hasDisp || hasFvg) && (hasVol || hasConv || hasSqz || hasDisp || hasFvg) && (
+                        {(hasVol || hasConv || hasSqz) && (
                           <div className="flex items-center gap-0.5 flex-wrap justify-center">
-                            {hasDisp && (
-                              <span className="text-[8px] text-amber-400/80" title="Displacement near cross">D</span>
-                            )}
-                            {hasFvg && (
-                              <span className="text-[8px] text-amber-400/80" title="FVG near cross">F</span>
-                            )}
-                            {showLeading && hasVol && (
+                            {hasVol && (
                               <span className="text-[8px] text-cyan-400" title={`Volume: ${tfr.volumeRatio!.toFixed(1)}x avg`}>
                                 V:{tfr.volumeRatio!.toFixed(1)}x
                               </span>
                             )}
-                            {showLeading && hasConv && (
+                            {hasConv && (
                               <span className="text-[8px] text-cyan-400" title={`EMAs converging${tfr.spreadDelta != null ? ` (${tfr.spreadDelta.toFixed(3)}%)` : ""}`}>
                                 {"\u2197"}
                               </span>
                             )}
-                            {showLeading && hasSqz && (
+                            {hasSqz && (
                               <span className="text-[8px] text-cyan-400" title={`Squeezed: ATR ratio ${tfr.atrRatio?.toFixed(2)}`}>
                                 {"\u25C6"}
                               </span>
