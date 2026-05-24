@@ -28,7 +28,7 @@ import type {
 } from "@/lib/prerun/types";
 import type { EmaTimeframe } from "@/lib/prerun/types";
 import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES } from "@/lib/prerun/types";
-import { type TFFilterValue, TF_FILTER_OPTIONS, INIT_TF_FILTERS, TF_FILTER_PRESETS, rowPassesTFFilters } from "@/lib/prerun/tf-filters";
+import { type TFFilterValue, type TrendFilterValue, TF_FILTER_OPTIONS, TREND_FILTER_OPTIONS, INIT_TF_FILTERS, INIT_TREND_FILTERS, TF_FILTER_PRESETS, rowPassesTFFilters } from "@/lib/prerun/tf-filters";
 import {
   savePreRunScan,
   loadPreRunScans,
@@ -1388,10 +1388,11 @@ const MultiTFTable = memo(function MultiTFTable({
   progress: string;
 }) {
   const [tfFilters, setTFFilters] = useState<Record<EmaTimeframe, TFFilterValue>>({ ...INIT_TF_FILTERS });
+  const [trendFilters, setTrendFilters] = useState<Record<EmaTimeframe, TrendFilterValue>>({ ...INIT_TREND_FILTERS });
 
   const activeFilterCount = useMemo(
-    () => TF_LABELS.filter((tf) => tfFilters[tf] !== "any").length,
-    [tfFilters],
+    () => TF_LABELS.filter((tf) => tfFilters[tf] !== "any" || trendFilters[tf] !== "any").length,
+    [tfFilters, trendFilters],
   );
 
   // Sort by total M2 score across timeframes (descending), tie-break by ticker
@@ -1415,9 +1416,9 @@ const MultiTFTable = memo(function MultiTFTable({
         }
         return { ...r, totalScore, bestTF };
       })
-      .filter((row) => rowPassesTFFilters(row, tfFilters))
+      .filter((row) => rowPassesTFFilters(row, tfFilters, trendFilters))
       .sort((a, b) => b.totalScore - a.totalScore || a.ticker.localeCompare(b.ticker));
-  }, [results, tfFilters]);
+  }, [results, tfFilters, trendFilters]);
 
   if (results.size === 0 && !scanning) return null;
 
@@ -1434,11 +1435,20 @@ const MultiTFTable = memo(function MultiTFTable({
           </span>
           {TF_FILTER_PRESETS.map((p) => {
             const isActive = activeFilterCount > 0 &&
-              TF_LABELS.every((tf) => tfFilters[tf] === p.filters[tf]);
+              TF_LABELS.every((tf) => tfFilters[tf] === p.filters[tf]) &&
+              TF_LABELS.every((tf) => trendFilters[tf] === (p.trendFilters?.[tf] ?? "any"));
             return (
               <button
                 key={p.id}
-                onClick={() => setTFFilters(isActive ? { ...INIT_TF_FILTERS } : { ...p.filters })}
+                onClick={() => {
+                  if (isActive) {
+                    setTFFilters({ ...INIT_TF_FILTERS });
+                    setTrendFilters({ ...INIT_TREND_FILTERS });
+                  } else {
+                    setTFFilters({ ...p.filters });
+                    setTrendFilters(p.trendFilters ? { ...p.trendFilters } : { ...INIT_TREND_FILTERS });
+                  }
+                }}
                 title={p.description}
                 className={`text-[10px] rounded px-1.5 py-0.5 border transition-colors ${
                   isActive
@@ -1456,7 +1466,7 @@ const MultiTFTable = memo(function MultiTFTable({
                 {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""}
               </span>
               <button
-                onClick={() => setTFFilters({ ...INIT_TF_FILTERS })}
+                onClick={() => { setTFFilters({ ...INIT_TF_FILTERS }); setTrendFilters({ ...INIT_TREND_FILTERS }); }}
                 className="text-[10px] text-[#888] hover:text-white transition-colors"
               >
                 Reset
@@ -1493,6 +1503,23 @@ const MultiTFTable = memo(function MultiTFTable({
                       }`}
                     >
                       {TF_FILTER_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={trendFilters[tf]}
+                      onChange={(e) =>
+                        setTrendFilters((prev) => ({ ...prev, [tf]: e.target.value as TrendFilterValue }))
+                      }
+                      className={`w-[46px] text-[9px] rounded px-0.5 py-0 border bg-[#0f0f0f] outline-none cursor-pointer ${
+                        trendFilters[tf] !== "any"
+                          ? "border-purple-500/50 text-purple-300"
+                          : "border-[#333] text-[#666]"
+                      }`}
+                    >
+                      {TREND_FILTER_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
                         </option>
