@@ -11,13 +11,10 @@ import {
   INIT_VOL_FILTERS,
   TF_FILTER_OPTIONS,
   TREND_FILTER_OPTIONS,
-  BOOL_FILTER_OPTIONS,
   VOL_FILTER_OPTIONS,
   TF_FILTER_PRESETS,
   type TFFilterValue,
   type TrendFilterValue,
-  type BoolFilterValue,
-  type VolFilterValue,
   type LeadingFilters,
 } from "./tf-filters";
 import type { MultiTFM2Result, M2TimeframeResult } from "./types";
@@ -370,11 +367,6 @@ describe("constants", () => {
     }
   });
 
-  it("BOOL_FILTER_OPTIONS has 3 options", () => {
-    expect(BOOL_FILTER_OPTIONS).toHaveLength(3);
-    expect(BOOL_FILTER_OPTIONS.map((o) => o.value)).toEqual(["any", "yes", "no"]);
-  });
-
   it("VOL_FILTER_OPTIONS has 4 options", () => {
     expect(VOL_FILTER_OPTIONS).toHaveLength(4);
     expect(VOL_FILTER_OPTIONS.map((o) => o.value)).toEqual(["any", "gt1.5", "gt2", "gt3"]);
@@ -536,7 +528,7 @@ describe("matchesVolFilter", () => {
 describe("rowPassesTFFilters with leading filters", () => {
   function makeLeadingRow(
     ticker: string,
-    data: Record<string, { score: number; volRatio?: number; conv?: boolean; sqz?: boolean; disp?: boolean; fvg?: boolean }>,
+    data: Record<string, { score: number; volRatio?: number; conv?: boolean; sqz?: boolean }>,
   ): MultiTFM2Result {
     const timeframes: MultiTFM2Result["timeframes"] = {};
     for (const [tf, d] of Object.entries(data)) {
@@ -544,8 +536,6 @@ describe("rowPassesTFFilters with leading filters", () => {
         volumeRatio: d.volRatio ?? null,
         converging: d.conv ?? null,
         squeezed: d.sqz ?? null,
-        displacementNearCross: d.disp ?? null,
-        fvgNearCross: d.fvg ?? null,
       });
     }
     return { ticker, timeframes };
@@ -597,23 +587,6 @@ describe("rowPassesTFFilters with leading filters", () => {
       squeeze: { ...INIT_BOOL_FILTERS, "1h": "yes" },
     };
     expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, leading)).toBe(true);
-  });
-
-  it("displacement filter works", () => {
-    const row = makeLeadingRow("W", {
-      "15m": { score: 2, disp: true, fvg: false },
-      "1h": { score: 0 }, "4h": { score: 0 }, "12h": { score: 0 },
-      "1d": { score: 0 }, "1wk": { score: 0 }, "1mo": { score: 0 },
-    });
-    const leading: LeadingFilters = {
-      disp: { ...INIT_BOOL_FILTERS, "15m": "yes" },
-    };
-    expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, leading)).toBe(true);
-
-    const leading2: LeadingFilters = {
-      fvg: { ...INIT_BOOL_FILTERS, "15m": "yes" },
-    };
-    expect(rowPassesTFFilters(row, { ...INIT_TF_FILTERS }, undefined, leading2)).toBe(false);
   });
 
   it("combined score + leading filters work", () => {

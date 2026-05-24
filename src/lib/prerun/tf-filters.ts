@@ -25,12 +25,6 @@ export const TREND_FILTER_OPTIONS: { value: TrendFilterValue; label: string }[] 
   { value: "gte_weak", label: "\u2265Weak" },
 ];
 
-export const BOOL_FILTER_OPTIONS: { value: BoolFilterValue; label: string }[] = [
-  { value: "any", label: "Any" },
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-];
-
 export const VOL_FILTER_OPTIONS: { value: VolFilterValue; label: string }[] = [
   { value: "any", label: "Any" },
   { value: "gt1.5", label: ">1.5x" },
@@ -55,8 +49,6 @@ export const INIT_VOL_FILTERS: Record<EmaTimeframe, VolFilterValue> = {
 };
 
 export interface LeadingFilters {
-  disp?: Record<EmaTimeframe, BoolFilterValue>;
-  fvg?: Record<EmaTimeframe, BoolFilterValue>;
   vol?: Record<EmaTimeframe, VolFilterValue>;
   conv?: Record<EmaTimeframe, BoolFilterValue>;
   squeeze?: Record<EmaTimeframe, BoolFilterValue>;
@@ -185,21 +177,16 @@ export function rowPassesTFFilters(
   return ALL_EMA_TIMEFRAMES.every((tf) => {
     const scoreFilter = filters[tf];
     const trendFilter = trendFilters?.[tf] ?? "any";
-    const dispFilter = leadingFilters?.disp?.[tf] ?? "any";
-    const fvgFilter = leadingFilters?.fvg?.[tf] ?? "any";
     const volFilter = leadingFilters?.vol?.[tf] ?? "any";
     const convFilter = leadingFilters?.conv?.[tf] ?? "any";
     const squeezeFilter = leadingFilters?.squeeze?.[tf] ?? "any";
 
     if (scoreFilter === "any" && trendFilter === "any" &&
-        dispFilter === "any" && fvgFilter === "any" &&
         volFilter === "any" && convFilter === "any" && squeezeFilter === "any") return true;
 
     const tfr = row.timeframes[tf];
     if (scoreFilter !== "any" && !matchesTFFilter(tfr?.scoreM2 ?? null, scoreFilter)) return false;
     if (trendFilter !== "any" && !matchesTrendFilter(tfr?.trendStrength ?? null, trendFilter)) return false;
-    if (dispFilter !== "any" && !matchesBoolFilter(tfr?.displacementNearCross ?? null, dispFilter)) return false;
-    if (fvgFilter !== "any" && !matchesBoolFilter(tfr?.fvgNearCross ?? null, fvgFilter)) return false;
     if (volFilter !== "any" && !matchesVolFilter(tfr?.volumeRatio ?? null, volFilter)) return false;
     if (convFilter !== "any" && !matchesBoolFilter(tfr?.converging ?? null, convFilter)) return false;
     if (squeezeFilter !== "any" && !matchesBoolFilter(tfr?.squeezed ?? null, squeezeFilter)) return false;
