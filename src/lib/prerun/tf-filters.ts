@@ -67,57 +67,55 @@ export const TF_FILTER_PRESETS: TFFilterPreset[] = [
   {
     id: "early_mover",
     label: "Early Mover",
-    description: "15m turning bullish with daily confirmation — catch short-term momentum",
+    description: "1h bullish with daily confirmation — short-term momentum aligning with trend",
     filters: {
-      "15m": "gte1", "1h": "any", "4h": "any", "12h": "any", "1d": "gte1", "1wk": "any", "1mo": "any",
+      "15m": "any", "1h": "gte1", "4h": "any", "12h": "any", "1d": "gte1", "1wk": "any", "1mo": "any",
     },
   },
   {
     id: "confirmed",
     label: "Confirmed",
-    description: "15m + 1h both aligned bullish — multi-timeframe confirmation",
+    description: "1h + 4h both aligned bullish — multi-timeframe confirmation",
     filters: {
-      "15m": "gte1", "1h": "gte1", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
+      "15m": "any", "1h": "gte1", "4h": "gte1", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
     },
   },
   {
     id: "stealth",
     label: "Stealth",
-    description: "15m bullish but 1h hasn't turned yet — earliest signal before hourly confirms",
+    description: "1h bullish but 4h hasn't turned yet — early signal before higher TF confirms",
     filters: {
-      "15m": "gte1", "1h": "lte1", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
+      "15m": "any", "1h": "gte1", "4h": "lte1", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
     },
   },
   {
     id: "cascade",
     label: "Cascade",
-    description: "Fresh crosses on 15m + 1h (rare — both must score 2 simultaneously)",
+    description: "Fresh crosses on 1h + 4h (rare — both must score 2 simultaneously)",
     filters: {
-      "15m": "2", "1h": "2", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
+      "15m": "any", "1h": "2", "4h": "2", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
     },
   },
   {
     id: "pre_cross",
     label: "Pre-Cross",
-    description: "15m converging + vol >1.5x, not yet crossed \u2014 setup forming before EMA cross (scan-time sensitive)",
+    description: "1h converging toward cross — setup forming before EMA crossover",
     filters: {
-      "15m": "lte1", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
+      "15m": "any", "1h": "lte1", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
     },
     leadingFilters: {
-      conv: { "15m": "yes", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any" },
-      vol: { "15m": "gt1.5", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any" },
+      conv: { "15m": "any", "1h": "yes", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any" },
     },
   },
   {
     id: "coiled",
     label: "Coiled",
-    description: "1h squeezed + converging \u2014 energy building before breakout",
+    description: "4h volatility squeezed — energy building before breakout",
     filters: {
       "15m": "any", "1h": "any", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any",
     },
     leadingFilters: {
-      squeeze: { "15m": "any", "1h": "yes", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any" },
-      conv: { "15m": "any", "1h": "yes", "4h": "any", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any" },
+      squeeze: { "15m": "any", "1h": "any", "4h": "yes", "12h": "any", "1d": "any", "1wk": "any", "1mo": "any" },
     },
   },
 ];

@@ -136,28 +136,28 @@ describe("rowPassesTFFilters", () => {
     expect(rowPassesTFFilters(row, filtersFail)).toBe(false);
   });
 
-  // The key preset: Early Mover (15m≥1, 1d≥1, rest any)
+  // The key preset: Early Mover (1h≥1, 1d≥1, rest any)
   describe("preset: Early Mover", () => {
     const earlyMover = TF_FILTER_PRESETS.find((p) => p.id === "early_mover")!;
     const preset = earlyMover.filters;
 
-    it("passes: 15m=1, daily=1, any wk/mo", () => {
+    it("passes: 1h=1, daily=1, any 15m/wk/mo", () => {
       const row = makeRow("TSLA", {
-        "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2,
+        "15m": 0, "1h": 1, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
-    it("passes: 15m=2 (strong), daily=2, higher TFs mix", () => {
+    it("passes: 1h=2 (strong), daily=2, higher TFs mix", () => {
       const row = makeRow("NVDA", {
-        "15m": 2, "1h": 1, "4h": 1, "12h": 0, "1d": 2, "1wk": 1, "1mo": 0,
+        "15m": 0, "1h": 2, "4h": 1, "12h": 0, "1d": 2, "1wk": 1, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
-    it("fails: 15m=0 (bearish on 15m)", () => {
+    it("fails: 1h=0 (hourly not bullish)", () => {
       const row = makeRow("AMD", {
-        "15m": 0, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
+        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
@@ -169,16 +169,16 @@ describe("rowPassesTFFilters", () => {
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
 
-    it("passes: 15m=1 with 1wk=2 (weekly already bullish — no longer excluded)", () => {
+    it("passes: 1h=1 with 1wk=2 (weekly already bullish)", () => {
       const row = makeRow("GOOG", {
-        "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 0,
+        "15m": 0, "1h": 1, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
-    it("fails: missing 15m data treated as not passing", () => {
+    it("fails: missing 1h data treated as not passing", () => {
       const row = makeRow("COIN", {
-        "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
+        "15m": 2, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(false);
     });
@@ -213,22 +213,22 @@ describe("rowPassesTFFilters", () => {
 
     it("passes when 4h is missing (4h is 'any' in preset)", () => {
       const row = makeRow("PLTR", {
-        "15m": 2, "1h": 0, /* 4h missing */ "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
+        "15m": 0, "1h": 2, /* 4h missing */ "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
     it("passes when 1wk is missing (1wk is 'any' in preset)", () => {
       const row = makeRow("PLTR", {
-        "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 1, /* 1wk missing */ "1mo": 0,
+        "15m": 0, "1h": 1, "4h": 0, "12h": 0, "1d": 1, /* 1wk missing */ "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
 
     it("passes when only unfiltered timeframes are missing", () => {
-      // 1h is "any" in the preset, so missing 1h doesn't matter
+      // 15m is "any" in the preset, so missing 15m doesn't matter
       const row = makeRow("SOFI", {
-        "15m": 2, /* 1h missing */ "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
+        /* 15m missing */ "1h": 2, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0,
       });
       expect(rowPassesTFFilters(row, preset)).toBe(true);
     });
@@ -406,78 +406,77 @@ describe("constants", () => {
   it("pre_cross preset exists with correct structure", () => {
     const preCross = TF_FILTER_PRESETS.find((p) => p.id === "pre_cross");
     expect(preCross).toBeDefined();
-    expect(preCross!.filters["15m"]).toBe("lte1"); // excludes already-crossed stocks
-    expect(preCross!.leadingFilters?.conv?.["15m"]).toBe("yes");
-    expect(preCross!.leadingFilters?.vol?.["15m"]).toBe("gt1.5");
+    expect(preCross!.filters["1h"]).toBe("lte1"); // excludes already-crossed stocks on 1h
+    expect(preCross!.leadingFilters?.conv?.["1h"]).toBe("yes"); // converging on 1h
   });
 
   it("coiled preset exists with correct structure", () => {
     const coiled = TF_FILTER_PRESETS.find((p) => p.id === "coiled");
     expect(coiled).toBeDefined();
-    expect(coiled!.leadingFilters?.squeeze?.["1h"]).toBe("yes");
-    expect(coiled!.leadingFilters?.conv?.["1h"]).toBe("yes");
+    expect(coiled!.leadingFilters?.squeeze?.["4h"]).toBe("yes"); // 4h volatility squeeze
   });
 
   it("early_mover preset exists with correct structure", () => {
     const em = TF_FILTER_PRESETS.find((p) => p.id === "early_mover");
     expect(em).toBeDefined();
-    expect(em!.filters["15m"]).toBe("gte1");
-    expect(em!.filters["1h"]).toBe("any");
+    expect(em!.filters["15m"]).toBe("any");
+    expect(em!.filters["1h"]).toBe("gte1");
     expect(em!.filters["4h"]).toBe("any");
     expect(em!.filters["1d"]).toBe("gte1");
     expect(em!.filters["1wk"]).toBe("any");
     expect(em!.filters["1mo"]).toBe("any");
   });
 
-  it("confirmed preset requires 15m≥1 and 1h≥1", () => {
+  it("confirmed preset requires 1h≥1 and 4h≥1", () => {
     const p = TF_FILTER_PRESETS.find((p) => p.id === "confirmed")!;
-    expect(p.filters["15m"]).toBe("gte1");
+    expect(p.filters["15m"]).toBe("any");
     expect(p.filters["1h"]).toBe("gte1");
-    expect(p.filters["4h"]).toBe("any");
+    expect(p.filters["4h"]).toBe("gte1");
     expect(p.filters["1wk"]).toBe("any");
 
-    // 1h=0 fails confirmed
-    const row0 = makeRow("A", { "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
+    // 4h=0 fails confirmed
+    const row0 = makeRow("A", { "15m": 1, "1h": 1, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
     expect(rowPassesTFFilters(row0, p.filters)).toBe(false);
-    // 1h=1 passes (even with wk/mo already bullish)
-    const row1 = makeRow("B", { "15m": 1, "1h": 1, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
+    // 4h=1 passes
+    const row1 = makeRow("B", { "15m": 0, "1h": 1, "4h": 1, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
     expect(rowPassesTFFilters(row1, p.filters)).toBe(true);
   });
 
-  it("stealth preset requires 15m≥1 and 1h≤1 (early signal before hourly confirms)", () => {
+  it("stealth preset requires 1h≥1 and 4h≤1 (early signal before higher TF confirms)", () => {
     const p = TF_FILTER_PRESETS.find((p) => p.id === "stealth")!;
-    expect(p.filters["15m"]).toBe("gte1");
-    expect(p.filters["1h"]).toBe("lte1");
-    expect(p.filters["4h"]).toBe("any");
+    expect(p.filters["15m"]).toBe("any");
+    expect(p.filters["1h"]).toBe("gte1");
+    expect(p.filters["4h"]).toBe("lte1");
     expect(p.filters["1wk"]).toBe("any");
     expect(p.filters["1mo"]).toBe("any");
 
-    // 15m=1, 1h=0 passes (1h hasn't turned yet)
-    const row = makeRow("C", { "15m": 1, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
+    // 1h=1, 4h=0 passes (4h hasn't turned yet)
+    const row = makeRow("C", { "15m": 0, "1h": 1, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
     expect(rowPassesTFFilters(row, p.filters)).toBe(true);
-    // 15m=1, 1h=1 passes (1h partial, ≤1)
-    const row2 = makeRow("D", { "15m": 1, "1h": 1, "4h": 1, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
+    // 1h=1, 4h=1 passes (4h partial, ≤1)
+    const row2 = makeRow("D", { "15m": 0, "1h": 1, "4h": 1, "12h": 0, "1d": 1, "1wk": 2, "1mo": 2 });
     expect(rowPassesTFFilters(row2, p.filters)).toBe(true);
-    // 15m=1, 1h=2 fails (1h already fully crossed — not stealth)
-    const row3 = makeRow("E", { "15m": 1, "1h": 2, "4h": 0, "12h": 0, "1d": 1, "1wk": 2, "1mo": 0 });
+    // 1h=1, 4h=2 fails (4h already fully crossed — not stealth)
+    const row3 = makeRow("E", { "15m": 0, "1h": 1, "4h": 2, "12h": 0, "1d": 1, "1wk": 2, "1mo": 0 });
     expect(rowPassesTFFilters(row3, p.filters)).toBe(false);
-    // 15m=0 fails
-    const row4 = makeRow("F", { "15m": 0, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
+    // 1h=0 fails
+    const row4 = makeRow("F", { "15m": 2, "1h": 0, "4h": 0, "12h": 0, "1d": 1, "1wk": 0, "1mo": 0 });
     expect(rowPassesTFFilters(row4, p.filters)).toBe(false);
   });
 
-  it("cascade preset requires both 15m=2 and 1h=2", () => {
+  it("cascade preset requires both 1h=2 and 4h=2", () => {
     const p = TF_FILTER_PRESETS.find((p) => p.id === "cascade")!;
-    expect(p.filters["15m"]).toBe("2");
+    expect(p.filters["15m"]).toBe("any");
     expect(p.filters["1h"]).toBe("2");
+    expect(p.filters["4h"]).toBe("2");
     expect(p.filters["1wk"]).toBe("any");
     expect(p.filters["1mo"]).toBe("any");
 
-    // Both 15m=2 and 1h=2 passes (even with wk/mo already bullish)
-    const row = makeRow("E", { "15m": 2, "1h": 2, "4h": 0, "12h": 0, "1d": 2, "1wk": 2, "1mo": 2 });
+    // Both 1h=2 and 4h=2 passes
+    const row = makeRow("E", { "15m": 0, "1h": 2, "4h": 2, "12h": 0, "1d": 2, "1wk": 2, "1mo": 2 });
     expect(rowPassesTFFilters(row, p.filters)).toBe(true);
-    // 1h=1 fails cascade
-    const row2 = makeRow("F", { "15m": 2, "1h": 1, "4h": 0, "12h": 0, "1d": 2, "1wk": 2, "1mo": 0 });
+    // 4h=1 fails cascade
+    const row2 = makeRow("F", { "15m": 0, "1h": 2, "4h": 1, "12h": 0, "1d": 2, "1wk": 2, "1mo": 0 });
     expect(rowPassesTFFilters(row2, p.filters)).toBe(false);
   });
 });
@@ -664,6 +663,7 @@ describe("preset vs Phase 1 pipeline compatibility", () => {
     // Phase 1 gates: pctFromAth >= 20%, higher lows, near breakout, above EMAs → daily M2 >= 1.
     const phase1Rows: MultiTFM2Result[] = [
       // Typical Phase 1 candidate: recovering stock, wk/mo already turned
+      // Matches: Early Mover (1h≥1, 1d≥1), Confirmed (1h≥1, 4h≥1)
       makeLeadingRow("TURN", {
         "15m": { score: 2, volRatio: 2.0, conv: false },
         "1h": { score: 1, conv: true },
@@ -671,39 +671,44 @@ describe("preset vs Phase 1 pipeline compatibility", () => {
         "1d": { score: 1 },
         "1wk": { score: 2 }, "1mo": { score: 2 },
       }),
-      // Fresh cascade: both 15m + 1h just crossed
+      // Fresh cascade: both 1h + 4h just crossed (score=2)
+      // Matches: Cascade (1h=2, 4h=2)
       makeLeadingRow("CASC", {
         "15m": { score: 2 },
         "1h": { score: 2 },
-        "4h": { score: 1 }, "12h": { score: 0 },
+        "4h": { score: 2 }, "12h": { score: 0 },
         "1d": { score: 2 },
         "1wk": { score: 2 }, "1mo": { score: 1 },
       }),
-      // Pre-cross setup: 15m converging with volume, not yet crossed
+      // Pre-cross setup: 1h converging, not yet crossed
+      // Matches: Pre-Cross (1h≤1, conv=yes on 1h)
       makeLeadingRow("PREX", {
-        "15m": { score: 0, volRatio: 2.5, conv: true },
-        "1h": { score: 0 },
+        "15m": { score: 0, volRatio: 2.5 },
+        "1h": { score: 0, conv: true },
         "4h": { score: 1 }, "12h": { score: 0 },
         "1d": { score: 1 },
         "1wk": { score: 2 }, "1mo": { score: 1 },
       }),
-      // Coiled: 1h squeezed + converging
+      // Coiled: 4h volatility squeezed — energy building before breakout
+      // Matches: Coiled (squeeze=yes on 4h)
       makeLeadingRow("COIL", {
         "15m": { score: 1 },
-        "1h": { score: 0, sqz: true, conv: true },
-        "4h": { score: 0 }, "12h": { score: 0 },
+        "1h": { score: 0 },
+        "4h": { score: 0, sqz: true }, "12h": { score: 0 },
         "1d": { score: 1 },
         "1wk": { score: 1 }, "1mo": { score: 0 },
       }),
-      // Stealth: 15m bullish but 1h hasn't fully turned yet
+      // Stealth: 1h bullish but 4h hasn't fully turned yet
+      // Matches: Stealth (1h≥1, 4h≤1)
       makeLeadingRow("STLTH", {
-        "15m": { score: 1 },
-        "1h": { score: 0 },
-        "4h": { score: 1 }, "12h": { score: 0 },
+        "15m": { score: 0 },
+        "1h": { score: 1 },
+        "4h": { score: 0 }, "12h": { score: 0 },
         "1d": { score: 2 },
         "1wk": { score: 2 }, "1mo": { score: 2 },
       }),
-      // Confirmed: 15m + 1h both active
+      // Confirmed: 1h + 4h both active
+      // Matches: Confirmed (1h≥1, 4h≥1), Early Mover (1h≥1, 1d≥1)
       makeLeadingRow("CONF", {
         "15m": { score: 2 },
         "1h": { score: 1 },
