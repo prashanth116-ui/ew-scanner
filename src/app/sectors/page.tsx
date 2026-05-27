@@ -19,10 +19,11 @@ import {
   getSnapshot,
 } from "@/lib/sector-rotation/history";
 import type { DailySnapshot, SectorSnapshot } from "@/lib/sector-rotation/history";
-import { loadScanResults } from "@/lib/prerun/storage";
+import { loadScanResults, loadScanResultsWithDate } from "@/lib/prerun/storage";
 import { SECTOR_UNIVERSE, getSectorForSymbol } from "@/data/sector-universe";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { compositeColor, compositeTextColor } from "@/lib/color-utils";
+import { useDebounce } from "@/lib/use-debounce";
 import { exportSectorsToExcel } from "@/lib/sector-rotation/export";
 
 // ── Color helpers ──
@@ -421,7 +422,16 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
 // ── #4: Regime Banner ──
 
 function RegimeBanner({ regime }: { regime: SectorRotationResult["regime"] }) {
-  if (!regime) return null;
+  if (!regime) {
+    return (
+      <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
+        <div className="flex items-center gap-2 text-sm text-[#666]">
+          <AlertTriangle className="h-4 w-4 text-[#555]" />
+          Macro regime data unavailable &mdash; VIX, yield, and DXY signals are not loading
+        </div>
+      </div>
+    );
+  }
   const regimeColor = regime.regime === "RISK_ON" ? "text-green-400" : regime.regime === "RISK_OFF" ? "text-red-400" : regime.regime === "INFLATIONARY" ? "text-amber-400" : "text-[#888]";
   const borderColor = regime.regime === "RISK_ON" ? "border-green-500/30" : regime.regime === "RISK_OFF" ? "border-red-500/30" : regime.regime === "INFLATIONARY" ? "border-amber-500/30" : "border-[#333]";
 
@@ -835,16 +845,17 @@ function AlertPanel({ sectors, data }: { sectors: SectorRotationScore[]; data: S
 
 function StockSearch({ allStocks }: { allStocks: StockInSector[] }) {
   const [query, setQuery] = useState("");
+  const debouncedQuery = useDebounce(query, 200);
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const results = useMemo(() => {
-    if (query.length < 1) return [];
-    const q = query.toUpperCase();
+    if (debouncedQuery.length < 1) return [];
+    const q = debouncedQuery.toUpperCase();
     return allStocks
       .filter((s) => s.ticker.includes(q) || s.companyName.toUpperCase().includes(q))
       .slice(0, 10);
-  }, [query, allStocks]);
+  }, [debouncedQuery, allStocks]);
 
   const showResults = focused && results.length > 0;
 
@@ -921,7 +932,7 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
   const [hovered, setHovered] = useState<string | null>(null);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[500px]" role="img" aria-label="Relative Rotation Graph">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Relative Rotation Graph">
       <rect x={cx} y={PAD} width={W - PAD - cx} height={cy - PAD} fill="rgba(74,222,128,0.05)" />
       <rect x={PAD} y={PAD} width={cx - PAD} height={cy - PAD} fill="rgba(34,211,238,0.05)" />
       <rect x={PAD} y={cy} width={cx - PAD} height={H - PAD - cy} fill="rgba(248,113,113,0.05)" />
@@ -987,7 +998,7 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns }: { sector: Se
               <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${quadrantColor(sector.quadrant)}`}>{sector.quadrant}</span>
               {(() => { const action = getTradingAction(sector); const badge = actionBadge(action); return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>; })()}
               {sector.stealthAccumulation && <span className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-400">STEALTH</span>}
-              {(sector.dataQuality ?? 100) < 100 && <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">{sector.dataQuality ?? 100}% data</span>}
+              {(sector.dataQuality ?? 100) < 100 && <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400" title={`Scoring factors: momentum, acceleration, Mansfield RS, CMF (always available), breadth, smart money. ${sector.dataQualityBreakdown ? `Missing: ${[!sector.dataQualityBreakdown.breadth && "breadth", !sector.dataQualityBreakdown.smartMoney && "smart money"].filter(Boolean).join(", ")}. ` : ""}Weights are redistributed across available factors.`}>{sector.dataQuality ?? 100}% data</span>}
             </div>
           </div>
         </div>
@@ -1023,7 +1034,7 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns }: { sector: Se
             <div className="flex justify-between"><span className="text-[#888]">Insider Buys</span><span className={sector.aggregateInsiderBuys > 0 ? "text-green-400" : "text-[#a0a0a0]"}>{sector.aggregateInsiderBuys}</span></div>
             <div className="flex justify-between"><span className="text-[#888]">Avg P/C Ratio</span><span className="text-white">{sector.aggregatePCR !== null ? sector.aggregatePCR : "N/A"}</span></div>
             <div className="flex justify-between"><span className="text-[#888]">Earnings Beat %</span><span className="text-white">{sector.earningsBeatPct}%</span></div>
-            <div className="flex justify-between"><span className="text-[#888]">Smart Money Score</span><span className={compositeTextColor(sector.smartMoneyScore)}>{sector.smartMoneyScore}/100</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Smart Money Score</span><span className={sector.dataQualityBreakdown?.smartMoney === false ? "text-[#555]" : compositeTextColor(sector.smartMoneyScore)}>{sector.dataQualityBreakdown?.smartMoney === false ? "No data" : `${sector.smartMoneyScore}/100`}</span></div>
             <div className="flex justify-between"><span className="text-[#888]">RS-Ratio / Momentum</span><span className="text-white">{sector.rsRatio} / {sector.rsMomentum}</span></div>
           </div>
           {stocks.length > 0 && (
@@ -1049,10 +1060,12 @@ export default function SectorRotationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [scanResults, setScanResults] = useState<PreRunResult[]>([]);
+  const [scanResultsDate, setScanResultsDate] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("score");
   const [compareDate, setCompareDate] = useState<string | null>(null);
   const [history, setHistory] = useState<DailySnapshot[]>([]);
   const [copiedToast, setCopiedToast] = useState(false);
+  const [loadingPhase, setLoadingPhase] = useState(0);
 
   useEffect(() => { setHistory(loadHistory()); }, []);
   useEffect(() => { if (data) setHistory(loadHistory()); }, [data]);
@@ -1080,7 +1093,11 @@ export default function SectorRotationPage() {
     return { improved, declined, unchanged };
   }, [comparisonMap, data]);
 
-  useEffect(() => { setScanResults(loadScanResults()); }, []);
+  useEffect(() => {
+    const { results, date } = loadScanResultsWithDate();
+    setScanResults(results);
+    setScanResultsDate(date);
+  }, []);
 
   // Build stock list per sector with RS Accel (#2)
   const stocksBySector = useMemo(() => {
@@ -1180,12 +1197,26 @@ export default function SectorRotationPage() {
     return () => clearTimeout(timer);
   }, [loading, data]);
 
+  // Loading phase cycling
+  const LOADING_PHASES = ["Fetching ETF data", "Fetching stock quotes", "Computing sector scores", "Building correlation matrix"];
+  useEffect(() => {
+    if (!loading || data) { setLoadingPhase(0); return; }
+    const timer = setInterval(() => setLoadingPhase((p) => (p + 1) % LOADING_PHASES.length), 8000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, data]);
+
   if (loading && !data) {
     return (
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
-        <p className="mt-4 text-[#888]">Calculating sector rotation...</p>
-        <p className="mt-1 text-xs text-[#555]">Fetching 1-year data for 13 ETFs + batch quotes for ~1,378 stocks</p>
+        <p className="mt-4 text-[#888]">{LOADING_PHASES[loadingPhase]}...</p>
+        <p className="mt-1 text-xs text-[#555]">13 ETFs + ~1,378 stock quotes</p>
+        <div className="mt-2 flex justify-center gap-1.5">
+          {LOADING_PHASES.map((_, i) => (
+            <div key={i} className={`h-1.5 w-1.5 rounded-full transition-colors ${i <= loadingPhase ? "bg-[#5ba3e6]" : "bg-[#333]"}`} />
+          ))}
+        </div>
         {loadingTimeout && (
           <div className="mt-6">
             <p className="text-xs text-amber-400">This is taking longer than expected.</p>
@@ -1222,7 +1253,7 @@ export default function SectorRotationPage() {
           <div className="mt-1 flex items-center gap-3">
             <DataAgeBadge calculatedAt={data.calculatedAt} />
             <span className="text-xs text-[#555]">{new Date(data.calculatedAt).toLocaleString()}</span>
-            {data.stockQuotes && <span className="text-xs text-[#555]">{Object.keys(data.stockQuotes).length} quotes</span>}
+            {data.stockQuotes && <span className="text-xs text-[#555]">{Object.keys(data.stockQuotes).length} quotes{data.quotesAsOf ? ` as of ${new Date(data.quotesAsOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}</span>}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1341,7 +1372,7 @@ export default function SectorRotationPage() {
                 </div>
                 <div className="mt-1.5 flex items-center justify-between">
                   {(() => { const action = getTradingAction(s); const badge = actionBadge(action); return <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>{badge.label}</span>; })()}
-                  {(s.dataQuality ?? 100) < 100 && <span className="text-[10px] text-amber-400/70" title={`${s.dataQuality ?? 100}% of composite factors have real data`}>{s.dataQuality ?? 100}% data</span>}
+                  {(s.dataQuality ?? 100) < 100 && <span className="text-[10px] text-amber-400/70" title={`Scoring factors: momentum, acceleration, Mansfield RS, CMF (always available), breadth, smart money. ${s.dataQualityBreakdown ? `Missing: ${[!s.dataQualityBreakdown.breadth && "breadth", !s.dataQualityBreakdown.smartMoney && "smart money"].filter(Boolean).join(", ")}. ` : ""}Weights are redistributed across available factors.`}>{s.dataQuality ?? 100}% data</span>}
                 </div>
                 {(() => {
                   const prev = comparisonMap?.get(s.sector);
@@ -1434,8 +1465,24 @@ export default function SectorRotationPage() {
       {/* Panel 5: Sector Detail Cards */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-white">Sector Details</h2>
-          {scanResults.length === 0 && <span className="text-xs text-[#555]">Run a Pre-Run scan to see stock-level data</span>}
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-white">Sector Details</h2>
+            <span className="text-[10px] text-[#555]" title="Data quality % shows how many of the 6 scoring factors (momentum, acceleration, Mansfield RS, CMF, breadth, smart money) have real data. Missing factors have their weights redistributed.">% = missing data</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {scanResultsDate && (() => {
+              const ageMs = Date.now() - new Date(scanResultsDate).getTime();
+              const ageHours = ageMs / (1000 * 60 * 60);
+              if (ageHours > 24) return (
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
+                  <AlertTriangle className="h-3 w-3" />
+                  PreRun scan data is {Math.floor(ageHours / 24)}d old
+                </span>
+              );
+              return null;
+            })()}
+            {scanResults.length === 0 && <span className="text-xs text-[#555]">Run a Pre-Run scan to see stock-level data</span>}
+          </div>
         </div>
         <div className="space-y-2">
           {sortedSectors.map((s) => (

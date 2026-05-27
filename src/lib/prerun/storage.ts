@@ -277,6 +277,18 @@ export function loadScanResults(): PreRunResult[] {
   }
 }
 
+export function loadScanResultsWithDate(): { results: PreRunResult[]; date: string | null } {
+  if (!isClient()) return { results: [], date: null };
+  try {
+    const raw = localStorage.getItem(SCAN_RESULTS_KEY);
+    if (!raw) return { results: [], date: null };
+    const cache = JSON.parse(raw) as ScanResultsCache;
+    return { results: cache.results ?? [], date: cache.date ?? null };
+  } catch {
+    return { results: [], date: null };
+  }
+}
+
 export function saveScanResults(results: PreRunResult[]): void {
   if (!isClient()) return;
   const cache: ScanResultsCache = {

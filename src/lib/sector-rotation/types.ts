@@ -36,6 +36,14 @@ export interface SectorRotationScore {
   // Composite
   compositeScore: number;
   dataQuality: number;         // 0-100, what % of composite factors have real data
+  dataQualityBreakdown?: {
+    momentum: boolean;
+    acceleration: boolean;
+    mansfield: boolean;
+    cmf: boolean;
+    breadth: boolean;
+    smartMoney: boolean;
+  };
   trend: "UP" | "DOWN" | "FLAT";
   trendArrow: string;
   stealthAccumulation: boolean;
@@ -60,6 +68,8 @@ export interface SectorRotationResult {
     sector: string;
     stocks: { ticker: string; score: number; reasons: string[] }[];
   }[];
+  /** ISO timestamp when batch stock quotes were fetched. */
+  quotesAsOf?: string;
   /** Per-stock quote data from batch fetch (price vs 50d SMA). */
   stockQuotes: Record<string, { price: number; sma50: number | null; sma200: number | null; pctFromSma50: number | null; rsAccel: number | null; volume: number; avgVolume10d: number }>;
   correlationBreak: boolean;

@@ -294,7 +294,7 @@ function computeComposite(
   normalized: Record<string, number>,
   hasBreadth: boolean,
   hasSmartMoney: boolean
-): { score: number; dataQuality: number } {
+): { score: number; dataQuality: number; breakdown: { momentum: boolean; acceleration: boolean; mansfield: boolean; cmf: boolean; breadth: boolean; smartMoney: boolean } } {
   const available: Record<string, number> = {
     momentum: BASE_WEIGHTS.momentum,
     acceleration: BASE_WEIGHTS.acceleration,
@@ -314,7 +314,15 @@ function computeComposite(
   }
 
   const dataQuality = Math.round((totalAvailable / totalBase) * 100);
-  return { score: Math.round(score), dataQuality };
+  const breakdown = {
+    momentum: true,
+    acceleration: true,
+    mansfield: true,
+    cmf: true,
+    breadth: hasBreadth,
+    smartMoney: hasSmartMoney,
+  };
+  return { score: Math.round(score), dataQuality, breakdown };
 }
 
 // ── Cache ──
@@ -349,6 +357,8 @@ export async function calculateSectorRotation(
     Promise.allSettled(allETFs.map((etf) => fetchYahooChart(etf, "1y", "1d"))),
     fetchBatchQuotes(allStockSymbols),
   ]);
+
+  const quotesAsOf = new Date().toISOString();
 
   const charts = new Map<string, ChartData>();
   for (let i = 0; i < allETFs.length; i++) {
@@ -465,8 +475,8 @@ export async function calculateSectorRotation(
     // Breadth divergence: > 50% stocks healthy but sector ETF declining
     const breadthDivergence = breadthPct !== null && breadthPct > 50 && roc20d < 0;
 
-    // Acceleration inflection: 2nd derivative positive but price still negative
-    const accelerationInflection = accel > 0 && roc20d < 0;
+    // Acceleration inflection: 2nd derivative positive but price flat-to-negative
+    const accelerationInflection = accel > 0 && roc20d < 2;
 
     // Smart money — only score if we have pre-run data for this sector
     const hasSmartMoneyData = allStocks.length > 0;
@@ -556,7 +566,7 @@ export async function calculateSectorRotation(
 
     // Dynamic composite with data quality tracking
     const hasBreadth = raw.breadthPct !== null;
-    const { score: compositeScore, dataQuality } = computeComposite(
+    const { score: compositeScore, dataQuality, breakdown } = computeComposite(
       normalized,
       hasBreadth,
       raw.hasSmartMoneyData
@@ -602,6 +612,7 @@ export async function calculateSectorRotation(
       quadrant: raw.quadrant,
       compositeScore,
       dataQuality,
+      dataQualityBreakdown: breakdown,
       trend,
       trendArrow,
       stealthAccumulation,
@@ -819,6 +830,7 @@ export async function calculateSectorRotation(
     sectorSpread,
     crossSectorPairs,
     topStocksToWatch,
+    quotesAsOf,
     stockQuotes,
     correlationBreak,
     correlationMatrix,

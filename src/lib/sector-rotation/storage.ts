@@ -7,7 +7,7 @@ import type { SectorRotationResult } from "./types";
 
 const STORAGE_KEY = "ew-scanner-sector-rotation";
 const TTL = 4 * 60 * 60 * 1000; // 4 hours
-const SCHEMA_VERSION = 6; // Bump when SectorRotationResult shape changes
+const SCHEMA_VERSION = 7; // Bump when SectorRotationResult shape changes
 
 interface CachedRotation {
   data: SectorRotationResult;
