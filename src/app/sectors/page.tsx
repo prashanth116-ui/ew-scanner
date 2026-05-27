@@ -135,6 +135,8 @@ interface StockInSector {
   aboveSma50: boolean | null;
   volumeVsAvg: number | null;
   sectorName: string;
+  daysToEarnings: number | null;
+  nextEarningsDate: string | null;
 }
 
 function isTurnaroundCandidate(s: StockInSector): boolean {
@@ -223,7 +225,7 @@ function EtfSparkline({ returns }: { returns: number[] | undefined }) {
 
 // ── Sector Stock Table (Enhanced #2: RS Accel, #8: export, #14: mobile) ──
 
-type StockSortKey = "ticker" | "rs20d" | "rsAccel" | "finalScore" | "volumeVsAvg" | "aboveSma50" | "verdict" | "phase";
+type StockSortKey = "ticker" | "rs20d" | "rsAccel" | "finalScore" | "volumeVsAvg" | "aboveSma50" | "verdict" | "phase" | "earnings";
 type SmaFilter = "all" | "above" | "below";
 type VolFilter = "all" | "above" | "below";
 type VerdictFilter = "all" | "priority" | "keep" | "watch";
@@ -277,6 +279,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
       case "aboveSma50": return list.sort((a, b) => dir * ((a.aboveSma50 === true ? 1 : a.aboveSma50 === false ? 0 : -1) - (b.aboveSma50 === true ? 1 : b.aboveSma50 === false ? 0 : -1)));
       case "verdict": return list.sort((a, b) => dir * ((VERDICT_RANK[a.verdict] ?? 4) - (VERDICT_RANK[b.verdict] ?? 4)));
       case "phase": return list.sort((a, b) => dir * (PHASE_RANK[getStockPhase(a)] - PHASE_RANK[getStockPhase(b)]));
+      case "earnings": return list.sort((a, b) => dir * ((a.daysToEarnings ?? 9999) - (b.daysToEarnings ?? 9999)));
       default: return list;
     }
   }, [filtered, sortKey, sortAsc]);
@@ -300,10 +303,10 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     return val;
   };
   const exportCsv = () => {
-    const header = "Ticker,Company,Phase,RS 20d,RS Accel,>50MA,Vol vs Avg,Score,Verdict";
+    const header = "Ticker,Company,Phase,RS 20d,RS Accel,>50MA,Vol vs Avg,Score,Earnings (days),Earnings Date,Verdict";
     const rows = sorted.map((s) => {
       const phase = phaseBadge(getStockPhase(s)).label;
-      return [s.ticker, csvEscape(s.companyName), phase, s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.verdict].join(",");
+      return [s.ticker, csvEscape(s.companyName), phase, s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.daysToEarnings ?? "", s.nextEarningsDate ?? "", s.verdict].join(",");
     });
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -418,6 +421,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
               <th className="text-center py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("aboveSma50")}>&gt;50MA{sortArrow("aboveSma50")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("volumeVsAvg")}>Vol vs Avg{sortArrow("volumeVsAvg")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("finalScore")}>Score{sortArrow("finalScore")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("earnings")}>Earnings{sortArrow("earnings")}</th>
               <th className="text-left py-1.5 pl-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("verdict")}>Verdict{sortArrow("verdict")}</th>
             </tr>
           </thead>
@@ -469,6 +473,9 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
                     </span>
                   </td>
                   <td className="py-1.5 px-2 text-right text-[#666]">{s.finalScore > 0 ? s.finalScore : "-"}</td>
+                  <td className={`py-1.5 px-2 text-right ${s.daysToEarnings === null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}`} title={s.nextEarningsDate ?? undefined}>
+                    {s.daysToEarnings !== null ? `${s.daysToEarnings}d` : "-"}
+                  </td>
                   <td className="py-1.5 pl-2">
                     {s.verdict ? (
                       <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
@@ -516,7 +523,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
                 {s.aboveSma50 === true ? <span className="h-2 w-2 rounded-full bg-green-400" /> : s.aboveSma50 === false ? <span className="h-2 w-2 rounded-full bg-red-400" /> : null}
               </div>
               <div className="mt-1 text-[10px] text-[#555]">{s.companyName}</div>
-              <div className="mt-2 grid grid-cols-4 gap-2 text-[11px]">
+              <div className="mt-2 grid grid-cols-5 gap-2 text-[11px]">
                 <div><span className="text-[#666]">RS</span> <span className={rsColor(s.rs20d)}>{s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}</span></div>
                 <div><span className="text-[#666]">Accel</span> <span className={rsAccelColor(s.rsAccel)}>{s.rsAccel !== null ? `${s.rsAccel > 0 ? "+" : ""}${s.rsAccel.toFixed(1)}` : "-"}</span></div>
                 <div>
@@ -527,6 +534,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
                   )}
                 </div>
                 <div><span className="text-[#666]">Score</span> <span className="text-[#a0a0a0]">{s.finalScore || "-"}</span></div>
+                <div><span className="text-[#666]">Earn</span> <span className={s.daysToEarnings === null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}>{s.daysToEarnings !== null ? `${s.daysToEarnings}d` : "-"}</span></div>
               </div>
             </div>
           );
@@ -1251,6 +1259,8 @@ export default function SectorRotationPage() {
           aboveSma50,
           volumeVsAvg,
           sectorName: sectorDef.displayName,
+          daysToEarnings: preRun?.data.daysToEarnings ?? null,
+          nextEarningsDate: preRun?.data.nextEarningsDate ?? null,
         };
       });
       map.set(sectorDef.displayName, stocks);
