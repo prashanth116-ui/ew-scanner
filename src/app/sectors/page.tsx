@@ -137,6 +137,10 @@ interface StockInSector {
   sectorName: string;
 }
 
+function isTurnaroundCandidate(s: StockInSector): boolean {
+  return s.aboveSma50 === false && (s.rs20d ?? 0) > 0 && (s.volumeVsAvg ?? 0) >= 1.2 && (s.rsAccel ?? 0) > 0;
+}
+
 function rsColor(rs: number | null): string {
   if (rs === null) return "text-[#666]";
   if (rs > 5) return "text-green-400";
@@ -245,10 +249,16 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
   };
 
   // #8: Export to CSV
+  const csvEscape = (val: string) => {
+    if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+      return `"${val.replace(/"/g, '""')}"`;
+    }
+    return val;
+  };
   const exportCsv = () => {
     const header = "Ticker,Company,RS 20d,RS Accel,>50MA,Vol vs Avg,Score,Verdict";
     const rows = sorted.map((s) =>
-      [s.ticker, `"${s.companyName}"`, s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.verdict].join(",")
+      [s.ticker, csvEscape(s.companyName), s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.verdict].join(",")
     );
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -332,8 +342,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
           </thead>
           <tbody>
             {sorted.map((s) => {
-              // Enhanced turnaround: below 50MA + positive RS + volume >= 1.2x + positive RS accel
-              const isTurnaround = s.aboveSma50 === false && (s.rs20d ?? 0) > 0 && (s.volumeVsAvg ?? 0) >= 1.2 && (s.rsAccel ?? 0) > 0;
+              const isTurnaround = isTurnaroundCandidate(s);
               return (
                 <tr key={s.ticker} className={`border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors ${isTurnaround ? "border-l-2 border-l-amber-400 bg-amber-500/5" : ""}`}>
                   <td className="py-1.5 pr-2">
@@ -384,7 +393,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
       {/* #14: Mobile card layout */}
       <div className="sm:hidden space-y-2">
         {sorted.map((s) => {
-          const isTurnaround = s.aboveSma50 === false && (s.rs20d ?? 0) > 0 && (s.volumeVsAvg ?? 0) >= 1.2 && (s.rsAccel ?? 0) > 0;
+          const isTurnaround = isTurnaroundCandidate(s);
           return (
             <div key={s.ticker} className={`rounded-lg border p-3 ${isTurnaround ? "border-l-2 border-l-amber-400 bg-amber-500/5 border-amber-500/20" : "border-[#2a2a2a] bg-[#141414]"}`}>
               <div className="flex items-center justify-between">
@@ -1050,6 +1059,8 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns }: { sector: Se
 
 // ── Main Page ──
 
+const LOADING_PHASES = ["Fetching ETF data", "Fetching stock quotes", "Computing sector scores", "Building correlation matrix"] as const;
+
 type SortMode = "score" | "action" | "quadrant" | "acceleration" | "name";
 
 const ACTION_RANK: Record<TradingAction, number> = { TRADE: 0, BUILD: 1, WATCH: 2, TRIM: 3, AVOID: 4 };
@@ -1155,7 +1166,12 @@ export default function SectorRotationPage() {
     }
   }, [data, sortMode]);
 
+  const abortRef = useRef<AbortController | null>(null);
+
   const fetchData = useCallback(async (skipCache = false) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
     if (!skipCache) {
@@ -1163,7 +1179,7 @@ export default function SectorRotationPage() {
       if (cached) { setData(cached); setLoading(false); return; }
     }
     try {
-      const res = await fetch("/api/sector-rotation");
+      const res = await fetch("/api/sector-rotation", { signal: controller.signal });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Unknown error" }));
         throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
@@ -1173,13 +1189,14 @@ export default function SectorRotationPage() {
       saveSectorRotation(result);
       saveSnapshot(result);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Failed to fetch");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); return () => { abortRef.current?.abort(); }; }, [fetchData]);
   useEffect(() => { const interval = setInterval(() => fetchData(true), 10 * 60 * 1000); return () => clearInterval(interval); }, [fetchData]);
 
   const handleExport = useCallback(() => { if (data) exportSectorsToExcel(data); }, [data]);
@@ -1198,7 +1215,6 @@ export default function SectorRotationPage() {
   }, [loading, data]);
 
   // Loading phase cycling
-  const LOADING_PHASES = ["Fetching ETF data", "Fetching stock quotes", "Computing sector scores", "Building correlation matrix"];
   useEffect(() => {
     if (!loading || data) { setLoadingPhase(0); return; }
     const timer = setInterval(() => setLoadingPhase((p) => (p + 1) % LOADING_PHASES.length), 8000);

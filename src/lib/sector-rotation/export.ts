@@ -44,7 +44,7 @@ export async function exportSectorsToExcel(
         "SMA200": quote?.sma200?.toFixed(2) ?? "-",
         "% from SMA50": quote?.pctFromSma50?.toFixed(1) ?? "-",
         "RS Accel": quote?.rsAccel?.toFixed(2) ?? "-",
-        Reasons: stock.reasons.join("; "),
+        Reasons: (stock.reasons ?? []).join("; "),
       });
     }
   }

@@ -506,7 +506,7 @@ export async function calculateSectorRotation(
       unusualVolume = avgVol20 > 0 && todayVol > 1.5 * avgVol20;
     }
 
-    // Smart money composite — only meaningful with pre-run data
+    // Smart money composite — only meaningful with pre-run data (cap at 100)
     let smartMoneyScore = 0;
     if (hasSmartMoneyData) {
       if (aggregateInsiderBuys > 0) smartMoneyScore += 25;
@@ -514,6 +514,7 @@ export async function calculateSectorRotation(
       if (aggregatePCR !== null && aggregatePCR < 0.7) smartMoneyScore += 25;
       if (unusualVolume) smartMoneyScore += 20;
       if (earningsBeatPct >= 50) smartMoneyScore += 20;
+      smartMoneyScore = Math.min(smartMoneyScore, 100);
     }
 
     rawScores.push({
@@ -546,8 +547,8 @@ export async function calculateSectorRotation(
   // Percentile-rank and min-max normalization
   const allMomentums = rawScores.map((s) => s.momentumComposite);
   const accels = rawScores.map((s) => s.acceleration);
-  const accelMin = Math.min(...accels);
-  const accelMax = Math.max(...accels);
+  const accelMin = accels.length > 0 ? Math.min(...accels) : 0;
+  const accelMax = accels.length > 0 ? Math.max(...accels) : 0;
 
   // Build final scored sectors
   const scoredSectors: SectorRotationScore[] = rawScores.map((raw) => {
@@ -634,9 +635,9 @@ export async function calculateSectorRotation(
   // Multi-signal rotation detection
   const all20dReturns = rawScores.map((r) => r.roc20d);
   const dispersionIndex = Math.round(stddev(all20dReturns) * 100) / 100;
-  const sectorSpread = Math.round(
-    (Math.max(...all20dReturns) - Math.min(...all20dReturns)) * 100
-  ) / 100;
+  const sectorSpread = all20dReturns.length > 0
+    ? Math.round((Math.max(...all20dReturns) - Math.min(...all20dReturns)) * 100) / 100
+    : 0;
 
   // Rotation active when:
   // - High dispersion (> 4): sectors clearly diverging, OR
@@ -815,8 +816,9 @@ export async function calculateSectorRotation(
         varA += da * da;
         varB += db * db;
       }
-      const denom = Math.sqrt(varA * varB);
-      const corr = denom !== 0 ? cov / denom : 0;
+      const product = varA * varB;
+      const denom = product > 0 ? Math.sqrt(product) : 0;
+      const corr = denom > 0 ? cov / denom : 0;
       correlationMatrix[`${a.etf}:${b.etf}`] = Math.round(corr * 100) / 100;
     }
   }

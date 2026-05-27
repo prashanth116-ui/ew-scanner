@@ -18,6 +18,16 @@ const YAHOO_SUMMARY =
 const YAHOO_CHART =
   "https://query1.finance.yahoo.com/v8/finance/chart";
 
+// ── Safe number coercion for Yahoo API responses ──
+
+function toNum(val: unknown, fallback: number): number {
+  return typeof val === "number" && !Number.isNaN(val) ? val : fallback;
+}
+
+function toNumOrNull(val: unknown): number | null {
+  return typeof val === "number" && !Number.isNaN(val) ? val : null;
+}
+
 // ── Finnhub response cache (30-min TTL) ──
 // Earnings calendar, insider buys, and beat streaks are stable for hours.
 // Eliminates ~4,173 redundant HTTP calls on repeated confluence scans.
@@ -74,6 +84,17 @@ async function fetchYahooSummary(
     data as { quoteSummary?: { result?: Record<string, unknown>[] } }
   )?.quoteSummary?.result?.[0];
   return result ?? null;
+}
+
+/** Last Observation Carried Forward — fill nulls with previous value instead of 0. */
+function locf(arr: (number | null)[]): number[] {
+  const out: number[] = [];
+  let last = 0;
+  for (const v of arr) {
+    if (v !== null && v !== undefined) last = v;
+    out.push(last);
+  }
+  return out;
 }
 
 /** Fetch price chart data for volume analysis + SMA calc. */
@@ -148,11 +169,11 @@ export async function fetchYahooChart(
 
   return {
     timestamps: chart.timestamp,
-    closes: (q.close ?? []).map((v) => v ?? 0),
+    closes: locf(q.close ?? []),
     volumes: (q.volume ?? []).map((v) => v ?? 0),
-    opens: (q.open ?? []).map((v) => v ?? 0),
-    highs: (q.high ?? []).map((v) => v ?? 0),
-    lows: (q.low ?? []).map((v) => v ?? 0),
+    opens: locf(q.open ?? []),
+    highs: locf(q.high ?? []),
+    lows: locf(q.low ?? []),
   };
 }
 
@@ -913,12 +934,12 @@ export async function fetchBatchQuotes(
       if (!symbol) continue;
       results.set(symbol, {
         symbol,
-        price: (quote.regularMarketPrice as number) ?? 0,
-        sma50: (quote.fiftyDayAverage as number) ?? null,
-        sma200: (quote.twoHundredDayAverage as number) ?? null,
-        volume: (quote.regularMarketVolume as number) ?? 0,
-        avgVolume10d: (quote.averageDailyVolume10Day as number) ?? 0,
-        dailyChangePct: (quote.regularMarketChangePercent as number) ?? 0,
+        price: toNum(quote.regularMarketPrice, 0),
+        sma50: toNumOrNull(quote.fiftyDayAverage),
+        sma200: toNumOrNull(quote.twoHundredDayAverage),
+        volume: toNum(quote.regularMarketVolume, 0),
+        avgVolume10d: toNum(quote.averageDailyVolume10Day, 0),
+        dailyChangePct: toNum(quote.regularMarketChangePercent, 0),
       });
     }
   }
@@ -941,12 +962,12 @@ export async function fetchBatchQuotes(
         if (!symbol) continue;
         results.set(symbol, {
           symbol,
-          price: (quote.regularMarketPrice as number) ?? 0,
-          sma50: (quote.fiftyDayAverage as number) ?? null,
-          sma200: (quote.twoHundredDayAverage as number) ?? null,
-          volume: (quote.regularMarketVolume as number) ?? 0,
-          avgVolume10d: (quote.averageDailyVolume10Day as number) ?? 0,
-          dailyChangePct: (quote.regularMarketChangePercent as number) ?? 0,
+          price: toNum(quote.regularMarketPrice, 0),
+          sma50: toNumOrNull(quote.fiftyDayAverage),
+          sma200: toNumOrNull(quote.twoHundredDayAverage),
+          volume: toNum(quote.regularMarketVolume, 0),
+          avgVolume10d: toNum(quote.averageDailyVolume10Day, 0),
+          dailyChangePct: toNum(quote.regularMarketChangePercent, 0),
         });
       }
     }

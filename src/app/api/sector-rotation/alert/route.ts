@@ -17,6 +17,8 @@ import { logError } from "@/lib/error-logger";
  * If KV is not configured, behavior is identical to the previous 2-tier system.
  */
 
+const VALID_QUADRANTS = new Set(["LEADING", "WEAKENING", "LAGGING", "IMPROVING"]);
+
 interface PreviousState {
   date: string;
   sectors: { sector: string; quadrant: string }[];
@@ -90,15 +92,17 @@ export async function GET(request: NextRequest) {
     const previousSnapshot = previous
       ? {
           date: previous.date ?? "",
-          sectors: previous.sectors.map((s) => ({
-            sector: s.sector,
-            compositeScore: 0,
-            acceleration: 0,
-            quadrant: s.quadrant as "LEADING" | "WEAKENING" | "LAGGING" | "IMPROVING",
-            mansfieldRS: 0,
-            breadthPct: null,
-            trend: "FLAT" as const,
-          })),
+          sectors: previous.sectors
+            .filter((s) => VALID_QUADRANTS.has(s.quadrant))
+            .map((s) => ({
+              sector: s.sector,
+              compositeScore: 0,
+              acceleration: 0,
+              quadrant: s.quadrant as "LEADING" | "WEAKENING" | "LAGGING" | "IMPROVING",
+              mansfieldRS: 0,
+              breadthPct: null,
+              trend: "FLAT" as const,
+            })),
           rotationSummary: "",
           dispersionIndex: 0,
         }
