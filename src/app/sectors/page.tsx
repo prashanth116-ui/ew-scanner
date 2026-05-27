@@ -141,6 +141,46 @@ function isTurnaroundCandidate(s: StockInSector): boolean {
   return s.aboveSma50 === false && (s.rs20d ?? 0) > 0 && (s.volumeVsAvg ?? 0) >= 1.2 && (s.rsAccel ?? 0) > 0;
 }
 
+// ── Phase-based stock grouping ──
+
+type StockPhase = "basing" | "turnaround" | "trending" | "exhausting" | "neutral";
+
+function getStockPhase(s: StockInSector): StockPhase {
+  const rsAccel = s.rsAccel ?? 0;
+  const rs20d = s.rs20d ?? 0;
+
+  // Phase 4 first — deeply negative accel overrides everything
+  if (rsAccel < -2) return "exhausting";
+  // Phase 2 — turnaround (existing logic)
+  if (s.aboveSma50 === false && rs20d > 0 && rsAccel > 0 && (s.volumeVsAvg ?? 0) >= 1.2) return "turnaround";
+  // Phase 1 — basing (below 50MA, accel turning positive but RS still negative)
+  if (s.aboveSma50 === false && rsAccel > 0 && rs20d <= 0) return "basing";
+  // Phase 3 — trending (above 50MA with positive momentum)
+  if (s.aboveSma50 === true && rsAccel > 0) return "trending";
+  // Everything else
+  return "neutral";
+}
+
+function phaseBadge(phase: StockPhase): { label: string; className: string; description: string } {
+  switch (phase) {
+    case "basing": return { label: "P1 Basing", className: "bg-purple-500/15 text-purple-400 border-purple-500/30", description: "Below 50MA, momentum turning — watch for confirmation" };
+    case "turnaround": return { label: "P2 Turnaround", className: "bg-amber-500/15 text-amber-400 border-amber-500/30", description: "Below 50MA, RS positive + volume — entry zone" };
+    case "trending": return { label: "P3 Trending", className: "bg-green-500/15 text-green-400 border-green-500/30", description: "Above 50MA, accelerating — hold or add on dips" };
+    case "exhausting": return { label: "P4 Exhausting", className: "bg-red-500/15 text-red-400 border-red-500/30", description: "Momentum fading (RS Accel < -2) — take profit" };
+    case "neutral": return { label: "Neutral", className: "bg-[#333]/50 text-[#666] border-[#333]", description: "Mixed or insufficient signals" };
+  }
+}
+
+const PHASE_RANK: Record<StockPhase, number> = { basing: 0, turnaround: 1, trending: 2, exhausting: 3, neutral: 4 };
+
+function getEntryQuality(s: StockInSector): number {
+  let quality = 0;
+  if ((s.rsAccel ?? 0) > 1) quality++;
+  if ((s.volumeVsAvg ?? 0) >= 1.5) quality++;
+  if (s.pctFromAth !== null && s.pctFromAth > -30) quality++;
+  return quality;
+}
+
 function rsColor(rs: number | null): string {
   if (rs === null) return "text-[#666]";
   if (rs > 5) return "text-green-400";
@@ -183,11 +223,12 @@ function EtfSparkline({ returns }: { returns: number[] | undefined }) {
 
 // ── Sector Stock Table (Enhanced #2: RS Accel, #8: export, #14: mobile) ──
 
-type StockSortKey = "ticker" | "rs20d" | "rsAccel" | "finalScore" | "volumeVsAvg" | "aboveSma50" | "verdict";
+type StockSortKey = "ticker" | "rs20d" | "rsAccel" | "finalScore" | "volumeVsAvg" | "aboveSma50" | "verdict" | "phase";
 type SmaFilter = "all" | "above" | "below";
 type VolFilter = "all" | "above" | "below";
 type VerdictFilter = "all" | "priority" | "keep" | "watch";
 type RsAccelFilter = "all" | "positive" | "negative";
+type PhaseFilter = "all" | "basing" | "turnaround" | "trending" | "exhausting";
 
 const VERDICT_RANK: Record<string, number> = { "PRIORITY BUY": 0, KEEP: 1, WATCH: 2, DISCARD: 3, "": 4 };
 
@@ -198,6 +239,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
   const [volFilter, setVolFilter] = useState<VolFilter>("all");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [rsAccelFilter, setRsAccelFilter] = useState<RsAccelFilter>("all");
+  const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("all");
   const [tableCopied, setTableCopied] = useState(false);
 
   const handleSort = (key: StockSortKey) => {
@@ -205,8 +247,8 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     else { setSortKey(key); setSortAsc(key === "ticker"); }
   };
 
-  const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); };
-  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all";
+  const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setPhaseFilter("all"); };
+  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || phaseFilter !== "all";
 
   const filtered = useMemo(() => {
     let list = [...stocks];
@@ -219,8 +261,9 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     else if (verdictFilter === "watch") list = list.filter((s) => s.verdict === "WATCH");
     if (rsAccelFilter === "positive") list = list.filter((s) => (s.rsAccel ?? 0) > 0);
     else if (rsAccelFilter === "negative") list = list.filter((s) => (s.rsAccel ?? 0) < 0);
+    if (phaseFilter !== "all") list = list.filter((s) => getStockPhase(s) === phaseFilter);
     return list;
-  }, [stocks, sma50Filter, volFilter, verdictFilter, rsAccelFilter]);
+  }, [stocks, sma50Filter, volFilter, verdictFilter, rsAccelFilter, phaseFilter]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -233,6 +276,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
       case "volumeVsAvg": return list.sort((a, b) => dir * ((a.volumeVsAvg ?? -1) - (b.volumeVsAvg ?? -1)));
       case "aboveSma50": return list.sort((a, b) => dir * ((a.aboveSma50 === true ? 1 : a.aboveSma50 === false ? 0 : -1) - (b.aboveSma50 === true ? 1 : b.aboveSma50 === false ? 0 : -1)));
       case "verdict": return list.sort((a, b) => dir * ((VERDICT_RANK[a.verdict] ?? 4) - (VERDICT_RANK[b.verdict] ?? 4)));
+      case "phase": return list.sort((a, b) => dir * (PHASE_RANK[getStockPhase(a)] - PHASE_RANK[getStockPhase(b)]));
       default: return list;
     }
   }, [filtered, sortKey, sortAsc]);
@@ -256,10 +300,11 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     return val;
   };
   const exportCsv = () => {
-    const header = "Ticker,Company,RS 20d,RS Accel,>50MA,Vol vs Avg,Score,Verdict";
-    const rows = sorted.map((s) =>
-      [s.ticker, csvEscape(s.companyName), s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.verdict].join(",")
-    );
+    const header = "Ticker,Company,Phase,RS 20d,RS Accel,>50MA,Vol vs Avg,Score,Verdict";
+    const rows = sorted.map((s) => {
+      const phase = phaseBadge(getStockPhase(s)).label;
+      return [s.ticker, csvEscape(s.companyName), phase, s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.verdict].join(",");
+    });
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -270,8 +315,33 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     URL.revokeObjectURL(url);
   };
 
+  // Phase counts for summary bar
+  const phaseCounts = useMemo(() => {
+    const counts: Record<StockPhase, number> = { basing: 0, turnaround: 0, trending: 0, exhausting: 0, neutral: 0 };
+    for (const s of stocks) counts[getStockPhase(s)]++;
+    return counts;
+  }, [stocks]);
+
   return (
     <div>
+      {/* Phase summary bar */}
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+        <button onClick={() => setPhaseFilter(phaseFilter === "basing" ? "all" : "basing")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "basing" ? "bg-purple-500/20 text-purple-400 border-purple-500/40" : "bg-purple-500/5 text-purple-400/70 border-purple-500/20 hover:bg-purple-500/10"}`} title="Phase 1: Below 50MA, momentum turning — watch for confirmation">
+          P1: {phaseCounts.basing}
+        </button>
+        <button onClick={() => setPhaseFilter(phaseFilter === "turnaround" ? "all" : "turnaround")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "turnaround" ? "bg-amber-500/20 text-amber-400 border-amber-500/40" : "bg-amber-500/5 text-amber-400/70 border-amber-500/20 hover:bg-amber-500/10"}`} title="Phase 2: Below 50MA, RS positive + volume — entry zone">
+          P2: {phaseCounts.turnaround}
+        </button>
+        <button onClick={() => setPhaseFilter(phaseFilter === "trending" ? "all" : "trending")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "trending" ? "bg-green-500/20 text-green-400 border-green-500/40" : "bg-green-500/5 text-green-400/70 border-green-500/20 hover:bg-green-500/10"}`} title="Phase 3: Above 50MA, accelerating — hold or add on dips">
+          P3: {phaseCounts.trending}
+        </button>
+        <button onClick={() => setPhaseFilter(phaseFilter === "exhausting" ? "all" : "exhausting")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "exhausting" ? "bg-red-500/20 text-red-400 border-red-500/40" : "bg-red-500/5 text-red-400/70 border-red-500/20 hover:bg-red-500/10"}`} title="Phase 4: Momentum fading (RS Accel < -2) — take profit">
+          P4: {phaseCounts.exhausting}
+        </button>
+        <span className="text-[10px] text-[#555]" title="Neutral: Mixed or insufficient signals">—: {phaseCounts.neutral}</span>
+        <span className="text-[10px] text-[#444] ml-1 hidden sm:inline" title="P1=Basing, P2=Turnaround (entry zone), P3=Trending (hold), P4=Exhausting (avoid)">?</span>
+      </div>
+
       {/* Filter bar */}
       <div className="flex items-center gap-2 flex-wrap mb-2 text-xs">
         <label className="flex items-center gap-1 text-[#888]">
@@ -296,6 +366,16 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
             <option value="all">All</option>
             <option value="positive">Positive</option>
             <option value="negative">Negative</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-[#888]">
+          Phase
+          <select value={phaseFilter} onChange={(e) => setPhaseFilter(e.target.value as PhaseFilter)} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
+            <option value="all">All</option>
+            <option value="basing">P1 Basing</option>
+            <option value="turnaround">P2 Turnaround</option>
+            <option value="trending">P3 Trending</option>
+            <option value="exhausting">P4 Exhausting</option>
           </select>
         </label>
         <label className="flex items-center gap-1 text-[#888]">
@@ -331,6 +411,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
           <thead>
             <tr className="text-[#666] border-b border-[#2a2a2a]">
               <th className="text-left py-1.5 pr-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("ticker")}>Ticker{sortArrow("ticker")}</th>
+              <th className="text-left py-1.5 pr-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("phase")}>Phase{sortArrow("phase")}</th>
               <th className="text-left py-1.5 pr-2 font-medium hidden md:table-cell">Company</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rs20d")}>RS 20d{sortArrow("rs20d")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rsAccel")}>RS Accel{sortArrow("rsAccel")}</th>
@@ -342,14 +423,24 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
           </thead>
           <tbody>
             {sorted.map((s) => {
-              const isTurnaround = isTurnaroundCandidate(s);
+              const phase = getStockPhase(s);
+              const badge = phaseBadge(phase);
+              const isActionable = phase === "basing" || phase === "turnaround";
+              const quality = isActionable ? getEntryQuality(s) : 0;
               return (
-                <tr key={s.ticker} className={`border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors ${isTurnaround ? "border-l-2 border-l-amber-400 bg-amber-500/5" : ""}`}>
+                <tr key={s.ticker} className={`border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors ${isActionable ? "border-l-2 border-l-amber-400 bg-amber-500/5" : ""}`}>
                   <td className="py-1.5 pr-2">
-                    <div className="flex items-center gap-1.5">
-                      <a href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`} target="_blank" rel="noopener noreferrer" className="font-medium text-white hover:text-[#5ba3e6] transition-colors">{s.ticker}</a>
-                      {isTurnaround && (
-                        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-400 whitespace-nowrap">Turnaround</span>
+                    <a href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`} target="_blank" rel="noopener noreferrer" className="font-medium text-white hover:text-[#5ba3e6] transition-colors">{s.ticker}</a>
+                  </td>
+                  <td className="py-1.5 pr-2">
+                    <div className="flex items-center gap-1">
+                      <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] whitespace-nowrap ${badge.className}`} title={badge.description}>{badge.label}</span>
+                      {isActionable && quality > 0 && (
+                        <span className="flex gap-0.5" title={`Entry quality: ${quality}/3`}>
+                          {Array.from({ length: quality }, (_, i) => (
+                            <span key={i} className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                          ))}
+                        </span>
                       )}
                     </div>
                   </td>
@@ -370,7 +461,12 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
                     )}
                   </td>
                   <td className={`py-1.5 px-2 text-right ${s.volumeVsAvg !== null && s.volumeVsAvg >= 1.5 ? "text-amber-400" : s.volumeVsAvg !== null && s.volumeVsAvg >= 1.0 ? "text-[#a0a0a0]" : "text-[#555]"}`}>
-                    {s.volumeVsAvg !== null ? `${s.volumeVsAvg.toFixed(2)}x` : "-"}
+                    <span className="inline-flex items-center gap-0.5">
+                      {s.volumeVsAvg !== null ? `${s.volumeVsAvg.toFixed(2)}x` : "-"}
+                      {(phase === "turnaround" || phase === "trending") && s.volumeVsAvg !== null && s.volumeVsAvg >= 1.5 && (
+                        <Zap className="h-2.5 w-2.5 text-amber-400" />
+                      )}
+                    </span>
                   </td>
                   <td className="py-1.5 px-2 text-right text-[#666]">{s.finalScore > 0 ? s.finalScore : "-"}</td>
                   <td className="py-1.5 pl-2">
@@ -393,13 +489,23 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
       {/* #14: Mobile card layout */}
       <div className="sm:hidden space-y-2">
         {sorted.map((s) => {
-          const isTurnaround = isTurnaroundCandidate(s);
+          const phase = getStockPhase(s);
+          const badge = phaseBadge(phase);
+          const isActionable = phase === "basing" || phase === "turnaround";
+          const quality = isActionable ? getEntryQuality(s) : 0;
           return (
-            <div key={s.ticker} className={`rounded-lg border p-3 ${isTurnaround ? "border-l-2 border-l-amber-400 bg-amber-500/5 border-amber-500/20" : "border-[#2a2a2a] bg-[#141414]"}`}>
+            <div key={s.ticker} className={`rounded-lg border p-3 ${isActionable ? "border-l-2 border-l-amber-400 bg-amber-500/5 border-amber-500/20" : "border-[#2a2a2a] bg-[#141414]"}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <a href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`} target="_blank" rel="noopener noreferrer" className="font-semibold text-white hover:text-[#5ba3e6]">{s.ticker}</a>
-                  {isTurnaround && <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-400">Turnaround</span>}
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[9px] ${badge.className}`}>{badge.label}</span>
+                  {isActionable && quality > 0 && (
+                    <span className="flex gap-0.5">
+                      {Array.from({ length: quality }, (_, i) => (
+                        <span key={i} className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                      ))}
+                    </span>
+                  )}
                   {s.verdict && <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
                     s.verdict === "PRIORITY BUY" ? "bg-green-500/15 text-green-400 border-green-500/30" :
                     s.verdict === "KEEP" ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" :
@@ -413,7 +519,13 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
               <div className="mt-2 grid grid-cols-4 gap-2 text-[11px]">
                 <div><span className="text-[#666]">RS</span> <span className={rsColor(s.rs20d)}>{s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}</span></div>
                 <div><span className="text-[#666]">Accel</span> <span className={rsAccelColor(s.rsAccel)}>{s.rsAccel !== null ? `${s.rsAccel > 0 ? "+" : ""}${s.rsAccel.toFixed(1)}` : "-"}</span></div>
-                <div><span className="text-[#666]">Vol</span> <span className="text-[#a0a0a0]">{s.volumeVsAvg?.toFixed(1) ?? "-"}x</span></div>
+                <div>
+                  <span className="text-[#666]">Vol</span>{" "}
+                  <span className="text-[#a0a0a0]">{s.volumeVsAvg?.toFixed(1) ?? "-"}x</span>
+                  {(phase === "turnaround" || phase === "trending") && s.volumeVsAvg !== null && s.volumeVsAvg >= 1.5 && (
+                    <Zap className="h-2.5 w-2.5 text-amber-400 inline ml-0.5" />
+                  )}
+                </div>
                 <div><span className="text-[#666]">Score</span> <span className="text-[#a0a0a0]">{s.finalScore || "-"}</span></div>
               </div>
             </div>
