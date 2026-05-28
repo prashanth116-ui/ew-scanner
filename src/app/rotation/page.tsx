@@ -2202,7 +2202,7 @@ export default function RotationTrackerPage() {
             Sectors
           </Link>
           <Link
-            href="/rotation/guide"
+            href="/sectors/guide"
             className="rounded-md border border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white hover:border-[#444]"
           >
             Guide
