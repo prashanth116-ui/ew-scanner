@@ -569,6 +569,113 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
   );
 }
 
+// ── Filter Recipes ──
+
+function FilterRecipes() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="mb-3 flex w-full items-center gap-2 text-lg font-semibold text-white text-left"
+      >
+        {open ? <ChevronUp className="h-5 w-5 text-[#5ba3e6]" /> : <ChevronDown className="h-5 w-5 text-[#5ba3e6]" />}
+        Filter Recipes
+        <span className="text-xs font-normal text-[#666]">Using all 3 RS metrics together</span>
+      </button>
+      {open && (
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-5 space-y-5">
+          {/* 3 Metrics Reference */}
+          <div>
+            <h3 className="text-sm font-semibold text-white mb-2">The Three Metrics</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Metric</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">What It Measures</th>
+                    <th className="py-1.5 text-left font-medium">Green Flag</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#a0a0a0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-white">RS 20d</td>
+                    <td className="py-2 pr-3">20-day relative strength vs the broad market</td>
+                    <td className="py-2 text-green-400">Positive = outperforming market</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-white">Trend Accel</td>
+                    <td className="py-2 pr-3">Stock&apos;s own trend acceleration (% from 50MA minus % from 200MA)</td>
+                    <td className="py-2 text-green-400">Positive = short-term gaining on long-term</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 font-medium text-white">Sector RS</td>
+                    <td className="py-2 pr-3">Relative strength acceleration vs sector ETF (5d vs 20d)</td>
+                    <td className="py-2 text-green-400">Positive = catching up vs sector</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Recipes */}
+          <div>
+            <h3 className="text-sm font-semibold text-white mb-2">Recipes</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Goal</th>
+                    <th className="py-1.5 text-left font-medium">Filter Combination</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#a0a0a0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-green-400 whitespace-nowrap">Best entries</td>
+                    <td className="py-2">Phase: <span className="text-white">P2 Turnaround</span> + Trend Accel: <span className="text-white">Positive</span> + Sector RS: <span className="text-white">Positive</span> + RS 20d: <span className="text-white">Positive</span></td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-cyan-400 whitespace-nowrap">Momentum leaders</td>
+                    <td className="py-2">Phase: <span className="text-white">P3 Trending</span> + RS 20d: <span className="text-white">Positive</span> + Volume: <span className="text-white">Above Avg</span></td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-amber-400 whitespace-nowrap">Catch-up catalyst</td>
+                    <td className="py-2">Trend Accel: <span className="text-white">Positive</span> + Sector RS: <span className="text-white">Negative</span> + Earnings: <span className="text-red-400">&le;14d</span> (red/amber)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-red-400 whitespace-nowrap">Avoid list</td>
+                    <td className="py-2">Phase: <span className="text-white">P4 Exhausting</span> + Trend Accel: <span className="text-white">Negative</span></td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 font-medium text-purple-400 whitespace-nowrap">Early watch</td>
+                    <td className="py-2">Phase: <span className="text-white">P1 Basing</span> + Sector RS: <span className="text-white">Positive</span> &mdash; add to watchlist, wait for P2 transition</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SNOW Pattern */}
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+            <h3 className="text-sm font-semibold text-amber-400 mb-2">The SNOW Pattern: Catch-Up Catalyst</h3>
+            <p className="text-xs text-[#a0a0a0] leading-relaxed">
+              Before earnings, SNOW had Trend Accel <span className="text-green-400 font-mono">+27.98</span> (powerful own momentum) but Sector RS <span className="text-red-400 font-mono">&minus;11.3</span> (lagging sector ETF recently).
+              The negative Sector RS looked bearish in isolation, but the strong Trend Accel correctly showed the stock had direction.
+              SNOW jumped 75 points after earnings &mdash; the catalyst unlocked the gap between individual strength and sector-relative weakness.
+            </p>
+            <p className="text-xs text-[#a0a0a0] leading-relaxed mt-2">
+              <strong className="text-white">Key rule:</strong> Positive Trend Accel + negative Sector RS = coiled catch-up, not breakdown.
+              If Trend Accel is also negative, the stock is genuinely weak &mdash; avoid.
+              When the two metrics diverge, <strong className="text-white">trust Trend Accel for direction</strong> and use Sector RS for relative positioning.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── #4: Regime Banner ──
 
 function RegimeBanner({ regime }: { regime: SectorRotationResult["regime"] }) {
@@ -1688,6 +1795,7 @@ export default function SectorRotationPage() {
           </div>
         </div>
       </div>
+      <FilterRecipes />
       <ScannerCTA />
     </div>
   );
