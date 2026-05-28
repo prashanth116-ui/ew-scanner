@@ -257,7 +257,7 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
   };
 
   const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setSectorRSFilter("all"); setPhaseFilter("all"); setQualityFilter("all"); };
-  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || sectorRSFilter !== "all" || phaseFilter !== "all" || qualityFilter !== "all";
+  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || (hasRotationData && sectorRSFilter !== "all") || phaseFilter !== "all" || (hasRotationData && qualityFilter !== "all");
 
   const earlyStrengthActive = phaseFilter === "turnaround";
   const toggleEarlyStrength = () => {
@@ -268,8 +268,8 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
     let list = [...stocks];
     if (sma50Filter === "above") list = list.filter((s) => s.aboveSma50 === true);
     else if (sma50Filter === "below") list = list.filter((s) => s.aboveSma50 === false);
-    if (volFilter === "above") list = list.filter((s) => (s.volumeVsAvg ?? 0) >= 1.0);
-    else if (volFilter === "below") list = list.filter((s) => s.volumeVsAvg !== null && s.volumeVsAvg < 1.0);
+    if (volFilter === "above") list = list.filter((s) => s.volumeVsAvg != null && s.volumeVsAvg >= 1.0);
+    else if (volFilter === "below") list = list.filter((s) => s.volumeVsAvg != null && s.volumeVsAvg < 1.0);
     if (verdictFilter === "priority") list = list.filter((s) => s.verdict === "PRIORITY BUY");
     else if (verdictFilter === "keep") list = list.filter((s) => s.verdict === "KEEP");
     else if (verdictFilter === "watch") list = list.filter((s) => s.verdict === "WATCH");
