@@ -88,6 +88,12 @@ export interface ConfluenceResult {
   stratResult: ConfluenceStratResult | null;
   stratBonus?: number;
   trending?: boolean;
+  momentumQuality?: {
+    rsAcceleration: number;
+    rsImproving: boolean;
+    rsDelta: number;
+    volumeConsistency: number;
+  } | null;
 }
 
 /** Raw result from the API (before sector merge + client-side scoring). */

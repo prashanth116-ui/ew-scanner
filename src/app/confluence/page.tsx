@@ -47,6 +47,7 @@ import { recordSignals, fetchClientHitRates, type HitRateEntry } from "@/lib/sig
 import { getConfluenceUniverse, getConfluenceTickerInfo } from "@/data/confluence-universe";
 import { getSectorForSymbol } from "@/data/sector-universe";
 import type { SectorRotationScore, SectorRotationResult, RRGQuadrant } from "@/lib/sector-rotation/types";
+import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 import { useSidebarState } from "@/lib/use-sidebar-state";
@@ -128,6 +129,10 @@ function generateWhyThisStock(r: ConfluenceResult): string {
     if (r.sectorResult.trend === "UP") parts.push("sector uptrend");
   }
 
+  if (r.momentumQuality?.rsImproving && r.momentumQuality.volumeConsistency >= 3) {
+    parts.push("sustained momentum quality");
+  }
+
   if (r.stratResult) {
     if (r.stratResult.signal === "ACTIONABLE") {
       const dir = r.stratResult.actionDirection;
@@ -173,6 +178,9 @@ export default function ConfluencePage() {
   // Strat aligned filter
   const [stratAlignedFilter, setStratAlignedFilter] = useState(false);
 
+  // Quality filter
+  const [qualityFilter, setQualityFilter] = useState<"all" | "improving" | "high" | "fading">("all");
+
   // Scan state
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState("");
@@ -180,6 +188,7 @@ export default function ConfluencePage() {
   const [totalCount, setTotalCount] = useState(0);
   const [rawResults, setRawResults] = useState<ConfluenceScanResult[]>([]);
   const [sectorData, setSectorData] = useState<SectorRotationScore[] | null>(null);
+  const [rotationStockMap, setRotationStockMap] = useState<Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>>(new Map());
   const scanAbort = useRef<AbortController | null>(null);
 
   // Sort
@@ -287,6 +296,8 @@ export default function ConfluencePage() {
 
       const tickerInfo = getConfluenceTickerInfo(r.ticker);
 
+      const rotStock = rotationStockMap.get(r.ticker);
+
       return {
         ticker: r.ticker,
         name: r.name || tickerInfo?.name || r.ticker,
@@ -305,6 +316,12 @@ export default function ConfluencePage() {
         stratResult: r.stratResult ?? null,
         stratBonus: stratBonus !== 0 ? stratBonus : undefined,
         trending: trending === true ? true : undefined,
+        momentumQuality: rotStock ? {
+          rsAcceleration: rotStock.rsAccel,
+          rsImproving: rotStock.rsImproving,
+          rsDelta: rotStock.rsDelta,
+          volumeConsistency: rotStock.volConsistency,
+        } : null,
       };
     });
 
@@ -325,7 +342,7 @@ export default function ConfluencePage() {
     }
 
     return results;
-  }, [rawResults, sectorMap, weights, thresholds]);
+  }, [rawResults, sectorMap, rotationStockMap, weights, thresholds]);
 
   // Save scan snapshot & compute persistence when scan finishes
   const prevScanningRef = useRef(false);
@@ -375,9 +392,12 @@ export default function ConfluencePage() {
         if (!aligned) return false;
       }
       if (stratAlignedFilter && !r.stratResult) return false;
+      if (qualityFilter === "improving" && r.momentumQuality && !r.momentumQuality.rsImproving) return false;
+      if (qualityFilter === "high" && (!r.momentumQuality || !r.momentumQuality.rsImproving || r.momentumQuality.volumeConsistency < 3)) return false;
+      if (qualityFilter === "fading" && (!r.momentumQuality || r.momentumQuality.rsImproving || r.momentumQuality.rsAcceleration >= 0)) return false;
       return true;
     });
-  }, [confluenceResults, signalFilter, sectorFilter, quadrantFilter, stratAlignedFilter]);
+  }, [confluenceResults, signalFilter, sectorFilter, quadrantFilter, stratAlignedFilter, qualityFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -456,6 +476,26 @@ export default function ConfluencePage() {
       if (sectorRes.ok) {
         const data = (await sectorRes.json()) as SectorRotationResult;
         setSectorData(data.sectors);
+      }
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        setScanning(false);
+        return;
+      }
+    }
+
+    // Fetch rotation tracker data for per-stock momentum quality
+    try {
+      const rotRes = await fetch("/api/rotation-tracker", { signal });
+      if (rotRes.ok) {
+        const rotData = (await rotRes.json()) as RotationTrackerResult;
+        const map = new Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>();
+        for (const rotation of rotData.activeRotations) {
+          for (const s of rotation.stocks) {
+            map.set(s.symbol, { rsAccel: s.rsAcceleration, rsImproving: s.rsImproving, rsDelta: s.rsDelta, volConsistency: s.volumeConsistency });
+          }
+        }
+        setRotationStockMap(map);
       }
     } catch (err) {
       if ((err as Error).name === "AbortError") {
@@ -800,6 +840,31 @@ export default function ConfluencePage() {
             </SidebarSection>
           )}
 
+          {/* Quality filter */}
+          <SidebarSection title="Momentum Quality" sectionKey="quality-filter" collapsed={collapsed.has("quality-filter")} onToggle={toggleSection}>
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { key: "all" as const, label: "All" },
+                { key: "improving" as const, label: "RS Improving" },
+                { key: "high" as const, label: "High Quality" },
+                { key: "fading" as const, label: "Fading" },
+              ]).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setQualityFilter(qualityFilter === key ? "all" : key)}
+                  className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium border transition-colors ${
+                    qualityFilter === key
+                      ? "bg-[#ec4899]/15 text-[#ec4899] border-[#ec4899]/30"
+                      : "text-[#a0a0a0] border-[#2a2a2a] hover:border-[#444] hover:text-white"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-[#555] mt-1.5">Filters by rotation tracker momentum data (active sectors only)</p>
+          </SidebarSection>
+
           {/* Scan / Cancel */}
           <div className="flex gap-2">
             <button
@@ -922,6 +987,7 @@ export default function ConfluencePage() {
               setSectorFilter("All");
               setQuadrantFilter(new Set());
               setStratAlignedFilter(false);
+              setQualityFilter("all");
             }}
             className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors"
           >
@@ -1426,6 +1492,13 @@ function ResultRow({
                   <DetailRow label="Composite" value={`${result.sectorResult.compositeScore}/100`} />
                   <DetailRow label="Quadrant" value={result.sectorResult.quadrant} highlight={result.sectorResult.quadrant === "LEADING"} />
                   <DetailRow label="Trend" value={result.sectorResult.trend} />
+                  {result.momentumQuality && (
+                    <>
+                      <DetailRow label="RS Direction" value={`${result.momentumQuality.rsImproving ? "Improving \u25B2" : "Fading \u25BC"}`} highlight={result.momentumQuality.rsImproving} />
+                      <DetailRow label="RS Delta" value={`${result.momentumQuality.rsDelta > 0 ? "+" : ""}${result.momentumQuality.rsDelta.toFixed(2)}`} />
+                      <DetailRow label="Vol Consistency" value={`${result.momentumQuality.volumeConsistency}/5 days`} />
+                    </>
+                  )}
                   {expandedPanel === "sector" && (
                     <div className="pt-2 border-t border-[#2a2a2a] mt-2">
                       <div className="space-y-2">
