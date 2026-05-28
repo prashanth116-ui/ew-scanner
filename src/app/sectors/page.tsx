@@ -259,6 +259,19 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
   const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setSectorRSFilter("all"); setPhaseFilter("all"); setQualityFilter("all"); };
   const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || sectorRSFilter !== "all" || phaseFilter !== "all" || qualityFilter !== "all";
 
+  const earlyStrengthActive = phaseFilter === "turnaround" && qualityFilter === "high" && rsAccelFilter === "positive";
+  const toggleEarlyStrength = () => {
+    if (earlyStrengthActive) {
+      setPhaseFilter("all");
+      setQualityFilter("all");
+      setRsAccelFilter("all");
+    } else {
+      setPhaseFilter("turnaround");
+      setQualityFilter("high");
+      setRsAccelFilter("positive");
+    }
+  };
+
   const filtered = useMemo(() => {
     let list = [...stocks];
     if (sma50Filter === "above") list = list.filter((s) => s.aboveSma50 === true);
@@ -355,7 +368,18 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
           P4: {phaseCounts.exhausting}
         </button>
         <span className="text-[10px] text-[#555]" title="Neutral: Mixed or insufficient signals">—: {phaseCounts.neutral}</span>
-        <span className="text-[10px] text-[#444] ml-1 hidden sm:inline" title="P1=Basing, P2=Turnaround (entry zone), P3=Trending (hold), P4=Exhausting (avoid)">?</span>
+        <div className="h-3 w-px bg-[#333] mx-1" />
+        <button
+          onClick={toggleEarlyStrength}
+          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
+            earlyStrengthActive
+              ? "bg-amber-500/20 text-amber-300 border-amber-500/40 ring-1 ring-amber-500/30"
+              : "bg-[#1a1a1a] text-[#888] border-[#333] hover:text-[#ccc] hover:border-[#444]"
+          }`}
+          title="Preset: Phase=P2 Turnaround + Quality=High + Trend Accel=Positive"
+        >
+          Early Strength
+        </button>
       </div>
 
       {/* Filter bar */}
