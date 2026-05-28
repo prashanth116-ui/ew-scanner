@@ -39,7 +39,7 @@ import { loadScanResults } from "@/lib/prerun/storage";
 
 // ── localStorage cache (4-hour TTL) ──
 
-const CACHE_KEY = "ew-rotation-tracker-v5";
+const CACHE_KEY = "ew-rotation-tracker-v6";
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 
 function loadCached(): RotationTrackerResult | null {
@@ -1382,17 +1382,17 @@ function StockPerformanceTable({
                 <td className="px-3 py-2 text-right text-[#888]">
                   {s.volumeVsAvg.toFixed(1)}x
                 </td>
-                <td className={`px-3 py-2 text-right font-mono text-xs ${s.rs20d === null ? "text-[#444]" : s.rs20d > 0 ? "text-green-400" : s.rs20d < 0 ? "text-red-400" : "text-[#666]"}`}>
-                  {s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}
+                <td className={`px-3 py-2 text-right font-mono text-xs ${s.rs20d == null ? "text-[#444]" : s.rs20d > 0 ? "text-green-400" : s.rs20d < 0 ? "text-red-400" : "text-[#666]"}`}>
+                  {s.rs20d != null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}
                 </td>
-                <td className={`px-3 py-2 text-right font-mono text-xs ${s.trendAccel === null ? "text-[#444]" : s.trendAccel > 0 ? "text-green-400" : s.trendAccel < 0 ? "text-red-400" : "text-[#666]"}`}>
-                  {s.trendAccel !== null ? `${s.trendAccel > 0 ? "+" : ""}${s.trendAccel.toFixed(2)}` : "-"}
+                <td className={`px-3 py-2 text-right font-mono text-xs ${s.trendAccel == null ? "text-[#444]" : s.trendAccel > 0 ? "text-green-400" : s.trendAccel < 0 ? "text-red-400" : "text-[#666]"}`}>
+                  {s.trendAccel != null ? `${s.trendAccel > 0 ? "+" : ""}${s.trendAccel.toFixed(2)}` : "-"}
                 </td>
                 <td className={`px-3 py-2 text-right font-mono text-xs ${(s.rsAcceleration ?? 0) > 0 ? "text-green-400" : (s.rsAcceleration ?? 0) < 0 ? "text-red-400" : "text-[#666]"}`}>
                   {(s.rsAcceleration ?? 0) > 0 ? "+" : ""}{(s.rsAcceleration ?? 0).toFixed(2)}
                 </td>
-                <td className={`px-3 py-2 text-right text-xs ${s.daysToEarnings === null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}`} title={s.nextEarningsDate ?? undefined}>
-                  {s.daysToEarnings !== null ? `${s.daysToEarnings}d` : "-"}
+                <td className={`px-3 py-2 text-right text-xs ${s.daysToEarnings == null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}`} title={s.nextEarningsDate ?? undefined}>
+                  {s.daysToEarnings != null ? `${s.daysToEarnings}d` : "-"}
                 </td>
               </tr>
             );
@@ -1911,10 +1911,10 @@ function CopyExportBar({
       s.performancePct.toFixed(2),
       s.aboveSma50 ? "Yes" : "No",
       s.volumeVsAvg.toFixed(2),
-      s.rs20d !== null ? s.rs20d.toFixed(1) : "",
-      s.trendAccel !== null ? s.trendAccel.toFixed(2) : "",
+      s.rs20d != null ? s.rs20d.toFixed(1) : "",
+      s.trendAccel != null ? s.trendAccel.toFixed(2) : "",
       (s.rsAcceleration ?? 0).toFixed(2),
-      s.daysToEarnings !== null ? String(s.daysToEarnings) : "",
+      s.daysToEarnings != null ? String(s.daysToEarnings) : "",
       s.nextEarningsDate ?? "",
       s.isTurnaroundCandidate ? "Yes" : "No",
     ]);
