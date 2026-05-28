@@ -259,16 +259,14 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
   const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setSectorRSFilter("all"); setPhaseFilter("all"); setQualityFilter("all"); };
   const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || sectorRSFilter !== "all" || phaseFilter !== "all" || qualityFilter !== "all";
 
-  const earlyStrengthActive = phaseFilter === "turnaround" && qualityFilter === "high" && rsAccelFilter === "positive";
+  const earlyStrengthActive = phaseFilter === "turnaround" && volFilter === "above";
   const toggleEarlyStrength = () => {
     if (earlyStrengthActive) {
       setPhaseFilter("all");
-      setQualityFilter("all");
-      setRsAccelFilter("all");
+      setVolFilter("all");
     } else {
       setPhaseFilter("turnaround");
-      setQualityFilter("high");
-      setRsAccelFilter("positive");
+      setVolFilter("above");
     }
   };
 
@@ -376,7 +374,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
               ? "bg-amber-500/20 text-amber-300 border-amber-500/40 ring-1 ring-amber-500/30"
               : "bg-[#1a1a1a] text-[#888] border-[#333] hover:text-[#ccc] hover:border-[#444]"
           }`}
-          title="Preset: Phase=P2 Turnaround + Quality=High + Trend Accel=Positive"
+          title="Preset: Phase=P2 Turnaround + Volume=Above Avg — below 50MA stocks with positive RS, trend accel, and volume"
         >
           Early Strength
         </button>
