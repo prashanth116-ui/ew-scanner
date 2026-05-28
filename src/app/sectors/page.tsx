@@ -239,7 +239,7 @@ type PhaseFilter = "all" | "basing" | "turnaround" | "trending" | "exhausting";
 
 const VERDICT_RANK: Record<string, number> = { "PRIORITY BUY": 0, KEEP: 1, WATCH: 2, DISCARD: 3, "": 4 };
 
-function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sectorName?: string }) {
+function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { stocks: StockInSector[]; sectorName?: string; hasRotationData?: boolean }) {
   const [sortKey, setSortKey] = useState<StockSortKey>("rs20d");
   const [sortAsc, setSortAsc] = useState(false);
   const [sma50Filter, setSma50Filter] = useState<SmaFilter>("all");
@@ -259,15 +259,9 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
   const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setSectorRSFilter("all"); setPhaseFilter("all"); setQualityFilter("all"); };
   const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || sectorRSFilter !== "all" || phaseFilter !== "all" || qualityFilter !== "all";
 
-  const earlyStrengthActive = phaseFilter === "turnaround" && volFilter === "above";
+  const earlyStrengthActive = phaseFilter === "turnaround";
   const toggleEarlyStrength = () => {
-    if (earlyStrengthActive) {
-      setPhaseFilter("all");
-      setVolFilter("all");
-    } else {
-      setPhaseFilter("turnaround");
-      setVolFilter("above");
-    }
+    setPhaseFilter(earlyStrengthActive ? "all" : "turnaround");
   };
 
   const filtered = useMemo(() => {
@@ -279,14 +273,14 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     if (verdictFilter === "priority") list = list.filter((s) => s.verdict === "PRIORITY BUY");
     else if (verdictFilter === "keep") list = list.filter((s) => s.verdict === "KEEP");
     else if (verdictFilter === "watch") list = list.filter((s) => s.verdict === "WATCH");
-    if (rsAccelFilter === "positive") list = list.filter((s) => (s.rsAccel ?? 0) > 0);
-    else if (rsAccelFilter === "negative") list = list.filter((s) => (s.rsAccel ?? 0) < 0);
-    if (sectorRSFilter === "positive") list = list.filter((s) => (s.sectorRS ?? 0) > 0);
-    else if (sectorRSFilter === "negative") list = list.filter((s) => (s.sectorRS ?? 0) < 0);
+    if (rsAccelFilter === "positive") list = list.filter((s) => s.rsAccel != null && s.rsAccel > 0);
+    else if (rsAccelFilter === "negative") list = list.filter((s) => s.rsAccel != null && s.rsAccel < 0);
+    if (sectorRSFilter === "positive") list = list.filter((s) => s.sectorRS != null && s.sectorRS > 0);
+    else if (sectorRSFilter === "negative") list = list.filter((s) => s.sectorRS != null && s.sectorRS < 0);
     if (phaseFilter !== "all") list = list.filter((s) => getStockPhase(s) === phaseFilter);
     if (qualityFilter === "improving") list = list.filter((s) => s.rsImproving);
     else if (qualityFilter === "high") list = list.filter((s) => s.rsImproving && s.volumeConsistency >= 3);
-    else if (qualityFilter === "fading") list = list.filter((s) => !s.rsImproving && (s.sectorRS ?? 0) < 0);
+    else if (qualityFilter === "fading") list = list.filter((s) => !s.rsImproving && s.sectorRS != null && s.sectorRS < 0);
     return list;
   }, [stocks, sma50Filter, volFilter, verdictFilter, rsAccelFilter, sectorRSFilter, phaseFilter, qualityFilter]);
 
@@ -374,7 +368,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
               ? "bg-amber-500/20 text-amber-300 border-amber-500/40 ring-1 ring-amber-500/30"
               : "bg-[#1a1a1a] text-[#888] border-[#333] hover:text-[#ccc] hover:border-[#444]"
           }`}
-          title="Preset: Phase=P2 Turnaround + Volume=Above Avg — below 50MA stocks with positive RS, trend accel, and volume"
+          title="Preset: P2 Turnaround — below 50MA, RS positive, trend accel positive, volume above avg"
         >
           Early Strength
         </button>
@@ -406,9 +400,9 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
             <option value="negative">Negative</option>
           </select>
         </label>
-        <label className="flex items-center gap-1 text-[#888]" title="Relative strength acceleration vs sector ETF. Positive = catching up vs sector recently.">
+        <label className={`flex items-center gap-1 ${hasRotationData ? "text-[#888]" : "text-[#555]"}`} title={hasRotationData ? "Relative strength acceleration vs sector ETF. Positive = catching up vs sector recently." : "Requires active rotation data — loading or unavailable"}>
           Sector RS
-          <select value={sectorRSFilter} onChange={(e) => setSectorRSFilter(e.target.value as RsAccelFilter)} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
+          <select value={sectorRSFilter} onChange={(e) => setSectorRSFilter(e.target.value as RsAccelFilter)} disabled={!hasRotationData} className={`bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-xs ${hasRotationData ? "text-[#a0a0a0]" : "text-[#555] opacity-50 cursor-not-allowed"}`}>
             <option value="all">All</option>
             <option value="positive">Positive</option>
             <option value="negative">Negative</option>
@@ -424,9 +418,9 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
             <option value="exhausting">P4 Exhausting</option>
           </select>
         </label>
-        <label className="flex items-center gap-1 text-[#888]">
+        <label className={`flex items-center gap-1 ${hasRotationData ? "text-[#888]" : "text-[#555]"}`} title={hasRotationData ? "Filter by rotation quality signals" : "Requires active rotation data — loading or unavailable"}>
           Quality
-          <select value={qualityFilter} onChange={(e) => setQualityFilter(e.target.value as "all" | "improving" | "high" | "fading")} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
+          <select value={qualityFilter} onChange={(e) => setQualityFilter(e.target.value as "all" | "improving" | "high" | "fading")} disabled={!hasRotationData} className={`bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-xs ${hasRotationData ? "text-[#a0a0a0]" : "text-[#555] opacity-50 cursor-not-allowed"}`}>
             <option value="all">All</option>
             <option value="improving">RS Improving</option>
             <option value="high">High Quality</option>
@@ -1283,7 +1277,7 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
 
 // ── Sector Detail Accordion (enhanced with #7 cross-linking, #5 sparkline) ──
 
-function SectorDetail({ sector, stocks, prevSnapshot, etfReturns }: { sector: SectorRotationScore; stocks: StockInSector[]; prevSnapshot?: SectorSnapshot | null; etfReturns?: number[] }) {
+function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationData = false }: { sector: SectorRotationScore; stocks: StockInSector[]; prevSnapshot?: SectorSnapshot | null; etfReturns?: number[]; hasRotationData?: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -1339,7 +1333,7 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns }: { sector: Se
           </div>
           {stocks.length > 0 && (
             <div className="border-t border-[#2a2a2a] pt-3">
-              <SectorStockTable stocks={stocks} sectorName={sector.sector} />
+              <SectorStockTable stocks={stocks} sectorName={sector.sector} hasRotationData={hasRotationData} />
             </div>
           )}
         </div>
@@ -1815,7 +1809,7 @@ export default function SectorRotationPage() {
         </div>
         <div className="space-y-2">
           {sortedSectors.map((s) => (
-            <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} prevSnapshot={comparisonMap?.get(s.sector)} etfReturns={data.etfReturns20d?.[s.etf]} />
+            <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} prevSnapshot={comparisonMap?.get(s.sector)} etfReturns={data.etfReturns20d?.[s.etf]} hasRotationData={rotationSectorRS.size > 0} />
           ))}
         </div>
       </div>

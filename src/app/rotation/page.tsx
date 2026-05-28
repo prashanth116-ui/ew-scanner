@@ -167,11 +167,11 @@ function perfBg(pct: number): string {
 type StockPhase = "basing" | "turnaround" | "trending" | "exhausting" | "neutral";
 
 function getRotationStockPhase(s: RotationStockPerformance): StockPhase {
-  const rsAccel = s.rsAcceleration ?? 0;
-  if (rsAccel < -2) return "exhausting";
-  if (!s.aboveSma50 && rsAccel > 0 && s.volumeVsAvg >= 1.2) return "turnaround";
-  if (!s.aboveSma50 && rsAccel > 0 && s.performancePct <= 0) return "basing";
-  if (s.aboveSma50 && rsAccel > 0) return "trending";
+  const ta = s.trendAccel ?? 0; // stock's own momentum (pctFromSMA50 - pctFromSMA200)
+  if (ta < -2) return "exhausting";
+  if (!s.aboveSma50 && ta > 0 && s.volumeVsAvg >= 1.2) return "turnaround";
+  if (!s.aboveSma50 && ta > 0 && s.performancePct <= 0) return "basing";
+  if (s.aboveSma50 && ta > 0) return "trending";
   return "neutral";
 }
 
@@ -1087,10 +1087,10 @@ function StockPerformanceTable({
     if (volFilter === "above") copy = copy.filter(item => item.stock.volumeVsAvg >= 1.2);
     else if (volFilter === "below") copy = copy.filter(item => item.stock.volumeVsAvg < 1.2);
     if (phaseFilter !== "all") copy = copy.filter(item => getRotationStockPhase(item.stock) === phaseFilter);
-    if (trendAccelFilter === "positive") copy = copy.filter(item => (item.stock.trendAccel ?? 0) > 0);
-    else if (trendAccelFilter === "negative") copy = copy.filter(item => (item.stock.trendAccel ?? 0) < 0);
-    if (rs20dFilter === "positive") copy = copy.filter(item => (item.stock.rs20d ?? 0) > 0);
-    else if (rs20dFilter === "negative") copy = copy.filter(item => (item.stock.rs20d ?? 0) < 0);
+    if (trendAccelFilter === "positive") copy = copy.filter(item => item.stock.trendAccel != null && item.stock.trendAccel > 0);
+    else if (trendAccelFilter === "negative") copy = copy.filter(item => item.stock.trendAccel != null && item.stock.trendAccel < 0);
+    if (rs20dFilter === "positive") copy = copy.filter(item => item.stock.rs20d != null && item.stock.rs20d > 0);
+    else if (rs20dFilter === "negative") copy = copy.filter(item => item.stock.rs20d != null && item.stock.rs20d < 0);
     if (qualityFilter === "improving") copy = copy.filter(item => item.stock.rsImproving);
     else if (qualityFilter === "high") copy = copy.filter(item =>
       item.stock.rsImproving && (item.stock.volumeConsistency ?? 0) >= 3 && (item.stock.dailyChangePct ?? 0) > -3
