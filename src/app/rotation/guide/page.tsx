@@ -23,6 +23,7 @@ const SECTIONS = [
   { id: "reading-actions", label: "Reading Actions" },
   { id: "timeline", label: "Timeline & Stats" },
   { id: "workflow", label: "Top-Down Workflow" },
+  { id: "filter-recipes", label: "Filter Recipes" },
   { id: "limitations", label: "Limitations" },
 ];
 
@@ -784,7 +785,119 @@ export default function RotationGuidePage() {
           </Tip>
         </Section>
 
-        {/* Section 9: Limitations */}
+        {/* Section 9: Filter Recipes */}
+        <Section
+          id="filter-recipes"
+          title="Filter Recipes: Using All 3 Metrics Together"
+          icon={<Eye className="h-5 w-5 text-[#5ba3e6]" />}
+        >
+          <p>
+            The stock table has three relative strength metrics side by side. Each measures something different.
+            The strongest picks have <strong className="text-white">all three agreeing</strong>.
+          </p>
+
+          <SubSection title="The Three Metrics">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Metric</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">What It Measures</th>
+                    <th className="py-1.5 text-left font-medium">Green Flag</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-white">RS 20d</td>
+                    <td className="py-2 pr-3">20-day relative strength vs the broad market</td>
+                    <td className="py-2 text-green-400">Positive = outperforming market</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-white">Trend Accel</td>
+                    <td className="py-2 pr-3">Stock&apos;s own trend acceleration (% from 50MA minus % from 200MA)</td>
+                    <td className="py-2 text-green-400">Positive = short-term trend gaining on long-term</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 font-medium text-white">Sector RS</td>
+                    <td className="py-2 pr-3">Relative strength acceleration vs sector ETF (5d vs 20d)</td>
+                    <td className="py-2 text-green-400">Positive = catching up vs sector recently</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Recipe 1: Best Entries (All 3 Positive)">
+            <p>
+              Set all three filters to <strong className="text-white">Positive</strong> plus Phase: <strong className="text-white">P2 Turnaround</strong>.
+              This surfaces stocks with strong individual momentum, gaining vs market AND gaining vs sector, in the entry zone (below 50MA turning up).
+              Highest-conviction new entries.
+            </p>
+          </SubSection>
+
+          <SubSection title="Recipe 2: Momentum Leaders">
+            <p>
+              Phase: <strong className="text-white">P3 Trending</strong> + RS 20d: <strong className="text-white">Positive</strong> + Volume: <strong className="text-white">Above Avg</strong>.
+              These are stocks already in uptrend with market-beating strength and institutional volume. Good for adding on pullbacks.
+            </p>
+          </SubSection>
+
+          <SubSection title="Recipe 3: Catch-Up Catalyst (The SNOW Pattern)">
+            <p>
+              Trend Accel: <strong className="text-white">Positive</strong> + Sector RS: <strong className="text-white">Negative</strong> + check the Earnings column for <span className="text-red-400">red</span> or <span className="text-amber-400">amber</span> (&le;14 days).
+            </p>
+            <p className="mt-2">
+              This combination identifies stocks with <strong className="text-white">strong individual momentum that are temporarily lagging their sector</strong>, with an upcoming earnings catalyst.
+              The positive Trend Accel confirms the stock&apos;s own trend is accelerating &mdash; it&apos;s not broken.
+              The negative Sector RS means it hasn&apos;t moved yet relative to peers &mdash; it&apos;s coiled.
+              Earnings is the trigger that can close the gap.
+            </p>
+            <p className="mt-2">
+              <strong className="text-white">Example:</strong> Before earnings, SNOW had Trend Accel <span className="text-green-400">+27.98</span> (powerful internal momentum) but Sector RS <span className="text-red-400">&minus;11.3</span> (lagging its sector ETF recently).
+              The Sector RS looked bearish in isolation, but the strong Trend Accel correctly signaled the stock had momentum.
+              SNOW jumped 75 points after earnings &mdash; the catalyst unlocked the gap between individual strength and sector-relative weakness.
+            </p>
+            <p className="mt-2">
+              <strong className="text-white">Key distinction:</strong> If Trend Accel is also negative, the stock is genuinely weak &mdash; avoid.
+              Positive Trend Accel + negative Sector RS = catch-up setup, not breakdown. The stock has the momentum; it just hasn&apos;t expressed it vs peers yet.
+            </p>
+            <Warning>
+              Earnings are binary events. Size down (half position or use options) when holding through earnings.
+              The pattern identifies <em>direction</em>, not <em>magnitude</em> &mdash; the stock can move the right way but still gap less than expected.
+            </Warning>
+          </SubSection>
+
+          <SubSection title="Recipe 4: Avoid List">
+            <p>
+              Phase: <strong className="text-white">P4 Exhausting</strong> + Trend Accel: <strong className="text-white">Negative</strong>.
+              Both the stock&apos;s own trend and its sector-relative momentum are fading. No reason to be involved.
+            </p>
+          </SubSection>
+
+          <SubSection title="Recipe 5: Early Watch (Contrarian)">
+            <p>
+              Phase: <strong className="text-white">P1 Basing</strong> + Sector RS: <strong className="text-white">Positive</strong>.
+              The stock is below 50MA with negative RS (hence P1 Basing), but its Sector RS is turning positive &mdash; it&apos;s starting to gain ground vs the sector ETF.
+              Too early to buy, but add to watchlist. If it transitions to P2 Turnaround (volume confirms), that&apos;s the entry.
+            </p>
+          </SubSection>
+
+          <SubSection title="Cross-Page Confirmation">
+            <p>
+              The same three metrics appear on both the <Link href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</Link> and the <Link href="/sectors" className="text-[#5ba3e6] hover:underline">Sectors Dashboard</Link>.
+              A stock that appears as a strong pick on <strong className="text-white">both pages</strong> &mdash; positive on all 3 metrics,
+              in an active rotation, within a leading or improving sector &mdash; is the highest-conviction setup.
+            </p>
+          </SubSection>
+
+          <Tip>
+            When Trend Accel and Sector RS diverge, <strong className="text-white">trust Trend Accel for direction</strong>.
+            It measures the stock&apos;s own momentum (more directional for individual moves). Use Sector RS for relative positioning
+            within a sector trade &mdash; it tells you if the stock is keeping up with peers, not whether it will go up or down.
+          </Tip>
+        </Section>
+
+        {/* Section 10: Limitations */}
         <Section
           id="limitations"
           title="Limitations"
