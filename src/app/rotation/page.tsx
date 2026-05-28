@@ -35,6 +35,7 @@ import type {
   StockCategory,
 } from "@/lib/sector-rotation/rotation-types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
+import { loadScanResults } from "@/lib/prerun/storage";
 
 // ── localStorage cache (4-hour TTL) ──
 
@@ -159,6 +160,38 @@ function perfBg(pct: number): string {
   if (pct > 0) return "bg-green-500/5";
   if (pct > -5) return "bg-red-500/5";
   return "bg-red-500/10";
+}
+
+// ── Phase classification (additive to existing action system) ──
+
+type StockPhase = "basing" | "turnaround" | "trending" | "exhausting" | "neutral";
+
+function getRotationStockPhase(s: RotationStockPerformance): StockPhase {
+  const rsAccel = s.rsAcceleration ?? 0;
+  if (rsAccel < -2) return "exhausting";
+  if (!s.aboveSma50 && rsAccel > 0 && s.volumeVsAvg >= 1.2) return "turnaround";
+  if (!s.aboveSma50 && rsAccel > 0 && s.performancePct <= 0) return "basing";
+  if (s.aboveSma50 && rsAccel > 0) return "trending";
+  return "neutral";
+}
+
+function phaseBadge(phase: StockPhase): { label: string; className: string; description: string } {
+  switch (phase) {
+    case "basing": return { label: "P1 Basing", className: "bg-purple-500/15 text-purple-400 border-purple-500/30", description: "Below 50MA, momentum turning — watch for confirmation" };
+    case "turnaround": return { label: "P2 Turnaround", className: "bg-amber-500/15 text-amber-400 border-amber-500/30", description: "Below 50MA, RS positive + volume — entry zone" };
+    case "trending": return { label: "P3 Trending", className: "bg-green-500/15 text-green-400 border-green-500/30", description: "Above 50MA, accelerating — hold or add on dips" };
+    case "exhausting": return { label: "P4 Exhausting", className: "bg-red-500/15 text-red-400 border-red-500/30", description: "Momentum fading (Sector RS < -2) — take profit" };
+    case "neutral": return { label: "Neutral", className: "bg-[#333]/50 text-[#666] border-[#333]", description: "Mixed or insufficient signals" };
+  }
+}
+
+const PHASE_RANK: Record<StockPhase, number> = { basing: 0, turnaround: 1, trending: 2, exhausting: 3, neutral: 4 };
+
+function getEntryQuality(s: RotationStockPerformance): number {
+  let quality = 0;
+  if ((s.rsAcceleration ?? 0) > 1) quality++;
+  if (s.volumeVsAvg >= 1.5) quality++;
+  return quality;
 }
 
 // ── Safe health accessor (guards against stale cached data missing health) ──
@@ -958,7 +991,7 @@ function actionChipColors(label: string): { bg: string; text: string; border: st
   }
 }
 
-type StockSortKey = "symbol" | "name" | "action" | "priceAtRotationStart" | "priceNow" | "dailyChangePct" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rsAcceleration";
+type StockSortKey = "symbol" | "name" | "action" | "phase" | "priceAtRotationStart" | "priceNow" | "dailyChangePct" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rs20d" | "trendAccel" | "rsAcceleration" | "earnings";
 
 function StockPerformanceTable({
   detail,
@@ -973,6 +1006,9 @@ function StockPerformanceTable({
   const [sma50Filter, setSma50Filter] = useState<"all" | "above" | "below">("all");
   const [rsAccelFilter, setRsAccelFilter] = useState<"all" | "positive" | "negative">("all");
   const [volFilter, setVolFilter] = useState<"all" | "above" | "below">("all");
+  const [phaseFilter, setPhaseFilter] = useState<"all" | "basing" | "turnaround" | "trending" | "exhausting">("all");
+  const [trendAccelFilter, setTrendAccelFilter] = useState<"all" | "positive" | "negative">("all");
+  const [rs20dFilter, setRs20dFilter] = useState<"all" | "positive" | "negative">("all");
 
   const sectorAvgPct =
     detail.stocks.length > 0
@@ -992,7 +1028,7 @@ function StockPerformanceTable({
     return ORDER.filter(a => actions.has(a));
   }, [detail.stocks, sectorAvgPct, lifecycle]);
 
-  const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all";
+  const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all" || phaseFilter !== "all" || trendAccelFilter !== "all" || rs20dFilter !== "all";
 
   function toggleAction(label: string) {
     setActionFilter(prev => {
@@ -1008,6 +1044,9 @@ function StockPerformanceTable({
     setSma50Filter("all");
     setRsAccelFilter("all");
     setVolFilter("all");
+    setPhaseFilter("all");
+    setTrendAccelFilter("all");
+    setRs20dFilter("all");
   }
 
   const sorted = useMemo(() => {
@@ -1028,6 +1067,11 @@ function StockPerformanceTable({
     else if (rsAccelFilter === "negative") copy = copy.filter(item => (item.stock.rsAcceleration ?? 0) < 0);
     if (volFilter === "above") copy = copy.filter(item => item.stock.volumeVsAvg >= 1.2);
     else if (volFilter === "below") copy = copy.filter(item => item.stock.volumeVsAvg < 1.2);
+    if (phaseFilter !== "all") copy = copy.filter(item => getRotationStockPhase(item.stock) === phaseFilter);
+    if (trendAccelFilter === "positive") copy = copy.filter(item => (item.stock.trendAccel ?? 0) > 0);
+    else if (trendAccelFilter === "negative") copy = copy.filter(item => (item.stock.trendAccel ?? 0) < 0);
+    if (rs20dFilter === "positive") copy = copy.filter(item => (item.stock.rs20d ?? 0) > 0);
+    else if (rs20dFilter === "negative") copy = copy.filter(item => (item.stock.rs20d ?? 0) < 0);
     // Sort
     copy.sort((a, b) => {
       let av: string | number;
@@ -1035,6 +1079,18 @@ function StockPerformanceTable({
       if (sortKey === "action") {
         av = a.stockAction.sortOrder;
         bv = b.stockAction.sortOrder;
+      } else if (sortKey === "phase") {
+        av = PHASE_RANK[getRotationStockPhase(a.stock)];
+        bv = PHASE_RANK[getRotationStockPhase(b.stock)];
+      } else if (sortKey === "earnings") {
+        av = a.stock.daysToEarnings ?? 9999;
+        bv = b.stock.daysToEarnings ?? 9999;
+      } else if (sortKey === "trendAccel") {
+        av = a.stock.trendAccel ?? -9999;
+        bv = b.stock.trendAccel ?? -9999;
+      } else if (sortKey === "rs20d") {
+        av = a.stock.rs20d ?? -9999;
+        bv = b.stock.rs20d ?? -9999;
       } else if (sortKey === "vsEtf") {
         av = a.vsEtf;
         bv = b.vsEtf;
@@ -1051,7 +1107,7 @@ function StockPerformanceTable({
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return copy;
-  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter]);
+  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter]);
 
   if (detail.stocks.length === 0) {
     return (
@@ -1075,8 +1131,31 @@ function StockPerformanceTable({
     return <span className="ml-1 text-[#5ba3e6]">{sortAsc ? "\u25B2" : "\u25BC"}</span>;
   }
 
+  const phaseCounts = useMemo(() => {
+    const counts = { basing: 0, turnaround: 0, trending: 0, exhausting: 0, neutral: 0 };
+    for (const s of detail.stocks) counts[getRotationStockPhase(s)]++;
+    return counts;
+  }, [detail.stocks]);
+
   return (
     <div>
+      {/* Phase summary bar */}
+      <div className="flex items-center gap-1.5 flex-wrap border-b border-[#2a2a2a] bg-[#141414] px-4 py-2">
+        <button onClick={() => setPhaseFilter(phaseFilter === "basing" ? "all" : "basing")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "basing" ? "bg-purple-500/20 text-purple-400 border-purple-500/40" : "bg-purple-500/5 text-purple-400/70 border-purple-500/20 hover:bg-purple-500/10"}`} title="Phase 1: Below 50MA, momentum turning — watch for confirmation">
+          P1: {phaseCounts.basing}
+        </button>
+        <button onClick={() => setPhaseFilter(phaseFilter === "turnaround" ? "all" : "turnaround")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "turnaround" ? "bg-amber-500/20 text-amber-400 border-amber-500/40" : "bg-amber-500/5 text-amber-400/70 border-amber-500/20 hover:bg-amber-500/10"}`} title="Phase 2: Below 50MA, RS positive + volume — entry zone">
+          P2: {phaseCounts.turnaround}
+        </button>
+        <button onClick={() => setPhaseFilter(phaseFilter === "trending" ? "all" : "trending")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "trending" ? "bg-green-500/20 text-green-400 border-green-500/40" : "bg-green-500/5 text-green-400/70 border-green-500/20 hover:bg-green-500/10"}`} title="Phase 3: Above 50MA, accelerating — hold or add on dips">
+          P3: {phaseCounts.trending}
+        </button>
+        <button onClick={() => setPhaseFilter(phaseFilter === "exhausting" ? "all" : "exhausting")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "exhausting" ? "bg-red-500/20 text-red-400 border-red-500/40" : "bg-red-500/5 text-red-400/70 border-red-500/20 hover:bg-red-500/10"}`} title="Phase 4: Momentum fading (Sector RS < -2) — take profit">
+          P4: {phaseCounts.exhausting}
+        </button>
+        <span className="text-[10px] text-[#555]" title="Neutral: Mixed or insufficient signals">—: {phaseCounts.neutral}</span>
+      </div>
+
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[#2a2a2a] bg-[#141414] px-4 py-2">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -1113,9 +1192,27 @@ function StockPerformanceTable({
           onChange={e => setRsAccelFilter(e.target.value as "all" | "positive" | "negative")}
           className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
         >
-          <option value="all">RS Accel: All</option>
+          <option value="all">Sector RS: All</option>
           <option value="positive">Positive (catching up)</option>
           <option value="negative">Negative (fading)</option>
+        </select>
+        <select
+          value={trendAccelFilter}
+          onChange={e => setTrendAccelFilter(e.target.value as "all" | "positive" | "negative")}
+          className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
+        >
+          <option value="all">Trend Accel: All</option>
+          <option value="positive">Positive (accelerating)</option>
+          <option value="negative">Negative (decelerating)</option>
+        </select>
+        <select
+          value={rs20dFilter}
+          onChange={e => setRs20dFilter(e.target.value as "all" | "positive" | "negative")}
+          className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
+        >
+          <option value="all">RS 20d: All</option>
+          <option value="positive">Positive</option>
+          <option value="negative">Negative</option>
         </select>
         <select
           value={volFilter}
@@ -1125,6 +1222,17 @@ function StockPerformanceTable({
           <option value="all">Volume: All</option>
           <option value="above">Above Avg (&ge;1.2x)</option>
           <option value="below">Below Avg</option>
+        </select>
+        <select
+          value={phaseFilter}
+          onChange={e => setPhaseFilter(e.target.value as "all" | "basing" | "turnaround" | "trending" | "exhausting")}
+          className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
+        >
+          <option value="all">Phase: All</option>
+          <option value="basing">P1 Basing</option>
+          <option value="turnaround">P2 Turnaround</option>
+          <option value="trending">P3 Trending</option>
+          <option value="exhausting">P4 Exhausting</option>
         </select>
         {hasActiveFilter && (
           <button
@@ -1159,6 +1267,9 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("symbol")}>
               Symbol<SortArrow col="symbol" />
             </th>
+            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("phase")}>
+              Phase<SortArrow col="phase" />
+            </th>
             <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("name")}>
               Name<SortArrow col="name" />
             </th>
@@ -1186,8 +1297,17 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("volumeVsAvg")}>
               Vol vs Avg<SortArrow col="volumeVsAvg" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("rsAcceleration")}>
-              RS Accel<SortArrow col="rsAcceleration" />
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("rs20d")} title="20-day relative strength vs market. Positive = outperforming over 20 days.">
+              RS 20d<SortArrow col="rs20d" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("trendAccel")} title="Short-term trend vs long-term trend (% from 50MA minus % from 200MA). Positive = accelerating uptrend.">
+              Trend Accel<SortArrow col="trendAccel" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("rsAcceleration")} title="Relative strength acceleration vs sector ETF (5d vs 20d). Positive = gaining ground vs sector recently.">
+              Sector RS<SortArrow col="rsAcceleration" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("earnings")}>
+              Earnings<SortArrow col="earnings" />
             </th>
           </tr>
         </thead>
@@ -1207,6 +1327,27 @@ function StockPerformanceTable({
                       Turnaround
                     </span>
                   )}
+                </td>
+                <td className="px-3 py-2 text-center">
+                  {(() => {
+                    const phase = getRotationStockPhase(s);
+                    const badge = phaseBadge(phase);
+                    const quality = getEntryQuality(s);
+                    return (
+                      <span className="inline-flex items-center gap-1" title={badge.description}>
+                        <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                        {(phase === "basing" || phase === "turnaround") && quality > 0 && (
+                          <span className="flex gap-0.5">
+                            {Array.from({ length: quality }).map((_, i) => (
+                              <span key={i} className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                            ))}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="px-3 py-2 text-[#ccc]">{s.name}</td>
                 <td className="px-3 py-2 text-center">
@@ -1241,8 +1382,17 @@ function StockPerformanceTable({
                 <td className="px-3 py-2 text-right text-[#888]">
                   {s.volumeVsAvg.toFixed(1)}x
                 </td>
+                <td className={`px-3 py-2 text-right font-mono text-xs ${s.rs20d === null ? "text-[#444]" : s.rs20d > 0 ? "text-green-400" : s.rs20d < 0 ? "text-red-400" : "text-[#666]"}`}>
+                  {s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}
+                </td>
+                <td className={`px-3 py-2 text-right font-mono text-xs ${s.trendAccel === null ? "text-[#444]" : s.trendAccel > 0 ? "text-green-400" : s.trendAccel < 0 ? "text-red-400" : "text-[#666]"}`}>
+                  {s.trendAccel !== null ? `${s.trendAccel > 0 ? "+" : ""}${s.trendAccel.toFixed(2)}` : "-"}
+                </td>
                 <td className={`px-3 py-2 text-right font-mono text-xs ${(s.rsAcceleration ?? 0) > 0 ? "text-green-400" : (s.rsAcceleration ?? 0) < 0 ? "text-red-400" : "text-[#666]"}`}>
                   {(s.rsAcceleration ?? 0) > 0 ? "+" : ""}{(s.rsAcceleration ?? 0).toFixed(2)}
+                </td>
+                <td className={`px-3 py-2 text-right text-xs ${s.daysToEarnings === null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}`} title={s.nextEarningsDate ?? undefined}>
+                  {s.daysToEarnings !== null ? `${s.daysToEarnings}d` : "-"}
                 </td>
               </tr>
             );
@@ -1751,16 +1901,21 @@ function CopyExportBar({
   }
 
   function exportCsv() {
-    const headers = ["Symbol", "Name", "Start Price", "Current", "% Change", "Above 50MA", "Vol vs Avg", "RS Accel", "Turnaround"];
+    const headers = ["Symbol", "Phase", "Name", "Start Price", "Current", "% Change", "Above 50MA", "Vol vs Avg", "RS 20d", "Trend Accel", "Sector RS", "Earnings (days)", "Earnings Date", "Turnaround"];
     const rows = stocks.map((s) => [
       s.symbol,
+      phaseBadge(getRotationStockPhase(s)).label,
       s.name,
       s.priceAtRotationStart.toFixed(2),
       s.priceNow.toFixed(2),
       s.performancePct.toFixed(2),
       s.aboveSma50 ? "Yes" : "No",
       s.volumeVsAvg.toFixed(2),
+      s.rs20d !== null ? s.rs20d.toFixed(1) : "",
+      s.trendAccel !== null ? s.trendAccel.toFixed(2) : "",
       (s.rsAcceleration ?? 0).toFixed(2),
+      s.daysToEarnings !== null ? String(s.daysToEarnings) : "",
+      s.nextEarningsDate ?? "",
       s.isTurnaroundCandidate ? "Yes" : "No",
     ]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
@@ -1860,14 +2015,41 @@ export default function RotationTrackerPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  // Enrich stocks with earnings data from prerun scan
+  const enrichedData = useMemo(() => {
+    if (!data) return null;
+    const scanResults = loadScanResults();
+    if (scanResults.length === 0) return data;
+
+    const scanByTicker = new Map<string, (typeof scanResults)[number]>();
+    for (const r of scanResults) scanByTicker.set(r.data.ticker, r);
+
+    return {
+      ...data,
+      activeRotations: data.activeRotations.map((rotation) => ({
+        ...rotation,
+        stocks: rotation.stocks.map((s) => {
+          const preRun = scanByTicker.get(s.symbol);
+          if (!preRun) return s;
+          return {
+            ...s,
+            daysToEarnings: preRun.data.daysToEarnings ?? null,
+            nextEarningsDate: preRun.data.nextEarningsDate ?? null,
+            rs20d: preRun.data.relativeStrength20d ?? s.rs20d,
+          };
+        }),
+      })),
+    };
+  }, [data]);
+
   // Find expanded rotation detail
   const expandedDetail = useMemo(() => {
-    if (!data || !expandedSector) return null;
+    if (!enrichedData || !expandedSector) return null;
     return (
-      data.activeRotations.find((r) => r.event.sectorId === expandedSector) ??
+      enrichedData.activeRotations.find((r) => r.event.sectorId === expandedSector) ??
       null
     );
-  }, [data, expandedSector]);
+  }, [enrichedData, expandedSector]);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">

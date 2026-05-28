@@ -41,9 +41,13 @@ export interface RotationStockPerformance {
   performancePct: number;
   aboveSma50: boolean;
   volumeVsAvg: number;
-  rsAcceleration: number; // positive = catching up vs sector ETF recently
+  rsAcceleration: number; // Sector RS: positive = catching up vs sector ETF recently (5d vs 20d)
+  trendAccel: number | null; // Trend Accel: pctFromSma50 - pctFromSma200 (stock's own trend acceleration)
   dailyChangePct: number; // today's % change from regularMarketChangePercent
   isTurnaroundCandidate: boolean; // lagging stock with positive RS acceleration + volume
+  daysToEarnings: number | null; // enriched client-side from prerun scan
+  nextEarningsDate: string | null; // enriched client-side from prerun scan
+  rs20d: number | null; // enriched client-side from prerun scan (relativeStrength20d)
 }
 
 export interface ActiveRotationDetail {

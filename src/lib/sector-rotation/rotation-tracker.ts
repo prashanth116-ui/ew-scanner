@@ -406,7 +406,7 @@ async function fetchStockPerformance(
   rotationStartDate: string,
   symbols: string[],
   names: Map<string, string>,
-  batchQuotes: Map<string, { price: number; sma50: number | null; volume: number; avgVolume10d: number; dailyChangePct: number }>,
+  batchQuotes: Map<string, { price: number; sma50: number | null; sma200: number | null; volume: number; avgVolume10d: number; dailyChangePct: number }>,
   etfCloses: number[],
   etfTimestamps: number[]
 ): Promise<RotationStockPerformance[]> {
@@ -465,6 +465,17 @@ async function fetchStockPerformance(
           ? Math.round((quote.volume / quote.avgVolume10d) * 100) / 100
           : 1;
 
+      // Trend Accel: pctFromSma50 - pctFromSma200 (stock's own trend acceleration)
+      const pctFromSma50 = quote.sma50 != null && quote.sma50 > 0
+        ? ((quote.price - quote.sma50) / quote.sma50) * 100
+        : null;
+      const pctFromSma200 = quote.sma200 != null && quote.sma200 > 0
+        ? ((quote.price - quote.sma200) / quote.sma200) * 100
+        : null;
+      const trendAccel = pctFromSma50 != null && pctFromSma200 != null
+        ? Math.round((pctFromSma50 - pctFromSma200) * 100) / 100
+        : null;
+
       // Align stock closes with ETF closes by matching timestamps for RS acceleration
       const alignedStockCloses: number[] = [];
       const alignedEtfCloses: number[] = [];
@@ -487,8 +498,12 @@ async function fetchStockPerformance(
         aboveSma50,
         volumeVsAvg,
         rsAcceleration: Math.round(rsAccel * 100) / 100,
+        trendAccel,
         dailyChangePct: Math.round(quote.dailyChangePct * 100) / 100,
         isTurnaroundCandidate: false, // set in second pass below
+        daysToEarnings: null, // enriched client-side from prerun scan
+        nextEarningsDate: null, // enriched client-side from prerun scan
+        rs20d: null, // enriched client-side from prerun scan
       });
     }
 
@@ -667,7 +682,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
       event.startDate,
       sectorSymbols,
       allStockNames,
-      batchQuotes as Map<string, { price: number; sma50: number | null; volume: number; avgVolume10d: number; dailyChangePct: number }>,
+      batchQuotes as Map<string, { price: number; sma50: number | null; sma200: number | null; volume: number; avgVolume10d: number; dailyChangePct: number }>,
       sectorEtfCloses,
       sectorEtfTimestamps
     );

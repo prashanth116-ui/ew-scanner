@@ -18,7 +18,7 @@ const SECTIONS = [
   { id: "what-is-it", label: "What Is It?" },
   { id: "rotation-cards", label: "Rotation Cards" },
   { id: "stock-table", label: "Stock Table" },
-  { id: "rs-acceleration", label: "RS Acceleration" },
+  { id: "rs-acceleration", label: "Sector RS" },
   { id: "turnaround", label: "Turnaround Candidates" },
   { id: "reading-actions", label: "Reading Actions" },
   { id: "timeline", label: "Timeline & Stats" },
@@ -131,7 +131,7 @@ export default function RotationGuidePage() {
                   Rotation Tracker Guide
                 </h1>
                 <p className="mt-1 text-[#a0a0a0]">
-                  How to read rotation cards, interpret stock performance, and use RS Acceleration to find turnaround candidates.
+                  How to read rotation cards, interpret stock performance, and use Sector RS to find turnaround candidates.
                 </p>
               </div>
             </div>
@@ -284,7 +284,7 @@ export default function RotationGuidePage() {
                   <tr className="border-b border-[#2a2a2a]/50"><td className="py-2 pr-3 font-medium text-white">vs ETF</td><td className="py-2">Stock return minus sector ETF return. Positive = outperforming the sector. Negative = underperforming.</td></tr>
                   <tr className="border-b border-[#2a2a2a]/50"><td className="py-2 pr-3 font-medium text-white">&gt;50MA</td><td className="py-2">Green dot = price above 50-day SMA (uptrend). Red dot = below (downtrend or broken).</td></tr>
                   <tr className="border-b border-[#2a2a2a]/50"><td className="py-2 pr-3 font-medium text-white">Vol vs Avg</td><td className="py-2">Today&apos;s volume divided by 10-day average. &ge;1.5x = high interest. &lt;0.8x = no participation.</td></tr>
-                  <tr><td className="py-2 pr-3 font-medium text-white">RS Accel</td><td className="py-2">Relative Strength Acceleration vs sector ETF. See dedicated section below.</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-white">Sector RS</td><td className="py-2">Relative strength acceleration vs sector ETF (5d vs 20d comparison). Positive = stock gaining ground vs sector recently. See dedicated section below.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -314,7 +314,7 @@ export default function RotationGuidePage() {
 
           <Tip>
             All columns are sortable. Click any column header to sort. Click again to reverse. <strong className="text-white">Sort by
-            RS Accel descending</strong> to find stocks that are catching up to the sector ETF fastest right now, regardless
+            Sector RS descending</strong> to find stocks that are catching up to the sector ETF fastest right now, regardless
             of their total performance.
           </Tip>
         </Section>
@@ -322,18 +322,20 @@ export default function RotationGuidePage() {
         {/* Section 4: RS Acceleration */}
         <Section
           id="rs-acceleration"
-          title="RS Acceleration (RS Accel)"
+          title="Sector RS (Relative Strength vs Sector ETF)"
           icon={<TrendingUp className="h-5 w-5 text-[#5ba3e6]" />}
         >
           <p>
-            <strong className="text-white">RS Acceleration</strong> measures whether a stock is gaining or losing ground
+            <strong className="text-white">Sector RS</strong> measures whether a stock is gaining or losing ground
             vs its sector ETF <em>recently</em> compared to the <em>medium term</em>. It&apos;s a second derivative &mdash;
             not how the stock is doing, but whether the rate of relative performance is changing.
+            Note: this is different from <strong className="text-white">Trend Accel</strong> on the Sectors dashboard,
+            which measures the stock&apos;s own trend acceleration (distance from 50MA minus distance from 200MA).
           </p>
 
           <SubSection title="The Formula">
             <div className="rounded-md bg-[#0a0a0a] border border-[#333] p-3 font-mono text-[11px] text-[#c0c0c0]">
-              RS Accel = (stock_5d_return &minus; etf_5d_return) &minus; (stock_20d_return &minus; etf_20d_return)
+              Sector RS = (stock_5d_return &minus; etf_5d_return) &minus; (stock_20d_return &minus; etf_20d_return)
             </div>
             <p className="mt-2">
               The first term is the stock&apos;s recent (5-day) outperformance vs the ETF. The second term is the
@@ -347,7 +349,7 @@ export default function RotationGuidePage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-[#2a2a2a] text-[#666]">
-                    <th className="py-1.5 pr-3 text-left font-medium">RS Accel</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Sector RS</th>
                     <th className="py-1.5 pr-3 text-left font-medium">Color</th>
                     <th className="py-1.5 text-left font-medium">What It Means</th>
                   </tr>
@@ -385,7 +387,7 @@ export default function RotationGuidePage() {
 
           <SubSection title="Post-Spike Cooldown (e.g., DDOG Pattern)">
             <p>
-              A <strong className="text-white">strongly negative RS Accel on a recent big winner</strong> is normal and does
+              A <strong className="text-white">strongly negative Sector RS on a recent big winner</strong> is normal and does
               not mean the stock is failing. Here&apos;s why:
             </p>
             <p className="mt-2">
@@ -395,10 +397,10 @@ export default function RotationGuidePage() {
             <div className="mt-2 rounded-md bg-[#0a0a0a] border border-[#333] p-3 font-mono text-[11px] text-[#c0c0c0]">
               <div>20d relative: +30% &minus; 5% = <span className="text-green-400">+25%</span> (massive outperformance)</div>
               <div>5d relative: 0% &minus; 1% = <span className="text-red-400">&minus;1%</span> (slight underperformance)</div>
-              <div>RS Accel: (&minus;1) &minus; (+25) = <span className="text-red-400">&minus;26</span></div>
+              <div>Sector RS: (&minus;1) &minus; (+25) = <span className="text-red-400">&minus;26</span></div>
             </div>
             <p className="mt-2">
-              The RS Accel is &minus;26 even though the stock is up 30%! This is correct &mdash; the stock <em>is</em> decelerating
+              The Sector RS is &minus;26 even though the stock is up 30%! This is correct &mdash; the stock <em>is</em> decelerating
               relative to the ETF. It&apos;s just that the &quot;deceleration&quot; is from an extraordinary spike back to normal,
               not from strength to weakness.
             </p>
@@ -407,32 +409,32 @@ export default function RotationGuidePage() {
             </p>
             <ul className="list-disc pl-4 space-y-1">
               <li>Check the <strong className="text-white">% Change</strong> column. If total return is strongly positive (e.g., +30%),
-                negative RS Accel just means post-spike cooldown. The stock is fine.</li>
+                negative Sector RS just means post-spike cooldown. The stock is fine.</li>
               <li>Check <strong className="text-white">vs ETF</strong>. If still well above zero, the stock is still outperforming
-                on an absolute basis. The negative RS Accel is noise.</li>
-              <li>A stock with <strong className="text-white">negative % Change AND negative RS Accel</strong> is genuinely failing &mdash;
+                on an absolute basis. The negative Sector RS is noise.</li>
+              <li>A stock with <strong className="text-white">negative % Change AND negative Sector RS</strong> is genuinely failing &mdash;
                 it&apos;s lagging the sector and getting worse. That&apos;s the real warning signal.</li>
             </ul>
           </SubSection>
 
-          <SubSection title="Best Uses for RS Accel">
+          <SubSection title="Best Uses for Sector RS">
             <ul className="list-disc pl-4 space-y-1">
-              <li><strong className="text-white">Find turnaround candidates</strong> &mdash; Sort RS Accel descending. Stocks at the top
+              <li><strong className="text-white">Find turnaround candidates</strong> &mdash; Sort Sector RS descending. Stocks at the top
                 with negative % Change are reversing their underperformance. These are early entries before the crowd notices.</li>
-              <li><strong className="text-white">Spot fading leaders</strong> &mdash; Leaders (green badge) with negative RS Accel are losing
+              <li><strong className="text-white">Spot fading leaders</strong> &mdash; Leaders (green badge) with negative Sector RS are losing
                 their edge. They may still be up, but the rate of outperformance is slowing. Consider taking profits.</li>
-              <li><strong className="text-white">Ignore post-spike noise</strong> &mdash; If % Change is +15% or higher and RS Accel is
+              <li><strong className="text-white">Ignore post-spike noise</strong> &mdash; If % Change is +15% or higher and Sector RS is
                 deeply negative, the stock just had a big move and is consolidating. This is not an exit signal &mdash; consolidation
                 after a spike is healthy.</li>
-              <li><strong className="text-white">Confirm catch-up plays</strong> &mdash; Catch-up stocks (cyan badge) with positive RS Accel
+              <li><strong className="text-white">Confirm catch-up plays</strong> &mdash; Catch-up stocks (cyan badge) with positive Sector RS
                 are the highest-probability entries &mdash; they&apos;re in an uptrend AND accelerating relative to the sector.</li>
             </ul>
           </SubSection>
 
           <Warning>
-            RS Accel requires at least 21 aligned trading days between the stock and ETF. Stocks with insufficient
+            Sector RS requires at least 21 aligned trading days between the stock and ETF. Stocks with insufficient
             data show <span className="font-mono">0.00</span> and will not qualify as turnaround candidates. Newly
-            IPO&apos;d or recently listed stocks may show zero RS Accel.
+            IPO&apos;d or recently listed stocks may show zero Sector RS.
           </Warning>
         </Section>
 
@@ -465,8 +467,8 @@ export default function RotationGuidePage() {
                     <td className="py-2">Must be a genuine laggard. Leaders and catch-ups don&apos;t need turnaround classification.</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
-                    <td className="py-2 pr-3 font-medium text-white">Positive RS Acceleration</td>
-                    <td className="py-2 pr-3">RS Accel &gt; +0.50</td>
+                    <td className="py-2 pr-3 font-medium text-white">Positive Sector RS</td>
+                    <td className="py-2 pr-3">Sector RS &gt; +0.50</td>
                     <td className="py-2">The stock must be catching up at a meaningful rate, not just fluctuating. 0.50 filters noise.</td>
                   </tr>
                   <tr>
@@ -496,14 +498,14 @@ export default function RotationGuidePage() {
             <p>
               Previously, all stocks below the 50-day SMA were categorized as &quot;Avoid&quot; with no distinction.
               Turnaround candidates are a carve-out from Avoid &mdash; they&apos;re still below average, but the
-              RS Acceleration shows they&apos;re improving at an accelerating rate. Think of it as:
+              Sector RS shows they&apos;re improving at an accelerating rate. Think of it as:
             </p>
             <ul className="list-disc pl-4 space-y-1">
               <li><strong className="text-red-400">Avoid</strong> = lagging AND getting worse (or no improvement signal)</li>
               <li><strong className="text-purple-400">Turnaround</strong> = lagging BUT catching up with volume support</li>
             </ul>
             <p className="mt-2">
-              Note that turnaround candidates can be below their 50MA &mdash; the RS Accel gives a leading signal
+              Note that turnaround candidates can be below their 50MA &mdash; the Sector RS gives a leading signal
               <em> before</em> the stock crosses above the 50MA. By the time a stock is above the 50MA and beating the
               sector average, it would be reclassified as Catch-up or Leader.
             </p>
@@ -517,11 +519,11 @@ export default function RotationGuidePage() {
             <ul className="list-disc pl-4 space-y-1">
               <li>5-day return: +6% vs ETF +1% &rarr; 5d relative = +5%</li>
               <li>20-day return: &minus;15% vs ETF +8% &rarr; 20d relative = &minus;23%</li>
-              <li>RS Accel = (+5) &minus; (&minus;23) = <span className="text-green-400 font-mono">+28.00</span></li>
+              <li>Sector RS = (+5) &minus; (&minus;23) = <span className="text-green-400 font-mono">+28.00</span></li>
               <li>Volume: 1.2x average (real participation)</li>
             </ul>
             <p className="mt-2">
-              RS Accel of +28 means the stock swung from &minus;23% underperformance over 20 days to +5% outperformance
+              Sector RS of +28 means the stock swung from &minus;23% underperformance over 20 days to +5% outperformance
               over 5 days. Massive acceleration. Combined with volume, this is a strong turnaround signal &mdash; the stock
               has reversed and institutional money is showing up. It gets the purple
               <span className="text-purple-400 font-semibold"> Speculative Buy</span> badge.
@@ -699,14 +701,14 @@ export default function RotationGuidePage() {
             </p>
             <ul className="list-disc pl-4 space-y-1">
               <li><strong className="text-white">Below 50MA</strong> &mdash; not yet in uptrend (early)</li>
-              <li><strong className="text-white">Positive RS Acceleration</strong> &mdash; relative strength improving vs sector</li>
+              <li><strong className="text-white">Positive Sector RS</strong> &mdash; relative strength improving vs sector</li>
               <li><strong className="text-white">Volume &ge; 1.2x average</strong> &mdash; institutional interest confirmed</li>
             </ul>
           </SubSection>
 
           <SubSection title="Step 4: Use Filters for Specific Screens">
             <p>
-              The filter bar has action chips, 50MA, RS Accel, and Volume dropdowns. Use these combos for targeted screening:
+              The filter bar has action chips, 50MA, Sector RS, and Volume dropdowns. Use these combos for targeted screening:
             </p>
             <div className="overflow-x-auto mt-2">
               <table className="w-full text-xs">
@@ -719,7 +721,7 @@ export default function RotationGuidePage() {
                 <tbody className="text-[#c0c0c0]">
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-2 pr-3 font-medium text-amber-400">Turnaround candidates</td>
-                    <td className="py-2">Below 50MA + Positive RS Accel + Above Avg volume (matches amber highlights exactly)</td>
+                    <td className="py-2">Below 50MA + Positive Sector RS + Above Avg volume (matches amber highlights exactly)</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-2 pr-3 font-medium text-green-400">Strongest leaders</td>
@@ -727,7 +729,7 @@ export default function RotationGuidePage() {
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
                     <td className="py-2 pr-3 font-medium text-red-400">Fading stocks to avoid</td>
-                    <td className="py-2">Above 50MA + Negative RS Accel (momentum dying despite uptrend)</td>
+                    <td className="py-2">Above 50MA + Negative Sector RS (momentum dying despite uptrend)</td>
                   </tr>
                   <tr>
                     <td className="py-2 pr-3 font-medium text-cyan-400">Undiscovered catch-ups</td>
@@ -744,8 +746,8 @@ export default function RotationGuidePage() {
               than one fighting a headwind. Check whether the expanded sector&apos;s card shows the alignment badge.
             </p>
             <p className="mt-2">
-              Sort by <strong className="text-white">RS Accel descending</strong> within highlighted turnaround rows to rank
-              them by momentum strength &mdash; the highest RS Accel values are reversing fastest.
+              Sort by <strong className="text-white">Sector RS descending</strong> within highlighted turnaround rows to rank
+              them by momentum strength &mdash; the highest Sector RS values are reversing fastest.
             </p>
           </SubSection>
 
@@ -760,16 +762,16 @@ export default function RotationGuidePage() {
             </ul>
           </SubSection>
 
-          <SubSection title="Interpreting Big RS Accel Numbers">
-            <p>RS Accel values outside &plusmn;5 deserve extra attention:</p>
+          <SubSection title="Interpreting Big Sector RS Numbers">
+            <p>Sector RS values outside &plusmn;5 deserve extra attention:</p>
             <ul className="list-disc pl-4 space-y-1">
-              <li><strong className="text-green-400">RS Accel &gt; +5</strong> with negative % Change = strong turnaround signal.
+              <li><strong className="text-green-400">Sector RS &gt; +5</strong> with negative % Change = strong turnaround signal.
                 The stock is reversing hard and fast from a deep underperformance.</li>
-              <li><strong className="text-green-400">RS Accel &gt; +5</strong> with positive % Change = momentum acceleration.
+              <li><strong className="text-green-400">Sector RS &gt; +5</strong> with positive % Change = momentum acceleration.
                 Already outperforming and gaining more ground. Strong leader getting stronger.</li>
-              <li><strong className="text-red-400">RS Accel &lt; &minus;5</strong> with positive % Change = post-spike cooldown.
+              <li><strong className="text-red-400">Sector RS &lt; &minus;5</strong> with positive % Change = post-spike cooldown.
                 Check if there was a recent earnings gap or catalyst. Usually not a sell signal, just consolidation.</li>
-              <li><strong className="text-red-400">RS Accel &lt; &minus;5</strong> with negative % Change = deteriorating laggard.
+              <li><strong className="text-red-400">Sector RS &lt; &minus;5</strong> with negative % Change = deteriorating laggard.
                 The worst combination. Stock is underperforming and getting worse. Avoid.</li>
             </ul>
           </SubSection>
@@ -777,7 +779,7 @@ export default function RotationGuidePage() {
           <Tip>
             The highest-conviction setup: an <strong className="text-green-400">ENTER</strong> sector with
             <strong className="text-white"> Regime Aligned</strong> badge, containing amber-highlighted turnaround rows with
-            <strong className="text-green-400"> RS Accel &gt; +2</strong>. This means fresh rotation + macro tailwind + lagging stock
+            <strong className="text-green-400"> Sector RS &gt; +2</strong>. This means fresh rotation + macro tailwind + lagging stock
             reversing with institutional volume. Cross-check on the Pre-Run scanner for additional confirmation.
           </Tip>
         </Section>
@@ -788,20 +790,20 @@ export default function RotationGuidePage() {
           title="Limitations"
           icon={<AlertTriangle className="h-5 w-5 text-amber-400" />}
         >
-          <SubSection title="RS Accel Limitations">
+          <SubSection title="Sector RS Limitations">
             <ul className="list-disc pl-4 space-y-1">
               <li>
                 <strong className="text-white">Post-spike distortion</strong> &mdash; Stocks that gapped up on earnings or
-                a catalyst will show strongly negative RS Accel for ~15 trading days as the 20-day window slides past the
-                spike. This is mathematically correct but does not indicate weakness. Always check % Change alongside RS Accel.
+                a catalyst will show strongly negative Sector RS for ~15 trading days as the 20-day window slides past the
+                spike. This is mathematically correct but does not indicate weakness. Always check % Change alongside Sector RS.
               </li>
               <li>
                 <strong className="text-white">Minimum data requirement</strong> &mdash; Needs 21 aligned trading days between
                 stock and ETF. New IPOs, recently listed stocks, or stocks with trading halts may show 0.00.
               </li>
               <li>
-                <strong className="text-white">5d/20d windows are fixed</strong> &mdash; RS Accel uses 5-day and 20-day lookbacks.
-                A stock that reversed 6 days ago may not yet show positive RS Accel if the first day of reversal was the 6th day
+                <strong className="text-white">5d/20d windows are fixed</strong> &mdash; Sector RS uses 5-day and 20-day lookbacks.
+                A stock that reversed 6 days ago may not yet show positive Sector RS if the first day of reversal was the 6th day
                 back. The signal lags by a few days.
               </li>
             </ul>
@@ -811,7 +813,7 @@ export default function RotationGuidePage() {
             <ul className="list-disc pl-4 space-y-1">
               <li>
                 <strong className="text-white">Not all turnarounds succeed</strong> &mdash; A stock can meet all three criteria
-                (lagging + RS Accel + volume) and still fail. The turnaround flag is a screening signal, not a trade signal.
+                (lagging + Sector RS + volume) and still fail. The turnaround flag is a screening signal, not a trade signal.
                 Always do additional analysis before entering.
               </li>
               <li>

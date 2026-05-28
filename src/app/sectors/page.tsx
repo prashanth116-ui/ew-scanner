@@ -9,6 +9,7 @@ import type {
   RRGQuadrant,
 } from "@/lib/sector-rotation/types";
 import type { PreRunResult } from "@/lib/prerun/types";
+import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
 import {
   loadSectorRotation,
   saveSectorRotation,
@@ -128,6 +129,7 @@ interface StockInSector {
   companyName: string;
   rs20d: number | null;
   rsAccel: number | null;
+  sectorRS: number | null; // relative strength accel vs sector ETF (from rotation tracker)
   pctFromAth: number | null;
   finalScore: number;
   verdict: string;
@@ -168,7 +170,7 @@ function phaseBadge(phase: StockPhase): { label: string; className: string; desc
     case "basing": return { label: "P1 Basing", className: "bg-purple-500/15 text-purple-400 border-purple-500/30", description: "Below 50MA, momentum turning — watch for confirmation" };
     case "turnaround": return { label: "P2 Turnaround", className: "bg-amber-500/15 text-amber-400 border-amber-500/30", description: "Below 50MA, RS positive + volume — entry zone" };
     case "trending": return { label: "P3 Trending", className: "bg-green-500/15 text-green-400 border-green-500/30", description: "Above 50MA, accelerating — hold or add on dips" };
-    case "exhausting": return { label: "P4 Exhausting", className: "bg-red-500/15 text-red-400 border-red-500/30", description: "Momentum fading (RS Accel < -2) — take profit" };
+    case "exhausting": return { label: "P4 Exhausting", className: "bg-red-500/15 text-red-400 border-red-500/30", description: "Momentum fading (Trend Accel < -2) — take profit" };
     case "neutral": return { label: "Neutral", className: "bg-[#333]/50 text-[#666] border-[#333]", description: "Mixed or insufficient signals" };
   }
 }
@@ -225,7 +227,7 @@ function EtfSparkline({ returns }: { returns: number[] | undefined }) {
 
 // ── Sector Stock Table (Enhanced #2: RS Accel, #8: export, #14: mobile) ──
 
-type StockSortKey = "ticker" | "rs20d" | "rsAccel" | "finalScore" | "volumeVsAvg" | "aboveSma50" | "verdict" | "phase" | "earnings";
+type StockSortKey = "ticker" | "rs20d" | "rsAccel" | "sectorRS" | "finalScore" | "volumeVsAvg" | "aboveSma50" | "verdict" | "phase" | "earnings";
 type SmaFilter = "all" | "above" | "below";
 type VolFilter = "all" | "above" | "below";
 type VerdictFilter = "all" | "priority" | "keep" | "watch";
@@ -241,6 +243,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
   const [volFilter, setVolFilter] = useState<VolFilter>("all");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [rsAccelFilter, setRsAccelFilter] = useState<RsAccelFilter>("all");
+  const [sectorRSFilter, setSectorRSFilter] = useState<RsAccelFilter>("all");
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("all");
   const [tableCopied, setTableCopied] = useState(false);
 
@@ -249,8 +252,8 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     else { setSortKey(key); setSortAsc(key === "ticker"); }
   };
 
-  const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setPhaseFilter("all"); };
-  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || phaseFilter !== "all";
+  const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setSectorRSFilter("all"); setPhaseFilter("all"); };
+  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || sectorRSFilter !== "all" || phaseFilter !== "all";
 
   const filtered = useMemo(() => {
     let list = [...stocks];
@@ -263,9 +266,11 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     else if (verdictFilter === "watch") list = list.filter((s) => s.verdict === "WATCH");
     if (rsAccelFilter === "positive") list = list.filter((s) => (s.rsAccel ?? 0) > 0);
     else if (rsAccelFilter === "negative") list = list.filter((s) => (s.rsAccel ?? 0) < 0);
+    if (sectorRSFilter === "positive") list = list.filter((s) => (s.sectorRS ?? 0) > 0);
+    else if (sectorRSFilter === "negative") list = list.filter((s) => (s.sectorRS ?? 0) < 0);
     if (phaseFilter !== "all") list = list.filter((s) => getStockPhase(s) === phaseFilter);
     return list;
-  }, [stocks, sma50Filter, volFilter, verdictFilter, rsAccelFilter, phaseFilter]);
+  }, [stocks, sma50Filter, volFilter, verdictFilter, rsAccelFilter, sectorRSFilter, phaseFilter]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -274,6 +279,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
       case "ticker": return list.sort((a, b) => dir * a.ticker.localeCompare(b.ticker));
       case "rs20d": return list.sort((a, b) => dir * ((a.rs20d ?? -999) - (b.rs20d ?? -999)));
       case "rsAccel": return list.sort((a, b) => dir * ((a.rsAccel ?? -999) - (b.rsAccel ?? -999)));
+      case "sectorRS": return list.sort((a, b) => dir * ((a.sectorRS ?? -999) - (b.sectorRS ?? -999)));
       case "finalScore": return list.sort((a, b) => dir * (a.finalScore - b.finalScore));
       case "volumeVsAvg": return list.sort((a, b) => dir * ((a.volumeVsAvg ?? -1) - (b.volumeVsAvg ?? -1)));
       case "aboveSma50": return list.sort((a, b) => dir * ((a.aboveSma50 === true ? 1 : a.aboveSma50 === false ? 0 : -1) - (b.aboveSma50 === true ? 1 : b.aboveSma50 === false ? 0 : -1)));
@@ -303,10 +309,10 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     return val;
   };
   const exportCsv = () => {
-    const header = "Ticker,Company,Phase,RS 20d,RS Accel,>50MA,Vol vs Avg,Score,Earnings (days),Earnings Date,Verdict";
+    const header = "Ticker,Company,Phase,RS 20d,Trend Accel,Sector RS,>50MA,Vol vs Avg,Score,Earnings (days),Earnings Date,Verdict";
     const rows = sorted.map((s) => {
       const phase = phaseBadge(getStockPhase(s)).label;
-      return [s.ticker, csvEscape(s.companyName), phase, s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.daysToEarnings ?? "", s.nextEarningsDate ?? "", s.verdict].join(",");
+      return [s.ticker, csvEscape(s.companyName), phase, s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.sectorRS?.toFixed(2) ?? "", s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.daysToEarnings ?? "", s.nextEarningsDate ?? "", s.verdict].join(",");
     });
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -338,7 +344,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
         <button onClick={() => setPhaseFilter(phaseFilter === "trending" ? "all" : "trending")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "trending" ? "bg-green-500/20 text-green-400 border-green-500/40" : "bg-green-500/5 text-green-400/70 border-green-500/20 hover:bg-green-500/10"}`} title="Phase 3: Above 50MA, accelerating — hold or add on dips">
           P3: {phaseCounts.trending}
         </button>
-        <button onClick={() => setPhaseFilter(phaseFilter === "exhausting" ? "all" : "exhausting")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "exhausting" ? "bg-red-500/20 text-red-400 border-red-500/40" : "bg-red-500/5 text-red-400/70 border-red-500/20 hover:bg-red-500/10"}`} title="Phase 4: Momentum fading (RS Accel < -2) — take profit">
+        <button onClick={() => setPhaseFilter(phaseFilter === "exhausting" ? "all" : "exhausting")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "exhausting" ? "bg-red-500/20 text-red-400 border-red-500/40" : "bg-red-500/5 text-red-400/70 border-red-500/20 hover:bg-red-500/10"}`} title="Phase 4: Momentum fading (Trend Accel < -2) — take profit">
           P4: {phaseCounts.exhausting}
         </button>
         <span className="text-[10px] text-[#555]" title="Neutral: Mixed or insufficient signals">—: {phaseCounts.neutral}</span>
@@ -363,9 +369,17 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
             <option value="below">Below Avg</option>
           </select>
         </label>
-        <label className="flex items-center gap-1 text-[#888]">
-          RS Accel
+        <label className="flex items-center gap-1 text-[#888]" title="Short-term trend vs long-term trend (% from 50MA minus % from 200MA)">
+          Trend Accel
           <select value={rsAccelFilter} onChange={(e) => setRsAccelFilter(e.target.value as RsAccelFilter)} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
+            <option value="all">All</option>
+            <option value="positive">Positive</option>
+            <option value="negative">Negative</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-[#888]" title="Relative strength acceleration vs sector ETF. Positive = catching up vs sector recently.">
+          Sector RS
+          <select value={sectorRSFilter} onChange={(e) => setSectorRSFilter(e.target.value as RsAccelFilter)} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
             <option value="all">All</option>
             <option value="positive">Positive</option>
             <option value="negative">Negative</option>
@@ -417,7 +431,8 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
               <th className="text-left py-1.5 pr-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("phase")}>Phase{sortArrow("phase")}</th>
               <th className="text-left py-1.5 pr-2 font-medium hidden md:table-cell">Company</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rs20d")}>RS 20d{sortArrow("rs20d")}</th>
-              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rsAccel")}>RS Accel{sortArrow("rsAccel")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rsAccel")} title="Short-term trend vs long-term trend (% from 50MA minus % from 200MA). Positive = accelerating uptrend.">Trend Accel{sortArrow("rsAccel")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("sectorRS")} title="Sector RS: relative strength acceleration vs sector ETF. (stock 5d - ETF 5d) - (stock 20d - ETF 20d). Positive = catching up vs sector recently.">Sector RS{sortArrow("sectorRS")}</th>
               <th className="text-center py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("aboveSma50")}>&gt;50MA{sortArrow("aboveSma50")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("volumeVsAvg")}>Vol vs Avg{sortArrow("volumeVsAvg")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("finalScore")}>Score{sortArrow("finalScore")}</th>
@@ -454,6 +469,9 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
                   </td>
                   <td className={`py-1.5 px-2 text-right font-mono ${rsAccelColor(s.rsAccel)}`}>
                     {s.rsAccel !== null ? `${s.rsAccel > 0 ? "+" : ""}${s.rsAccel.toFixed(2)}` : "-"}
+                  </td>
+                  <td className={`py-1.5 px-2 text-right font-mono ${rsAccelColor(s.sectorRS)}`}>
+                    {s.sectorRS !== null ? `${s.sectorRS > 0 ? "+" : ""}${s.sectorRS.toFixed(2)}` : "-"}
                   </td>
                   <td className="py-1.5 px-2 text-center">
                     {s.aboveSma50 === true ? (
@@ -523,9 +541,12 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
                 {s.aboveSma50 === true ? <span className="h-2 w-2 rounded-full bg-green-400" /> : s.aboveSma50 === false ? <span className="h-2 w-2 rounded-full bg-red-400" /> : null}
               </div>
               <div className="mt-1 text-[10px] text-[#555]">{s.companyName}</div>
-              <div className="mt-2 grid grid-cols-5 gap-2 text-[11px]">
-                <div><span className="text-[#666]">RS</span> <span className={rsColor(s.rs20d)}>{s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}</span></div>
-                <div><span className="text-[#666]">Accel</span> <span className={rsAccelColor(s.rsAccel)}>{s.rsAccel !== null ? `${s.rsAccel > 0 ? "+" : ""}${s.rsAccel.toFixed(1)}` : "-"}</span></div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                <div><span className="text-[#666]">RS 20d</span> <span className={rsColor(s.rs20d)}>{s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}</span></div>
+                <div><span className="text-[#666]" title="Trend Accel: % from 50MA minus % from 200MA">TrAccel</span> <span className={rsAccelColor(s.rsAccel)}>{s.rsAccel !== null ? `${s.rsAccel > 0 ? "+" : ""}${s.rsAccel.toFixed(1)}` : "-"}</span></div>
+                <div><span className="text-[#666]" title="Sector RS: relative strength vs sector ETF">SectorRS</span> <span className={rsAccelColor(s.sectorRS)}>{s.sectorRS !== null ? `${s.sectorRS > 0 ? "+" : ""}${s.sectorRS.toFixed(1)}` : "-"}</span></div>
+              </div>
+              <div className="mt-1 grid grid-cols-3 gap-2 text-[11px]">
                 <div>
                   <span className="text-[#666]">Vol</span>{" "}
                   <span className="text-[#a0a0a0]">{s.volumeVsAvg?.toFixed(1) ?? "-"}x</span>
@@ -1197,6 +1218,21 @@ export default function SectorRotationPage() {
   const [history, setHistory] = useState<DailySnapshot[]>([]);
   const [copiedToast, setCopiedToast] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(0);
+  const [rotationSectorRS, setRotationSectorRS] = useState<Map<string, number>>(new Map());
+
+  // Fetch rotation tracker data for Sector RS column (non-blocking)
+  useEffect(() => {
+    fetch("/api/rotation-tracker").then(res => res.ok ? res.json() : null).then((result: RotationTrackerResult | null) => {
+      if (!result) return;
+      const map = new Map<string, number>();
+      for (const rotation of result.activeRotations) {
+        for (const s of rotation.stocks) {
+          map.set(s.symbol, s.rsAcceleration);
+        }
+      }
+      setRotationSectorRS(map);
+    }).catch(() => { /* non-critical */ });
+  }, []);
 
   useEffect(() => { setHistory(loadHistory()); }, []);
   useEffect(() => { if (data) setHistory(loadHistory()); }, [data]);
@@ -1252,6 +1288,7 @@ export default function SectorRotationPage() {
           companyName: stock.name,
           rs20d,
           rsAccel,
+          sectorRS: rotationSectorRS.get(stock.symbol) ?? null,
           pctFromAth: preRun?.data.pctFromAth ?? null,
           finalScore: preRun?.scores.finalScore ?? 0,
           verdict: preRun?.verdict ?? "",
@@ -1266,7 +1303,7 @@ export default function SectorRotationPage() {
       map.set(sectorDef.displayName, stocks);
     }
     return map;
-  }, [scanResults, data]);
+  }, [scanResults, data, rotationSectorRS]);
 
   // #6: Flat list of all stocks for search
   const allStocks = useMemo(() => {
