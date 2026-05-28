@@ -385,6 +385,45 @@ function computeRSAcceleration(stockCloses: number[], etfCloses: number[]): numb
   return (stockReturn5d - etfReturn5d) - (stockReturn20d - etfReturn20d);
 }
 
+/**
+ * Compute RS acceleration shifted back 5 days — same formula as
+ * computeRSAcceleration but using indices len-6..len-26 instead of len-1..len-21.
+ * Requires len >= 26.
+ */
+function computeRSAccelerationPrior(stockCloses: number[], etfCloses: number[]): number {
+  const len = Math.min(stockCloses.length, etfCloses.length);
+  if (len < 26) return 0;
+
+  const sNow = stockCloses[len - 6];
+  const eNow = etfCloses[len - 6];
+  const s5 = stockCloses[len - 11];
+  const e5 = etfCloses[len - 11];
+  const s20 = stockCloses[len - 26];
+  const e20 = etfCloses[len - 26];
+
+  if (sNow === 0 || eNow === 0 || s5 === 0 || e5 === 0 || s20 === 0 || e20 === 0) return 0;
+
+  const stockReturn5d = ((sNow - s5) / s5) * 100;
+  const etfReturn5d = ((eNow - e5) / e5) * 100;
+  const stockReturn20d = ((sNow - s20) / s20) * 100;
+  const etfReturn20d = ((eNow - e20) / e20) * 100;
+
+  return (stockReturn5d - etfReturn5d) - (stockReturn20d - etfReturn20d);
+}
+
+/**
+ * Count how many of the last 5 daily volumes exceed the 10-day average.
+ * Returns 0-5.
+ */
+function computeVolumeConsistency(volumes: number[], avgVolume10d: number): number {
+  if (volumes.length < 5 || avgVolume10d <= 0) return 0;
+  let count = 0;
+  for (let i = volumes.length - 5; i < volumes.length; i++) {
+    if (volumes[i] > avgVolume10d) count++;
+  }
+  return count;
+}
+
 /** Check if a stock qualifies as a turnaround candidate. */
 function checkTurnaroundCandidate(
   perfPct: number,
@@ -488,6 +527,9 @@ async function fetchStockPerformance(
       }
 
       const rsAccel = computeRSAcceleration(alignedStockCloses, alignedEtfCloses);
+      const rsAccelPrior = computeRSAccelerationPrior(alignedStockCloses, alignedEtfCloses);
+      const rsDelta = rsAccel - rsAccelPrior;
+      const volConsistency = computeVolumeConsistency(chart.volumes, quote.avgVolume10d);
 
       results.push({
         symbol: sym,
@@ -504,6 +546,10 @@ async function fetchStockPerformance(
         daysToEarnings: null, // enriched client-side from prerun scan
         nextEarningsDate: null, // enriched client-side from prerun scan
         rs20d: null, // enriched client-side from prerun scan
+        rsAccelPrior: Math.round(rsAccelPrior * 100) / 100,
+        rsImproving: rsDelta > 0,
+        rsDelta: Math.round(rsDelta * 100) / 100,
+        volumeConsistency: volConsistency,
       });
     }
 

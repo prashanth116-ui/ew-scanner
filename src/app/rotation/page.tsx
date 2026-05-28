@@ -39,7 +39,7 @@ import { loadScanResults } from "@/lib/prerun/storage";
 
 // ── localStorage cache (4-hour TTL) ──
 
-const CACHE_KEY = "ew-rotation-tracker-v6";
+const CACHE_KEY = "ew-rotation-tracker-v7";
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 
 function loadCached(): RotationTrackerResult | null {
@@ -191,6 +191,7 @@ function getEntryQuality(s: RotationStockPerformance): number {
   let quality = 0;
   if ((s.rsAcceleration ?? 0) > 1) quality++;
   if (s.volumeVsAvg >= 1.5) quality++;
+  if (s.rsImproving && (s.volumeConsistency ?? 0) >= 3) quality++;
   return quality;
 }
 
@@ -1009,6 +1010,7 @@ function StockPerformanceTable({
   const [phaseFilter, setPhaseFilter] = useState<"all" | "basing" | "turnaround" | "trending" | "exhausting">("all");
   const [trendAccelFilter, setTrendAccelFilter] = useState<"all" | "positive" | "negative">("all");
   const [rs20dFilter, setRs20dFilter] = useState<"all" | "positive" | "negative">("all");
+  const [qualityFilter, setQualityFilter] = useState<"all" | "improving" | "high" | "fading">("all");
 
   const sectorAvgPct =
     detail.stocks.length > 0
@@ -1028,7 +1030,7 @@ function StockPerformanceTable({
     return ORDER.filter(a => actions.has(a));
   }, [detail.stocks, sectorAvgPct, lifecycle]);
 
-  const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all" || phaseFilter !== "all" || trendAccelFilter !== "all" || rs20dFilter !== "all";
+  const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all" || phaseFilter !== "all" || trendAccelFilter !== "all" || rs20dFilter !== "all" || qualityFilter !== "all";
 
   function toggleAction(label: string) {
     setActionFilter(prev => {
@@ -1047,6 +1049,7 @@ function StockPerformanceTable({
     setPhaseFilter("all");
     setTrendAccelFilter("all");
     setRs20dFilter("all");
+    setQualityFilter("all");
   }
 
   const sorted = useMemo(() => {
@@ -1072,6 +1075,13 @@ function StockPerformanceTable({
     else if (trendAccelFilter === "negative") copy = copy.filter(item => (item.stock.trendAccel ?? 0) < 0);
     if (rs20dFilter === "positive") copy = copy.filter(item => (item.stock.rs20d ?? 0) > 0);
     else if (rs20dFilter === "negative") copy = copy.filter(item => (item.stock.rs20d ?? 0) < 0);
+    if (qualityFilter === "improving") copy = copy.filter(item => item.stock.rsImproving);
+    else if (qualityFilter === "high") copy = copy.filter(item =>
+      item.stock.rsImproving && (item.stock.volumeConsistency ?? 0) >= 3 && (item.stock.dailyChangePct ?? 0) > -3
+    );
+    else if (qualityFilter === "fading") copy = copy.filter(item =>
+      !item.stock.rsImproving && (item.stock.rsAcceleration ?? 0) < 0
+    );
     // Sort
     copy.sort((a, b) => {
       let av: string | number;
@@ -1107,7 +1117,7 @@ function StockPerformanceTable({
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return copy;
-  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter]);
+  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter, qualityFilter]);
 
   if (detail.stocks.length === 0) {
     return (
@@ -1222,6 +1232,16 @@ function StockPerformanceTable({
           <option value="all">Volume: All</option>
           <option value="above">Above Avg (&ge;1.2x)</option>
           <option value="below">Below Avg</option>
+        </select>
+        <select
+          value={qualityFilter}
+          onChange={e => setQualityFilter(e.target.value as "all" | "improving" | "high" | "fading")}
+          className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
+        >
+          <option value="all">Quality: All</option>
+          <option value="improving">RS Improving</option>
+          <option value="high">High Quality</option>
+          <option value="fading">Fading</option>
         </select>
         <select
           value={phaseFilter}
@@ -1390,6 +1410,9 @@ function StockPerformanceTable({
                 </td>
                 <td className={`px-3 py-2 text-right font-mono text-xs ${(s.rsAcceleration ?? 0) > 0 ? "text-green-400" : (s.rsAcceleration ?? 0) < 0 ? "text-red-400" : "text-[#666]"}`}>
                   {(s.rsAcceleration ?? 0) > 0 ? "+" : ""}{(s.rsAcceleration ?? 0).toFixed(2)}
+                  <span className={`ml-1 ${s.rsImproving ? "text-green-400" : "text-red-400"}`} title={`RS Delta: ${(s.rsDelta ?? 0) > 0 ? "+" : ""}${(s.rsDelta ?? 0).toFixed(2)}`}>
+                    {s.rsImproving ? "\u25B2" : "\u25BC"}
+                  </span>
                 </td>
                 <td className={`px-3 py-2 text-right text-xs ${s.daysToEarnings == null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}`} title={s.nextEarningsDate ?? undefined}>
                   {s.daysToEarnings != null ? `${s.daysToEarnings}d` : "-"}
@@ -1901,7 +1924,7 @@ function CopyExportBar({
   }
 
   function exportCsv() {
-    const headers = ["Symbol", "Phase", "Name", "Start Price", "Current", "% Change", "Above 50MA", "Vol vs Avg", "RS 20d", "Trend Accel", "Sector RS", "Earnings (days)", "Earnings Date", "Turnaround"];
+    const headers = ["Symbol", "Phase", "Name", "Start Price", "Current", "% Change", "Above 50MA", "Vol vs Avg", "RS 20d", "Trend Accel", "Sector RS", "RS Delta", "RS Improving", "Vol Consistency", "Earnings (days)", "Earnings Date", "Turnaround"];
     const rows = stocks.map((s) => [
       s.symbol,
       phaseBadge(getRotationStockPhase(s)).label,
@@ -1914,6 +1937,9 @@ function CopyExportBar({
       s.rs20d != null ? s.rs20d.toFixed(1) : "",
       s.trendAccel != null ? s.trendAccel.toFixed(2) : "",
       (s.rsAcceleration ?? 0).toFixed(2),
+      (s.rsDelta ?? 0).toFixed(2),
+      s.rsImproving ? "Yes" : "No",
+      String(s.volumeConsistency ?? 0),
       s.daysToEarnings != null ? String(s.daysToEarnings) : "",
       s.nextEarningsDate ?? "",
       s.isTurnaroundCandidate ? "Yes" : "No",

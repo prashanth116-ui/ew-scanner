@@ -48,6 +48,10 @@ export interface RotationStockPerformance {
   daysToEarnings: number | null; // enriched client-side from prerun scan
   nextEarningsDate: string | null; // enriched client-side from prerun scan
   rs20d: number | null; // enriched client-side from prerun scan (relativeStrength20d)
+  rsAccelPrior: number; // Sector RS 5 days ago (same formula, shifted window)
+  rsImproving: boolean; // rsDelta > 0 (RS direction is improving)
+  rsDelta: number; // rsAcceleration - rsAccelPrior (positive = inflection)
+  volumeConsistency: number; // days in last 5 with vol > 10d avg (0-5 scale)
 }
 
 export interface ActiveRotationDetail {

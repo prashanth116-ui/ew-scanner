@@ -139,6 +139,9 @@ interface StockInSector {
   sectorName: string;
   daysToEarnings: number | null;
   nextEarningsDate: string | null;
+  rsImproving: boolean;
+  rsDelta: number;
+  volumeConsistency: number;
 }
 
 function isTurnaroundCandidate(s: StockInSector): boolean {
@@ -181,7 +184,7 @@ function getEntryQuality(s: StockInSector): number {
   let quality = 0;
   if ((s.rsAccel ?? 0) > 1) quality++;
   if ((s.volumeVsAvg ?? 0) >= 1.5) quality++;
-  if (s.pctFromAth !== null && s.pctFromAth > -30) quality++;
+  if (s.rsImproving && s.volumeConsistency >= 3) quality++;
   return quality;
 }
 
@@ -245,6 +248,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
   const [rsAccelFilter, setRsAccelFilter] = useState<RsAccelFilter>("all");
   const [sectorRSFilter, setSectorRSFilter] = useState<RsAccelFilter>("all");
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("all");
+  const [qualityFilter, setQualityFilter] = useState<"all" | "improving" | "high" | "fading">("all");
   const [tableCopied, setTableCopied] = useState(false);
 
   const handleSort = (key: StockSortKey) => {
@@ -252,8 +256,8 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     else { setSortKey(key); setSortAsc(key === "ticker"); }
   };
 
-  const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setSectorRSFilter("all"); setPhaseFilter("all"); };
-  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || sectorRSFilter !== "all" || phaseFilter !== "all";
+  const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setSectorRSFilter("all"); setPhaseFilter("all"); setQualityFilter("all"); };
+  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || sectorRSFilter !== "all" || phaseFilter !== "all" || qualityFilter !== "all";
 
   const filtered = useMemo(() => {
     let list = [...stocks];
@@ -269,8 +273,11 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     if (sectorRSFilter === "positive") list = list.filter((s) => (s.sectorRS ?? 0) > 0);
     else if (sectorRSFilter === "negative") list = list.filter((s) => (s.sectorRS ?? 0) < 0);
     if (phaseFilter !== "all") list = list.filter((s) => getStockPhase(s) === phaseFilter);
+    if (qualityFilter === "improving") list = list.filter((s) => s.rsImproving);
+    else if (qualityFilter === "high") list = list.filter((s) => s.rsImproving && s.volumeConsistency >= 3);
+    else if (qualityFilter === "fading") list = list.filter((s) => !s.rsImproving && (s.sectorRS ?? 0) < 0);
     return list;
-  }, [stocks, sma50Filter, volFilter, verdictFilter, rsAccelFilter, sectorRSFilter, phaseFilter]);
+  }, [stocks, sma50Filter, volFilter, verdictFilter, rsAccelFilter, sectorRSFilter, phaseFilter, qualityFilter]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -309,10 +316,10 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
     return val;
   };
   const exportCsv = () => {
-    const header = "Ticker,Company,Phase,RS 20d,Trend Accel,Sector RS,>50MA,Vol vs Avg,Score,Earnings (days),Earnings Date,Verdict";
+    const header = "Ticker,Company,Phase,RS 20d,Trend Accel,Sector RS,RS Delta,RS Improving,Vol Consistency,>50MA,Vol vs Avg,Score,Earnings (days),Earnings Date,Verdict";
     const rows = sorted.map((s) => {
       const phase = phaseBadge(getStockPhase(s)).label;
-      return [s.ticker, csvEscape(s.companyName), phase, s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.sectorRS?.toFixed(2) ?? "", s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.daysToEarnings ?? "", s.nextEarningsDate ?? "", s.verdict].join(",");
+      return [s.ticker, csvEscape(s.companyName), phase, s.rs20d?.toFixed(1) ?? "", s.rsAccel?.toFixed(2) ?? "", s.sectorRS?.toFixed(2) ?? "", s.rsDelta.toFixed(2), s.rsImproving ? "Y" : "N", String(s.volumeConsistency), s.aboveSma50 === true ? "Y" : s.aboveSma50 === false ? "N" : "", s.volumeVsAvg?.toFixed(2) ?? "", s.finalScore || "", s.daysToEarnings ?? "", s.nextEarningsDate ?? "", s.verdict].join(",");
     });
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -396,6 +403,15 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
           </select>
         </label>
         <label className="flex items-center gap-1 text-[#888]">
+          Quality
+          <select value={qualityFilter} onChange={(e) => setQualityFilter(e.target.value as "all" | "improving" | "high" | "fading")} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
+            <option value="all">All</option>
+            <option value="improving">RS Improving</option>
+            <option value="high">High Quality</option>
+            <option value="fading">Fading</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-[#888]">
           Verdict
           <select value={verdictFilter} onChange={(e) => setVerdictFilter(e.target.value as VerdictFilter)} className="bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-[#a0a0a0] text-xs">
             <option value="all">All</option>
@@ -472,6 +488,11 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
                   </td>
                   <td className={`py-1.5 px-2 text-right font-mono ${rsAccelColor(s.sectorRS)}`}>
                     {s.sectorRS !== null ? `${s.sectorRS > 0 ? "+" : ""}${s.sectorRS.toFixed(2)}` : "-"}
+                    {s.sectorRS !== null && (
+                      <span className={`ml-0.5 ${s.rsImproving ? "text-green-400" : "text-red-400"}`} title={`RS Delta: ${s.rsDelta > 0 ? "+" : ""}${s.rsDelta.toFixed(2)}`}>
+                        {s.rsImproving ? "\u25B2" : "\u25BC"}
+                      </span>
+                    )}
                   </td>
                   <td className="py-1.5 px-2 text-center">
                     {s.aboveSma50 === true ? (
@@ -544,7 +565,7 @@ function SectorStockTable({ stocks, sectorName }: { stocks: StockInSector[]; sec
               <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
                 <div><span className="text-[#666]">RS 20d</span> <span className={rsColor(s.rs20d)}>{s.rs20d !== null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}</span></div>
                 <div><span className="text-[#666]" title="Trend Accel: % from 50MA minus % from 200MA">TrAccel</span> <span className={rsAccelColor(s.rsAccel)}>{s.rsAccel !== null ? `${s.rsAccel > 0 ? "+" : ""}${s.rsAccel.toFixed(1)}` : "-"}</span></div>
-                <div><span className="text-[#666]" title="Sector RS: relative strength vs sector ETF">SectorRS</span> <span className={rsAccelColor(s.sectorRS)}>{s.sectorRS !== null ? `${s.sectorRS > 0 ? "+" : ""}${s.sectorRS.toFixed(1)}` : "-"}</span></div>
+                <div><span className="text-[#666]" title="Sector RS: relative strength vs sector ETF">SectorRS</span> <span className={rsAccelColor(s.sectorRS)}>{s.sectorRS !== null ? `${s.sectorRS > 0 ? "+" : ""}${s.sectorRS.toFixed(1)}` : "-"}{s.sectorRS !== null && <span className={s.rsImproving ? "text-green-400" : "text-red-400"}>{s.rsImproving ? "\u25B2" : "\u25BC"}</span>}</span></div>
               </div>
               <div className="mt-1 grid grid-cols-3 gap-2 text-[11px]">
                 <div>
@@ -1325,16 +1346,16 @@ export default function SectorRotationPage() {
   const [history, setHistory] = useState<DailySnapshot[]>([]);
   const [copiedToast, setCopiedToast] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(0);
-  const [rotationSectorRS, setRotationSectorRS] = useState<Map<string, number>>(new Map());
+  const [rotationSectorRS, setRotationSectorRS] = useState<Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>>(new Map());
 
   // Fetch rotation tracker data for Sector RS column (non-blocking)
   useEffect(() => {
     fetch("/api/rotation-tracker").then(res => res.ok ? res.json() : null).then((result: RotationTrackerResult | null) => {
       if (!result) return;
-      const map = new Map<string, number>();
+      const map = new Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>();
       for (const rotation of result.activeRotations) {
         for (const s of rotation.stocks) {
-          map.set(s.symbol, s.rsAcceleration);
+          map.set(s.symbol, { rsAccel: s.rsAcceleration, rsImproving: s.rsImproving, rsDelta: s.rsDelta, volConsistency: s.volumeConsistency });
         }
       }
       setRotationSectorRS(map);
@@ -1390,12 +1411,13 @@ export default function SectorRotationPage() {
           ? Math.round((quote.volume / quote.avgVolume10d) * 100) / 100
           : null;
         const rsAccel = quote?.rsAccel ?? null;
+        const rotationData = rotationSectorRS.get(stock.symbol);
         return {
           ticker: stock.symbol,
           companyName: stock.name,
           rs20d,
           rsAccel,
-          sectorRS: rotationSectorRS.get(stock.symbol) ?? null,
+          sectorRS: rotationData?.rsAccel ?? null,
           pctFromAth: preRun?.data.pctFromAth ?? null,
           finalScore: preRun?.scores.finalScore ?? 0,
           verdict: preRun?.verdict ?? "",
@@ -1405,6 +1427,9 @@ export default function SectorRotationPage() {
           sectorName: sectorDef.displayName,
           daysToEarnings: preRun?.data.daysToEarnings ?? null,
           nextEarningsDate: preRun?.data.nextEarningsDate ?? null,
+          rsImproving: rotationData?.rsImproving ?? false,
+          rsDelta: rotationData?.rsDelta ?? 0,
+          volumeConsistency: rotationData?.volConsistency ?? 0,
         };
       });
       map.set(sectorDef.displayName, stocks);
