@@ -19,6 +19,9 @@ const SECTIONS = [
   { id: "rotation-cards", label: "Rotation Cards" },
   { id: "stock-table", label: "Stock Table" },
   { id: "rs-acceleration", label: "Sector RS" },
+  { id: "leading-lagging", label: "Leading vs Lagging" },
+  { id: "four-phases", label: "4-Phase Lifecycle" },
+  { id: "momentum-quality", label: "Momentum Quality" },
   { id: "turnaround", label: "Turnaround Candidates" },
   { id: "reading-actions", label: "Reading Actions" },
   { id: "timeline", label: "Timeline & Stats" },
@@ -439,7 +442,334 @@ export default function RotationGuidePage() {
           </Warning>
         </Section>
 
-        {/* Section 5: Turnaround Candidates */}
+        {/* Section 5: Leading vs Lagging */}
+        <Section
+          id="leading-lagging"
+          title="Leading vs Lagging: How to Tell"
+          icon={<Scale className="h-5 w-5 text-[#5ba3e6]" />}
+        >
+          <p>
+            Sector RS tells you <em>direction</em>, but you need to combine it with total performance to understand
+            <strong className="text-white"> where a stock sits in the move</strong>. The same Sector RS value means very
+            different things depending on context.
+          </p>
+
+          <SubSection title="Reading the Combination">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">% Change</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Sector RS</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Arrow</th>
+                    <th className="py-1.5 text-left font-medium">What It Means</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 text-green-400">High (+20%+)</td>
+                    <td className="py-2 pr-3 text-red-400">Negative</td>
+                    <td className="py-2 pr-3 text-red-400">&darr;</td>
+                    <td className="py-2"><strong className="text-amber-400">Exhausted leader</strong> &mdash; had its run, now decelerating. Take profits. (e.g., WOLF +234%, RS &minus;125)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 text-green-400">High (+20%+)</td>
+                    <td className="py-2 pr-3 text-green-400">Positive</td>
+                    <td className="py-2 pr-3 text-green-400">&uarr;</td>
+                    <td className="py-2"><strong className="text-green-400">Accelerating leader</strong> &mdash; still gaining ground. Hold or add on dips.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 text-red-400">Low/Negative</td>
+                    <td className="py-2 pr-3 text-green-400">Positive</td>
+                    <td className="py-2 pr-3 text-green-400">&uarr;</td>
+                    <td className="py-2"><strong className="text-cyan-400">Early catch-up</strong> &mdash; lagging but reversing. Best risk/reward entry zone. (e.g., AEIS &minus;3%, RS +31)</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 text-red-400">Low/Negative</td>
+                    <td className="py-2 pr-3 text-red-400">Negative</td>
+                    <td className="py-2 pr-3 text-red-400">&darr;</td>
+                    <td className="py-2"><strong className="text-red-400">Deteriorating laggard</strong> &mdash; underperforming and getting worse. Avoid entirely.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="The Direction Arrow (&uarr; / &darr;)">
+            <p>
+              Every Sector RS value now shows a <span className="text-green-400">&FilledVerySmallSquare; &uarr;</span> or <span className="text-red-400">&FilledVerySmallSquare; &darr;</span> arrow.
+              This shows whether the Sector RS value itself is <strong className="text-white">improving or fading vs 5 days ago</strong> (the RS Delta).
+            </p>
+            <ul className="list-disc pl-4 space-y-1 mt-2">
+              <li><span className="text-green-400 font-mono">&uarr;</span> = RS is accelerating &mdash; the stock is gaining ground faster than it was 5 days ago</li>
+              <li><span className="text-red-400 font-mono">&darr;</span> = RS is decelerating &mdash; the stock is losing relative momentum</li>
+            </ul>
+            <p className="mt-2">
+              Hover the arrow to see the exact RS Delta value. Positive delta + positive Sector RS = strongest signal.
+              Negative delta on a previously positive RS = early warning that the inflection may be fading.
+            </p>
+          </SubSection>
+
+          <SubSection title="Real Examples from Semiconductors">
+            <p className="font-medium text-white mb-2">Exhausted leaders (move is over):</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1 pr-3 text-left font-medium">Stock</th>
+                    <th className="py-1 pr-3 text-right font-medium">Gain</th>
+                    <th className="py-1 pr-3 text-right font-medium">Sector RS</th>
+                    <th className="py-1 text-left font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1 pr-3">MRAM</td><td className="py-1 pr-3 text-right text-green-400">+222%</td><td className="py-1 pr-3 text-right text-red-400">&minus;129</td><td className="py-1">Move exhausted</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1 pr-3">WOLF</td><td className="py-1 pr-3 text-right text-green-400">+234%</td><td className="py-1 pr-3 text-right text-red-400">&minus;125</td><td className="py-1">Move exhausted</td></tr>
+                  <tr><td className="py-1 pr-3">MXL</td><td className="py-1 pr-3 text-right text-green-400">+449%</td><td className="py-1 pr-3 text-right text-red-400">&minus;76</td><td className="py-1">Move exhausted</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="font-medium text-white mt-3 mb-2">Early catch-ups (next potential movers):</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1 pr-3 text-left font-medium">Stock</th>
+                    <th className="py-1 pr-3 text-right font-medium">Gain</th>
+                    <th className="py-1 pr-3 text-right font-medium">Sector RS</th>
+                    <th className="py-1 text-left font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1 pr-3">APH</td><td className="py-1 pr-3 text-right">+9%</td><td className="py-1 pr-3 text-right text-green-400">+31.8</td><td className="py-1">Accelerating now</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1 pr-3">AEIS</td><td className="py-1 pr-3 text-right text-red-400">&minus;3%</td><td className="py-1 pr-3 text-right text-green-400">+31.2</td><td className="py-1">Accelerating from bottom</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1 pr-3">CAMT</td><td className="py-1 pr-3 text-right">+7%</td><td className="py-1 pr-3 text-right text-green-400">+29.9</td><td className="py-1">Inflecting</td></tr>
+                  <tr><td className="py-1 pr-3">AMKR</td><td className="py-1 pr-3 text-right text-green-400">+52%</td><td className="py-1 pr-3 text-right text-green-400">+20.7</td><td className="py-1">Mid-move, still accelerating</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2">
+              The stocks in the second table are what MXL and WOLF looked like <em>before</em> their 200&ndash;400% runs. The key:
+              look at the <strong className="text-white">bottom</strong> of the performance list with <strong className="text-green-400">positive Sector RS</strong>, not the top.
+            </p>
+          </SubSection>
+
+          <Tip>
+            The core insight: <strong className="text-white">% Change is backward-looking. Sector RS is forward-looking.</strong> It tells
+            you which stocks are changing direction relative to the sector right now. Sort by Sector RS descending to find them.
+          </Tip>
+        </Section>
+
+        {/* Section 6: 4-Phase Stock Lifecycle */}
+        <Section
+          id="four-phases"
+          title="4-Phase Stock Lifecycle"
+          icon={<Layers className="h-5 w-5 text-[#5ba3e6]" />}
+        >
+          <p>
+            Every stock in a rotation moves through four phases. The <strong className="text-white">Phase badge</strong> on each
+            row tells you where a stock is. Your job is to act on P1&ndash;P2 signals rather than waiting for P3 confirmation
+            when 50&ndash;100% of the move is already done.
+          </p>
+
+          <SubSection title="Phase Progression">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Phase</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Signals</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Action</th>
+                    <th className="py-1.5 text-left font-medium">Risk/Reward</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3"><span className="text-purple-400 font-medium">P1 Basing</span></td>
+                    <td className="py-2 pr-3">Below 50MA, RS negative but Sector RS turning positive, volume rising toward 1.0x</td>
+                    <td className="py-2 pr-3">Watch &mdash; add to watchlist, too early to act</td>
+                    <td className="py-2">Highest reward if it works, but low probability. Wait for P2 confirmation.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3"><span className="text-amber-400 font-medium">P2 Turnaround</span></td>
+                    <td className="py-2 pr-3">Below 50MA, RS 20d flips positive, volume &ge;1.2x, positive Sector RS</td>
+                    <td className="py-2 pr-3"><strong className="text-white">Best entry zone</strong> &mdash; the turnaround is confirmed</td>
+                    <td className="py-2">Best risk/reward. This is where MXL/WOLF would have been flagged before their 200&ndash;400% runs.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3"><span className="text-green-400 font-medium">P3 Trending</span></td>
+                    <td className="py-2 pr-3">Above 50MA, RS still positive, volume sustained</td>
+                    <td className="py-2 pr-3">Hold or add on dips &mdash; trail with stops</td>
+                    <td className="py-2">Safest but 50&ndash;100% of the move may already be done. Good for adds, not initiation.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3"><span className="text-red-400 font-medium">P4 Exhausting</span></td>
+                    <td className="py-2 pr-3">Sector RS deeply negative (like WOLF at &minus;125), momentum dying</td>
+                    <td className="py-2 pr-3">Exit &mdash; take profits, do not enter</td>
+                    <td className="py-2">The move is over. This is where you take profits, not where you start positions.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Separating Real Moves from Fakeouts">
+            <p>Stocks that pop and drop share these traits:</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong className="text-white">Low volume on the move</strong> &mdash; Vol vs Avg stays below 1.0x. No institutional participation. Compare COHR (0.7x, +49%) vs GFS (3.7x, +85%). Volume confirms conviction.</li>
+              <li><strong className="text-white">No RS follow-through</strong> &mdash; Sector RS spikes for one scan then fades. Check if RS is sustained across multiple days, not a one-day blip. The <span className="text-green-400">&uarr;</span> arrow confirms follow-through.</li>
+              <li><strong className="text-white">Low volume consistency</strong> &mdash; Volume on only 1&ndash;2 of the last 5 days means a spike, not sustained institutional interest. Look for 3+ days (Vol Consistency &ge; 3 in CSV export).</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Practical Screening for Early Entries">
+            <p>To catch the next MXL/WOLF early, filter for:</p>
+            <div className="overflow-x-auto mt-2">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Criteria</th>
+                    <th className="py-1.5 text-left font-medium">Why</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 text-white">Sector RS &gt; +10</td><td className="py-1.5">Momentum is inflecting hard</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 text-white">Vol vs Avg &ge; 1.2x</td><td className="py-1.5">Institutional buying confirmed</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 text-white">Below 50MA</td><td className="py-1.5">Turnaround setup, not chasing</td></tr>
+                  <tr><td className="py-1.5 pr-3 text-white">RS 20d turning positive</td><td className="py-1.5">Momentum confirmation</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2">
+              Stocks with high Sector RS but low volume (e.g., 0.6x) are less trustworthy &mdash; momentum without institutional
+              conviction often fades. <strong className="text-white">Volume confirms direction.</strong>
+            </p>
+          </SubSection>
+
+          <Warning>
+            Phase badges update with each data refresh. A stock can move from P1 to P2 (entry trigger) or from P3 to P4 (exit trigger)
+            between scans. Don&apos;t set-and-forget &mdash; check phase transitions regularly.
+          </Warning>
+        </Section>
+
+        {/* Section 7: Momentum Quality Filter */}
+        <Section
+          id="momentum-quality"
+          title="Momentum Quality Filter"
+          icon={<Eye className="h-5 w-5 text-[#5ba3e6]" />}
+        >
+          <p>
+            The <strong className="text-white">Quality</strong> dropdown (between Volume and Phase) separates
+            <strong className="text-white"> sustained institutional movers</strong> from one-day spikes. It uses two signals
+            not visible in the table columns: <strong className="text-white">RS Delta</strong> (is Sector RS itself improving?)
+            and <strong className="text-white">Volume Consistency</strong> (volume above average on how many of the last 5 days?).
+          </p>
+
+          <SubSection title="Filter Options">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Option</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Criteria</th>
+                    <th className="py-1.5 text-left font-medium">Use Case</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-white">RS Improving</td>
+                    <td className="py-2 pr-3">RS Delta &gt; 0 (Sector RS trending upward)</td>
+                    <td className="py-2">Catches inflection points &mdash; RS turning less negative or more positive</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-white">High Quality</td>
+                    <td className="py-2 pr-3">RS improving + volume on 3+ of last 5 days + not crashing today (&gt;&minus;3%)</td>
+                    <td className="py-2">Real sustained movers with institutional participation, not one-day spikes</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 font-medium text-white">Fading</td>
+                    <td className="py-2 pr-3">RS declining + Sector RS negative</td>
+                    <td className="py-2">Actively deteriorating &mdash; build your avoid/trim list</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Entry Quality Dots">
+            <p>
+              The dots next to the Phase badge (on P1 Basing and P2 Turnaround stocks) show entry quality on a 0&ndash;3 scale:
+            </p>
+            <ul className="list-disc pl-4 space-y-1 mt-2">
+              <li><strong className="text-white">Dot 1:</strong> Sector RS &gt; 1 &mdash; meaningful relative strength acceleration</li>
+              <li><strong className="text-white">Dot 2:</strong> Volume &ge; 1.5x average &mdash; strong institutional participation today</li>
+              <li><strong className="text-white">Dot 3:</strong> RS improving + volume consistent on 3+ of last 5 days &mdash; <strong className="text-white">sustained</strong> momentum, not a one-day spike</li>
+            </ul>
+            <p className="mt-2">
+              Three dots = strongest entry signal. Prioritize 3-dot stocks over 1-dot stocks within the same phase.
+            </p>
+          </SubSection>
+
+          <SubSection title="RS Delta &amp; Volume Consistency (Under the Hood)">
+            <p>
+              These values are visible in the CSV export and as tooltips, but not as separate table columns:
+            </p>
+            <ul className="list-disc pl-4 space-y-1 mt-2">
+              <li><strong className="text-white">RS Delta</strong> (hover the &uarr;/&darr; arrow): Sector RS today minus Sector RS 5 days ago. Positive = RS is accelerating. Negative = RS is decelerating.</li>
+              <li><strong className="text-white">Vol Consistency</strong> (in CSV): 0&ndash;5 scale. How many of the last 5 trading days had volume above the 10-day average. &ge;3 means sustained institutional activity.</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Recommended Workflow">
+            <ol className="list-decimal pl-4 space-y-2">
+              <li>Set <strong className="text-white">Quality &rarr; High Quality</strong> to see only sustained movers</li>
+              <li>Combine with <strong className="text-white">Phase &rarr; P2 Turnaround</strong> to find early entries with real momentum</li>
+              <li>Sort by <strong className="text-white">Trend Accel descending</strong> to rank by strength</li>
+              <li>Check the <span className="text-green-400">&uarr;</span>/<span className="text-red-400">&darr;</span> arrows &mdash; prioritize <span className="text-green-400">&uarr;</span></li>
+              <li>Use <strong className="text-white">Quality &rarr; Fading</strong> to build your avoid/trim list</li>
+              <li>Export via CSV for the full dataset including RS Delta and Vol Consistency</li>
+            </ol>
+          </SubSection>
+
+          <SubSection title="Updated Filter Recipes">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Goal</th>
+                    <th className="py-1.5 text-left font-medium">Filters</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-amber-400">Best entries</td>
+                    <td className="py-2">Phase: P2 Turnaround + Quality: High Quality + Trend Accel: Positive</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-green-400">Momentum leaders</td>
+                    <td className="py-2">Phase: P3 Trending + RS 20d: Positive + Volume: Above Avg</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3 font-medium text-red-400">Avoid list</td>
+                    <td className="py-2">Quality: Fading</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3 font-medium text-purple-400">Early watchlist</td>
+                    <td className="py-2">Phase: P1 Basing + Sector RS: Positive (contrarian &mdash; wait for P2 to enter)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <Tip>
+            <strong className="text-white">The SNOW lesson:</strong> SNOW had Trend Accel +27.98 (strong) but Sector RS &minus;11.3 (lagging sector).
+            When they diverge, <strong className="text-white">trust Trend Accel for direction</strong> and use Sector RS for relative positioning.
+            Positive Trend Accel + negative Sector RS = coiled catch-up, not breakdown.
+          </Tip>
+        </Section>
+
+        {/* Section 8: Turnaround Candidates */}
         <Section
           id="turnaround"
           title="Turnaround Candidates"
