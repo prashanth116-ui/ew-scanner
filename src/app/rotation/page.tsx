@@ -1032,6 +1032,20 @@ function StockPerformanceTable({
 
   const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all" || phaseFilter !== "all" || trendAccelFilter !== "all" || rs20dFilter !== "all" || qualityFilter !== "all";
 
+  const earlyStrengthActive = phaseFilter === "turnaround" && qualityFilter === "high" && trendAccelFilter === "positive";
+
+  function toggleEarlyStrength() {
+    if (earlyStrengthActive) {
+      setPhaseFilter("all");
+      setQualityFilter("all");
+      setTrendAccelFilter("all");
+    } else {
+      setPhaseFilter("turnaround");
+      setQualityFilter("high");
+      setTrendAccelFilter("positive");
+    }
+  }
+
   function toggleAction(label: string) {
     setActionFilter(prev => {
       const next = new Set(prev);
@@ -1187,6 +1201,18 @@ function StockPerformanceTable({
             );
           })}
         </div>
+        <div className="h-4 w-px bg-[#333]" />
+        <button
+          onClick={toggleEarlyStrength}
+          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+            earlyStrengthActive
+              ? "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/40"
+              : "bg-[#1a1a1a] text-[#888] ring-1 ring-[#333] hover:text-[#ccc]"
+          }`}
+          title="Preset: Phase=P2 Turnaround + Quality=High + Trend Accel=Positive"
+        >
+          Early Strength
+        </button>
         <div className="h-4 w-px bg-[#333]" />
         <select
           value={sma50Filter}
