@@ -992,14 +992,16 @@ function actionChipColors(label: string): { bg: string; text: string; border: st
   }
 }
 
-type StockSortKey = "symbol" | "name" | "action" | "phase" | "priceAtRotationStart" | "priceNow" | "dailyChangePct" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rs20d" | "trendAccel" | "rsAcceleration" | "earnings";
+type StockSortKey = "symbol" | "name" | "action" | "phase" | "sector" | "priceAtRotationStart" | "priceNow" | "dailyChangePct" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rs20d" | "trendAccel" | "rsAcceleration" | "earnings";
 
 function StockPerformanceTable({
   detail,
   lifecycle,
+  sectorMap,
 }: {
   detail: ActiveRotationDetail;
   lifecycle: LifecycleStage;
+  sectorMap?: Map<string, string>;
 }) {
   const [sortKey, setSortKey] = useState<StockSortKey>("performancePct");
   const [sortAsc, setSortAsc] = useState(false);
@@ -1115,6 +1117,9 @@ function StockPerformanceTable({
       } else if (sortKey === "rs20d") {
         av = a.stock.rs20d ?? -9999;
         bv = b.stock.rs20d ?? -9999;
+      } else if (sortKey === "sector") {
+        av = sectorMap?.get(a.stock.symbol) ?? "";
+        bv = sectorMap?.get(b.stock.symbol) ?? "";
       } else if (sortKey === "vsEtf") {
         av = a.vsEtf;
         bv = b.vsEtf;
@@ -1131,7 +1136,7 @@ function StockPerformanceTable({
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return copy;
-  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter, qualityFilter]);
+  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter, qualityFilter, sectorMap]);
 
   if (detail.stocks.length === 0) {
     return (
@@ -1313,6 +1318,11 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("symbol")}>
               Symbol<SortArrow col="symbol" />
             </th>
+            {sectorMap && (
+              <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("sector")}>
+                Sector<SortArrow col="sector" />
+              </th>
+            )}
             <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("phase")}>
               Phase<SortArrow col="phase" />
             </th>
@@ -1374,6 +1384,9 @@ function StockPerformanceTable({
                     </span>
                   )}
                 </td>
+                {sectorMap && (
+                  <td className="px-3 py-2 text-xs text-[#a0a0a0]">{sectorMap.get(s.symbol) ?? ""}</td>
+                )}
                 <td className="px-3 py-2 text-center">
                   {(() => {
                     const phase = getRotationStockPhase(s);
@@ -2116,6 +2129,7 @@ export default function RotationTrackerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSector, setExpandedSector] = useState<string | null>(null);
+  const [showAllSectors, setShowAllSectors] = useState(false);
   const [heatmapSectors, setHeatmapSectors] = useState<SectorRotationScore[] | null>(null);
 
   const fetchData = useCallback(async (skipCache = false) => {
@@ -2210,6 +2224,39 @@ export default function RotationTrackerPage() {
     );
   }, [enrichedData, expandedSector]);
 
+  // Build aggregate data for "All Sectors" view
+  const allSectorsForTable = useMemo(() => {
+    if (!enrichedData || enrichedData.activeRotations.length === 0) return null;
+    const allStocks: RotationStockPerformance[] = [];
+    const sectorMap = new Map<string, string>();
+    for (const rot of enrichedData.activeRotations) {
+      for (const s of rot.stocks) {
+        allStocks.push(s);
+        sectorMap.set(s.symbol, rot.event.sectorName);
+      }
+    }
+    const detail: ActiveRotationDetail = {
+      event: {
+        ...enrichedData.activeRotations[0].event,
+        sectorId: "__all__",
+        sectorName: "All Sectors",
+        etfPerformancePct: 0,
+      },
+      stocks: allStocks,
+    };
+    return { detail, sectorMap };
+  }, [enrichedData]);
+
+  const handleExpandSector = useCallback((sectorId: string | null) => {
+    setExpandedSector(sectorId);
+    setShowAllSectors(false);
+  }, []);
+
+  const handleShowAllSectors = useCallback(() => {
+    setShowAllSectors((prev) => !prev);
+    setExpandedSector(null);
+  }, []);
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
       {/* Header */}
@@ -2292,17 +2339,51 @@ export default function RotationTrackerPage() {
                   {data.activeRotations.length}
                 </span>
               )}
+              {data.activeRotations.length > 1 && (
+                <button
+                  onClick={handleShowAllSectors}
+                  className={`ml-2 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    showAllSectors
+                      ? "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/40"
+                      : "bg-[#1a1a1a] text-[#888] ring-1 ring-[#333] hover:text-[#ccc]"
+                  }`}
+                >
+                  All Sectors
+                </button>
+              )}
             </h2>
             <ActiveRotationCards
               rotations={data.activeRotations}
-              onExpand={setExpandedSector}
+              onExpand={handleExpandSector}
               expandedId={expandedSector}
               regime={data.regime}
               patternStats={data.patternStats}
             />
           </section>
 
-          {/* Section 2: Stock Performance (expanded) */}
+          {/* Section 2a: All Sectors aggregate view */}
+          {showAllSectors && allSectorsForTable && (
+            <section className="rounded-lg border border-[#2a2a2a] bg-[#111] overflow-hidden">
+              <div className="border-b border-[#2a2a2a] px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="font-semibold text-white">
+                    All Sectors — Stocks Across {enrichedData!.activeRotations.length} Active Rotations
+                  </h2>
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-400">
+                    {allSectorsForTable.detail.stocks.length} stocks
+                  </span>
+                </div>
+                <CopyExportBar stocks={allSectorsForTable.detail.stocks} sectorName="All Sectors" />
+              </div>
+              <StockPerformanceTable
+                detail={allSectorsForTable.detail}
+                lifecycle="EARLY"
+                sectorMap={allSectorsForTable.sectorMap}
+              />
+            </section>
+          )}
+
+          {/* Section 2b: Stock Performance (expanded) */}
           {expandedDetail && (() => {
             const lc = computeLifecycleStage(expandedDetail.event);
             const conv = computeConviction(expandedDetail.event);
