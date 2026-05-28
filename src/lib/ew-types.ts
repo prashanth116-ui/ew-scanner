@@ -209,6 +209,9 @@ export interface SavedScan {
     minDecline: number;
     minMonths: number;
     minRecovery: number;
+    fibFilter?: string;
+    volFilter?: string;
+    mtfFilter?: string;
   };
   candidateCount: number;
   candidates: Omit<EnhancedScoredCandidate, "series">[];

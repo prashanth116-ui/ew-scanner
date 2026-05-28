@@ -72,6 +72,10 @@ const LABEL_MIN_SCORE = 0.65; // 65% normalized score — cuts ~40% of AI label 
 type SortKey = "score" | "decline" | "recovery" | "sector" | "confidence";
 type GroupKey = "none" | "sector" | "confidence";
 
+type FibFilterValue = "all" | "golden" | "deep" | "shallow";
+type VolFilterValue = "all" | "expanding" | "contracting";
+type MtfFilterValue = "all" | "confirmed" | "conflicting";
+
 interface Preset {
   name: string;
   shortName: string;
@@ -82,6 +86,9 @@ interface Preset {
   minDecline: number;
   minMonths: number;
   minRecovery: number;
+  fibFilter?: FibFilterValue;
+  volFilter?: VolFilterValue;
+  mtfFilter?: MtfFilterValue;
 }
 
 const PRESETS: Preset[] = [
@@ -140,6 +147,20 @@ const PRESETS: Preset[] = [
     minMonths: 3,
     minRecovery: 5,
   },
+  {
+    name: "High Conviction",
+    shortName: "Conviction",
+    description: "Golden zone + confirmed volume + MTF alignment. Fewest, highest-quality results.",
+    mode: "wave2",
+    htf: "Weekly",
+    ltf: "Daily",
+    minDecline: 20,
+    minMonths: 3,
+    minRecovery: 10,
+    fibFilter: "golden",
+    volFilter: "expanding",
+    mtfFilter: "confirmed",
+  },
 ];
 
 export default function EWScannerPageWrapper() {
@@ -176,6 +197,10 @@ function EWScannerPage() {
   const [minRecovery, setMinRecovery] = useState(
     searchParams.has("minRecovery") ? Number(searchParams.get("minRecovery")) : initModeConfig.defaults.minRecovery
   );
+
+  const [fibFilter, setFibFilter] = useState<FibFilterValue>((searchParams.get("fibFilter") as FibFilterValue) || "all");
+  const [volFilter, setVolFilter] = useState<VolFilterValue>((searchParams.get("volFilter") as VolFilterValue) || "all");
+  const [mtfFilter, setMtfFilter] = useState<MtfFilterValue>((searchParams.get("mtfFilter") as MtfFilterValue) || "all");
 
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState("");
@@ -259,9 +284,12 @@ function EWScannerPage() {
     if (debouncedSortBy !== "score") params.set("sortBy", debouncedSortBy);
     if (debouncedGroupBy !== "none") params.set("groupBy", debouncedGroupBy);
     if (debouncedViewMode !== "detailed") params.set("viewMode", debouncedViewMode);
+    if (fibFilter !== "all") params.set("fibFilter", fibFilter);
+    if (volFilter !== "all") params.set("volFilter", volFilter);
+    if (mtfFilter !== "all") params.set("mtfFilter", mtfFilter);
     const qs = params.toString();
     router.replace(qs ? `/?${qs}` : "/", { scroll: false });
-  }, [debouncedMode, debouncedUniverse, debouncedHtf, debouncedLtf, debouncedDecline, debouncedMonths, debouncedRecovery, debouncedSortBy, debouncedGroupBy, debouncedViewMode, searchParams, router]);
+  }, [debouncedMode, debouncedUniverse, debouncedHtf, debouncedLtf, debouncedDecline, debouncedMonths, debouncedRecovery, debouncedSortBy, debouncedGroupBy, debouncedViewMode, fibFilter, volFilter, mtfFilter, searchParams, router]);
 
   // Hit rates from Supabase
   const [hitRates, setHitRates] = useState<HitRateEntry[]>([]);
@@ -304,6 +332,9 @@ function EWScannerPage() {
     setMinDecline(cfg.defaults.minDecline);
     setMinMonths(cfg.defaults.minMonths);
     setMinRecovery(cfg.defaults.minRecovery);
+    setFibFilter("all");
+    setVolFilter("all");
+    setMtfFilter("all");
   }, []);
 
   // Apply a preset (cheat code)
@@ -314,6 +345,9 @@ function EWScannerPage() {
     setMinDecline(preset.minDecline);
     setMinMonths(preset.minMonths);
     setMinRecovery(preset.minRecovery);
+    setFibFilter(preset.fibFilter ?? "all");
+    setVolFilter(preset.volFilter ?? "all");
+    setMtfFilter(preset.mtfFilter ?? "all");
   }, []);
 
   const passed = useMemo(() => results.filter((r) => r.passed), [results]);
@@ -324,9 +358,22 @@ function EWScannerPage() {
       (c) =>
         c.declinePct >= debouncedDecline &&
         c.monthsDecline >= debouncedMonths &&
-        c.recoveryPct >= debouncedRecovery
+        c.recoveryPct >= debouncedRecovery &&
+        // Fib zone filter
+        (fibFilter === "all" ||
+          (fibFilter === "golden" && c.fibAnalysis?.withinGoldenZone) ||
+          (fibFilter === "deep" && c.fibAnalysis != null && c.fibAnalysis.retracementDepth >= 0.618) ||
+          (fibFilter === "shallow" && c.fibAnalysis != null && c.fibAnalysis.retracementDepth < 0.382)) &&
+        // Volume filter
+        (volFilter === "all" ||
+          (volFilter === "expanding" && c.volumeAnalysis?.volumeTrend === "expanding") ||
+          (volFilter === "contracting" && c.volumeAnalysis?.volumeTrend === "contracting")) &&
+        // MTF alignment filter
+        (mtfFilter === "all" ||
+          (mtfFilter === "confirmed" && c.mtfConfirmation?.alignment === "confirmed") ||
+          (mtfFilter === "conflicting" && c.mtfConfirmation?.alignment === "conflicting"))
     );
-  }, [passed, mode, debouncedDecline, debouncedMonths, debouncedRecovery]);
+  }, [passed, mode, debouncedDecline, debouncedMonths, debouncedRecovery, fibFilter, volFilter, mtfFilter]);
 
   // Sort
   const sorted = useMemo(() => [...modeFiltered].sort((a, b) => {
@@ -909,10 +956,15 @@ function EWScannerPage() {
 
   const handleSave = useCallback(() => {
     const name = `${getModeConfig(mode).shortLabel} - ${universe} - ${new Date().toLocaleDateString()}`;
-    saveScan(name, mode, universe, { minDecline, minMonths, minRecovery }, modeFiltered, labels);
+    saveScan(name, mode, universe, {
+      minDecline, minMonths, minRecovery,
+      ...(fibFilter !== "all" && { fibFilter }),
+      ...(volFilter !== "all" && { volFilter }),
+      ...(mtfFilter !== "all" && { mtfFilter }),
+    }, modeFiltered, labels);
     setSavedScans(loadScans());
     showFeedback("Scan saved");
-  }, [mode, universe, minDecline, minMonths, minRecovery, modeFiltered, labels, showFeedback]);
+  }, [mode, universe, minDecline, minMonths, minRecovery, fibFilter, volFilter, mtfFilter, modeFiltered, labels, showFeedback]);
 
   const handleLoadScan = useCallback((scan: SavedScan) => {
     setMode(scan.mode);
@@ -920,6 +972,9 @@ function EWScannerPage() {
     setMinDecline(scan.filters.minDecline);
     setMinMonths(scan.filters.minMonths);
     setMinRecovery(scan.filters.minRecovery);
+    setFibFilter((scan.filters.fibFilter as FibFilterValue) ?? "all");
+    setVolFilter((scan.filters.volFilter as VolFilterValue) ?? "all");
+    setMtfFilter((scan.filters.mtfFilter as MtfFilterValue) ?? "all");
     // Restore candidates (without series data)
     const restored = scan.candidates.map((c) => ({
       ...c,
@@ -1132,7 +1187,7 @@ function EWScannerPage() {
               onClick={() => toggleSection("filters")}
               className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
             >
-              <span>Filters <span className="normal-case text-[#666]">({minDecline}%/{minMonths}mo/{minRecovery}%)</span></span>
+              <span>Filters <span className="normal-case text-[#666]">({minDecline}%/{minMonths}mo/{minRecovery}%{[fibFilter !== "all" && "Fib", volFilter !== "all" && "Vol", mtfFilter !== "all" && "MTF"].filter(Boolean).length > 0 ? ` + ${[fibFilter !== "all" && "Fib", volFilter !== "all" && "Vol", mtfFilter !== "all" && "MTF"].filter(Boolean).join("+")}` : ""})</span></span>
               <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("filters") ? "" : "rotate-90"}`} />
             </button>
             {!collapsed.has("filters") && (
@@ -1181,12 +1236,65 @@ function EWScannerPage() {
                     className="ew-slider w-full"
                   />
                 </div>
+                {/* Advanced filters */}
+                <div className="border-t border-[#2a2a2a] pt-3 mt-1">
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-[#666]">Advanced</p>
+                  <div className="space-y-2.5">
+                    <div>
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="text-[#a0a0a0]">Fib Zone</span>
+                      </div>
+                      <select
+                        value={fibFilter}
+                        onChange={(e) => setFibFilter(e.target.value as FibFilterValue)}
+                        className="w-full rounded-md border border-[#2a2a2a] bg-[#262626] px-3 py-1.5 text-sm text-[#e6e6e6]"
+                      >
+                        <option value="all">All</option>
+                        <option value="golden">Golden Zone (38.2-61.8%)</option>
+                        <option value="deep">Deep (&ge;61.8%)</option>
+                        <option value="shallow">Shallow (&lt;38.2%)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="text-[#a0a0a0]">Volume</span>
+                      </div>
+                      <select
+                        value={volFilter}
+                        onChange={(e) => setVolFilter(e.target.value as VolFilterValue)}
+                        className="w-full rounded-md border border-[#2a2a2a] bg-[#262626] px-3 py-1.5 text-sm text-[#e6e6e6]"
+                      >
+                        <option value="all">All</option>
+                        <option value="expanding">Expanding</option>
+                        <option value="contracting">Contracting</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="text-[#a0a0a0]">MTF Alignment</span>
+                      </div>
+                      <select
+                        value={mtfFilter}
+                        onChange={(e) => setMtfFilter(e.target.value as MtfFilterValue)}
+                        className="w-full rounded-md border border-[#2a2a2a] bg-[#262626] px-3 py-1.5 text-sm text-[#e6e6e6]"
+                      >
+                        <option value="all">All</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="conflicting">Conflicting</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 <button
                   onClick={() => {
                     const defaults = getModeConfig(mode).defaults;
                     setMinDecline(defaults.minDecline);
                     setMinMonths(defaults.minMonths);
                     setMinRecovery(defaults.minRecovery);
+                    setFibFilter("all");
+                    setVolFilter("all");
+                    setMtfFilter("all");
                   }}
                   className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
                 >

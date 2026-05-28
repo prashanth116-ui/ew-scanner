@@ -11,7 +11,7 @@ export function saveScan(
   name: string,
   mode: ScannerMode,
   universe: string,
-  filters: { minDecline: number; minMonths: number; minRecovery: number },
+  filters: { minDecline: number; minMonths: number; minRecovery: number; fibFilter?: string; volFilter?: string; mtfFilter?: string },
   candidates: EnhancedScoredCandidate[],
   labels: Record<string, string>
 ): SavedScan | null {
