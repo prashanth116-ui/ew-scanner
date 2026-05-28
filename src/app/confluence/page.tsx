@@ -7,7 +7,6 @@ import {
   ChevronRight,
   ChevronDown,
   X,
-  ArrowUpDown,
   Layers,
   Copy,
   Check,
@@ -181,6 +180,13 @@ export default function ConfluencePage() {
   // Quality filter
   const [qualityFilter, setQualityFilter] = useState<"all" | "improving" | "high" | "fading">("all");
 
+  // Scanner filters
+  const [verdictFilter, setVerdictFilter] = useState<"all" | "priority" | "keep" | "watch" | "discard">("all");
+  const [ewConfFilter, setEwConfFilter] = useState<"all" | "high" | "probable" | "speculative">("all");
+  const [tfcFilter, setTfcFilter] = useState<"all" | "full_bull" | "full_bear" | "mixed">("all");
+  const [dirFilter, setDirFilter] = useState<"all" | "long" | "short">("all");
+  const [stockRSFilter, setStockRSFilter] = useState<Set<"leading" | "improving" | "weakening" | "lagging">>(new Set());
+
   // Scan state
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState("");
@@ -325,24 +331,25 @@ export default function ConfluencePage() {
       };
     });
 
-    // Save current raw scores for next comparison
-    if (results.length > 0) {
-      const scoreMap: Record<string, number> = {};
-      for (const r of rawResults) {
-        const ewN = r.ewResult ? r.ewResult.enhancedNormalized : 0;
-        const sqN = r.squeezeResult ? r.squeezeResult.squeezeScore / 100 : 0;
-        const prN = r.prerunResult ? r.prerunResult.finalScore / 24 : 0;
-        scoreMap[r.ticker] = ewN + sqN + prN;
-      }
-      try {
-        localStorage.setItem("ew-confluence-prev-scores", JSON.stringify(scoreMap));
-      } catch {
-        // ignore storage errors
-      }
-    }
-
     return results;
   }, [rawResults, sectorMap, rotationStockMap, weights, thresholds]);
+
+  // Save current raw scores to localStorage for next comparison (trending detection)
+  useEffect(() => {
+    if (confluenceResults.length === 0) return;
+    const scoreMap: Record<string, number> = {};
+    for (const r of rawResults) {
+      const ewN = r.ewResult ? r.ewResult.enhancedNormalized : 0;
+      const sqN = r.squeezeResult ? r.squeezeResult.squeezeScore / 100 : 0;
+      const prN = r.prerunResult ? r.prerunResult.finalScore / 24 : 0;
+      scoreMap[r.ticker] = ewN + sqN + prN;
+    }
+    try {
+      localStorage.setItem("ew-confluence-prev-scores", JSON.stringify(scoreMap));
+    } catch {
+      // ignore storage errors
+    }
+  }, [confluenceResults, rawResults]);
 
   // Save scan snapshot & compute persistence when scan finishes
   const prevScanningRef = useRef(false);
@@ -384,7 +391,10 @@ export default function ConfluencePage() {
     return confluenceResults.filter((r) => {
       if (!signalFilter.has(r.signal)) return false;
       if (sectorFilter !== "All" && r.sector !== sectorFilter) return false;
-      if (quadrantFilter.size > 0 && r.sectorResult && !quadrantFilter.has(r.sectorResult.quadrant as RRGQuadrant)) return false;
+      if (quadrantFilter.size > 0) {
+        if (!r.sectorResult) return false;
+        if (!quadrantFilter.has(r.sectorResult.quadrant as RRGQuadrant)) return false;
+      }
       if (stratAlignedFilter && r.stratResult) {
         const aligned = r.stratResult.signal === "ACTIONABLE" ||
           r.stratResult.tfcAlignment === "FULL_BULL" ||
@@ -392,12 +402,43 @@ export default function ConfluencePage() {
         if (!aligned) return false;
       }
       if (stratAlignedFilter && !r.stratResult) return false;
-      if (qualityFilter === "improving" && r.momentumQuality && !r.momentumQuality.rsImproving) return false;
+      if (qualityFilter === "improving" && (!r.momentumQuality || !r.momentumQuality.rsImproving)) return false;
       if (qualityFilter === "high" && (!r.momentumQuality || !r.momentumQuality.rsImproving || r.momentumQuality.volumeConsistency < 3)) return false;
       if (qualityFilter === "fading" && (!r.momentumQuality || r.momentumQuality.rsImproving || r.momentumQuality.rsAcceleration >= 0)) return false;
+      // Verdict filter
+      if (verdictFilter !== "all") {
+        if (!r.prerunResult) return false;
+        if (r.prerunResult.verdict.toUpperCase() !== verdictFilter.toUpperCase()) return false;
+      }
+      // EW Confidence filter
+      if (ewConfFilter !== "all") {
+        if (!r.ewResult) return false;
+        if (r.ewResult.confidenceTier.toLowerCase() !== ewConfFilter) return false;
+      }
+      // TFC Alignment filter
+      if (tfcFilter !== "all") {
+        if (!r.stratResult) return false;
+        const tfcMap: Record<string, string> = { full_bull: "FULL_BULL", full_bear: "FULL_BEAR", mixed: "MIXED" };
+        if (r.stratResult.tfcAlignment !== tfcMap[tfcFilter]) return false;
+      }
+      // Direction filter
+      if (dirFilter !== "all") {
+        if (!r.stratResult?.actionDirection) return false;
+        if (dirFilter === "long" && r.stratResult.actionDirection !== "LONG" && r.stratResult.actionDirection !== "BOTH") return false;
+        if (dirFilter === "short" && r.stratResult.actionDirection !== "SHORT" && r.stratResult.actionDirection !== "BOTH") return false;
+      }
+      // Stock RS Quadrant filter
+      if (stockRSFilter.size > 0) {
+        if (!r.momentumQuality) return false;
+        const { rsAcceleration, rsImproving } = r.momentumQuality;
+        const sq = rsAcceleration > 0
+          ? (rsImproving ? "leading" : "weakening")
+          : (rsImproving ? "improving" : "lagging");
+        if (!stockRSFilter.has(sq)) return false;
+      }
       return true;
     });
-  }, [confluenceResults, signalFilter, sectorFilter, quadrantFilter, stratAlignedFilter, qualityFilter]);
+  }, [confluenceResults, signalFilter, sectorFilter, quadrantFilter, stratAlignedFilter, qualityFilter, verdictFilter, ewConfFilter, tfcFilter, dirFilter, stockRSFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -459,6 +500,8 @@ export default function ConfluencePage() {
 
     setScanning(true);
     setRawResults([]);
+    setSectorData(null);
+    setRotationStockMap(new Map());
     setScannedCount(0);
 
     const universe = getConfluenceUniverse();
@@ -540,15 +583,11 @@ export default function ConfluencePage() {
       const tickerEnd = Math.min(i + stride, tickers.length);
       setProgress(`Scanning ${tickerEnd}/${tickers.length}...`);
 
-      try {
-        const settled = await Promise.allSettled(batchPromises);
-        for (const r of settled) {
-          if (r.status === "fulfilled") {
-            results.push(...r.value);
-          }
+      const settled = await Promise.allSettled(batchPromises);
+      for (const r of settled) {
+        if (r.status === "fulfilled") {
+          results.push(...r.value);
         }
-      } catch (err) {
-        if ((err as Error).name === "AbortError") break;
       }
 
       setScannedCount(tickerEnd);
@@ -635,6 +674,15 @@ export default function ConfluencePage() {
     });
   }, []);
 
+  // Stock RS Quadrant filter toggle
+  const toggleStockRS = useCallback((q: "leading" | "improving" | "weakening" | "lagging") => {
+    setStockRSFilter((prev) => {
+      const s = new Set(prev);
+      if (s.has(q)) s.delete(q); else s.add(q);
+      return s;
+    });
+  }, []);
+
   // Signal filter toggle
   const toggleSignal = useCallback((sig: ConfluenceSignal) => {
     setSignalFilter((prev) => {
@@ -651,7 +699,7 @@ export default function ConfluencePage() {
     navigator.clipboard.writeText(symbols).then(() => {
       setCopiedToast(true);
       setTimeout(() => setCopiedToast(false), 2000);
-    });
+    }).catch(() => {});
   }, [sorted]);
 
   const handleExport = useCallback(() => {
@@ -794,6 +842,46 @@ export default function ConfluencePage() {
             </div>
           </SidebarSection>
 
+          {/* Stock RS Quadrant filter */}
+          <SidebarSection title="Stock RS Quadrant" sectionKey="stock-rs" collapsed={collapsed.has("stock-rs")} onToggle={toggleSection}>
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { q: "leading" as const, color: "green", label: "Leading" },
+                { q: "improving" as const, color: "cyan", label: "Improving" },
+                { q: "weakening" as const, color: "amber", label: "Weakening" },
+                { q: "lagging" as const, color: "red", label: "Lagging" },
+              ] as const).map(({ q, color, label }) => {
+                const active = stockRSFilter.has(q);
+                const colorMap: Record<string, { active: string; inactive: string }> = {
+                  green:  { active: "bg-green-500/15 text-green-400 border-green-500/30", inactive: "text-[#a0a0a0] border-[#2a2a2a] hover:border-green-500/30 hover:text-green-400" },
+                  cyan:   { active: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30", inactive: "text-[#a0a0a0] border-[#2a2a2a] hover:border-cyan-500/30 hover:text-cyan-400" },
+                  amber:  { active: "bg-amber-500/15 text-amber-400 border-amber-500/30", inactive: "text-[#a0a0a0] border-[#2a2a2a] hover:border-amber-500/30 hover:text-amber-400" },
+                  red:    { active: "bg-red-500/15 text-red-400 border-red-500/30", inactive: "text-[#a0a0a0] border-[#2a2a2a] hover:border-red-500/30 hover:text-red-400" },
+                };
+                return (
+                  <button
+                    key={q}
+                    onClick={() => toggleStockRS(q)}
+                    className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium border transition-colors ${
+                      active ? colorMap[color].active : colorMap[color].inactive
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              {stockRSFilter.size > 0 && (
+                <button
+                  onClick={() => setStockRSFilter(new Set())}
+                  className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium text-[#666] border border-[#2a2a2a] hover:text-white hover:border-[#444] transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] text-[#555] mt-1.5">Per-stock relative strength quadrant (from rotation tracker)</p>
+          </SidebarSection>
+
           {/* Strat Aligned filter */}
           <SidebarSection title="Strat Filter" sectionKey="strat-filter" collapsed={collapsed.has("strat-filter")} onToggle={toggleSection}>
             <button
@@ -863,6 +951,111 @@ export default function ConfluencePage() {
               ))}
             </div>
             <p className="text-[10px] text-[#555] mt-1.5">Filters by rotation tracker momentum data (active sectors only)</p>
+          </SidebarSection>
+
+          {/* Scanner Filters */}
+          <SidebarSection title="Scanner Filters" sectionKey="scanner-filters" collapsed={collapsed.has("scanner-filters")} onToggle={toggleSection}>
+            <div className="space-y-3">
+              {/* Verdict (Pre-Run) */}
+              <div>
+                <p className="text-[10px] text-[#666] mb-1.5">Verdict (Pre-Run)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { key: "all" as const, label: "All" },
+                    { key: "priority" as const, label: "Priority" },
+                    { key: "keep" as const, label: "Keep" },
+                    { key: "watch" as const, label: "Watch" },
+                    { key: "discard" as const, label: "Discard" },
+                  ]).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setVerdictFilter(verdictFilter === key ? "all" : key)}
+                      className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium border transition-colors ${
+                        verdictFilter === key
+                          ? "bg-[#ec4899]/15 text-[#ec4899] border-[#ec4899]/30"
+                          : "text-[#a0a0a0] border-[#2a2a2a] hover:border-[#444] hover:text-white"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* EW Confidence */}
+              <div>
+                <p className="text-[10px] text-[#666] mb-1.5">EW Confidence</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { key: "all" as const, label: "All" },
+                    { key: "high" as const, label: "High" },
+                    { key: "probable" as const, label: "Probable" },
+                    { key: "speculative" as const, label: "Speculative" },
+                  ]).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setEwConfFilter(ewConfFilter === key ? "all" : key)}
+                      className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium border transition-colors ${
+                        ewConfFilter === key
+                          ? "bg-[#ec4899]/15 text-[#ec4899] border-[#ec4899]/30"
+                          : "text-[#a0a0a0] border-[#2a2a2a] hover:border-[#444] hover:text-white"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* TFC Alignment (Strat) */}
+              <div>
+                <p className="text-[10px] text-[#666] mb-1.5">TFC Alignment (Strat)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { key: "all" as const, label: "All" },
+                    { key: "full_bull" as const, label: "Full Bull" },
+                    { key: "full_bear" as const, label: "Full Bear" },
+                    { key: "mixed" as const, label: "Mixed" },
+                  ]).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setTfcFilter(tfcFilter === key ? "all" : key)}
+                      className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium border transition-colors ${
+                        tfcFilter === key
+                          ? "bg-[#ec4899]/15 text-[#ec4899] border-[#ec4899]/30"
+                          : "text-[#a0a0a0] border-[#2a2a2a] hover:border-[#444] hover:text-white"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Direction (Strat) */}
+              <div>
+                <p className="text-[10px] text-[#666] mb-1.5">Direction (Strat)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { key: "all" as const, label: "All" },
+                    { key: "long" as const, label: "Long" },
+                    { key: "short" as const, label: "Short" },
+                  ]).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setDirFilter(dirFilter === key ? "all" : key)}
+                      className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium border transition-colors ${
+                        dirFilter === key
+                          ? "bg-[#ec4899]/15 text-[#ec4899] border-[#ec4899]/30"
+                          : "text-[#a0a0a0] border-[#2a2a2a] hover:border-[#444] hover:text-white"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </SidebarSection>
 
           {/* Scan / Cancel */}
@@ -988,6 +1181,11 @@ export default function ConfluencePage() {
               setQuadrantFilter(new Set());
               setStratAlignedFilter(false);
               setQualityFilter("all");
+              setVerdictFilter("all");
+              setEwConfFilter("all");
+              setTfcFilter("all");
+              setDirFilter("all");
+              setStockRSFilter(new Set());
             }}
             className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors"
           >
@@ -1299,10 +1497,10 @@ function ResultRow({
             <div className="flex gap-1">
               {[s.ewNormalized, s.squeezeNormalized, s.prerunNormalized, s.sectorNormalized].map((v, i) => (
                 <div key={i} className={`w-2 h-2 rounded-full ${v > 0 ? passDot(
-                  i === 0 ? v >= (DEFAULT_THRESHOLDS.ew) :
-                  i === 1 ? v >= (DEFAULT_THRESHOLDS.squeeze) :
-                  i === 2 ? v >= (DEFAULT_THRESHOLDS.prerun) :
-                  v >= (DEFAULT_THRESHOLDS.sector)
+                  i === 0 ? v >= (thresholds.ew) :
+                  i === 1 ? v >= (thresholds.squeeze) :
+                  i === 2 ? v >= (thresholds.prerun) :
+                  v >= (thresholds.sector)
                 ) : "bg-[#222]"}`} />
               ))}
               <div className={`w-2 h-2 rounded-full ${result.stratResult ? ((result.stratResult.normalizedScore >= 0.35) ? "bg-orange-500" : "bg-[#333]") : "bg-[#222]"}`} />

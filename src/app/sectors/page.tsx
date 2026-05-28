@@ -20,8 +20,8 @@ import {
   getSnapshot,
 } from "@/lib/sector-rotation/history";
 import type { DailySnapshot, SectorSnapshot } from "@/lib/sector-rotation/history";
-import { loadScanResults, loadScanResultsWithDate } from "@/lib/prerun/storage";
-import { SECTOR_UNIVERSE, getSectorForSymbol } from "@/data/sector-universe";
+import { loadScanResultsWithDate } from "@/lib/prerun/storage";
+import { SECTOR_UNIVERSE } from "@/data/sector-universe";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { compositeColor, compositeTextColor } from "@/lib/color-utils";
 import { useDebounce } from "@/lib/use-debounce";
@@ -144,10 +144,6 @@ interface StockInSector {
   volumeConsistency: number;
 }
 
-function isTurnaroundCandidate(s: StockInSector): boolean {
-  return s.aboveSma50 === false && (s.rs20d ?? 0) > 0 && (s.volumeVsAvg ?? 0) >= 1.2 && (s.rsAccel ?? 0) > 0;
-}
-
 // ── Phase-based stock grouping ──
 
 type StockPhase = "basing" | "turnaround" | "trending" | "exhausting" | "neutral";
@@ -257,7 +253,7 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
   };
 
   const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setSectorRSFilter("all"); setPhaseFilter("all"); setQualityFilter("all"); };
-  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || (hasRotationData && sectorRSFilter !== "all") || phaseFilter !== "all" || (hasRotationData && qualityFilter !== "all");
+  const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || sectorRSFilter !== "all" || phaseFilter !== "all" || qualityFilter !== "all";
 
   const earlyStrengthActive = phaseFilter === "turnaround";
   const toggleEarlyStrength = () => {
@@ -310,7 +306,7 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
     navigator.clipboard.writeText(tickers).then(() => {
       setTableCopied(true);
       setTimeout(() => setTableCopied(false), 2000);
-    });
+    }).catch(() => {});
   };
 
   // #8: Export to CSV
@@ -1378,7 +1374,6 @@ export default function SectorRotationPage() {
     }).catch(() => { /* non-critical */ });
   }, []);
 
-  useEffect(() => { setHistory(loadHistory()); }, []);
   useEffect(() => { if (data) setHistory(loadHistory()); }, [data]);
 
   const comparisonMap = useMemo(() => {
@@ -1511,7 +1506,7 @@ export default function SectorRotationPage() {
   const copyWatchlist = useCallback(() => {
     if (!data) return;
     const tickers = data.topStocksToWatch.flatMap((g) => g.stocks.map((s) => s.ticker)).join(", ");
-    navigator.clipboard.writeText(tickers).then(() => { setCopiedToast(true); setTimeout(() => setCopiedToast(false), 2000); });
+    navigator.clipboard.writeText(tickers).then(() => { setCopiedToast(true); setTimeout(() => setCopiedToast(false), 2000); }).catch(() => {});
   }, [data]);
 
   const [loadingTimeout, setLoadingTimeout] = useState(false);

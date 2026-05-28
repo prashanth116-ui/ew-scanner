@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useMemo, useRef, Suspense, memo } fro
 import {
   Search,
   Loader2,
-  ChevronDown,
   X,
   Save,
   Trash2,
@@ -45,8 +44,7 @@ import type {
   SqueezeWatchlist,
 } from "@/lib/ew-types";
 import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-scoring";
-import { computeSITrend, type SITrendDirection } from "@/lib/squeeze-scoring";
-import { recordSignals, fetchClientHitRates, type HitRateEntry } from "@/lib/signal-client";
+import { recordSignals } from "@/lib/signal-client";
 import { useDebounce } from "@/lib/use-debounce";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 import { useSidebarState } from "@/lib/use-sidebar-state";
@@ -116,9 +114,14 @@ type SortKey =
   | "ticker";
 type SortDir = "asc" | "desc";
 
-function formatPct(val: number | null): string {
+function formatSiPct(val: number | null): string {
   if (val == null) return "-";
   return `${normalizeSiPercent(val).toFixed(1)}%`;
+}
+function formatPct(val: number | null): string {
+  if (val == null) return "-";
+  const v = val < 1 && val > 0 ? val * 100 : val;
+  return `${v.toFixed(1)}%`;
 }
 
 export default function SqueezePageWrapper() {
@@ -312,6 +315,7 @@ function SqueezePage() {
     setRawResults([]);
     setScannedCount(0);
     setExpandedTicker(null);
+    setSearchedTickers(new Set());
 
     const tickers = ALL_TICKERS;
     setTotalCount(tickers.length);
@@ -344,7 +348,12 @@ function SqueezePage() {
       }
 
       setScannedCount(Math.min(i + BATCH_SIZE, tickers.length));
-      setRawResults([...results]);
+      setRawResults((prev) => {
+        // Preserve manually-searched tickers not in scan results
+        const scannedTickers = new Set(results.map(r => r.ticker));
+        const manual = prev.filter(r => !scannedTickers.has(r.ticker));
+        return [...results, ...manual];
+      });
 
       if (i + BATCH_SIZE < tickers.length && !signal.aborted) {
         await new Promise((r) => setTimeout(r, BATCH_DELAY));
@@ -537,6 +546,7 @@ function SqueezePage() {
     setMinScore(scan.filters.minScore ?? 0);
     setRequireEw(scan.filters.requireEwAlignment);
     setRawResults(scan.candidates);
+    setSearchedTickers(new Set());
   }, []);
 
   // ── Apply Preset ──
@@ -599,30 +609,8 @@ function SqueezePage() {
     navigator.clipboard.writeText(symbols).then(() => {
       setCopiedToast(true);
       setTimeout(() => setCopiedToast(false), 2000);
-    });
+    }).catch(() => {});
   }, [sorted]);
-
-  const SortHeader = ({
-    label,
-    sortKeyVal,
-    className,
-  }: {
-    label: string;
-    sortKeyVal: SortKey;
-    className?: string;
-  }) => (
-    <th
-      onClick={() => toggleSort(sortKeyVal)}
-      className={`px-3 py-2 text-left text-xs font-medium text-[#a0a0a0] cursor-pointer hover:text-white select-none ${className ?? ""}`}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {sortKey === sortKeyVal && (
-          <ArrowUpDown className="h-3 w-3 text-[#5ba3e6]" />
-        )}
-      </span>
-    </th>
-  );
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
@@ -1047,17 +1035,17 @@ function SqueezePage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-[#2a2a2a]">
-                    <SortHeader label="Ticker" sortKeyVal="ticker" />
+                    <SqueezeSortHeader onSort={toggleSort} currentSortKey={sortKey} sortDir={sortDir} label="Ticker" sortKeyVal="ticker" />
                     <th className="px-3 py-2 text-left text-xs font-medium text-[#a0a0a0]">
                       Name
                     </th>
-                    <SortHeader label="SI%" sortKeyVal="siPercent" />
-                    <SortHeader label="DTC" sortKeyVal="dtc" />
-                    <SortHeader label="Float" sortKeyVal="float" />
-                    <SortHeader label="Vol Ratio" sortKeyVal="volumeRatio" />
-                    <SortHeader label="Price" sortKeyVal="price" />
-                    <SortHeader label="Near Low" sortKeyVal="nearLow" />
-                    <SortHeader label="Score" sortKeyVal="score" />
+                    <SqueezeSortHeader onSort={toggleSort} currentSortKey={sortKey} sortDir={sortDir} label="SI%" sortKeyVal="siPercent" />
+                    <SqueezeSortHeader onSort={toggleSort} currentSortKey={sortKey} sortDir={sortDir} label="DTC" sortKeyVal="dtc" />
+                    <SqueezeSortHeader onSort={toggleSort} currentSortKey={sortKey} sortDir={sortDir} label="Float" sortKeyVal="float" />
+                    <SqueezeSortHeader onSort={toggleSort} currentSortKey={sortKey} sortDir={sortDir} label="Vol Ratio" sortKeyVal="volumeRatio" />
+                    <SqueezeSortHeader onSort={toggleSort} currentSortKey={sortKey} sortDir={sortDir} label="Price" sortKeyVal="price" />
+                    <SqueezeSortHeader onSort={toggleSort} currentSortKey={sortKey} sortDir={sortDir} label="Near Low" sortKeyVal="nearLow" />
+                    <SqueezeSortHeader onSort={toggleSort} currentSortKey={sortKey} sortDir={sortDir} label="Score" sortKeyVal="score" />
                     <th className="px-3 py-2 text-left text-xs font-medium text-[#a0a0a0]">
                       EW
                     </th>
@@ -1182,7 +1170,7 @@ const TableRow = memo(function TableRow({
           {c.name}
         </td>
         <td className="px-3 py-2.5 text-sm text-white font-medium">
-          {formatPct(c.shortPercentOfFloat)}
+          {formatSiPct(c.shortPercentOfFloat)}
         </td>
         <td className="px-3 py-2.5 text-sm text-white">
           {formatNum(c.shortRatio, 1)}
@@ -1376,3 +1364,35 @@ const TableRow = memo(function TableRow({
     </>
   );
 });
+
+// ── Sort Header Component ──
+
+function SqueezeSortHeader({
+  label,
+  sortKeyVal,
+  className,
+  onSort,
+  currentSortKey,
+  sortDir,
+}: {
+  label: string;
+  sortKeyVal: SortKey;
+  className?: string;
+  onSort: (key: SortKey) => void;
+  currentSortKey: SortKey;
+  sortDir: SortDir;
+}) {
+  return (
+    <th
+      onClick={() => onSort(sortKeyVal)}
+      className={`px-3 py-2 text-left text-xs font-medium text-[#a0a0a0] cursor-pointer hover:text-white select-none ${className ?? ""}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {currentSortKey === sortKeyVal && (
+          <ArrowUpDown className="h-3 w-3 text-[#5ba3e6]" />
+        )}
+      </span>
+    </th>
+  );
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef, memo, Suspense } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, memo } from "react";
 import {
   Search,
   Loader2,
@@ -104,9 +104,7 @@ function tfcDotColor(dir: string): string {
 export default function StratPageWrapper() {
   return (
     <>
-      <Suspense fallback={null}>
-        <StratPage />
-      </Suspense>
+      <StratPage />
       <ScannerCTA />
     </>
   );
@@ -241,6 +239,10 @@ function StratPage() {
   // Sort
   const sorted = useMemo(() => {
     const arr = [...filtered];
+    // Pre-compute actionable combo counts for sorting to avoid repeated .filter() in comparator
+    const actionableCounts = sortKey === "combos"
+      ? new Map(arr.map(r => [r.ticker, r.combos.filter(c => c.isActionable).length]))
+      : null;
     arr.sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
@@ -251,7 +253,7 @@ function StratPage() {
           cmp = a.tfc.score - b.tfc.score;
           break;
         case "combos":
-          cmp = a.combos.filter((c) => c.isActionable).length - b.combos.filter((c) => c.isActionable).length;
+          cmp = (actionableCounts!.get(a.ticker) ?? 0) - (actionableCounts!.get(b.ticker) ?? 0);
           break;
         case "price":
           cmp = (a.currentPrice ?? 0) - (b.currentPrice ?? 0);
@@ -264,11 +266,14 @@ function StratPage() {
 
   // Stats — count from rawResults so widget numbers are stable while filtering
   const stats = useMemo(() => {
-    const actionable = rawResults.filter((r) => r.signal === "ACTIONABLE").length;
-    const settingUp = rawResults.filter((r) => r.signal === "SETTING_UP").length;
-    const fullBull = rawResults.filter((r) => r.tfc.alignment === "FULL_BULL").length;
-    const fullBear = rawResults.filter((r) => r.tfc.alignment === "FULL_BEAR").length;
-    const broadening = rawResults.filter((r) => r.broadenings.length > 0).length;
+    let actionable = 0, settingUp = 0, fullBull = 0, fullBear = 0, broadening = 0;
+    for (const r of rawResults) {
+      if (r.signal === "ACTIONABLE") actionable++;
+      if (r.signal === "SETTING_UP") settingUp++;
+      if (r.tfc.alignment === "FULL_BULL") fullBull++;
+      if (r.tfc.alignment === "FULL_BEAR") fullBear++;
+      if (r.broadenings.length > 0) broadening++;
+    }
     return { total: filtered.length, actionable, settingUp, fullBull, fullBear, broadening };
   }, [rawResults, filtered]);
 
@@ -371,9 +376,14 @@ function StratPage() {
   }, []);
 
   // Ticker search
+  const lookupInFlight = useRef<string | null>(null);
+
   const lookupTicker = useCallback(async () => {
     const ticker = tickerSearch.trim().toUpperCase();
     if (!ticker) return;
+
+    // Guard against duplicate concurrent lookups for the same ticker
+    if (lookupInFlight.current === ticker) return;
 
     // If already in results, just expand it and scroll to it
     if (rawResults.some((r) => r.ticker === ticker)) {
@@ -383,6 +393,7 @@ function StratPage() {
       return;
     }
 
+    lookupInFlight.current = ticker;
     setTickerSearching(true);
     setTickerError(null);
 
@@ -391,15 +402,20 @@ function StratPage() {
       if (!res.ok) {
         setTickerError(`Could not find "${ticker}"`);
         setTickerSearching(false);
+        lookupInFlight.current = null;
         return;
       }
       const data = (await res.json()) as StratResult;
       if (!data.ticker) {
         setTickerError(`No data for "${ticker}"`);
         setTickerSearching(false);
+        lookupInFlight.current = null;
         return;
       }
-      setRawResults((prev) => [data, ...prev]);
+      setRawResults((prev) => {
+        if (prev.some(r => r.ticker === data.ticker)) return prev;
+        return [data, ...prev];
+      });
       setManualTickers((prev) => new Set(prev).add(data.ticker));
       setExpandedTicker(data.ticker);
       setTickerSearch("");
@@ -407,6 +423,7 @@ function StratPage() {
       setTickerError("Network error");
     }
     setTickerSearching(false);
+    lookupInFlight.current = null;
   }, [tickerSearch, rawResults]);
 
   // Sort toggle
@@ -477,7 +494,7 @@ function StratPage() {
     navigator.clipboard.writeText(symbols).then(() => {
       setCopiedToast(true);
       setTimeout(() => setCopiedToast(false), 2000);
-    });
+    }).catch(() => {});
   }, [sorted]);
 
   const handleAddToWatchlist = useCallback((watchlistId: string, result: StratResult) => {
@@ -506,14 +523,21 @@ function StratPage() {
   const sectorBuckets = useMemo(() => getSectorBuckets(), []);
   const sectorTickerCount = useMemo(() => getTickersForSector(sectorBucket).length, [sectorBucket]);
 
-  // Format cache age for display
-  const cacheAgeLabel = useMemo(() => {
-    if (!cacheAge) return null;
-    const mins = Math.floor((Date.now() - cacheAge) / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    return `${hrs}h ${mins % 60}m ago`;
+  // Format cache age for display (updates every 60s)
+  const [cacheAgeLabel, setCacheAgeLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!cacheAge) { setCacheAgeLabel(null); return; }
+    const compute = () => {
+      const mins = Math.floor((Date.now() - cacheAge) / 60000);
+      if (mins < 1) return "just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      return `${hrs}h ${mins % 60}m ago`;
+    };
+    setCacheAgeLabel(compute());
+    const interval = setInterval(() => setCacheAgeLabel(compute()), 60000);
+    return () => clearInterval(interval);
   }, [cacheAge]);
 
   return (
@@ -835,9 +859,9 @@ function StratPage() {
         {rawResults.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
             <button
-              onClick={() => { setSignalFilter("All"); setTfcAlignment("All"); }}
+              onClick={() => { setSignalFilter("All"); setTfcAlignment("All"); setHasBroadening("All"); }}
               className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
-                signalFilter === "All" && tfcAlignment === "All" ? "border-[#f97316]/40 ring-1 ring-[#f97316]/20" : "border-[#2a2a2a] hover:border-[#444]"
+                signalFilter === "All" && tfcAlignment === "All" && hasBroadening === "All" ? "border-[#f97316]/40 ring-1 ring-[#f97316]/20" : "border-[#2a2a2a] hover:border-[#444]"
               }`}
             >
               <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">Results</p>
@@ -847,7 +871,7 @@ function StratPage() {
               </p>
             </button>
             <button
-              onClick={() => { setSignalFilter(signalFilter === "ACTIONABLE" ? "All" : "ACTIONABLE"); setTfcAlignment("All"); }}
+              onClick={() => { setSignalFilter(signalFilter === "ACTIONABLE" ? "All" : "ACTIONABLE"); setTfcAlignment("All"); setHasBroadening("All"); }}
               className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
                 signalFilter === "ACTIONABLE" ? "border-green-500/40 ring-1 ring-green-500/20" : "border-green-500/20 hover:border-green-500/40"
               }`}
@@ -856,7 +880,7 @@ function StratPage() {
               <p className="text-lg font-bold text-green-400">{stats.actionable}</p>
             </button>
             <button
-              onClick={() => { setSignalFilter(signalFilter === "SETTING_UP" ? "All" : "SETTING_UP"); setTfcAlignment("All"); }}
+              onClick={() => { setSignalFilter(signalFilter === "SETTING_UP" ? "All" : "SETTING_UP"); setTfcAlignment("All"); setHasBroadening("All"); }}
               className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
                 signalFilter === "SETTING_UP" ? "border-amber-500/40 ring-1 ring-amber-500/20" : "border-amber-500/20 hover:border-amber-500/40"
               }`}
@@ -865,7 +889,7 @@ function StratPage() {
               <p className="text-lg font-bold text-amber-400">{stats.settingUp}</p>
             </button>
             <button
-              onClick={() => { setTfcAlignment(tfcAlignment === "FULL_BULL" ? "All" : "FULL_BULL"); setSignalFilter("All"); }}
+              onClick={() => { setTfcAlignment(tfcAlignment === "FULL_BULL" ? "All" : "FULL_BULL"); setSignalFilter("All"); setHasBroadening("All"); }}
               className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
                 tfcAlignment === "FULL_BULL" ? "border-green-500/40 ring-1 ring-green-500/20" : "border-green-500/20 hover:border-green-500/40"
               }`}
@@ -874,7 +898,7 @@ function StratPage() {
               <p className="text-lg font-bold text-green-400">{stats.fullBull}</p>
             </button>
             <button
-              onClick={() => { setTfcAlignment(tfcAlignment === "FULL_BEAR" ? "All" : "FULL_BEAR"); setSignalFilter("All"); }}
+              onClick={() => { setTfcAlignment(tfcAlignment === "FULL_BEAR" ? "All" : "FULL_BEAR"); setSignalFilter("All"); setHasBroadening("All"); }}
               className={`rounded-lg border bg-[#141414] px-4 py-3 text-left transition-colors ${
                 tfcAlignment === "FULL_BEAR" ? "border-red-500/40 ring-1 ring-red-500/20" : "border-red-500/20 hover:border-red-500/40"
               }`}

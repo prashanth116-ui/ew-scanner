@@ -45,7 +45,7 @@ import type {
   SavedScan,
 } from "@/lib/ew-types";
 import { SCANNER_MODES, getModeConfig, applyModeFilters } from "@/lib/ew-scanner-modes";
-import { saveScan, loadScans, deleteScan, loadCustomUniverses } from "@/lib/ew-watchlist";
+import { saveScan, loadScans, deleteScan, loadCustomUniverses, type CustomUniverse } from "@/lib/ew-watchlist";
 import { loadWatchlists, addToWatchlist } from "@/lib/ew-watchlists";
 import { confirmMultiTimeframe, getWaveStatusInfo, countWaves, computeForwardTargets } from "@/lib/ew-wave-counter";
 import { computeReliabilityScore } from "@/lib/ew-reliability";
@@ -245,7 +245,7 @@ function EWScannerPage() {
   const [savedScans, setSavedScans] = useState<SavedScan[]>([]);
   const [showSaved, setShowSaved] = useState(false);
   const [showUniverseBuilder, setShowUniverseBuilder] = useState(false);
-  const [customUniverseKeys, setCustomUniverseKeys] = useState<string[]>([]);
+  const [customUniverses, setCustomUniverses] = useState<CustomUniverse[]>(() => loadCustomUniverses());
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
   const [showAlertConfig, setShowAlertConfig] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
@@ -289,7 +289,7 @@ function EWScannerPage() {
     if (mtfFilter !== "all") params.set("mtfFilter", mtfFilter);
     const qs = params.toString();
     router.replace(qs ? `/?${qs}` : "/", { scroll: false });
-  }, [debouncedMode, debouncedUniverse, debouncedHtf, debouncedLtf, debouncedDecline, debouncedMonths, debouncedRecovery, debouncedSortBy, debouncedGroupBy, debouncedViewMode, fibFilter, volFilter, mtfFilter, searchParams, router]);
+  }, [debouncedMode, debouncedUniverse, debouncedHtf, debouncedLtf, debouncedDecline, debouncedMonths, debouncedRecovery, debouncedSortBy, debouncedGroupBy, debouncedViewMode, fibFilter, volFilter, mtfFilter, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hit rates from Supabase
   const [hitRates, setHitRates] = useState<HitRateEntry[]>([]);
@@ -305,7 +305,7 @@ function EWScannerPage() {
   // Load saved scans and custom universes on mount
   useEffect(() => {
     setSavedScans(loadScans());
-    setCustomUniverseKeys(loadCustomUniverses().map((u) => `custom:${u.id}`));
+    setCustomUniverses(loadCustomUniverses());
   }, []);
 
   // Load scan from URL param (from history page)
@@ -399,6 +399,13 @@ function EWScannerPage() {
 
   // Group
   const grouped = useMemo(() => groupCandidates(sorted, groupBy), [sorted, groupBy]);
+
+  // Summary stats (memoized to avoid recomputation on every render)
+  const summaryStats = useMemo(() => ({
+    avgDecline: (modeFiltered.reduce((s, r) => s + r.declinePct, 0) / (modeFiltered.length || 1)).toFixed(1),
+    avgDuration: (modeFiltered.reduce((s, r) => s + r.monthsDecline, 0) / (modeFiltered.length || 1)).toFixed(0),
+    avgRecovery: (modeFiltered.reduce((s, r) => s + r.recoveryPct, 0) / (modeFiltered.length || 1)).toFixed(1),
+  }), [modeFiltered]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -558,6 +565,7 @@ function EWScannerPage() {
     let batchesSinceLastUpdate = 0;
 
     for (let i = 0; i < total; i += BATCH_SIZE) {
+      if (signal.aborted) break;
       const batch = tickers.slice(i, i + BATCH_SIZE);
       const fetched = Math.min(i + BATCH_SIZE, total);
       const failRate = fetched > 0 ? fetchFailures / fetched : 0;
@@ -647,6 +655,7 @@ function EWScannerPage() {
 
     if (topForMtf.length > 0) {
       setProgress(`Running multi-timeframe confirmation for top ${topForMtf.length}...`);
+      const mtfUpdates = new Map<string, Partial<EnhancedScoredCandidate>>();
       await Promise.allSettled(
         topForMtf.map(async (c) => {
           try {
@@ -665,7 +674,9 @@ function EWScannerPage() {
                 for (let i = dAthIdx; i < dailySeries.low.length; i++) {
                   if (dailySeries.low[i] < dMin) { dMin = dailySeries.low[i]; dLowIdx = i; }
                 }
-                c.mtfConfirmation = confirmMultiTimeframe(c.waveCount, dailySeries, dAthIdx, dLowIdx);
+                const update: Partial<EnhancedScoredCandidate> = {
+                  mtfConfirmation: confirmMultiTimeframe(c.waveCount, dailySeries, dAthIdx, dLowIdx),
+                };
                 let dMicroLowIdx = dLowIdx;
                 if (dAthIdx >= dailySeries.high.length * 0.85) {
                   let gMin = Infinity;
@@ -675,9 +686,10 @@ function EWScannerPage() {
                 }
                 const dailyCount = countWaves(dailySeries, dAthIdx, dMicroLowIdx, "intermediate");
                 if (dailyCount) {
-                  c.dailyWaveCount = dailyCount;
-                  c.dailySeries = dailySeries;
+                  update.dailyWaveCount = dailyCount;
+                  update.dailySeries = dailySeries;
                 }
+                mtfUpdates.set(c.ticker, update);
               }
             }
           } catch {
@@ -685,8 +697,11 @@ function EWScannerPage() {
           }
         })
       );
-      // Update results to trigger re-render
-      setResults([...scored]);
+      // Update results immutably to trigger re-render
+      setResults(scored.map((s) => {
+        const u = mtfUpdates.get(s.ticker);
+        return u ? { ...s, ...u } : s;
+      }));
     }
 
     // Label top candidates only (token gate: top N above min score)
@@ -1170,7 +1185,7 @@ function EWScannerPage() {
                       {k} ({UNIVERSES[k].length})
                     </option>
                   ))}
-                  {loadCustomUniverses().map((u) => (
+                  {customUniverses.map((u) => (
                     <option key={u.id} value={`custom:${u.id}`}>
                       {u.name} ({u.tickers.length})
                     </option>
@@ -1627,17 +1642,17 @@ function EWScannerPage() {
                 <StatCard
                   icon={<TrendingDown className="h-4 w-4 text-red-400" />}
                   label="Avg Decline"
-                  value={`${(modeFiltered.reduce((s, r) => s + r.declinePct, 0) / (modeFiltered.length || 1)).toFixed(1)}%`}
+                  value={`${summaryStats.avgDecline}%`}
                 />
                 <StatCard
                   icon={<Clock className="h-4 w-4 text-yellow-400" />}
                   label="Avg Duration"
-                  value={`${(modeFiltered.reduce((s, r) => s + r.monthsDecline, 0) / (modeFiltered.length || 1)).toFixed(0)}mo`}
+                  value={`${summaryStats.avgDuration}mo`}
                 />
                 <StatCard
                   icon={<TrendingUp className="h-4 w-4 text-green-400" />}
                   label="Avg Recovery"
-                  value={`${(modeFiltered.reduce((s, r) => s + r.recoveryPct, 0) / (modeFiltered.length || 1)).toFixed(1)}%`}
+                  value={`${summaryStats.avgRecovery}%`}
                 />
               </div>
 
@@ -1745,9 +1760,9 @@ function EWScannerPage() {
                   </h3>
                 )}
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {items.map((c, idx) => {
+                  {(() => {
                     const itemMatchCount = items.filter((i) => i.wavePositionMatch).length;
-                    return (
+                    return items.map((c, idx) => (
                       <Fragment key={c.ticker}>
                         {idx === itemMatchCount && itemMatchCount > 0 && itemMatchCount < items.length && (
                           <div className="col-span-full flex items-center gap-3 py-2">
@@ -1774,8 +1789,8 @@ function EWScannerPage() {
                           mode={mode}
                         />
                       </Fragment>
-                    );
-                  })}
+                    ));
+                  })()}
                 </div>
               </div>
             ))
@@ -2166,7 +2181,7 @@ function EWScannerPage() {
         open={showUniverseBuilder}
         onOpenChange={setShowUniverseBuilder}
         onUniverseCreated={() => {
-          setCustomUniverseKeys(loadCustomUniverses().map((u) => `custom:${u.id}`));
+          setCustomUniverses(loadCustomUniverses());
         }}
       />
 
@@ -2534,6 +2549,10 @@ function CompactTable({
   items,
   labels,
   labeling,
+  scoreTextColor,
+  scoreBgColor,
+  confidenceBadge,
+  fmtYear,
   runDeep,
   mode,
 }: {

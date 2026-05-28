@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef, Suspense, memo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, memo } from "react";
 import {
   Search,
   Loader2,
@@ -25,8 +25,8 @@ import type {
   SavedPreRunScan,
   PreRunCriteriaFilter,
   MultiTFM2Result,
+  EmaTimeframe,
 } from "@/lib/prerun/types";
-import type { EmaTimeframe } from "@/lib/prerun/types";
 import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES } from "@/lib/prerun/types";
 import {
   type TFFilterValue, type TrendFilterValue, type BoolFilterValue, type VolFilterValue,
@@ -91,9 +91,7 @@ const EARNINGS_OPTIONS = [
 export default function PreRunPageWrapper() {
   return (
     <>
-      <Suspense fallback={null}>
-        <PreRunPage />
-      </Suspense>
+      <PreRunPage />
       <ScannerCTA />
     </>
   );
@@ -129,6 +127,7 @@ function PreRunPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [rawResults, setRawResults] = useState<PreRunResult[]>([]);
   const scanAbort = useRef<AbortController | null>(null);
+  const phase2Abort = useRef<AbortController | null>(null);
 
   // Ticker search
   const [tickerSearch, setTickerSearch] = useState("");
@@ -155,6 +154,9 @@ function PreRunPage() {
   const [addedTicker, setAddedTicker] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
 
+  // Timer ref for watchlist add feedback
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Copy watchlist
   const [copiedToast, setCopiedToast] = useState(false);
 
@@ -180,6 +182,7 @@ function PreRunPage() {
   useEffect(() => {
     return () => {
       scanAbort.current?.abort();
+      phase2Abort.current?.abort();
     };
   }, []);
 
@@ -238,7 +241,9 @@ function PreRunPage() {
       let cmp = 0;
       switch (sortKey) {
         case "score":
-          cmp = a.scores.finalScore - b.scores.finalScore;
+          cmp = skipGate3
+            ? (a.scores.totalScore - b.scores.totalScore)
+            : (a.scores.finalScore - b.scores.finalScore);
           break;
         case "pctFromAth":
           cmp = (a.data.pctFromAth ?? 0) - (b.data.pctFromAth ?? 0);
@@ -253,7 +258,7 @@ function PreRunPage() {
       return sortDir === "desc" ? -cmp : cmp;
     });
     return arr;
-  }, [filtered, sortKey, sortDir]);
+  }, [filtered, sortKey, sortDir, skipGate3]);
 
   // Stats
   const stats = useMemo(() => {
@@ -266,6 +271,11 @@ function PreRunPage() {
   // Phase 2: Multi-TF M2 scan for candidate tickers
   const runMultiTFPhase2 = useCallback(async (candidates: PreRunResult[]) => {
     if (candidates.length === 0) return;
+
+    phase2Abort.current?.abort();
+    const p2Controller = new AbortController();
+    phase2Abort.current = p2Controller;
+    const p2Signal = p2Controller.signal;
 
     setMultiTFScanning(true);
     setMultiTFProgress(`Fetching M2 for ${candidates.length} candidates across 6 timeframes...`);
@@ -303,6 +313,7 @@ function PreRunPage() {
       // Batch tickers in groups of 10 for the API
       const PHASE2_BATCH = 25;
       for (let i = 0; i < candidateTickers.length; i += PHASE2_BATCH) {
+        if (p2Signal.aborted) break;
         const batch = candidateTickers.slice(i, i + PHASE2_BATCH);
         setMultiTFProgress(
           `M2 Phase 2: ${Math.min(i + PHASE2_BATCH, candidateTickers.length)}/${candidateTickers.length} tickers...`
@@ -313,6 +324,7 @@ function PreRunPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tickers: batch, timeframes }),
+            signal: p2Signal,
           });
 
           if (res.ok) {
@@ -354,6 +366,7 @@ function PreRunPage() {
   // Scan
   const runScan = useCallback(async () => {
     scanAbort.current?.abort();
+    phase2Abort.current?.abort();
     const controller = new AbortController();
     scanAbort.current = controller;
     const signal = controller.signal;
@@ -402,7 +415,11 @@ function PreRunPage() {
       }
 
       setScannedCount(Math.min(i + BATCH_SIZE, tickers.length));
-      setRawResults([...results]);
+      setRawResults((prev) => {
+        const scannedTickers = new Set(results.map(r => r.data.ticker));
+        const manual = prev.filter(r => !scannedTickers.has(r.data.ticker));
+        return [...results, ...manual];
+      });
 
       if (i + BATCH_SIZE < tickers.length && !signal.aborted) {
         await new Promise((r) => setTimeout(r, BATCH_DELAY));
@@ -434,6 +451,8 @@ function PreRunPage() {
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
     scanAbort.current = null;
+    phase2Abort.current?.abort();
+    phase2Abort.current = null;
     setScanning(false);
     setMultiTFScanning(false);
     setProgress("");
@@ -528,6 +547,9 @@ function PreRunPage() {
     setVerdictFilter(scan.filters.verdict);
     setEmaTimeframe(scan.filters.emaTimeframe ?? "15m");
     setRawResults(scan.candidates);
+    setCriteriaFilters([]);
+    setSkipGate3(false);
+    setMultiTFResults(new Map());
   }, []);
 
   // Preset
@@ -548,14 +570,15 @@ function PreRunPage() {
 
   // Add to watchlist
   const handleAddToWatchlist = useCallback((result: PreRunResult) => {
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
     setAddError(null);
     const item = addToPreRunWatchlist(result);
     if (item) {
       setAddedTicker(result.data.ticker);
-      setTimeout(() => setAddedTicker(null), 1500);
+      feedbackTimer.current = setTimeout(() => { setAddedTicker(null); setAddError(null); }, 1500);
     } else {
       setAddError(`${result.data.ticker} already in watchlist`);
-      setTimeout(() => setAddError(null), 2500);
+      feedbackTimer.current = setTimeout(() => { setAddedTicker(null); setAddError(null); }, 2500);
     }
   }, []);
 
@@ -583,7 +606,7 @@ function PreRunPage() {
     navigator.clipboard.writeText(symbols).then(() => {
       setCopiedToast(true);
       setTimeout(() => setCopiedToast(false), 2000);
-    });
+    }).catch(() => {});
   }, [sorted]);
 
   const sectorBuckets = useMemo(() => getSectorBuckets(), []);
@@ -1255,7 +1278,7 @@ const ResultCard = memo(function ResultCard({
         );
       })()}
 
-      {/* Score dots (A-O) */}
+      {/* Score dots (A-Q) */}
       <div className="flex flex-wrap items-center gap-1 mb-3">
         {criteriaLabels.map((label, i) => (
           <div key={label} className="flex flex-col items-center gap-0.5" title={`${criteriaNames[i]}: ${criteriaValues[i]}/${criteriaMaxes[i]}`}>
