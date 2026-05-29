@@ -231,6 +231,7 @@ export interface PreRunPreset {
   recommended?: boolean;
   multiTF?: boolean;
   skipGate3?: boolean;
+  quadrantFilter?: string;
 }
 
 export const PRERUN_PRESETS: PreRunPreset[] = [
@@ -272,5 +273,12 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     ],
     multiTF: true,
     skipGate3: true,
+  },
+  {
+    name: "Leading Sector Scan",
+    shortName: "Leading",
+    description: "Only scan stocks in RRG LEADING sectors. Ride sector momentum with quality base.",
+    filters: { minScore: 11 },
+    quadrantFilter: "LEADING",
   },
 ];

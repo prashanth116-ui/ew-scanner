@@ -69,6 +69,7 @@ import { HitRateDashboard } from "@/components/hit-rate-dashboard";
 import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
 import { recordSignals, type ClientSignal } from "@/lib/signal-client";
 import { loadSectorRotation } from "@/lib/sector-rotation/storage";
+import { RRG_QUADRANTS } from "@/lib/sector-quadrant-map";
 
 const BATCH_SIZE = 25;
 const BATCH_DELAY = 500;
@@ -119,6 +120,9 @@ function PreRunPage() {
   const [earningsWithin, setEarningsWithin] = usePersistedFilter("ew-filter:prerun:earningsWithin", DEFAULT_PRERUN_FILTERS.earningsWithin);
   const [verdictFilter, setVerdictFilter] = usePersistedFilter("ew-filter:prerun:verdictFilter", DEFAULT_PRERUN_FILTERS.verdict);
   const [emaTimeframe, setEmaTimeframe] = usePersistedFilter<EmaTimeframe>("ew-filter:prerun:emaTimeframe", DEFAULT_PRERUN_FILTERS.emaTimeframe);
+
+  // Quadrant pre-scan filter
+  const [quadrantFilter, setQuadrantFilter] = usePersistedFilter("ew-filter:prerun:quadrantFilter", "All");
 
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
@@ -410,7 +414,16 @@ function PreRunPage() {
     setScannedCount(0);
     if (showMultiTF) setMultiTFResults(new Map());
 
-    const tickers = getTickersForSector(sectorBucket);
+    let tickers = getTickersForSector(sectorBucket);
+
+    // Pre-scan quadrant filter
+    if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
+      tickers = tickers.filter((t) => {
+        const sector = getSectorForTicker(t);
+        return sector && sectorQuadrants[sector] === quadrantFilter;
+      });
+    }
+
     setTotalCount(tickers.length);
 
     if (tickers.length === 0) {
@@ -493,7 +506,7 @@ function PreRunPage() {
       });
       runMultiTFPhase2(candidates);
     }
-  }, [sectorBucket, emaTimeframe, showMultiTF, criteriaFilters, minScore, runMultiTFPhase2, sectorQuadrants]);
+  }, [sectorBucket, emaTimeframe, showMultiTF, criteriaFilters, minScore, runMultiTFPhase2, sectorQuadrants, quadrantFilter]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -615,6 +628,7 @@ function PreRunPage() {
     setCriteriaFilters(preset.criteriaFilters ?? []);
     setShowMultiTF(preset.multiTF ?? false);
     setSkipGate3(preset.skipGate3 ?? false);
+    setQuadrantFilter(preset.quadrantFilter ?? "All");
   }, []);
 
   // Add to watchlist
@@ -756,6 +770,27 @@ function PreRunPage() {
                   ))}
                 </select>
               </div>
+              {/* RRG Quadrant */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">RRG Quadrant</span>
+                </div>
+                <select
+                  value={quadrantFilter}
+                  onChange={(e) => setQuadrantFilter(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#5ba3e6] focus:outline-none"
+                >
+                  <option value="All">All Quadrants</option>
+                  {RRG_QUADRANTS.map((q) => (
+                    <option key={q} value={q}>{q}</option>
+                  ))}
+                </select>
+                {Object.keys(sectorQuadrants).length === 0 && (
+                  <p className="mt-1 text-[10px] text-[#555]">
+                    Visit /sectors to populate rotation data.
+                  </p>
+                )}
+              </div>
               {/* Earnings Within */}
               <div>
                 <div className="flex justify-between text-xs mb-1">
@@ -824,6 +859,7 @@ function PreRunPage() {
                   setEmaTimeframe(DEFAULT_PRERUN_FILTERS.emaTimeframe);
                   setCriteriaFilters([]);
                   setSkipGate3(false);
+                  setQuadrantFilter("All");
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >

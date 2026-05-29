@@ -66,6 +66,7 @@ import { StalenessLabel } from "@/components/staleness-label";
 import { HitRateDashboard } from "@/components/hit-rate-dashboard";
 import { loadSectorRotation } from "@/lib/sector-rotation/storage";
 import type { RRGQuadrant } from "@/lib/sector-rotation/types";
+import { buildSectorQuadrantMap, RRG_QUADRANTS, type SectorQuadrantMap } from "@/lib/sector-quadrant-map";
 
 const HTF_OPTIONS = ["Monthly", "Weekly"] as const;
 const LTF_OPTIONS = ["Daily", "4H", "1H"] as const;
@@ -95,6 +96,8 @@ interface Preset {
   fibFilter?: FibFilterValue;
   volFilter?: VolFilterValue;
   mtfFilter?: MtfFilterValue;
+  sectorFilter?: string;
+  quadrantFilter?: string;
 }
 
 const PRESETS: Preset[] = [
@@ -167,6 +170,30 @@ const PRESETS: Preset[] = [
     volFilter: "expanding",
     mtfFilter: "confirmed",
   },
+  {
+    name: "Leading Sectors",
+    shortName: "Leading",
+    description: "Only scan sectors in RRG LEADING quadrant. Ride sector momentum.",
+    mode: "wave2",
+    htf: "Weekly",
+    ltf: "Daily",
+    minDecline: 20,
+    minMonths: 3,
+    minRecovery: 10,
+    quadrantFilter: "LEADING",
+  },
+  {
+    name: "Tech Deep Value",
+    shortName: "Tech Value",
+    description: "Technology sector only, deep pullbacks. Concentrated tech recovery plays.",
+    mode: "wave2",
+    htf: "Weekly",
+    ltf: "Daily",
+    minDecline: 30,
+    minMonths: 3,
+    minRecovery: 5,
+    sectorFilter: "Technology",
+  },
 ];
 
 export default function EWScannerPageWrapper() {
@@ -207,6 +234,8 @@ function EWScannerPage() {
   const [fibFilter, setFibFilter] = useState<FibFilterValue>((searchParams.get("fibFilter") as FibFilterValue) || "all");
   const [volFilter, setVolFilter] = useState<VolFilterValue>((searchParams.get("volFilter") as VolFilterValue) || "all");
   const [mtfFilter, setMtfFilter] = useState<MtfFilterValue>((searchParams.get("mtfFilter") as MtfFilterValue) || "all");
+  const [sectorFilter, setSectorFilter] = useState<string>(searchParams.get("sectorFilter") || "All");
+  const [quadrantFilter, setQuadrantFilter] = useState<string>(searchParams.get("quadrantFilter") || "All");
 
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState("");
@@ -258,6 +287,8 @@ function EWScannerPage() {
 
   // Sector rotation quadrant data (cached from /sectors page)
   const [sectorRotation, setSectorRotation] = useState<{ sector: string; quadrant: RRGQuadrant }[] | null>(null);
+  // Sector quadrant map for pre-scan filtering
+  const [sectorQuadrantMap, setSectorQuadrantMap] = useState<SectorQuadrantMap | null>(null);
 
   // Deep analysis phases
   const [deepPhase, setDeepPhase] = useState<string>("Analyzing...");
@@ -296,9 +327,11 @@ function EWScannerPage() {
     if (fibFilter !== "all") params.set("fibFilter", fibFilter);
     if (volFilter !== "all") params.set("volFilter", volFilter);
     if (mtfFilter !== "all") params.set("mtfFilter", mtfFilter);
+    if (sectorFilter !== "All") params.set("sectorFilter", sectorFilter);
+    if (quadrantFilter !== "All") params.set("quadrantFilter", quadrantFilter);
     const qs = params.toString();
     router.replace(qs ? `/?${qs}` : "/", { scroll: false });
-  }, [debouncedMode, debouncedUniverse, debouncedHtf, debouncedLtf, debouncedDecline, debouncedMonths, debouncedRecovery, debouncedSortBy, debouncedGroupBy, debouncedViewMode, fibFilter, volFilter, mtfFilter, router]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedMode, debouncedUniverse, debouncedHtf, debouncedLtf, debouncedDecline, debouncedMonths, debouncedRecovery, debouncedSortBy, debouncedGroupBy, debouncedViewMode, fibFilter, volFilter, mtfFilter, sectorFilter, quadrantFilter, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hit rates from Supabase
   const [hitRates, setHitRates] = useState<HitRateEntry[]>([]);
@@ -327,6 +360,8 @@ function EWScannerPage() {
         rotation.sectors.map((s) => ({ sector: s.sector, quadrant: s.quadrant }))
       );
     }
+    // Build sector quadrant map for pre-scan filtering
+    setSectorQuadrantMap(buildSectorQuadrantMap());
   }, []);
 
   // Load scan from URL param (from history page)
@@ -379,6 +414,8 @@ function EWScannerPage() {
     setFibFilter(preset.fibFilter ?? "all");
     setVolFilter(preset.volFilter ?? "all");
     setMtfFilter(preset.mtfFilter ?? "all");
+    setSectorFilter(preset.sectorFilter ?? "All");
+    setQuadrantFilter(preset.quadrantFilter ?? "All");
   }, []);
 
   const passed = useMemo(() => results.filter((r) => r.passed), [results]);
@@ -589,6 +626,22 @@ function EWScannerPage() {
     } else {
       tickers = UNIVERSES[universe as UniverseKey] ?? [];
     }
+
+    // Pre-scan sector filter
+    if (sectorFilter !== "All") {
+      tickers = tickers.filter((t) => t.sector === sectorFilter);
+    }
+
+    // Pre-scan quadrant filter (uses coarse sector names from EW universes)
+    if (quadrantFilter !== "All" && sectorQuadrantMap) {
+      const allowedSectors = new Set(
+        Object.entries(sectorQuadrantMap.coarse)
+          .filter(([, q]) => q === quadrantFilter)
+          .map(([s]) => s)
+      );
+      tickers = tickers.filter((t) => allowedSectors.has(t.sector ?? ""));
+    }
+
     const total = tickers.length;
     setTotalCount(total);
     const quotes: EnrichedQuoteInput[] = [];
@@ -838,7 +891,7 @@ function EWScannerPage() {
 
     setProgress("");
     setScanning(false);
-  }, [universe, htf, ltf, minDecline, minMonths, minRecovery, mode]);
+  }, [universe, htf, ltf, minDecline, minMonths, minRecovery, mode, sectorFilter, quadrantFilter, sectorQuadrantMap]);
 
   // --- Deep Analysis ---
   const runDeep = useCallback(
@@ -1239,7 +1292,7 @@ function EWScannerPage() {
               onClick={() => toggleSection("filters")}
               className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
             >
-              <span>Filters <span className="normal-case text-[#666]">({minDecline}%/{minMonths}mo/{minRecovery}%{[fibFilter !== "all" && "Fib", volFilter !== "all" && "Vol", mtfFilter !== "all" && "MTF"].filter(Boolean).length > 0 ? ` + ${[fibFilter !== "all" && "Fib", volFilter !== "all" && "Vol", mtfFilter !== "all" && "MTF"].filter(Boolean).join("+")}` : ""})</span></span>
+              <span>Filters <span className="normal-case text-[#666]">({minDecline}%/{minMonths}mo/{minRecovery}%{[fibFilter !== "all" && "Fib", volFilter !== "all" && "Vol", mtfFilter !== "all" && "MTF", sectorFilter !== "All" && "Sector", quadrantFilter !== "All" && "Quad"].filter(Boolean).length > 0 ? ` + ${[fibFilter !== "all" && "Fib", volFilter !== "all" && "Vol", mtfFilter !== "all" && "MTF", sectorFilter !== "All" && "Sector", quadrantFilter !== "All" && "Quad"].filter(Boolean).join("+")}` : ""})</span></span>
               <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("filters") ? "" : "rotate-90"}`} />
             </button>
             {!collapsed.has("filters") && (
@@ -1337,6 +1390,50 @@ function EWScannerPage() {
                     </div>
                   </div>
                 </div>
+                {/* Pre-scan sector & quadrant filters */}
+                <div className="border-t border-[#2a2a2a] pt-3 mt-1">
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-[#666]">Pre-Scan</p>
+                  <div className="space-y-2.5">
+                    <div>
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="text-[#a0a0a0]">Sector</span>
+                      </div>
+                      <select
+                        value={sectorFilter}
+                        onChange={(e) => setSectorFilter(e.target.value)}
+                        className="w-full rounded-md border border-[#2a2a2a] bg-[#262626] px-3 py-1.5 text-sm text-[#e6e6e6]"
+                      >
+                        <option value="All">All Sectors</option>
+                        <option value="Technology">Technology</option>
+                        <option value="Consumer">Consumer</option>
+                        <option value="Financials">Financials</option>
+                        <option value="Healthcare">Healthcare</option>
+                        <option value="Energy">Energy</option>
+                        <option value="Industrials">Industrials</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="text-[#a0a0a0]">RRG Quadrant</span>
+                      </div>
+                      <select
+                        value={quadrantFilter}
+                        onChange={(e) => setQuadrantFilter(e.target.value)}
+                        className="w-full rounded-md border border-[#2a2a2a] bg-[#262626] px-3 py-1.5 text-sm text-[#e6e6e6]"
+                      >
+                        <option value="All">All Quadrants</option>
+                        {RRG_QUADRANTS.map((q) => (
+                          <option key={q} value={q}>{q}</option>
+                        ))}
+                      </select>
+                      {!sectorQuadrantMap && (
+                        <p className="mt-1 text-[10px] text-[#555]">
+                          Visit /sectors to populate rotation data.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
                 <button
                   onClick={() => {
@@ -1347,6 +1444,8 @@ function EWScannerPage() {
                     setFibFilter("all");
                     setVolFilter("all");
                     setMtfFilter("all");
+                    setSectorFilter("All");
+                    setQuadrantFilter("All");
                   }}
                   className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
                 >

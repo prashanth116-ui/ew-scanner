@@ -61,6 +61,9 @@ import { ScanButton } from "@/components/scan-button";
 import { StalenessLabel } from "@/components/staleness-label";
 import { HitRateDashboard } from "@/components/hit-rate-dashboard";
 import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { getSectorForTicker, getSectorBuckets } from "@/data/prerun-universe";
+import { loadSectorRotation } from "@/lib/sector-rotation/storage";
+import { RRG_QUADRANTS } from "@/lib/sector-quadrant-map";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 300;
@@ -71,6 +74,8 @@ interface SqueezePreset {
   description: string;
   filters: Partial<SqueezeFilters>;
   recommended?: boolean;
+  sectorFilter?: string;
+  quadrantFilter?: string;
 }
 
 const PRESETS: SqueezePreset[] = [
@@ -104,6 +109,13 @@ const PRESETS: SqueezePreset[] = [
     shortName: "Wide Net",
     description: "Relaxed filters to catch more candidates. Good for initial screening.",
     filters: { minSiPercent: 5, minDaysToCover: 1 },
+  },
+  {
+    name: "Leading Squeeze",
+    shortName: "Leading",
+    description: "Squeeze candidates in RRG LEADING sectors. Sector tailwind + short squeeze.",
+    filters: { minSiPercent: 10, minScore: 25 },
+    quadrantFilter: "LEADING",
   },
 ];
 
@@ -151,6 +163,11 @@ function SqueezePage() {
   const [maxNearLow, setMaxNearLow] = usePersistedFilter("ew-filter:squeeze:maxNearLow", DEFAULT_SQUEEZE_FILTERS.maxNearLowPct);
   const [minScore, setMinScore] = usePersistedFilter("ew-filter:squeeze:minScore", DEFAULT_SQUEEZE_FILTERS.minScore);
   const [requireEw, setRequireEw] = usePersistedFilter("ew-filter:squeeze:requireEw", DEFAULT_SQUEEZE_FILTERS.requireEwAlignment);
+  const [sectorFilter, setSectorFilter] = usePersistedFilter("ew-filter:squeeze:sectorFilter", "All");
+  const [quadrantFilter, setQuadrantFilter] = usePersistedFilter("ew-filter:squeeze:quadrantFilter", "All");
+
+  // Sector rotation quadrant map
+  const [sectorQuadrants, setSectorQuadrants] = useState<Record<string, string>>({});
 
   const debouncedSi = useDebounce(minSiPercent, 300);
   const debouncedDtc = useDebounce(minDtc, 300);
@@ -201,7 +218,7 @@ function SqueezePage() {
   const searchParams = useSearchParams();
   const [autoLookup, setAutoLookup] = useState<string | null>(null);
 
-  // Load saved scans, watchlists, and cached results on mount
+  // Load saved scans, watchlists, cached results, and sector rotation on mount
   useEffect(() => {
     setSavedScans(loadSqueezeScans());
     setSqueezeWatchlists(loadSqueezeWatchlists());
@@ -209,6 +226,15 @@ function SqueezePage() {
     const cached = loadFromCache<SqueezeData[]>("ew-squeeze-scan-v1", 30 * 60 * 1000);
     if (cached && cached.length > 0) {
       setRawResults(cached);
+    }
+    // Load cached sector rotation for quadrant filtering
+    const rotation = loadSectorRotation();
+    if (rotation?.sectors) {
+      const qmap: Record<string, string> = {};
+      for (const s of rotation.sectors) {
+        qmap[s.sector] = s.quadrant;
+      }
+      setSectorQuadrants(qmap);
     }
   }, []);
 
@@ -331,7 +357,21 @@ function SqueezePage() {
     setExpandedTicker(null);
     setSearchedTickers(new Set());
 
-    const tickers = ALL_TICKERS;
+    let tickers = [...ALL_TICKERS];
+
+    // Pre-scan sector filter
+    if (sectorFilter !== "All") {
+      tickers = tickers.filter((t) => getSectorForTicker(t.symbol) === sectorFilter);
+    }
+
+    // Pre-scan quadrant filter
+    if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
+      tickers = tickers.filter((t) => {
+        const sector = getSectorForTicker(t.symbol);
+        return sector && sectorQuadrants[sector] === quadrantFilter;
+      });
+    }
+
     setTotalCount(tickers.length);
     const results: SqueezeData[] = [];
 
@@ -395,7 +435,7 @@ function SqueezePage() {
 
     setScanning(false);
     setProgress("");
-  }, []);
+  }, [sectorFilter, quadrantFilter, sectorQuadrants]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -583,6 +623,8 @@ function SqueezePage() {
     setMaxNearLow(f.maxNearLowPct);
     setMinScore(f.minScore);
     setRequireEw(f.requireEwAlignment);
+    setSectorFilter(preset.sectorFilter ?? "All");
+    setQuadrantFilter(preset.quadrantFilter ?? "All");
   }, []);
 
   // ── Add to Watchlist ──
@@ -637,12 +679,49 @@ function SqueezePage() {
 
         {/* Filters */}
         <SidebarSection
-          title={`Filters (${minSiPercent}% SI, ${minDtc} DTC${minScore > 0 ? `, ${minScore}+ score` : ""})`}
+          title={`Filters (${minSiPercent}% SI, ${minDtc} DTC${minScore > 0 ? `, ${minScore}+ score` : ""}${sectorFilter !== "All" ? ` + Sector` : ""}${quadrantFilter !== "All" ? ` + Quad` : ""})`}
           sectionKey="filters"
           collapsed={collapsed.has("filters")}
           onToggle={toggleSection}
         >
             <div className="space-y-4">
+              {/* Sector (pre-scan) */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Sector</span>
+                </div>
+                <select
+                  value={sectorFilter}
+                  onChange={(e) => setSectorFilter(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#5ba3e6] focus:outline-none"
+                >
+                  <option value="All">All Sectors</option>
+                  {getSectorBuckets().map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+              {/* RRG Quadrant (pre-scan) */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">RRG Quadrant</span>
+                </div>
+                <select
+                  value={quadrantFilter}
+                  onChange={(e) => setQuadrantFilter(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#5ba3e6] focus:outline-none"
+                >
+                  <option value="All">All Quadrants</option>
+                  {RRG_QUADRANTS.map((q) => (
+                    <option key={q} value={q}>{q}</option>
+                  ))}
+                </select>
+                {Object.keys(sectorQuadrants).length === 0 && (
+                  <p className="mt-1 text-[10px] text-[#555]">
+                    Visit /sectors to populate rotation data.
+                  </p>
+                )}
+              </div>
               {/* Min SI% */}
               <div>
                 <div className="flex justify-between text-xs mb-1">
@@ -784,6 +863,8 @@ function SqueezePage() {
                   setMaxNearLow(DEFAULT_SQUEEZE_FILTERS.maxNearLowPct);
                   setMinScore(DEFAULT_SQUEEZE_FILTERS.minScore);
                   setRequireEw(DEFAULT_SQUEEZE_FILTERS.requireEwAlignment);
+                  setSectorFilter("All");
+                  setQuadrantFilter("All");
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >
