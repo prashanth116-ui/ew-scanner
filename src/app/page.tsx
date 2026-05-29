@@ -67,6 +67,7 @@ import { HitRateDashboard } from "@/components/hit-rate-dashboard";
 import { loadSectorRotation } from "@/lib/sector-rotation/storage";
 import type { RRGQuadrant } from "@/lib/sector-rotation/types";
 import { buildSectorQuadrantMap, RRG_QUADRANTS, type SectorQuadrantMap } from "@/lib/sector-quadrant-map";
+import { getSectorForTicker } from "@/data/prerun-universe";
 
 const HTF_OPTIONS = ["Monthly", "Weekly"] as const;
 const LTF_OPTIONS = ["Daily", "4H", "1H"] as const;
@@ -629,17 +630,32 @@ function EWScannerPage() {
 
     // Pre-scan sector filter
     if (sectorFilter !== "All") {
-      tickers = tickers.filter((t) => t.sector === sectorFilter);
+      tickers = tickers.filter((t) => {
+        // Use coarse sector from universe data, or fall back to fine-grained lookup
+        return t.sector === sectorFilter || (!t.sector && getSectorForTicker(t.symbol) === sectorFilter);
+      });
     }
 
-    // Pre-scan quadrant filter (uses coarse sector names from EW universes)
+    // Pre-scan quadrant filter
     if (quadrantFilter !== "All" && sectorQuadrantMap) {
-      const allowedSectors = new Set(
+      // Build allowed set from both coarse (for universe tickers with .sector)
+      // and fine (for Full universe tickers without .sector)
+      const allowedCoarse = new Set(
         Object.entries(sectorQuadrantMap.coarse)
           .filter(([, q]) => q === quadrantFilter)
           .map(([s]) => s)
       );
-      tickers = tickers.filter((t) => allowedSectors.has(t.sector ?? ""));
+      const allowedFine = new Set(
+        Object.entries(sectorQuadrantMap.fine)
+          .filter(([, q]) => q === quadrantFilter)
+          .map(([s]) => s)
+      );
+      tickers = tickers.filter((t) => {
+        if (t.sector) return allowedCoarse.has(t.sector);
+        // Full universe — look up fine-grained sector
+        const fineSector = getSectorForTicker(t.symbol);
+        return fineSector && allowedFine.has(fineSector);
+      });
     }
 
     const total = tickers.length;
