@@ -128,9 +128,18 @@ describe("scoreB", () => {
 // ── Score D: Earnings inflection ──
 
 describe("scoreD", () => {
-  it("returns 2 for strong revenue growth + near earnings", () => {
+  it("returns 2 for strong revenue growth + near earnings (<=30d)", () => {
     expect(scoreD(makeData({ revenueGrowthYoY: 25, daysToEarnings: 30 }))).toBe(2);
-    expect(scoreD(makeData({ revenueGrowthYoY: 50, daysToEarnings: 60 }))).toBe(2);
+    expect(scoreD(makeData({ revenueGrowthYoY: 50, daysToEarnings: 20 }))).toBe(2);
+  });
+
+  it("returns 3 for imminent earnings + strong fundamentals", () => {
+    expect(scoreD(makeData({ revenueGrowthYoY: 25, daysToEarnings: 10, earningsBeatStreak: 2 }))).toBe(3);
+    expect(scoreD(makeData({ daysToEarnings: 7, earningsBeatStreak: 3 }))).toBe(3);
+  });
+
+  it("returns 1 for strong revenue growth + earnings >30d (earningsSoon)", () => {
+    expect(scoreD(makeData({ revenueGrowthYoY: 50, daysToEarnings: 60 }))).toBe(1);
   });
 
   it("returns 1 for positive revenue growth without near earnings", () => {

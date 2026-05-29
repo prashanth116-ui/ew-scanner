@@ -58,6 +58,10 @@ const UNIVERSES_DEF = {
     { symbol: "IBM", name: "IBM", sector: "Technology" },
     { symbol: "GE", name: "GE Aerospace", sector: "Industrials" },
     { symbol: "ISRG", name: "Intuitive Surgical", sector: "Healthcare" },
+    { symbol: "DELL", name: "Dell Technologies", sector: "Technology" },
+    { symbol: "ARM", name: "Arm Holdings", sector: "Technology" },
+    { symbol: "ON", name: "ON Semiconductor", sector: "Technology" },
+    { symbol: "ANET", name: "Arista Networks", sector: "Technology" },
   ],
   NDX: [
     { symbol: "AAPL", name: "Apple", sector: "Technology" },
@@ -100,6 +104,10 @@ const UNIVERSES_DEF = {
     { symbol: "PYPL", name: "PayPal", sector: "Financials" },
     { symbol: "COIN", name: "Coinbase", sector: "Financials" },
     { symbol: "PLTR", name: "Palantir", sector: "Technology" },
+    { symbol: "DELL", name: "Dell Technologies", sector: "Technology" },
+    { symbol: "ARM", name: "Arm Holdings", sector: "Technology" },
+    { symbol: "ON", name: "ON Semiconductor", sector: "Technology" },
+    { symbol: "ANET", name: "Arista Networks", sector: "Technology" },
   ],
   Biotech: [
     { symbol: "LLY", name: "Eli Lilly", sector: "Healthcare" },

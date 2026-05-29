@@ -1,8 +1,8 @@
 /**
  * Pre-Run scoring engine.
  * 3 hard gates + 18 criteria (A-Q + M2) with weighted scoring.
- * B and C expanded to 0-3. All others 0-2. Max raw = 38.
- * Sector momentum modifier: +1/0/-1. Final max ~39.
+ * B and C expanded to 0-3, D expanded to 0-3. Max raw = 39.
+ * Modifiers (not in MAX_SCORE): sector momentum +1/0/-1, sector quadrant +2/0/-1/-2.
  */
 
 import type {
@@ -69,12 +69,11 @@ export function scoreC(manualScore: number): number {
   return Math.max(0, Math.min(3, manualScore));
 }
 
-/** Criterion D: Earnings inflection (0-2).
- *  Enhanced with revenue acceleration and earnings beat streak. */
+/** Criterion D: Earnings inflection (0-3, boosted proximity).
+ *  Enhanced with revenue acceleration, earnings beat streak, and imminent earnings tier. */
 export function scoreD(data: PreRunStockData): number {
   const revGrowth = data.revenueGrowthYoY ?? 0;
   const daysToEarn = data.daysToEarnings;
-  const hasNearEarnings = daysToEarn !== null && daysToEarn <= 60;
   const beatStreak = data.earningsBeatStreak ?? 0;
 
   // Revenue acceleration from quarterly data
@@ -89,13 +88,23 @@ export function scoreD(data: PreRunStockData): number {
     }
   }
 
-  // Score 2: accelerating revenue + near earnings catalyst, OR strong rev growth + beat streak + near earnings
-  if ((revenueAccelerating || revGrowth > 20) && hasNearEarnings && beatStreak >= 2) return 2;
-  if (revGrowth > 20 && hasNearEarnings) return 2;
-  if (revenueAccelerating && hasNearEarnings) return 2;
+  // Earnings proximity tiers
+  const earningsImm = daysToEarn !== null && daysToEarn <= 14;  // imminent
+  const earningsNear = daysToEarn !== null && daysToEarn <= 30;
+  const earningsSoon = daysToEarn !== null && daysToEarn <= 60;
 
-  // Score 1: positive growth or near earnings or beat streak
-  if (revGrowth > 0 || hasNearEarnings || beatStreak >= 2) return 1;
+  // Score 3: imminent earnings + strong fundamentals
+  if (earningsImm && (revenueAccelerating || revGrowth > 20) && beatStreak >= 2) return 3;
+  if (earningsImm && beatStreak >= 3) return 3;
+
+  // Score 2: near earnings with catalyst signals
+  if ((revenueAccelerating || revGrowth > 20) && earningsNear && beatStreak >= 2) return 2;
+  if (revGrowth > 20 && earningsNear) return 2;
+  if (revenueAccelerating && earningsNear) return 2;
+  if (earningsImm && (revGrowth > 0 || beatStreak >= 1)) return 2;
+
+  // Score 1: positive signals
+  if (revGrowth > 0 || earningsSoon || beatStreak >= 2) return 1;
 
   return 0;
 }
@@ -288,7 +297,8 @@ export function scorePreRun(
   data: PreRunStockData,
   gate2Pass: boolean,
   manualScoreC: number,
-  manualScoreG: number
+  manualScoreG: number,
+  sectorQuadrant?: string | null
 ): PreRunResult {
   const gates: PreRunGates = {
     gate1: evaluateGate1(data),
@@ -296,7 +306,17 @@ export function scorePreRun(
     gate3: evaluateGate3(data),
   };
 
-  const gatesPass = gates.gate1 && gates.gate2 && gates.gate3;
+  // Narrow Gate 1 bypass: skip for LEADING sector + near earnings + positive RS
+  let gate1Bypassed = false;
+  if (!gates.gate1 && sectorQuadrant) {
+    const isLeadingSector = sectorQuadrant === "LEADING";
+    const hasNearEarnings = data.daysToEarnings !== null && data.daysToEarnings <= 30;
+    const hasPositiveRS = (data.relativeStrength20d ?? -999) > 0;
+    if (isLeadingSector && hasNearEarnings && hasPositiveRS) {
+      gate1Bypassed = true;
+    }
+  }
+  const gatesPass = (gates.gate1 || gate1Bypassed) && gates.gate2 && gates.gate3;
 
   const sA = scoreA(data);
   const sB = scoreB(data);
@@ -317,8 +337,9 @@ export function scorePreRun(
   const sP = scoreP(data);
   const sQ = scoreQ(data);
   const sMod = calcSectorModifier(data);
+  const sQuad = sectorQuadrantGate(sectorQuadrant ?? null);
 
-  const totalScore = sA + sB + sC + sD + sE + sF + sG + sH + sI + sJ + sK + sL + sM + sM2 + sN + sO + sP + sQ + sMod;
+  const totalScore = sA + sB + sC + sD + sE + sF + sG + sH + sI + sJ + sK + sL + sM + sM2 + sN + sO + sP + sQ + sMod + sQuad;
   const finalScore = gatesPass ? totalScore : 0;
 
   let verdict: PreRunVerdict = "DISCARD";
@@ -358,17 +379,19 @@ export function scorePreRun(
       scoreP: sP,
       scoreQ: sQ,
       sectorModifier: sMod,
+      sectorQuadrant: sQuad,
       totalScore,
       finalScore,
     },
     verdict,
     patternMatch,
+    gate1Bypassed: gate1Bypassed || undefined,
   };
 }
 
 /** Auto-score for nightly scan (uses default manual scores: C=1, G=auto). */
-export function autoScorePreRun(data: PreRunStockData): PreRunResult {
-  return scorePreRun(data, true, 1, suggestScoreG(data));
+export function autoScorePreRun(data: PreRunStockData, sectorQuadrant?: string | null): PreRunResult {
+  return scorePreRun(data, true, 1, suggestScoreG(data), sectorQuadrant);
 }
 
 /**

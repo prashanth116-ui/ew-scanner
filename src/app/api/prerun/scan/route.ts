@@ -4,6 +4,7 @@ import { logError } from "@/lib/error-logger";
 import { validateTickers } from "@/lib/api-utils";
 import { fetchPreRunData } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
+import { getSectorForTicker } from "@/data/prerun-universe";
 import type { EmaTimeframe } from "@/lib/prerun/types";
 
 const BATCH_SIZE = 25;
@@ -19,9 +20,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { tickers: string[]; emaTimeframe?: EmaTimeframe };
+    const body = (await request.json()) as { tickers: string[]; emaTimeframe?: EmaTimeframe; sectorQuadrants?: Record<string, string> };
     const tickers = validateTickers(body.tickers).slice(0, 1500);
     const emaTimeframe = body.emaTimeframe ?? "15m";
+    const sectorQuadrants = body.sectorQuadrants ?? {};
     if (!tickers.length) {
       return NextResponse.json({ error: "tickers array required (valid A-Z tickers)" }, { status: 400 });
     }
@@ -34,7 +36,9 @@ export async function POST(request: NextRequest) {
         batch.map(async (ticker) => {
           const data = await fetchPreRunData(ticker, emaTimeframe);
           if (!data) return null;
-          return autoScorePreRun(data);
+          const sector = getSectorForTicker(ticker);
+          const quadrant = sector ? sectorQuadrants[sector] ?? null : null;
+          return autoScorePreRun(data, quadrant);
         })
       );
 

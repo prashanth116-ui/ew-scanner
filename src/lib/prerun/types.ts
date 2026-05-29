@@ -92,7 +92,7 @@ export interface PreRunScores {
   scoreA: number; // Dead money base (0-2)
   scoreB: number; // Short interest (0-3, expanded)
   scoreC: number; // Narrative catalyst (0-3, manual, expanded)
-  scoreD: number; // Earnings inflection (0-2)
+  scoreD: number; // Earnings inflection (0-3, boosted proximity)
   scoreE: number; // Institutional under-ownership (0-2)
   scoreF: number; // Volume accumulation (0-2)
   scoreG: number; // Index inclusion potential (0-2, manual)
@@ -108,12 +108,13 @@ export interface PreRunScores {
   scoreP: number; // Earnings revision momentum (0-2)
   scoreQ: number; // Short squeeze probability (0-2)
   sectorModifier: number; // +1/0/-1 based on sector momentum
-  totalScore: number; // Sum of A-Q + M2 + sector modifier (max 38 + modifier)
+  sectorQuadrant: number; // +2/0/-1/-2 based on RRG quadrant
+  totalScore: number; // Sum of A-Q + M2 + modifiers (max 41 + modifiers)
   finalScore: number; // 0 if any gate fails, else totalScore
 }
 
-/** Maximum possible raw score (before sector modifier). */
-export const MAX_SCORE = 38;
+/** Maximum possible raw score (before modifiers: sector momentum + sector quadrant). */
+export const MAX_SCORE = 39;
 
 export interface PreRunResult {
   data: PreRunStockData;
@@ -121,6 +122,7 @@ export interface PreRunResult {
   scores: PreRunScores;
   verdict: PreRunVerdict;
   patternMatch: { template: string; similarity: number } | null;
+  gate1Bypassed?: boolean;
 }
 
 export interface PreRunWatchlistItem {

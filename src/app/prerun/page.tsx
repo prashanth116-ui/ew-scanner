@@ -68,6 +68,7 @@ import { StalenessLabel } from "@/components/staleness-label";
 import { HitRateDashboard } from "@/components/hit-rate-dashboard";
 import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
 import { recordSignals, type ClientSignal } from "@/lib/signal-client";
+import { loadSectorRotation } from "@/lib/sector-rotation/storage";
 
 const BATCH_SIZE = 25;
 const BATCH_DELAY = 500;
@@ -168,10 +169,22 @@ function PreRunPage() {
   // Timer ref for watchlist add feedback
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Seed watchlist on mount + load cache
+  // Sector rotation quadrant map (sector name → quadrant string)
+  const [sectorQuadrants, setSectorQuadrants] = useState<Record<string, string>>({});
+
+  // Seed watchlist on mount + load cache + load sector rotation
   useEffect(() => {
     seedWatchlistIfEmpty();
     setSavedScans(loadPreRunScans());
+    // Load cached sector rotation for quadrant scoring
+    const rotation = loadSectorRotation();
+    if (rotation?.sectors) {
+      const qmap: Record<string, string> = {};
+      for (const s of rotation.sectors) {
+        qmap[s.sector] = s.quadrant;
+      }
+      setSectorQuadrants(qmap);
+    }
     // Pre-populate from cache (30-min TTL)
     const cached = loadFromCache<PreRunResult[]>("ew-prerun-scan-v1", 30 * 60 * 1000);
     if (cached && cached.length > 0) {
@@ -236,7 +249,7 @@ function PreRunPage() {
       if (filters.minShortFloat > 0 && (r.data.shortFloat ?? 0) < filters.minShortFloat) return false;
       if (filters.maxMarketCap > 0 && (r.data.marketCap ?? Infinity) > filters.maxMarketCap) return false;
       if (skipGate3) {
-        if (!r.gates.gate1) return false;
+        if (!r.gates.gate1 && !r.gate1Bypassed) return false;
         if (filters.minScore > 0 && r.scores.totalScore < filters.minScore) return false;
       } else {
         if (filters.minScore > 0 && r.scores.finalScore < filters.minScore) return false;
@@ -421,7 +434,7 @@ function PreRunPage() {
         const res = await fetch("/api/prerun/scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tickers: batch, emaTimeframe: phase1Timeframe }),
+          body: JSON.stringify({ tickers: batch, emaTimeframe: phase1Timeframe, sectorQuadrants }),
           signal,
         });
 
@@ -480,7 +493,7 @@ function PreRunPage() {
       });
       runMultiTFPhase2(candidates);
     }
-  }, [sectorBucket, emaTimeframe, showMultiTF, criteriaFilters, minScore, runMultiTFPhase2]);
+  }, [sectorBucket, emaTimeframe, showMultiTF, criteriaFilters, minScore, runMultiTFPhase2, sectorQuadrants]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -508,7 +521,9 @@ function PreRunPage() {
     setTickerError(null);
 
     try {
-      const res = await fetch(`/api/prerun/stock?ticker=${encodeURIComponent(ticker)}&emaTimeframe=${emaTimeframe}`);
+      const sector = getSectorForTicker(ticker);
+      const quadrant = sector ? sectorQuadrants[sector] ?? "" : "";
+      const res = await fetch(`/api/prerun/stock?ticker=${encodeURIComponent(ticker)}&emaTimeframe=${emaTimeframe}${quadrant ? `&sectorQuadrant=${quadrant}` : ""}`);
       if (!res.ok) {
         setTickerError(`Could not find "${ticker}"`);
         setTickerSearching(false);
@@ -526,7 +541,7 @@ function PreRunPage() {
       setTickerError("Network error");
     }
     setTickerSearching(false);
-  }, [tickerSearch, rawResults, emaTimeframe]);
+  }, [tickerSearch, rawResults, emaTimeframe, sectorQuadrants]);
 
   // AI Score
   const requestAiScore = useCallback(async (result: PreRunResult) => {
@@ -1285,20 +1300,23 @@ const ResultCard = memo(function ResultCard({
       <div className="flex items-center gap-2 mb-3">
         {(
           [
-            { label: "G1", pass: g.gate1 },
-            { label: "G2", pass: g.gate2 },
-            { label: "G3", pass: g.gate3 },
+            { label: "G1", pass: g.gate1 || !!result.gate1Bypassed, bypassed: !!result.gate1Bypassed },
+            { label: "G2", pass: g.gate2, bypassed: false },
+            { label: "G3", pass: g.gate3, bypassed: false },
           ] as const
         ).map((gate) => (
           <span
             key={gate.label}
             className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${
-              gate.pass
+              gate.bypassed
+                ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+                : gate.pass
                 ? "bg-green-500/10 text-green-400 border border-green-500/20"
                 : "bg-red-500/10 text-red-400 border border-red-500/20"
             }`}
+            title={gate.bypassed ? "Gate 1 bypassed: LEADING sector + near earnings + positive RS" : undefined}
           >
-            {gate.label}
+            {gate.label}{gate.bypassed ? "*" : ""}
             {gate.pass ? (
               <Check className="h-2.5 w-2.5" />
             ) : (

@@ -3,6 +3,7 @@ import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
+import { getSectorForTicker } from "@/data/prerun-universe";
 import type { EmaTimeframe } from "@/lib/prerun/types";
 
 export async function GET(request: NextRequest) {
@@ -25,7 +26,8 @@ export async function GET(request: NextRequest) {
     if (!data) {
       return NextResponse.json({ error: "No data found" }, { status: 404 });
     }
-    const result = autoScorePreRun(data);
+    const sectorQuadrant = request.nextUrl.searchParams.get("sectorQuadrant") ?? null;
+    const result = autoScorePreRun(data, sectorQuadrant);
     return NextResponse.json(result);
   } catch (err) {
     logError("api/prerun/stock", err, { ticker });

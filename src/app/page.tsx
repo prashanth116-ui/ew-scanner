@@ -27,6 +27,7 @@ import {
   LayoutGrid,
   List,
 } from "lucide-react";
+import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
 import * as Select from "@radix-ui/react-select";
@@ -63,6 +64,8 @@ import { ProgressBar } from "@/components/progress-bar";
 import { loadFromCache, saveToCache } from "@/lib/scan-cache";
 import { StalenessLabel } from "@/components/staleness-label";
 import { HitRateDashboard } from "@/components/hit-rate-dashboard";
+import { loadSectorRotation } from "@/lib/sector-rotation/storage";
+import type { RRGQuadrant } from "@/lib/sector-rotation/types";
 
 const HTF_OPTIONS = ["Monthly", "Weekly"] as const;
 const LTF_OPTIONS = ["Daily", "4H", "1H"] as const;
@@ -186,7 +189,7 @@ function EWScannerPage() {
   const initModeConfig = getModeConfig(initMode);
   const [htf, setHtf] = useState<string>(searchParams.get("htf") || "Monthly");
   const [ltf, setLtf] = useState<string>(searchParams.get("ltf") || "Daily");
-  const [universe, setUniverse] = useState<string>(searchParams.get("universe") || "SP500");
+  const [universe, setUniverse] = useState<string>(searchParams.get("universe") || "Full");
   const [mode, setMode] = useState<ScannerMode>(initMode);
 
   // Default sliders from mode config, with URL override
@@ -253,6 +256,9 @@ function EWScannerPage() {
   const [showAlertConfig, setShowAlertConfig] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
+  // Sector rotation quadrant data (cached from /sectors page)
+  const [sectorRotation, setSectorRotation] = useState<{ sector: string; quadrant: RRGQuadrant }[] | null>(null);
+
   // Deep analysis phases
   const [deepPhase, setDeepPhase] = useState<string>("Analyzing...");
 
@@ -278,7 +284,7 @@ function EWScannerPage() {
     const params = new URLSearchParams();
     const defaults = getModeConfig(debouncedMode).defaults;
     if (debouncedMode !== "wave2") params.set("mode", debouncedMode);
-    if (debouncedUniverse !== "SP500") params.set("universe", debouncedUniverse);
+    if (debouncedUniverse !== "Full") params.set("universe", debouncedUniverse);
     if (debouncedHtf !== "Monthly") params.set("htf", debouncedHtf);
     if (debouncedLtf !== "Daily") params.set("ltf", debouncedLtf);
     if (debouncedDecline !== defaults.minDecline) params.set("minDecline", String(debouncedDecline));
@@ -305,7 +311,7 @@ function EWScannerPage() {
   const [tickerError, setTickerError] = useState<string | null>(null);
   const tickerAbort = useRef<AbortController | null>(null);
 
-  // Load saved scans, custom universes, and cached results on mount
+  // Load saved scans, custom universes, cached results, and sector rotation on mount
   useEffect(() => {
     setSavedScans(loadScans());
     setCustomUniverses(loadCustomUniverses());
@@ -313,6 +319,13 @@ function EWScannerPage() {
     const cached = loadFromCache<EnhancedScoredCandidate[]>("ew-scan-v1", 30 * 60 * 1000);
     if (cached && cached.length > 0) {
       setResults(cached);
+    }
+    // Load cached sector rotation data
+    const rotation = loadSectorRotation();
+    if (rotation?.sectors) {
+      setSectorRotation(
+        rotation.sectors.map((s) => ({ sector: s.sector, quadrant: s.quadrant }))
+      );
     }
   }, []);
 
@@ -1339,6 +1352,62 @@ function EWScannerPage() {
                 >
                   Reset Filters
                 </button>
+              </div>
+            )}
+          </div>
+
+          {/* Sector Rotation */}
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
+            <button
+              onClick={() => toggleSection("sector-rotation")}
+              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#a0a0a0]"
+            >
+              <span>Sector Rotation</span>
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed.has("sector-rotation") ? "" : "rotate-90"}`} />
+            </button>
+            {!collapsed.has("sector-rotation") && (
+              <div className="border-t border-[#2a2a2a] px-4 pb-4 pt-3">
+                {sectorRotation && sectorRotation.length > 0 ? (
+                  <>
+                    <div className="space-y-1">
+                      {[...sectorRotation]
+                        .sort((a, b) => {
+                          const order: Record<string, number> = { LEADING: 0, IMPROVING: 1, WEAKENING: 2, LAGGING: 3 };
+                          return (order[a.quadrant] ?? 4) - (order[b.quadrant] ?? 4);
+                        })
+                        .map((s) => {
+                          const colors: Record<string, string> = {
+                            LEADING: "bg-green-500/15 text-green-400 border-green-500/25",
+                            IMPROVING: "bg-cyan-500/15 text-cyan-400 border-cyan-500/25",
+                            WEAKENING: "bg-amber-500/15 text-amber-400 border-amber-500/25",
+                            LAGGING: "bg-red-500/15 text-red-400 border-red-500/25",
+                          };
+                          return (
+                            <div key={s.sector} className="flex items-center justify-between py-0.5">
+                              <span className="text-[11px] text-[#a0a0a0] truncate">{s.sector}</span>
+                              <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium border ${colors[s.quadrant] ?? "bg-[#262626] text-[#666] border-[#333]"}`}>
+                                {s.quadrant}
+                              </span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                    <Link
+                      href="/sectors"
+                      className="mt-2 block text-center text-[10px] text-[#5ba3e6] hover:text-[#7bb8f0] transition-colors"
+                    >
+                      Full Sector Analysis →
+                    </Link>
+                  </>
+                ) : (
+                  <p className="text-[10px] text-[#555]">
+                    No data. Visit{" "}
+                    <Link href="/sectors" className="text-[#5ba3e6] hover:text-[#7bb8f0]">
+                      /sectors
+                    </Link>{" "}
+                    to populate cache.
+                  </p>
+                )}
               </div>
             )}
           </div>
