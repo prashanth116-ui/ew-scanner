@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type FormEvent, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Calendar,
@@ -18,9 +18,23 @@ import {
   PieChart,
   Minus,
   ChevronRight,
+  Crosshair,
+  Clock,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
+import { tierColor, verdictColor } from "@/lib/color-utils";
+import type { ConfluenceScanResult } from "@/lib/confluence/types";
+import {
+  computeBeatStreak,
+  computeInsiderSummary,
+  computeEstimateTrend,
+  computePlaybook,
+  getSearchHistory,
+  addToSearchHistory,
+  clearSearchHistory,
+} from "@/lib/earnings-utils";
 
 // ── Types ──
 
@@ -401,6 +415,70 @@ function Section({
   );
 }
 
+// ── Earnings Surprise Chart ──
+
+function EarningsSurpriseChart({ history }: { history: EarningsQuarter[] }) {
+  const bars = [...history].reverse(); // oldest first for left-to-right
+  const validBars = bars.filter((h) => h.surprisePercent != null);
+  if (validBars.length < 2) return null;
+
+  const maxAbs = Math.max(
+    ...validBars.map((h) => Math.abs(h.surprisePercent!)),
+    0.01
+  );
+
+  return (
+    <div className="mt-4">
+      <div className="mb-2 text-xs font-semibold text-[#777]">Surprise History</div>
+      <div className="flex items-end gap-1.5" style={{ height: "80px" }}>
+        {bars.map((h, i) => {
+          const pct = h.surprisePercent;
+          if (pct == null) {
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end">
+                <div className="w-full rounded-sm bg-[#1a1a1a]" style={{ height: "2px" }} />
+                <span className="mt-1 text-[9px] text-[#444] truncate w-full text-center">
+                  {h.quarter?.split(" ").pop() ?? ""}
+                </span>
+              </div>
+            );
+          }
+          const height = Math.max((Math.abs(pct) / maxAbs) * 36, 2);
+          const isBeat = pct > 0;
+          return (
+            <div
+              key={i}
+              className="flex-1 flex flex-col items-center justify-end"
+              title={`${h.quarter}: ${pct > 0 ? "+" : ""}${(pct * 100).toFixed(1)}%`}
+            >
+              {isBeat ? (
+                <>
+                  <div
+                    className="w-full rounded-t-sm bg-green-500/70"
+                    style={{ height: `${height}px` }}
+                  />
+                  <div className="w-full bg-[#1a1a1a]" style={{ height: `${36 - height}px` }} />
+                </>
+              ) : (
+                <>
+                  <div className="w-full bg-[#1a1a1a]" style={{ height: `${36 - height}px` }} />
+                  <div
+                    className="w-full rounded-b-sm bg-red-500/70"
+                    style={{ height: `${height}px` }}
+                  />
+                </>
+              )}
+              <span className="mt-1 text-[9px] text-[#444] truncate w-full text-center">
+                {h.quarter?.split(" ").pop() ?? ""}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ──
 
 export function EarningsClient() {
@@ -410,12 +488,24 @@ export function EarningsClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isCollapsed, toggleSection } = useCollapsibleSections([], "earnings");
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [scanResult, setScanResult] = useState<ConfluenceScanResult | null>(null);
+  const [scanLoading, setScanLoading] = useState(false);
+
+  // Load search history on mount
+  useEffect(() => {
+    setSearchHistory(getSearchHistory());
+  }, []);
 
   const doSearch = useCallback(async (ticker: string) => {
     if (!ticker) return;
     setLoading(true);
     setError(null);
     setData(null);
+    setScanResult(null);
+
+    addToSearchHistory(ticker);
+    setSearchHistory(getSearchHistory());
 
     try {
       const res = await fetch(
@@ -437,6 +527,50 @@ export function EarningsClient() {
     }
   }, []);
 
+  // Fire lazy confluence scan when earnings data loads
+  useEffect(() => {
+    if (!data) return;
+    let cancelled = false;
+    setScanLoading(true);
+    fetch("/api/confluence/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tickers: [data.ticker] }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!cancelled && body?.results?.length) {
+          setScanResult(body.results[0]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setScanLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [data]);
+
+  // Computed insights
+  const beatStreak = useMemo(
+    () => (data ? computeBeatStreak(data.history) : null),
+    [data]
+  );
+  const insiderSummary = useMemo(
+    () => (data ? computeInsiderSummary(data.insiderTransactions) : null),
+    [data]
+  );
+  const estimateTrend = useMemo(
+    () => (data ? computeEstimateTrend(data.estimates) : null),
+    [data]
+  );
+  const playbook = useMemo(
+    () =>
+      beatStreak && estimateTrend && insiderSummary
+        ? computePlaybook(beatStreak, estimateTrend, insiderSummary, scanResult)
+        : null,
+    [beatStreak, estimateTrend, insiderSummary, scanResult]
+  );
+
   // Auto-search if ?ticker= is in the URL (e.g. from calendar link)
   useEffect(() => {
     const t = searchParams.get("ticker")?.trim().toUpperCase();
@@ -453,6 +587,11 @@ export function EarningsClient() {
     },
     [query, doSearch]
   );
+
+  const handleClearHistory = useCallback(() => {
+    clearSearchHistory();
+    setSearchHistory([]);
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -493,6 +632,31 @@ export function EarningsClient() {
         </button>
       </form>
 
+      {/* Recent Search History */}
+      {!data && !loading && searchHistory.length > 0 && (
+        <div className="mx-auto flex max-w-md flex-wrap items-center justify-center gap-2">
+          <span className="text-xs text-[#555]">Recent:</span>
+          {searchHistory.map((t) => (
+            <button
+              key={t}
+              onClick={() => {
+                setQuery(t);
+                doSearch(t);
+              }}
+              className="rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-2.5 py-1 text-xs font-mono font-semibold text-[#5ba3e6] hover:bg-[#222] transition-colors"
+            >
+              {t}
+            </button>
+          ))}
+          <button
+            onClick={handleClearHistory}
+            className="text-xs text-[#555] hover:text-[#a0a0a0]"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="mx-auto max-w-md rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-center text-sm text-red-400">
@@ -509,6 +673,51 @@ export function EarningsClient() {
               <div>
                 <h2 className="text-xl font-bold text-white">{data.name}</h2>
                 <span className="text-sm text-[#5ba3e6]">{data.ticker}</span>
+                {/* Insight badges */}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {beatStreak && beatStreak.streak > 0 && (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${
+                        beatStreak.streak >= 3
+                          ? "bg-green-500/10 border-green-500/20 text-green-400"
+                          : beatStreak.streak >= 2
+                            ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
+                            : "bg-[#2a2a2a] border-[#333] text-[#a0a0a0]"
+                      }`}
+                    >
+                      <TrendingUp className="h-3 w-3" />
+                      {beatStreak.streak}Q Beat Streak
+                    </span>
+                  )}
+                  {estimateTrend && estimateTrend !== "stable" && (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${
+                        estimateTrend === "rising"
+                          ? "bg-green-500/10 border-green-500/20 text-green-400"
+                          : "bg-red-500/10 border-red-500/20 text-red-400"
+                      }`}
+                    >
+                      {estimateTrend === "rising" ? (
+                        <TrendingUp className="h-3 w-3" />
+                      ) : (
+                        <TrendingDown className="h-3 w-3" />
+                      )}
+                      Estimates {estimateTrend === "rising" ? "Rising" : "Falling"}
+                    </span>
+                  )}
+                  {insiderSummary && insiderSummary.sentiment !== "neutral" && (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${
+                        insiderSummary.sentiment === "buying"
+                          ? "bg-green-500/10 border-green-500/20 text-green-400"
+                          : "bg-red-500/10 border-red-500/20 text-red-400"
+                      }`}
+                    >
+                      <Users className="h-3 w-3" />
+                      {insiderSummary.label}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="text-right">
                 {data.currentPrice != null && (
@@ -546,6 +755,11 @@ export function EarningsClient() {
                 <span className="text-lg font-bold text-white">
                   {data.nextRevenueAvg != null ? formatLargeNumber(data.nextRevenueAvg) : DASH}
                 </span>
+                {data.nextRevenueLow != null && data.nextRevenueHigh != null && (
+                  <div className="mt-1 text-[11px] text-[#555]">
+                    Range: {formatLargeNumber(data.nextRevenueLow)} &ndash; {formatLargeNumber(data.nextRevenueHigh)}
+                  </div>
+                )}
               </div>
               <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-4">
                 <div className="mb-1 flex items-center gap-2">
@@ -558,6 +772,139 @@ export function EarningsClient() {
               </div>
             </div>
           </div>
+
+          {/* ── Scanner Intelligence ── */}
+          <Section id="scanner-playbook" icon={Crosshair} title="Scanner Intelligence" collapsed={isCollapsed("scanner-playbook")} onToggle={toggleSection}>
+            {scanLoading && (
+              <div className="flex items-center gap-2 text-sm text-[#777]">
+                <Loader2 className="h-4 w-4 animate-spin text-[#5ba3e6]" />
+                Scanning {data.ticker} across scanners...
+              </div>
+            )}
+            {!scanLoading && (
+              <div className="space-y-5">
+                {/* Scanner Signals Grid */}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {/* EW */}
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-3">
+                    <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Elliott Wave</div>
+                    {scanResult?.ewResult ? (
+                      <>
+                        <div className="mt-1 text-sm font-semibold text-white">
+                          {scanResult.ewResult.wavePosition ?? "N/A"}
+                        </div>
+                        <div className="mt-0.5 text-xs text-[#a0a0a0]">
+                          {scanResult.ewResult.confidenceTier} confidence
+                          {scanResult.ewResult.fibDepthLabel && ` \u00b7 ${scanResult.ewResult.fibDepthLabel}`}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-1 text-xs text-[#555]">No data</div>
+                    )}
+                  </div>
+
+                  {/* Squeeze */}
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-3">
+                    <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Squeeze</div>
+                    {scanResult?.squeezeResult ? (
+                      <>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-sm font-semibold text-white">
+                            {scanResult.squeezeResult.squeezeScore.toFixed(0)}
+                          </span>
+                          <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${tierColor(scanResult.squeezeResult.tier)}`}>
+                            {scanResult.squeezeResult.tier}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-1 text-xs text-[#555]">No data</div>
+                    )}
+                  </div>
+
+                  {/* Pre-Run */}
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-3">
+                    <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Pre-Run</div>
+                    {scanResult?.prerunResult ? (
+                      <>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${verdictColor(scanResult.prerunResult.verdict)}`}>
+                            {scanResult.prerunResult.verdict}
+                          </span>
+                          <span className="text-sm font-semibold text-white">
+                            {scanResult.prerunResult.finalScore.toFixed(0)}
+                          </span>
+                        </div>
+                        {scanResult.prerunResult.daysToEarnings != null && (
+                          <div className="mt-0.5 text-xs text-[#a0a0a0]">
+                            {scanResult.prerunResult.daysToEarnings}d to earnings
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="mt-1 text-xs text-[#555]">No data</div>
+                    )}
+                  </div>
+
+                  {/* Strat */}
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-3">
+                    <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Strat</div>
+                    {scanResult?.stratResult ? (
+                      <>
+                        <div className="mt-1 text-sm font-semibold text-white">
+                          {scanResult.stratResult.signal}
+                        </div>
+                        <div className="mt-0.5 text-xs text-[#a0a0a0]">
+                          {scanResult.stratResult.actionDirection ?? "N/A"} \u00b7 TFC: {scanResult.stratResult.tfcAlignment.replace("_", " ")}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-1 text-xs text-[#555]">No data</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Earnings Playbook */}
+                {playbook && (
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-sm font-bold text-white">Earnings Playbook</span>
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                          playbook.bias === "bullish"
+                            ? "bg-green-500/10 border-green-500/20 text-green-400"
+                            : playbook.bias === "bearish"
+                              ? "bg-red-500/10 border-red-500/20 text-red-400"
+                              : "bg-[#2a2a2a] border-[#333] text-[#a0a0a0]"
+                        }`}
+                      >
+                        {playbook.bias === "bullish" ? "Bullish Bias" : playbook.bias === "bearish" ? "Bearish Bias" : "Neutral"}
+                      </span>
+                      <span className="text-xs text-[#555]">
+                        {playbook.bullishCount} bullish / {playbook.bearishCount} bearish
+                      </span>
+                    </div>
+                    {playbook.signals.length > 0 ? (
+                      <ul className="space-y-1.5">
+                        {playbook.signals.map((s, i) => (
+                          <li key={i} className="flex items-start gap-2 text-xs">
+                            <span
+                              className={`mt-1 inline-block h-2 w-2 shrink-0 rounded-full ${
+                                s.bullish ? "bg-green-500" : "bg-red-500"
+                              }`}
+                            />
+                            <span className="text-[#a0a0a0]">{s.text}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-[#555]">Not enough data to generate playbook signals.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </Section>
 
           {/* ── Analyst Consensus + Price Targets ── */}
           {data.analystRatings && (
@@ -720,6 +1067,9 @@ export function EarningsClient() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Earnings Surprise Visual */}
+              <EarningsSurpriseChart history={data.history.slice(0, 8)} />
             </Section>
           )}
 

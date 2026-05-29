@@ -13,7 +13,12 @@ import {
   ExternalLink,
   Search,
   X,
+  Bookmark,
+  Crosshair,
 } from "lucide-react";
+import { tierColor, verdictColor } from "@/lib/color-utils";
+import type { ConfluenceScanResult } from "@/lib/confluence/types";
+import { getAllWatchlistTickers, getTickerWatchlistSources } from "@/lib/earnings-utils";
 
 // ── Types ──
 
@@ -148,10 +153,14 @@ function WeekView({
   anchor,
   grouped,
   search,
+  scanResults,
+  watchlistTickers,
 }: {
   anchor: Date;
   grouped: Map<string, CalendarEntry[]>;
   search: string;
+  scanResults: Map<string, ConfluenceScanResult>;
+  watchlistTickers: Set<string> | null;
 }) {
   const mon = getMonday(anchor);
   const days = Array.from({ length: 5 }, (_, i) => toISO(addDays(mon, i)));
@@ -232,6 +241,8 @@ function WeekView({
                         searchUpper !== "" &&
                         !e.symbol.includes(searchUpper)
                       }
+                      scanResult={scanResults.get(e.symbol)}
+                      watchlistSources={watchlistTickers?.has(e.symbol) ? getTickerWatchlistSources(e.symbol) : undefined}
                     />
                   ))}
                 </div>
@@ -257,6 +268,8 @@ function WeekView({
                         searchUpper !== "" &&
                         !e.symbol.includes(searchUpper)
                       }
+                      scanResult={scanResults.get(e.symbol)}
+                      watchlistSources={watchlistTickers?.has(e.symbol) ? getTickerWatchlistSources(e.symbol) : undefined}
                     />
                   ))}
                 </div>
@@ -282,6 +295,8 @@ function WeekView({
                         searchUpper !== "" &&
                         !e.symbol.includes(searchUpper)
                       }
+                      scanResult={scanResults.get(e.symbol)}
+                      watchlistSources={watchlistTickers?.has(e.symbol) ? getTickerWatchlistSources(e.symbol) : undefined}
                     />
                   ))}
                 </div>
@@ -300,22 +315,56 @@ function TickerRow({
   entry,
   highlighted,
   dimmed,
+  scanResult,
+  watchlistSources,
 }: {
   entry: CalendarEntry;
   highlighted: boolean;
   dimmed: boolean;
+  scanResult?: ConfluenceScanResult;
+  watchlistSources?: string[];
 }) {
   return (
     <Link
       href={`/earnings?ticker=${entry.symbol}`}
-      className={`group flex items-center justify-between gap-2 px-4 py-2 transition-colors hover:bg-[#1a1a1a] ${
+      className={`group flex items-center gap-2 px-4 py-2 transition-colors hover:bg-[#1a1a1a] ${
         highlighted ? "bg-[#5ba3e6]/10" : ""
       } ${dimmed ? "opacity-25" : ""}`}
     >
-      <span className="font-mono text-sm font-bold text-[#5ba3e6] group-hover:underline">
+      <span className="font-mono text-sm font-bold text-[#5ba3e6] group-hover:underline shrink-0">
         {entry.symbol}
       </span>
-      <span className="text-xs text-[#555]">
+      {/* Watchlist source tags */}
+      {watchlistSources && watchlistSources.length > 0 && (
+        <div className="flex gap-1 shrink-0">
+          {watchlistSources.map((src) => (
+            <span key={src} className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[9px] text-[#777]">
+              {src}
+            </span>
+          ))}
+        </div>
+      )}
+      {/* Scanner badges (compact) */}
+      {scanResult && (
+        <div className="flex gap-1 shrink-0">
+          {scanResult.ewResult?.wavePosition && (
+            <span className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[9px] text-[#a0a0a0]" title={`EW: ${scanResult.ewResult.wavePosition}`}>
+              {scanResult.ewResult.wavePosition}
+            </span>
+          )}
+          {scanResult.squeezeResult && (
+            <span className={`rounded border px-1 py-0.5 text-[9px] ${tierColor(scanResult.squeezeResult.tier)}`} title={`Squeeze: ${scanResult.squeezeResult.squeezeScore.toFixed(0)}`}>
+              SQ
+            </span>
+          )}
+          {scanResult.prerunResult && (
+            <span className={`rounded border px-1 py-0.5 text-[9px] ${verdictColor(scanResult.prerunResult.verdict)}`} title={`Pre-Run: ${scanResult.prerunResult.verdict}`}>
+              PR
+            </span>
+          )}
+        </div>
+      )}
+      <span className="ml-auto text-xs text-[#555] shrink-0">
         {formatEps(entry.epsEstimate)}
       </span>
     </Link>
@@ -330,12 +379,14 @@ function MonthView({
   search,
   onSelectDay,
   selectedDay,
+  scanResults,
 }: {
   anchor: Date;
   grouped: Map<string, CalendarEntry[]>;
   search: string;
   onSelectDay: (dateStr: string | null) => void;
   selectedDay: string | null;
+  scanResults: Map<string, ConfluenceScanResult>;
 }) {
   const year = anchor.getFullYear();
   const month = anchor.getMonth();
@@ -474,18 +525,23 @@ function MonthView({
               {/* Ticker previews */}
               {entries.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
-                  {entries.slice(0, 4).map((e) => (
-                    <span
-                      key={e.symbol}
-                      className={`font-mono text-[11px] ${
-                        hasSearch && e.symbol.includes(searchUpper)
-                          ? "text-[#5ba3e6] font-bold"
-                          : "text-[#666]"
-                      }`}
-                    >
-                      {e.symbol}
-                    </span>
-                  ))}
+                  {entries.slice(0, 4).map((e) => {
+                    const isScanned = scanResults.has(e.symbol);
+                    return (
+                      <span
+                        key={e.symbol}
+                        className={`font-mono text-[11px] ${
+                          hasSearch && e.symbol.includes(searchUpper)
+                            ? "text-[#5ba3e6] font-bold"
+                            : isScanned
+                              ? "text-[#5ba3e6]/70"
+                              : "text-[#666]"
+                        }`}
+                      >
+                        {e.symbol}
+                      </span>
+                    );
+                  })}
                   {entries.length > 4 && (
                     <span className="text-[11px] text-[#444]">
                       +{entries.length - 4}
@@ -507,10 +563,12 @@ function DayDetail({
   dateStr,
   entries,
   onClose,
+  scanResults,
 }: {
   dateStr: string;
   entries: CalendarEntry[];
   onClose: () => void;
+  scanResults: Map<string, ConfluenceScanResult>;
 }) {
   const d = new Date(dateStr + "T12:00:00");
   const label = d.toLocaleDateString("en-US", {
@@ -565,41 +623,70 @@ function DayDetail({
               <th className="hidden px-3 py-2 text-center font-semibold text-white sm:table-cell">
                 Qtr
               </th>
+              <th className="hidden px-3 py-2 text-center font-semibold text-white sm:table-cell">
+                Scanners
+              </th>
               <th className="px-3 py-2 text-center font-semibold text-white">
                 Details
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#2a2a2a]">
-            {entries.map((e, i) => (
-              <tr key={i} className="bg-[#141414] hover:bg-[#1a1a1a]">
-                <td className="px-3 py-2">
-                  <span className="font-mono text-xs font-bold text-[#5ba3e6]">
-                    {e.symbol}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <HourBadge hour={e.hour} />
-                </td>
-                <td className="px-3 py-2 text-right text-[#a0a0a0]">
-                  {formatEps(e.epsEstimate)}
-                </td>
-                <td className="hidden px-3 py-2 text-right text-[#a0a0a0] sm:table-cell">
-                  {formatLargeNumber(e.revenueEstimate)}
-                </td>
-                <td className="hidden px-3 py-2 text-center text-[#777] sm:table-cell">
-                  {e.quarter != null ? `Q${e.quarter}` : "\u2014"}
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <Link
-                    href={`/earnings?ticker=${e.symbol}`}
-                    className="inline-flex items-center gap-1 text-xs text-[#5ba3e6] hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
-                </td>
-              </tr>
-            ))}
+            {entries.map((e, i) => {
+              const sr = scanResults.get(e.symbol);
+              return (
+                <tr key={i} className="bg-[#141414] hover:bg-[#1a1a1a]">
+                  <td className="px-3 py-2">
+                    <span className="font-mono text-xs font-bold text-[#5ba3e6]">
+                      {e.symbol}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <HourBadge hour={e.hour} />
+                  </td>
+                  <td className="px-3 py-2 text-right text-[#a0a0a0]">
+                    {formatEps(e.epsEstimate)}
+                  </td>
+                  <td className="hidden px-3 py-2 text-right text-[#a0a0a0] sm:table-cell">
+                    {formatLargeNumber(e.revenueEstimate)}
+                  </td>
+                  <td className="hidden px-3 py-2 text-center text-[#777] sm:table-cell">
+                    {e.quarter != null ? `Q${e.quarter}` : "\u2014"}
+                  </td>
+                  <td className="hidden px-3 py-2 text-center sm:table-cell">
+                    {sr ? (
+                      <div className="flex items-center justify-center gap-1">
+                        {sr.ewResult?.wavePosition && (
+                          <span className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[9px] text-[#a0a0a0]">
+                            {sr.ewResult.wavePosition}
+                          </span>
+                        )}
+                        {sr.squeezeResult && (
+                          <span className={`rounded border px-1 py-0.5 text-[9px] ${tierColor(sr.squeezeResult.tier)}`}>
+                            SQ:{sr.squeezeResult.tier}
+                          </span>
+                        )}
+                        {sr.prerunResult && (
+                          <span className={`rounded border px-1 py-0.5 text-[9px] ${verdictColor(sr.prerunResult.verdict)}`}>
+                            {sr.prerunResult.verdict}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-[#333]">{"\u2014"}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <Link
+                      href={`/earnings?ticker=${e.symbol}`}
+                      className="inline-flex items-center gap-1 text-xs text-[#5ba3e6] hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -618,6 +705,10 @@ export function CalendarClient() {
   const [hourFilter, setHourFilter] = useState<HourFilter>("all");
   const [search, setSearch] = useState("");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [watchlistFilter, setWatchlistFilter] = useState(false);
+  const [watchlistTickers, setWatchlistTickers] = useState<Set<string> | null>(null);
+  const [scanResults, setScanResults] = useState<Map<string, ConfluenceScanResult>>(new Map());
+  const [scanLoading, setScanLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     const range =
@@ -665,13 +756,55 @@ export function CalendarClient() {
 
   const goToday = () => setAnchor(new Date());
 
+  // Load watchlist tickers when toggle is activated
+  const handleWatchlistToggle = useCallback(() => {
+    setWatchlistFilter((prev) => {
+      if (!prev) {
+        setWatchlistTickers(getAllWatchlistTickers());
+      }
+      return !prev;
+    });
+  }, []);
+
+  // Scan visible tickers via confluence API
+  const handleScanEarnings = useCallback(async () => {
+    const tickers = [...new Set(entries.map((e) => e.symbol))].slice(0, 25);
+    if (tickers.length === 0) return;
+    setScanLoading(true);
+    try {
+      const res = await fetch("/api/confluence/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers }),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const map = new Map<string, ConfluenceScanResult>();
+        for (const r of body.results ?? []) {
+          map.set(r.ticker, r);
+        }
+        setScanResults(map);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setScanLoading(false);
+    }
+  }, [entries]);
+
   // Filter entries
   const filtered = useMemo(() => {
-    if (hourFilter === "all") return entries;
-    return entries.filter((e) => e.hour === hourFilter);
-  }, [entries, hourFilter]);
+    let result = entries;
+    if (hourFilter !== "all") {
+      result = result.filter((e) => e.hour === hourFilter);
+    }
+    if (watchlistFilter && watchlistTickers) {
+      result = result.filter((e) => watchlistTickers.has(e.symbol));
+    }
+    return result;
+  }, [entries, hourFilter, watchlistFilter, watchlistTickers]);
 
-  // Group filtered entries by date
+  // Group filtered entries by date with smart sorting
   const grouped = useMemo(() => {
     const map = new Map<string, CalendarEntry[]>();
     for (const e of filtered) {
@@ -679,8 +812,24 @@ export function CalendarClient() {
       list.push(e);
       map.set(e.date, list);
     }
+    // Sort entries within each day: scanner score desc -> watchlist membership -> alpha
+    for (const [date, list] of map) {
+      list.sort((a, b) => {
+        // Scanner score (higher first)
+        const scoreA = scanResults.get(a.symbol)?.squeezeResult?.squeezeScore ?? -1;
+        const scoreB = scanResults.get(b.symbol)?.squeezeResult?.squeezeScore ?? -1;
+        if (scoreA !== scoreB) return scoreB - scoreA;
+        // Watchlist membership
+        const wlA = watchlistTickers?.has(a.symbol) ? 1 : 0;
+        const wlB = watchlistTickers?.has(b.symbol) ? 1 : 0;
+        if (wlA !== wlB) return wlB - wlA;
+        // Alphabetical fallback
+        return a.symbol.localeCompare(b.symbol);
+      });
+      map.set(date, list);
+    }
     return map;
-  }, [filtered]);
+  }, [filtered, scanResults, watchlistTickers]);
 
   const totalDays = grouped.size;
 
@@ -803,6 +952,33 @@ export function CalendarClient() {
             </button>
           )}
         </div>
+
+        {/* Watchlist filter */}
+        <button
+          onClick={handleWatchlistToggle}
+          className={`flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+            watchlistFilter
+              ? "border-[#5ba3e6]/40 bg-[#5ba3e6]/10 text-[#5ba3e6]"
+              : "border-[#2a2a2a] text-[#a0a0a0] hover:text-white hover:bg-[#1a1a1a]"
+          }`}
+        >
+          <Bookmark className="h-3 w-3" />
+          My Watchlists
+        </button>
+
+        {/* Scan earnings */}
+        <button
+          onClick={handleScanEarnings}
+          disabled={scanLoading || entries.length === 0}
+          className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-2.5 py-1.5 text-xs font-semibold text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50 transition-colors"
+        >
+          {scanLoading ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Crosshair className="h-3 w-3" />
+          )}
+          {scanLoading ? "Scanning..." : "Scan Earnings"}
+        </button>
       </div>
 
       {/* Summary */}
@@ -836,7 +1012,7 @@ export function CalendarClient() {
       {!loading && !error && (
         <>
           {view === "week" && (
-            <WeekView anchor={anchor} grouped={grouped} search={search} />
+            <WeekView anchor={anchor} grouped={grouped} search={search} scanResults={scanResults} watchlistTickers={watchlistFilter ? watchlistTickers : null} />
           )}
 
           {view === "month" && (
@@ -847,6 +1023,7 @@ export function CalendarClient() {
                 search={search}
                 onSelectDay={setSelectedDay}
                 selectedDay={selectedDay}
+                scanResults={scanResults}
               />
 
               {/* Day detail panel */}
@@ -855,6 +1032,7 @@ export function CalendarClient() {
                   dateStr={selectedDay}
                   entries={selectedEntries}
                   onClose={() => setSelectedDay(null)}
+                  scanResults={scanResults}
                 />
               )}
 
