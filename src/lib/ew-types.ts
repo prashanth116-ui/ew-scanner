@@ -212,7 +212,11 @@ export interface SavedScan {
     fibFilter?: string;
     volFilter?: string;
     mtfFilter?: string;
+    sectorFilter?: string;
+    quadrantFilter?: string;
   };
+  htf?: string;
+  ltf?: string;
   candidateCount: number;
   candidates: Omit<EnhancedScoredCandidate, "series">[];
   labels: Record<string, string>;

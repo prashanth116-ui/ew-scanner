@@ -365,6 +365,22 @@ function EWScannerPage() {
     setSectorQuadrantMap(buildSectorQuadrantMap());
   }, []);
 
+  // Refresh sector rotation/quadrant data when tab regains focus
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState !== "visible") return;
+      const rotation = loadSectorRotation();
+      if (rotation?.sectors) {
+        setSectorRotation(
+          rotation.sectors.map((s) => ({ sector: s.sector, quadrant: s.quadrant }))
+        );
+      }
+      setSectorQuadrantMap(buildSectorQuadrantMap());
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, []);
+
   // Load scan from URL param (from history page)
   useEffect(() => {
     const scanId = searchParams.get("loadScan");
@@ -1082,20 +1098,26 @@ function EWScannerPage() {
       ...(fibFilter !== "all" && { fibFilter }),
       ...(volFilter !== "all" && { volFilter }),
       ...(mtfFilter !== "all" && { mtfFilter }),
-    }, modeFiltered, labels);
+      ...(sectorFilter !== "All" && { sectorFilter }),
+      ...(quadrantFilter !== "All" && { quadrantFilter }),
+    }, modeFiltered, labels, { htf, ltf });
     setSavedScans(loadScans());
     showFeedback("Scan saved");
-  }, [mode, universe, minDecline, minMonths, minRecovery, fibFilter, volFilter, mtfFilter, modeFiltered, labels, showFeedback]);
+  }, [mode, universe, minDecline, minMonths, minRecovery, fibFilter, volFilter, mtfFilter, sectorFilter, quadrantFilter, htf, ltf, modeFiltered, labels, showFeedback]);
 
   const handleLoadScan = useCallback((scan: SavedScan) => {
     setMode(scan.mode);
     setUniverse(scan.universe as UniverseKey);
+    setHtf(scan.htf ?? "Monthly");
+    setLtf(scan.ltf ?? "Daily");
     setMinDecline(scan.filters.minDecline);
     setMinMonths(scan.filters.minMonths);
     setMinRecovery(scan.filters.minRecovery);
     setFibFilter((scan.filters.fibFilter as FibFilterValue) ?? "all");
     setVolFilter((scan.filters.volFilter as VolFilterValue) ?? "all");
     setMtfFilter((scan.filters.mtfFilter as MtfFilterValue) ?? "all");
+    setSectorFilter(scan.filters.sectorFilter ?? "All");
+    setQuadrantFilter(scan.filters.quadrantFilter ?? "All");
     // Restore candidates (without series data)
     const restored = scan.candidates.map((c) => ({
       ...c,

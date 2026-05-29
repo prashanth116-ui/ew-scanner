@@ -4,10 +4,18 @@
  * Cached server-side for 5 min.
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { fetchMarketRegime } from "@/lib/ew-regime";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rl = rateLimit(`regime:${getClientKey(request)}`, 30, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
   const regime = await fetchMarketRegime();
   if (!regime) {
     return NextResponse.json({ regime: "neutral", available: false });

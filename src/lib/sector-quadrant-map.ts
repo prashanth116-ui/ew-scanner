@@ -17,6 +17,10 @@ const COARSE_TO_FINE: Record<string, string[]> = {
   Financials: ["Financials"],
   Energy: ["Energy"],
   Industrials: ["Industrials"],
+  "Communication Services": ["Communication Services"],
+  Materials: ["Materials"],
+  "Real Estate": ["Real Estate"],
+  Utilities: ["Utilities"],
 };
 
 export interface SectorQuadrantMap {

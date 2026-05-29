@@ -4,12 +4,20 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { detectGammaBatch } from "@/lib/squeeze-options";
 
 export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
+  const rl = rateLimit(`squeeze-gamma:${getClientKey(request)}`, 30, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
   try {
     const body = await request.json();
     const { tickers } = body as { tickers: Array<{ ticker: string; price: number }> };

@@ -221,7 +221,8 @@ export function addPreRunHistory(
 export function savePreRunScan(
   name: string,
   filters: PreRunFilters,
-  candidates: PreRunResult[]
+  candidates: PreRunResult[],
+  extra?: { quadrantFilter?: string; skipGate3?: boolean; criteriaFilters?: import("./types").PreRunCriteriaFilter[]; multiTF?: boolean }
 ): SavedPreRunScan | null {
   if (!isClient()) return null;
 
@@ -232,6 +233,10 @@ export function savePreRunScan(
     filters,
     candidateCount: candidates.length,
     candidates,
+    ...(extra?.quadrantFilter && extra.quadrantFilter !== "All" && { quadrantFilter: extra.quadrantFilter }),
+    ...(extra?.skipGate3 && { skipGate3: extra.skipGate3 }),
+    ...(extra?.criteriaFilters?.length && { criteriaFilters: extra.criteriaFilters }),
+    ...(extra?.multiTF && { multiTF: extra.multiTF }),
   };
 
   const existing = loadPreRunScans();

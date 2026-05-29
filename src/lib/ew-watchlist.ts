@@ -11,9 +11,10 @@ export function saveScan(
   name: string,
   mode: ScannerMode,
   universe: string,
-  filters: { minDecline: number; minMonths: number; minRecovery: number; fibFilter?: string; volFilter?: string; mtfFilter?: string },
+  filters: { minDecline: number; minMonths: number; minRecovery: number; fibFilter?: string; volFilter?: string; mtfFilter?: string; sectorFilter?: string; quadrantFilter?: string },
   candidates: EnhancedScoredCandidate[],
-  labels: Record<string, string>
+  labels: Record<string, string>,
+  extra?: { htf?: string; ltf?: string }
 ): SavedScan | null {
   if (!isClient()) return null;
 
@@ -33,6 +34,8 @@ export function saveScan(
     mode,
     universe,
     filters,
+    ...(extra?.htf && { htf: extra.htf }),
+    ...(extra?.ltf && { ltf: extra.ltf }),
     candidateCount: candidates.length,
     candidates: stripped,
     labels,

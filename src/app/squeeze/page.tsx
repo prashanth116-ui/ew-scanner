@@ -238,6 +238,21 @@ function SqueezePage() {
     }
   }, []);
 
+  // Refresh sector quadrants when tab regains focus
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState !== "visible") return;
+      const rotation = loadSectorRotation();
+      if (rotation?.sectors) {
+        const qmap: Record<string, string> = {};
+        for (const s of rotation.sectors) qmap[s.sector] = s.quadrant;
+        setSectorQuadrants(qmap);
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, []);
+
   // Cleanup abort on unmount
   useEffect(() => {
     return () => {
@@ -253,6 +268,9 @@ function SqueezePage() {
       setAutoLookup(ticker.toUpperCase());
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Memoize sector bucket list (static data, computed once)
+  const sectorBucketList = useMemo(() => getSectorBuckets(), []);
 
   // Build filters object
   const filters: SqueezeFilters = useMemo(
@@ -273,12 +291,12 @@ function SqueezePage() {
   const scored = useMemo(() => {
     const filtered = scoreSqueezeBatch(rawResults, filters);
     if (searchedTickers.size === 0) return filtered;
-    // Score searched tickers that got filtered out
+    // Score searched tickers that got filtered out, merge into filtered list (sort handles ordering)
     const filteredSet = new Set(filtered.map((c) => c.ticker));
     const missing = rawResults
       .filter((r) => searchedTickers.has(r.ticker) && !filteredSet.has(r.ticker))
       .map(computeSqueezeScore);
-    return [...missing, ...filtered];
+    return [...filtered, ...missing];
   }, [rawResults, filters, searchedTickers]);
 
   const sorted = useMemo(() => {
@@ -696,7 +714,7 @@ function SqueezePage() {
                   className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#5ba3e6] focus:outline-none"
                 >
                   <option value="All">All Sectors</option>
-                  {getSectorBuckets().map((s) => (
+                  {sectorBucketList.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>

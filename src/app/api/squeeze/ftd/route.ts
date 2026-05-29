@@ -4,10 +4,18 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { fetchUpcomingFTDs, fetchFTDsForTickers } from "@/lib/supabase/query";
 
 export async function GET(request: NextRequest) {
+  const rl = rateLimit(`squeeze-ftd:${getClientKey(request)}`, 60, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
   try {
     const { searchParams } = new URL(request.url);
     const tickers = searchParams.get("tickers");

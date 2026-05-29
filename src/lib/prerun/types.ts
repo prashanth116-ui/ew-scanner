@@ -193,6 +193,11 @@ export interface SavedPreRunScan {
   filters: PreRunFilters;
   candidateCount: number;
   candidates: PreRunResult[];
+  /** Extended state (added post-launch, optional for backward compat) */
+  quadrantFilter?: string;
+  skipGate3?: boolean;
+  criteriaFilters?: PreRunCriteriaFilter[];
+  multiTF?: boolean;
 }
 
 export interface PreRunFilters {

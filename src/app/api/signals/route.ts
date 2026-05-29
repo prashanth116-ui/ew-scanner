@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { recordSignalBatch } from "@/lib/supabase/persistence";
 import { fetchHitRates } from "@/lib/supabase/query";
@@ -12,6 +13,13 @@ import type { SignalRecord } from "@/lib/supabase/persistence";
 
 /** POST: Record scanner signals after scan completes. */
 export async function POST(request: NextRequest) {
+  const rl = rateLimit(`signals-post:${getClientKey(request)}`, 30, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
   try {
     const body = await request.json();
     const { signals } = body as { signals: SignalRecord[] };
@@ -35,6 +43,13 @@ export async function POST(request: NextRequest) {
 
 /** GET: Fetch hit rates for a scanner. ?scanner=ew&mode=wave2&strength=high */
 export async function GET(request: NextRequest) {
+  const rl = rateLimit(`signals-get:${getClientKey(request)}`, 60, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
   try {
     const { searchParams } = new URL(request.url);
     const scanner = searchParams.get("scanner");

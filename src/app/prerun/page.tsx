@@ -203,6 +203,21 @@ function PreRunPage() {
     }
   }, []);
 
+  // Refresh sector quadrants when tab regains focus (data may have been updated on /sectors page)
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState !== "visible") return;
+      const rotation = loadSectorRotation();
+      if (rotation?.sectors) {
+        const qmap: Record<string, string> = {};
+        for (const s of rotation.sectors) qmap[s.sector] = s.quadrant;
+        setSectorQuadrants(qmap);
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, []);
+
   // Cleanup abort on unmount
   useEffect(() => {
     return () => {
@@ -269,9 +284,14 @@ function PreRunPage() {
       for (const cf of criteriaFilters) {
         if (getCriterionScore(r.scores, cf.criterion) < cf.min) return false;
       }
+      // Post-scan quadrant filter
+      if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
+        const sector = getSectorForTicker(r.data.ticker);
+        if (!sector || sectorQuadrants[sector] !== quadrantFilter) return false;
+      }
       return true;
     });
-  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate3]);
+  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate3, quadrantFilter, sectorQuadrants]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -588,10 +608,15 @@ function PreRunPage() {
   // Save / Load / Delete scans
   const handleSave = useCallback(() => {
     const name = saveName.trim() || `Pre-Run ${new Date().toLocaleDateString()}`;
-    savePreRunScan(name, filters, filtered);
+    savePreRunScan(name, filters, filtered, {
+      quadrantFilter: quadrantFilter !== "All" ? quadrantFilter : undefined,
+      skipGate3: skipGate3 || undefined,
+      criteriaFilters: criteriaFilters.length > 0 ? criteriaFilters : undefined,
+      multiTF: showMultiTF || undefined,
+    });
     setSavedScans(loadPreRunScans());
     setSaveName("");
-  }, [saveName, filters, filtered]);
+  }, [saveName, filters, filtered, quadrantFilter, skipGate3, criteriaFilters, showMultiTF]);
 
   const handleDelete = useCallback((id: string) => {
     if (!confirm("Delete this saved scan?")) return;
@@ -609,8 +634,10 @@ function PreRunPage() {
     setVerdictFilter(scan.filters.verdict);
     setEmaTimeframe(scan.filters.emaTimeframe ?? "15m");
     setRawResults(scan.candidates);
-    setCriteriaFilters([]);
-    setSkipGate3(false);
+    setQuadrantFilter(scan.quadrantFilter ?? "All");
+    setSkipGate3(scan.skipGate3 ?? false);
+    setCriteriaFilters(scan.criteriaFilters ?? []);
+    setShowMultiTF(scan.multiTF ?? false);
     setMultiTFResults(new Map());
   }, []);
 
@@ -860,6 +887,7 @@ function PreRunPage() {
                   setCriteriaFilters([]);
                   setSkipGate3(false);
                   setQuadrantFilter("All");
+                  setShowMultiTF(false);
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >
