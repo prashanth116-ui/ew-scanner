@@ -1,15 +1,10 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect, Suspense } from "react";
 import {
-  Search,
-  Loader2,
   ChevronRight,
   ChevronDown,
-  X,
   Layers,
-  Copy,
-  Check,
   ExternalLink,
   ArrowUp,
   ArrowDown,
@@ -55,6 +50,13 @@ import { SidebarSection } from "@/components/sidebar-section";
 import { PresetList } from "@/components/preset-list";
 import { ScoreBar } from "@/components/score-bar";
 import { ProgressBar } from "@/components/progress-bar";
+import { CopyButton } from "@/components/copy-button";
+import { TickerSearchInput } from "@/components/ticker-search-input";
+import { ScanButton } from "@/components/scan-button";
+import { StalenessLabel } from "@/components/staleness-label";
+import { HitRateDashboard } from "@/components/hit-rate-dashboard";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { loadFromCache, saveToCache } from "@/lib/scan-cache";
 
 const BATCH_SIZE = 25;
 const BATCH_DELAY = 300;
@@ -158,34 +160,43 @@ const SCANNER_LINKS: Record<string, { href: string; label: string }> = {
   strat: { href: "/strat", label: "Strat Scanner" },
 };
 
-export default function ConfluencePage() {
+export default function ConfluencePageWrapper() {
+  return (
+    <>
+      <Suspense fallback={null}>
+        <ConfluencePage />
+      </Suspense>
+      <ScannerCTA />
+    </>
+  );
+}
+
+function ConfluencePage() {
   // Weights & thresholds
-  const [weights, setWeights] = useState<ConfluenceWeights>({ ...DEFAULT_WEIGHTS });
-  const [thresholds, setThresholds] = useState<ConfluenceThresholds>({ ...DEFAULT_THRESHOLDS });
+  const [weights, setWeights] = usePersistedFilter<ConfluenceWeights>("ew-filter:confluence:weights", { ...DEFAULT_WEIGHTS });
+  const [thresholds, setThresholds] = usePersistedFilter<ConfluenceThresholds>("ew-filter:confluence:thresholds", { ...DEFAULT_THRESHOLDS });
 
   // Signal filter
-  const [signalFilter, setSignalFilter] = useState<Set<ConfluenceSignal>>(
-    new Set(["strong", "moderate", "weak"])
-  );
+  const [signalFilter, setSignalFilter] = usePersistedFilter<Set<ConfluenceSignal>>("ew-filter:confluence:signalFilter", new Set(["strong", "moderate", "weak"]));
 
   // Sector filter
-  const [sectorFilter, setSectorFilter] = useState("All");
+  const [sectorFilter, setSectorFilter] = usePersistedFilter("ew-filter:confluence:sectorFilter", "All");
 
   // Quadrant filter
-  const [quadrantFilter, setQuadrantFilter] = useState<Set<RRGQuadrant>>(new Set());
+  const [quadrantFilter, setQuadrantFilter] = usePersistedFilter<Set<RRGQuadrant>>("ew-filter:confluence:quadrantFilter", new Set());
 
   // Strat aligned filter
-  const [stratAlignedFilter, setStratAlignedFilter] = useState(false);
+  const [stratAlignedFilter, setStratAlignedFilter] = usePersistedFilter("ew-filter:confluence:stratAlignedFilter", false);
 
   // Quality filter
-  const [qualityFilter, setQualityFilter] = useState<"all" | "improving" | "high" | "fading">("all");
+  const [qualityFilter, setQualityFilter] = usePersistedFilter<"all" | "improving" | "high" | "fading">("ew-filter:confluence:qualityFilter", "all");
 
   // Scanner filters
-  const [verdictFilter, setVerdictFilter] = useState<"all" | "priority" | "keep" | "watch" | "discard">("all");
-  const [ewConfFilter, setEwConfFilter] = useState<"all" | "high" | "probable" | "speculative">("all");
-  const [tfcFilter, setTfcFilter] = useState<"all" | "full_bull" | "full_bear" | "mixed">("all");
-  const [dirFilter, setDirFilter] = useState<"all" | "long" | "short">("all");
-  const [stockRSFilter, setStockRSFilter] = useState<Set<"leading" | "improving" | "weakening" | "lagging">>(new Set());
+  const [verdictFilter, setVerdictFilter] = usePersistedFilter<"all" | "priority" | "keep" | "watch" | "discard">("ew-filter:confluence:verdictFilter", "all");
+  const [ewConfFilter, setEwConfFilter] = usePersistedFilter<"all" | "high" | "probable" | "speculative">("ew-filter:confluence:ewConfFilter", "all");
+  const [tfcFilter, setTfcFilter] = usePersistedFilter<"all" | "full_bull" | "full_bear" | "mixed">("ew-filter:confluence:tfcFilter", "all");
+  const [dirFilter, setDirFilter] = usePersistedFilter<"all" | "long" | "short">("ew-filter:confluence:dirFilter", "all");
+  const [stockRSFilter, setStockRSFilter] = usePersistedFilter<Set<"leading" | "improving" | "weakening" | "lagging">>("ew-filter:confluence:stockRSFilter", new Set());
 
   // Scan state
   const [scanning, setScanning] = useState(false);
@@ -198,8 +209,8 @@ export default function ConfluencePage() {
   const scanAbort = useRef<AbortController | null>(null);
 
   // Sort
-  const [sortKey, setSortKey] = useState<SortKey>("confluence");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortKey, setSortKey] = usePersistedFilter<SortKey>("ew-filter:confluence:sortKey", "confluence");
+  const [sortDir, setSortDir] = usePersistedFilter<SortDir>("ew-filter:confluence:sortDir", "desc");
 
   // UI state
   const [sidebarOpen, setSidebarOpen] = useSidebarState("confluence");
@@ -210,9 +221,6 @@ export default function ConfluencePage() {
   const [tickerSearch, setTickerSearch] = useState("");
   const [tickerSearching, setTickerSearching] = useState(false);
 
-  // Export toast
-  const [copiedToast, setCopiedToast] = useState(false);
-
   // Saved scans
   const [savedScans, setSavedScans] = useState<SavedConfluenceScan[]>([]);
   const [saveName, setSaveName] = useState("");
@@ -220,6 +228,11 @@ export default function ConfluencePage() {
 
   useEffect(() => {
     setSavedScans(loadConfluenceScans());
+    // Load cached results on mount
+    const cached = loadFromCache<ConfluenceScanResult[]>("ew-confluence-scan-v1", 15 * 60 * 1000);
+    if (cached && cached.length > 0) {
+      setRawResults(cached);
+    }
   }, []);
 
   // Signal persistence from previous scan
@@ -598,6 +611,7 @@ export default function ConfluencePage() {
       }
     }
 
+    saveToCache("ew-confluence-scan-v1", results);
     setScanning(false);
     setProgress("");
   }, []);
@@ -655,52 +669,37 @@ export default function ConfluencePage() {
   const toggleSort = useCallback(
     (key: SortKey) => {
       if (sortKey === key) {
-        setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+        setSortDir(sortDir === "desc" ? "asc" : "desc");
       } else {
         setSortKey(key);
         setSortDir("desc");
       }
     },
-    [sortKey]
+    [sortKey, sortDir]
   );
 
   // Quadrant filter toggle
   const toggleQuadrant = useCallback((q: RRGQuadrant) => {
-    setQuadrantFilter((prev) => {
-      const s = new Set(prev);
-      if (s.has(q)) s.delete(q);
-      else s.add(q);
-      return s;
-    });
-  }, []);
+    const s = new Set(quadrantFilter);
+    if (s.has(q)) s.delete(q);
+    else s.add(q);
+    setQuadrantFilter(s);
+  }, [quadrantFilter]);
 
   // Stock RS Quadrant filter toggle
   const toggleStockRS = useCallback((q: "leading" | "improving" | "weakening" | "lagging") => {
-    setStockRSFilter((prev) => {
-      const s = new Set(prev);
-      if (s.has(q)) s.delete(q); else s.add(q);
-      return s;
-    });
-  }, []);
+    const s = new Set(stockRSFilter);
+    if (s.has(q)) s.delete(q); else s.add(q);
+    setStockRSFilter(s);
+  }, [stockRSFilter]);
 
   // Signal filter toggle
   const toggleSignal = useCallback((sig: ConfluenceSignal) => {
-    setSignalFilter((prev) => {
-      const s = new Set(prev);
-      if (s.has(sig)) s.delete(sig);
-      else s.add(sig);
-      return s;
-    });
-  }, []);
-
-  // Export / copy watchlist
-  const copyWatchlist = useCallback(() => {
-    const symbols = sorted.map((r) => r.ticker).join(", ");
-    navigator.clipboard.writeText(symbols).then(() => {
-      setCopiedToast(true);
-      setTimeout(() => setCopiedToast(false), 2000);
-    }).catch(() => {});
-  }, [sorted]);
+    const s = new Set(signalFilter);
+    if (s.has(sig)) s.delete(sig);
+    else s.add(sig);
+    setSignalFilter(s);
+  }, [signalFilter]);
 
   const handleExport = useCallback(() => {
     if (sorted.length > 0) exportConfluenceToExcel(sorted);
@@ -755,7 +754,7 @@ export default function ConfluencePage() {
                       max={100}
                       step={5}
                       value={weights[key]}
-                      onChange={(e) => setWeights((w) => ({ ...w, [key]: Number(e.target.value) }))}
+                      onChange={(e) => setWeights({ ...weights, [key]: Number(e.target.value) })}
                       className="w-full accent-[#ec4899]"
                     />
                   </div>
@@ -777,7 +776,7 @@ export default function ConfluencePage() {
                       max={100}
                       step={5}
                       value={thresholds[key] * 100}
-                      onChange={(e) => setThresholds((t) => ({ ...t, [key]: Number(e.target.value) / 100 }))}
+                      onChange={(e) => setThresholds({ ...thresholds, [key]: Number(e.target.value) / 100 })}
                       className="w-full accent-[#ec4899]"
                     />
                   </div>
@@ -885,7 +884,7 @@ export default function ConfluencePage() {
           {/* Strat Aligned filter */}
           <SidebarSection title="Strat Filter" sectionKey="strat-filter" collapsed={collapsed.has("strat-filter")} onToggle={toggleSection}>
             <button
-              onClick={() => setStratAlignedFilter((v) => !v)}
+              onClick={() => setStratAlignedFilter(!stratAlignedFilter)}
               className={`inline-flex items-center rounded-md px-2.5 py-1.5 text-xs font-medium border transition-colors ${
                 stratAlignedFilter
                   ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
@@ -1059,52 +1058,21 @@ export default function ConfluencePage() {
           </SidebarSection>
 
           {/* Scan / Cancel */}
-          <div className="flex gap-2">
-            <button
-              onClick={runScan}
-              disabled={scanning}
-              className="flex-1 flex items-center justify-center gap-2 rounded-md bg-[#ec4899] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#db2777] disabled:opacity-50 transition-colors"
-            >
-              {scanning ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="h-4 w-4" />
-              )}
-              {scanning ? "Scanning..." : "Scan"}
-            </button>
-            {scanning && (
-              <button
-                onClick={cancelScan}
-                className="rounded-md border border-[#2a2a2a] px-3 py-2.5 text-sm text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+          <ScanButton scanning={scanning} onScan={runScan} onCancel={cancelScan} accentColor="#ec4899" />
+          {!scanning && rawResults.length > 0 && (
+            <StalenessLabel cacheKey="ew-confluence-scan-v1" ttlMs={15 * 60 * 1000} onRefresh={runScan} />
+          )}
 
           {/* Ticker search */}
           <SidebarSection title="Add Ticker" sectionKey="ticker" collapsed={collapsed.has("ticker")} onToggle={toggleSection}>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={tickerSearch}
-                    onChange={(e) => setTickerSearch(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === "Enter" && lookupTicker()}
-                    placeholder="e.g. AAPL, NVDA..."
-                    className="flex-1 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white placeholder-[#555] focus:border-[#ec4899] focus:outline-none"
-                  />
-                  <button
-                    onClick={lookupTicker}
-                    disabled={tickerSearching || !tickerSearch.trim()}
-                    className="rounded-md bg-[#ec4899] px-3 py-1.5 text-sm text-white hover:bg-[#db2777] disabled:opacity-50 transition-colors"
-                  >
-                    {tickerSearching ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Search className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
+            <TickerSearchInput
+              value={tickerSearch}
+              onChange={setTickerSearch}
+              onSearch={lookupTicker}
+              searching={tickerSearching}
+              placeholder="e.g. AAPL, TSLA..."
+              accentColor="#ec4899"
+            />
           </SidebarSection>
 
           {/* Saved Scans */}
@@ -1171,9 +1139,15 @@ export default function ConfluencePage() {
             )}
           </SidebarSection>
 
+          {/* Hit Rates */}
+          <SidebarSection title="Hit Rates" sectionKey="hitrates" collapsed={collapsed.has("hitrates")} onToggle={toggleSection}>
+            <HitRateDashboard scanner="confluence" />
+          </SidebarSection>
+
           {/* Reset */}
           <button
             onClick={() => {
+              clearPersistedFilters("ew-filter:confluence");
               setWeights({ ...DEFAULT_WEIGHTS });
               setThresholds({ ...DEFAULT_THRESHOLDS });
               setSignalFilter(new Set(["strong", "moderate", "weak"]));
@@ -1307,23 +1281,7 @@ export default function ConfluencePage() {
                   <FileDown className="h-3 w-3" />
                   <span className="hidden sm:inline">Export</span>
                 </button>
-                <button
-                  onClick={copyWatchlist}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-[#a0a0a0] hover:text-white border border-[#2a2a2a] hover:border-[#444] transition-colors"
-                  title="Copy all visible tickers to clipboard"
-                >
-                  {copiedToast ? (
-                    <>
-                      <Check className="h-3 w-3 text-green-400" />
-                      <span className="text-green-400">Copied {sorted.length}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3 w-3" />
-                      <span className="hidden sm:inline">Copy Watchlist</span>
-                    </>
-                  )}
-                </button>
+                <CopyButton tickers={sorted.map((r) => r.ticker)} />
               </div>
             </div>
           )}
@@ -1403,7 +1361,6 @@ export default function ConfluencePage() {
           ) : null}
         </main>
       </div>
-      <ScannerCTA />
     </>
   );
 }
@@ -1594,7 +1551,7 @@ function ResultRow({
                         <ScoreBar size="sm" label="Score" value={result.ewResult.enhancedScore} max={25} color="#5ba3e6" />
                         <ScoreBar size="sm" label="Normalized" value={result.ewResult.enhancedNormalized * 100} max={100} color="#5ba3e6" />
                       </div>
-                      <ScannerLink scanner="ew" />
+                      <ScannerLink scanner="ew" ticker={result.ticker} />
                     </div>
                   )}
                 </div>
@@ -1634,7 +1591,7 @@ function ResultRow({
                       ) : (
                         <ScoreBar size="sm" label="Score" value={result.squeezeResult.squeezeScore} max={100} color="#f59e0b" />
                       )}
-                      <ScannerLink scanner="squeeze" />
+                      <ScannerLink scanner="squeeze" ticker={result.ticker} />
                     </div>
                   )}
                 </div>
@@ -1668,7 +1625,7 @@ function ResultRow({
                       <div className="space-y-2">
                         <ScoreBar size="sm" label="Score" value={result.prerunResult.finalScore} max={24} color="#10b981" />
                       </div>
-                      <ScannerLink scanner="prerun" />
+                      <ScannerLink scanner="prerun" ticker={result.ticker} />
                     </div>
                   )}
                 </div>
@@ -1702,7 +1659,7 @@ function ResultRow({
                       <div className="space-y-2">
                         <ScoreBar size="sm" label="Composite" value={result.sectorResult.compositeScore} max={100} color="#8b5cf6" />
                       </div>
-                      <ScannerLink scanner="sector" />
+                      <ScannerLink scanner="sector" ticker={result.ticker} />
                     </div>
                   )}
                 </div>
@@ -1743,7 +1700,7 @@ function ResultRow({
                       {result.stratResult.shortTrigger != null && (
                         <p className="text-[10px] text-[#888]">Short trigger: ${result.stratResult.shortTrigger.toFixed(2)}</p>
                       )}
-                      <ScannerLink scanner="strat" />
+                      <ScannerLink scanner="strat" ticker={result.ticker} />
                     </div>
                   )}
                 </div>
@@ -1868,12 +1825,13 @@ function DetailRow({ label, value, highlight }: { label: string; value: string; 
 }
 
 /** "View in Scanner" link rendered inside expanded panel. */
-function ScannerLink({ scanner }: { scanner: string }) {
+function ScannerLink({ scanner, ticker }: { scanner: string; ticker?: string }) {
   const info = SCANNER_LINKS[scanner];
   if (!info) return null;
+  const href = ticker ? `${info.href}?ticker=${ticker}` : info.href;
   return (
     <Link
-      href={info.href}
+      href={href}
       className="flex items-center gap-1 mt-3 text-[10px] text-[#666] hover:text-[#ec4899] transition-colors"
     >
       <ExternalLink className="h-3 w-3" />

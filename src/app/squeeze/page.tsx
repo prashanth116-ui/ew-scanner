@@ -2,9 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef, Suspense, memo } from "react";
 import {
-  Search,
   Loader2,
-  X,
   Save,
   Trash2,
   ArrowUpDown,
@@ -15,9 +13,9 @@ import {
   ListPlus,
   Check,
   FileDown,
-  Copy,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { SQUEEZE_UNIVERSE } from "@/data/squeeze-universe";
 import {
   scoreSqueezeBatch,
@@ -57,6 +55,12 @@ import { SidebarSection } from "@/components/sidebar-section";
 import { PresetList } from "@/components/preset-list";
 import { ProgressBar } from "@/components/progress-bar";
 import { loadFromCache, saveToCache } from "@/lib/scan-cache";
+import { CopyButton } from "@/components/copy-button";
+import { TickerSearchInput } from "@/components/ticker-search-input";
+import { ScanButton } from "@/components/scan-button";
+import { StalenessLabel } from "@/components/staleness-label";
+import { HitRateDashboard } from "@/components/hit-rate-dashboard";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 300;
@@ -139,14 +143,14 @@ const ALL_TICKERS = SQUEEZE_UNIVERSE;
 
 function SqueezePage() {
   // Filters
-  const [minSiPercent, setMinSiPercent] = useState(DEFAULT_SQUEEZE_FILTERS.minSiPercent);
-  const [minDtc, setMinDtc] = useState(DEFAULT_SQUEEZE_FILTERS.minDaysToCover);
-  const [maxFloat, setMaxFloat] = useState(DEFAULT_SQUEEZE_FILTERS.maxFloat);
-  const [minVolRatio, setMinVolRatio] = useState(DEFAULT_SQUEEZE_FILTERS.minVolumeRatio);
-  const [maxMktCap, setMaxMktCap] = useState(DEFAULT_SQUEEZE_FILTERS.maxMarketCap);
-  const [maxNearLow, setMaxNearLow] = useState(DEFAULT_SQUEEZE_FILTERS.maxNearLowPct);
-  const [minScore, setMinScore] = useState(DEFAULT_SQUEEZE_FILTERS.minScore);
-  const [requireEw, setRequireEw] = useState(DEFAULT_SQUEEZE_FILTERS.requireEwAlignment);
+  const [minSiPercent, setMinSiPercent] = usePersistedFilter("ew-filter:squeeze:minSiPercent", DEFAULT_SQUEEZE_FILTERS.minSiPercent);
+  const [minDtc, setMinDtc] = usePersistedFilter("ew-filter:squeeze:minDtc", DEFAULT_SQUEEZE_FILTERS.minDaysToCover);
+  const [maxFloat, setMaxFloat] = usePersistedFilter("ew-filter:squeeze:maxFloat", DEFAULT_SQUEEZE_FILTERS.maxFloat);
+  const [minVolRatio, setMinVolRatio] = usePersistedFilter("ew-filter:squeeze:minVolRatio", DEFAULT_SQUEEZE_FILTERS.minVolumeRatio);
+  const [maxMktCap, setMaxMktCap] = usePersistedFilter("ew-filter:squeeze:maxMktCap", DEFAULT_SQUEEZE_FILTERS.maxMarketCap);
+  const [maxNearLow, setMaxNearLow] = usePersistedFilter("ew-filter:squeeze:maxNearLow", DEFAULT_SQUEEZE_FILTERS.maxNearLowPct);
+  const [minScore, setMinScore] = usePersistedFilter("ew-filter:squeeze:minScore", DEFAULT_SQUEEZE_FILTERS.minScore);
+  const [requireEw, setRequireEw] = usePersistedFilter("ew-filter:squeeze:requireEw", DEFAULT_SQUEEZE_FILTERS.requireEwAlignment);
 
   const debouncedSi = useDebounce(minSiPercent, 300);
   const debouncedDtc = useDebounce(minDtc, 300);
@@ -175,8 +179,8 @@ function SqueezePage() {
   const [enrichProgress, setEnrichProgress] = useState("");
 
   // Sort
-  const [sortKey, setSortKey] = useState<SortKey>("score");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortKey, setSortKey] = usePersistedFilter<SortKey>("ew-filter:squeeze:sortKey", "score");
+  const [sortDir, setSortDir] = usePersistedFilter<SortDir>("ew-filter:squeeze:sortDir", "desc");
 
   // Expand
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
@@ -193,8 +197,9 @@ function SqueezePage() {
   const [squeezeWatchlists, setSqueezeWatchlists] = useState<SqueezeWatchlist[]>([]);
   const [addedTicker, setAddedTicker] = useState<string | null>(null);
 
-  // Export / copy watchlist
-  const [copiedToast, setCopiedToast] = useState(false);
+  // Deep link support
+  const searchParams = useSearchParams();
+  const [autoLookup, setAutoLookup] = useState<string | null>(null);
 
   // Load saved scans, watchlists, and cached results on mount
   useEffect(() => {
@@ -213,6 +218,15 @@ function SqueezePage() {
       scanAbort.current?.abort();
     };
   }, []);
+
+  // Deep link: read ticker from URL params on mount
+  useEffect(() => {
+    const ticker = searchParams.get("ticker");
+    if (ticker) {
+      setTickerSearch(ticker.toUpperCase());
+      setAutoLookup(ticker.toUpperCase());
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build filters object
   const filters: SqueezeFilters = useMemo(
@@ -428,6 +442,15 @@ function SqueezePage() {
     setTickerSearching(false);
   }, [tickerSearch, rawResults]);
 
+  // Auto-lookup effect (deep link)
+  useEffect(() => {
+    if (autoLookup && tickerSearch === autoLookup) {
+      lookupTicker();
+      setAutoLookup(null);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [autoLookup, tickerSearch, lookupTicker]);
+
   // ── Enrich with EW ──
   const enrichWithEW = useCallback(async () => {
     const top = sorted.slice(0, 20);
@@ -591,25 +614,17 @@ function SqueezePage() {
   const toggleSort = useCallback(
     (key: SortKey) => {
       if (sortKey === key) {
-        setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+        setSortDir(sortDir === "desc" ? "asc" : "desc");
       } else {
         setSortKey(key);
         setSortDir("desc");
       }
     },
-    [sortKey]
+    [sortKey, sortDir]
   );
 
   const handleExport = useCallback(() => {
     if (sorted.length > 0) exportSqueezeToExcel(sorted);
-  }, [sorted]);
-
-  const copyWatchlist = useCallback(() => {
-    const symbols = sorted.map((r) => r.ticker).join(", ");
-    navigator.clipboard.writeText(symbols).then(() => {
-      setCopiedToast(true);
-      setTimeout(() => setCopiedToast(false), 2000);
-    }).catch(() => {});
   }, [sorted]);
 
   return (
@@ -760,6 +775,7 @@ function SqueezePage() {
               </label>
               <button
                 onClick={() => {
+                  clearPersistedFilters("ew-filter:squeeze");
                   setMinSiPercent(DEFAULT_SQUEEZE_FILTERS.minSiPercent);
                   setMinDtc(DEFAULT_SQUEEZE_FILTERS.minDaysToCover);
                   setMaxFloat(DEFAULT_SQUEEZE_FILTERS.maxFloat);
@@ -777,28 +793,10 @@ function SqueezePage() {
         </SidebarSection>
 
         {/* Scan / Cancel */}
-        <div className="flex gap-2">
-          <button
-            onClick={runScan}
-            disabled={scanning}
-            className="flex-1 flex items-center justify-center gap-2 rounded-md bg-[#5ba3e6] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#4a8fd4] disabled:opacity-50 transition-colors"
-          >
-            {scanning ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-            {scanning ? "Scanning..." : "Scan"}
-          </button>
-          {scanning && (
-            <button
-              onClick={cancelScan}
-              className="rounded-md border border-[#2a2a2a] px-3 py-2.5 text-sm text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+        <ScanButton scanning={scanning} onScan={runScan} onCancel={cancelScan} />
+        {!scanning && rawResults.length > 0 && (
+          <StalenessLabel cacheKey="ew-squeeze-scan-v1" ttlMs={30 * 60 * 1000} onRefresh={runScan} />
+        )}
 
         {/* Saved Scans */}
         <SidebarSection
@@ -857,34 +855,27 @@ function SqueezePage() {
               ))}
             </div>
         </SidebarSection>
+
+        {/* Hit Rates */}
+        <SidebarSection title="Hit Rates" sectionKey="hitrates" collapsed={collapsed.has("hitrates")} onToggle={toggleSection}>
+          <HitRateDashboard scanner="squeeze" />
+        </SidebarSection>
       </SidebarShell>
 
       {/* ── Main Content ── */}
       <main className="flex-1 min-w-0">
         {/* Ticker Search */}
         <div className="flex items-center gap-2 mb-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#555]" />
-            <input
+          <div className="flex-1">
+            <TickerSearchInput
               value={tickerSearch}
-              onChange={(e) => setTickerSearch(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === "Enter" && lookupTicker()}
+              onChange={setTickerSearch}
+              onSearch={lookupTicker}
+              searching={tickerSearching}
+              error={tickerError}
               placeholder="Search any ticker (e.g. GME, CVNA, AMC)..."
-              className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] py-2.5 pl-10 pr-3 text-sm text-white placeholder-[#555] transition-colors focus:border-[#5ba3e6] focus:outline-none"
             />
           </div>
-          <button
-            onClick={lookupTicker}
-            disabled={tickerSearching || !tickerSearch.trim()}
-            className="flex items-center gap-1.5 rounded-lg bg-[#5ba3e6] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#4a8fd4] disabled:opacity-50"
-          >
-            {tickerSearching ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-            Lookup
-          </button>
           <Link
             href="/squeeze/watchlist"
             className="flex items-center gap-1 rounded-lg border border-[#2a2a2a] px-3 py-2.5 text-sm text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors shrink-0"
@@ -900,19 +891,6 @@ function SqueezePage() {
             <span className="hidden md:inline">Guide</span>
           </Link>
         </div>
-
-        {/* Ticker search error */}
-        {tickerError && (
-          <div className="flex items-center justify-between rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 mb-4">
-            <p className="text-sm text-red-400">{tickerError}</p>
-            <button
-              onClick={() => setTickerError(null)}
-              className="shrink-0 rounded p-1 text-red-400/50 hover:text-red-400"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
 
         {/* Progress */}
         {scanning && (
@@ -995,23 +973,7 @@ function SqueezePage() {
                 <FileDown className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Export</span>
               </button>
-              <button
-                onClick={copyWatchlist}
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-[#a0a0a0] hover:text-white border border-[#2a2a2a] hover:border-[#444] transition-colors"
-                title="Copy all visible tickers to clipboard"
-              >
-                {copiedToast ? (
-                  <>
-                    <Check className="h-3 w-3 text-green-400" />
-                    <span className="text-green-400">Copied {sorted.length}</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3 w-3" />
-                    <span className="hidden sm:inline">Copy Watchlist</span>
-                  </>
-                )}
-              </button>
+              <CopyButton tickers={sorted.map((r) => r.ticker)} />
             </div>
           </div>
         )}

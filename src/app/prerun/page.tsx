@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef, memo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, memo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Search,
   Loader2,
@@ -15,7 +16,6 @@ import {
   Check,
   FileDown,
   Sparkles,
-  Copy,
   Layers,
 } from "lucide-react";
 import Link from "next/link";
@@ -61,6 +61,13 @@ import { SidebarSection } from "@/components/sidebar-section";
 import { PresetList } from "@/components/preset-list";
 import { ProgressBar } from "@/components/progress-bar";
 import { loadFromCache, saveToCache } from "@/lib/scan-cache";
+import { CopyButton } from "@/components/copy-button";
+import { TickerSearchInput } from "@/components/ticker-search-input";
+import { ScanButton } from "@/components/scan-button";
+import { StalenessLabel } from "@/components/staleness-label";
+import { HitRateDashboard } from "@/components/hit-rate-dashboard";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { recordSignals, type ClientSignal } from "@/lib/signal-client";
 
 const BATCH_SIZE = 25;
 const BATCH_DELAY = 500;
@@ -91,28 +98,32 @@ const EARNINGS_OPTIONS = [
 export default function PreRunPageWrapper() {
   return (
     <>
-      <PreRunPage />
+      <Suspense fallback={null}>
+        <PreRunPage />
+      </Suspense>
       <ScannerCTA />
     </>
   );
 }
 
 function PreRunPage() {
+  const searchParams = useSearchParams();
+
   // Filters
-  const [minPctFromAth, setMinPctFromAth] = useState(DEFAULT_PRERUN_FILTERS.minPctFromAth);
-  const [minShortFloat, setMinShortFloat] = useState(DEFAULT_PRERUN_FILTERS.minShortFloat);
-  const [maxMarketCap, setMaxMarketCap] = useState(DEFAULT_PRERUN_FILTERS.maxMarketCap);
-  const [minScore, setMinScore] = useState(DEFAULT_PRERUN_FILTERS.minScore);
-  const [sectorBucket, setSectorBucket] = useState(DEFAULT_PRERUN_FILTERS.sectorBucket);
-  const [earningsWithin, setEarningsWithin] = useState(DEFAULT_PRERUN_FILTERS.earningsWithin);
-  const [verdictFilter, setVerdictFilter] = useState(DEFAULT_PRERUN_FILTERS.verdict);
-  const [emaTimeframe, setEmaTimeframe] = useState<EmaTimeframe>(DEFAULT_PRERUN_FILTERS.emaTimeframe);
+  const [minPctFromAth, setMinPctFromAth] = usePersistedFilter("ew-filter:prerun:minPctFromAth", DEFAULT_PRERUN_FILTERS.minPctFromAth);
+  const [minShortFloat, setMinShortFloat] = usePersistedFilter("ew-filter:prerun:minShortFloat", DEFAULT_PRERUN_FILTERS.minShortFloat);
+  const [maxMarketCap, setMaxMarketCap] = usePersistedFilter("ew-filter:prerun:maxMarketCap", DEFAULT_PRERUN_FILTERS.maxMarketCap);
+  const [minScore, setMinScore] = usePersistedFilter("ew-filter:prerun:minScore", DEFAULT_PRERUN_FILTERS.minScore);
+  const [sectorBucket, setSectorBucket] = usePersistedFilter("ew-filter:prerun:sectorBucket", DEFAULT_PRERUN_FILTERS.sectorBucket);
+  const [earningsWithin, setEarningsWithin] = usePersistedFilter("ew-filter:prerun:earningsWithin", DEFAULT_PRERUN_FILTERS.earningsWithin);
+  const [verdictFilter, setVerdictFilter] = usePersistedFilter("ew-filter:prerun:verdictFilter", DEFAULT_PRERUN_FILTERS.verdict);
+  const [emaTimeframe, setEmaTimeframe] = usePersistedFilter<EmaTimeframe>("ew-filter:prerun:emaTimeframe", DEFAULT_PRERUN_FILTERS.emaTimeframe);
 
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
 
   // Gate 3 skip (for Pullback Buy — shows stocks below SMA20)
-  const [skipGate3, setSkipGate3] = useState(false);
+  const [skipGate3, setSkipGate3] = usePersistedFilter("ew-filter:prerun:skipGate3", false);
 
   // Multi-TF M2 state
   const [multiTFResults, setMultiTFResults] = useState<Map<string, MultiTFM2Result>>(new Map());
@@ -139,8 +150,8 @@ function PreRunPage() {
   const [aiResults, setAiResults] = useState<Map<string, { suggestedScore: number; reasoning: string; confidence: string }>>(new Map());
 
   // Sort
-  const [sortKey, setSortKey] = useState<SortKey>("score");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortKey, setSortKey] = usePersistedFilter<SortKey>("ew-filter:prerun:sortKey", "score");
+  const [sortDir, setSortDir] = usePersistedFilter<SortDir>("ew-filter:prerun:sortDir", "desc");
 
   // Sidebar collapse
   const [sidebarOpen, setSidebarOpen] = useSidebarState("prerun");
@@ -156,9 +167,6 @@ function PreRunPage() {
 
   // Timer ref for watchlist add feedback
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Copy watchlist
-  const [copiedToast, setCopiedToast] = useState(false);
 
   // Seed watchlist on mount + load cache
   useEffect(() => {
@@ -185,6 +193,19 @@ function PreRunPage() {
       phase2Abort.current?.abort();
     };
   }, []);
+
+  // Deep link: auto-lookup ticker from URL param
+  useEffect(() => {
+    const ticker = searchParams.get("ticker");
+    if (ticker) {
+      setTickerSearch(ticker.toUpperCase());
+      // Delay to let state settle before lookup
+      const timer = setTimeout(() => {
+        lookupTicker();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build filters object
   const filters: PreRunFilters = useMemo(
@@ -432,6 +453,19 @@ function PreRunPage() {
     setScanning(false);
     setProgress("");
 
+    // After scan results are finalized, record signals
+    const signals: ClientSignal[] = results
+      .filter((r) => r.scores.finalScore >= 4)
+      .map((r) => ({
+        scanner: "prerun" as const,
+        ticker: r.data.ticker,
+        signal_date: new Date().toISOString().slice(0, 10),
+        price_at_signal: r.data.currentPrice ?? 0,
+        score: r.scores.finalScore,
+        signal_strength: r.verdict,
+      }));
+    recordSignals(signals);
+
     // Phase 2: Multi-TF M2 scan for candidates that pass filters
     if (showMultiTF && !signal.aborted && results.length > 0) {
       // Filter candidates using current criteria filters
@@ -601,14 +635,6 @@ function PreRunPage() {
     exportPreRunToExcel(sorted);
   }, [sorted]);
 
-  const copyWatchlist = useCallback(() => {
-    const symbols = sorted.map((r) => r.data.ticker).join(", ");
-    navigator.clipboard.writeText(symbols).then(() => {
-      setCopiedToast(true);
-      setTimeout(() => setCopiedToast(false), 2000);
-    }).catch(() => {});
-  }, [sorted]);
-
   const sectorBuckets = useMemo(() => getSectorBuckets(), []);
 
   return (
@@ -772,6 +798,7 @@ function PreRunPage() {
               </div>
               <button
                 onClick={() => {
+                  clearPersistedFilters("ew-filter:prerun");
                   setMinPctFromAth(DEFAULT_PRERUN_FILTERS.minPctFromAth);
                   setMinShortFloat(DEFAULT_PRERUN_FILTERS.minShortFloat);
                   setMaxMarketCap(DEFAULT_PRERUN_FILTERS.maxMarketCap);
@@ -807,57 +834,21 @@ function PreRunPage() {
         )}
 
         {/* Scan / Cancel */}
-        <div className="flex gap-2">
-          <button
-            onClick={runScan}
-            disabled={scanning}
-            className="flex-1 flex items-center justify-center gap-2 rounded-md bg-[#5ba3e6] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#4a8fd4] disabled:opacity-50 transition-colors"
-          >
-            {scanning ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-            {scanning ? "Scanning..." : "Scan"}
-          </button>
-          {scanning && (
-            <button
-              onClick={cancelScan}
-              className="rounded-md border border-[#2a2a2a] px-3 py-2.5 text-sm text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+        <ScanButton scanning={scanning} onScan={runScan} onCancel={cancelScan} />
+        {!scanning && rawResults.length > 0 && (
+          <StalenessLabel cacheKey="ew-prerun-scan-v1" ttlMs={30 * 60 * 1000} onRefresh={runScan} />
+        )}
 
         {/* Ticker Search */}
         <SidebarSection title="Add Ticker" sectionKey="ticker" collapsed={collapsed.has("ticker")} onToggle={toggleSection}>
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={tickerSearch}
-                  onChange={(e) => setTickerSearch(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === "Enter" && lookupTicker()}
-                  placeholder="e.g. SMCI, WOLF..."
-                  className="flex-1 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white placeholder-[#555] focus:border-[#5ba3e6] focus:outline-none"
-                />
-                <button
-                  onClick={lookupTicker}
-                  disabled={tickerSearching || !tickerSearch.trim()}
-                  className="rounded-md bg-[#5ba3e6] px-3 py-1.5 text-sm text-white hover:bg-[#4a8fd4] disabled:opacity-50 transition-colors"
-                >
-                  {tickerSearching ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Search className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-              {tickerError && (
-                <p className="text-xs text-red-400">{tickerError}</p>
-              )}
-            </div>
+            <TickerSearchInput
+              value={tickerSearch}
+              onChange={setTickerSearch}
+              onSearch={lookupTicker}
+              searching={tickerSearching}
+              error={tickerError}
+              placeholder="e.g. AAPL, TSLA..."
+            />
         </SidebarSection>
 
         {/* Saved Scans */}
@@ -916,6 +907,10 @@ function PreRunPage() {
                 </div>
               ))}
             </div>
+        </SidebarSection>
+
+        <SidebarSection title="Hit Rates" sectionKey="hitrates" collapsed={collapsed.has("hitrates")} onToggle={toggleSection}>
+          <HitRateDashboard scanner="prerun" />
         </SidebarSection>
       </SidebarShell>
 
@@ -1030,23 +1025,7 @@ function PreRunPage() {
                 <Layers className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Multi-TF</span>
               </button>
-              <button
-                onClick={copyWatchlist}
-                className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
-                title="Copy all visible tickers to clipboard"
-              >
-                {copiedToast ? (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-green-400" />
-                    <span className="text-green-400 hidden sm:inline">Copied</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Copy Tickers</span>
-                  </>
-                )}
-              </button>
+              <CopyButton tickers={sorted.map((r) => r.data.ticker)} />
             </div>
           </div>
         )}

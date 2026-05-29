@@ -42,3 +42,16 @@ export function clearCache(key: string): void {
     // ignore
   }
 }
+
+/** Returns ms since cache was saved, or null if no cache exists. */
+export function getCacheAge(key: string): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as CacheEntry<unknown>;
+    return Date.now() - entry.savedAt;
+  } catch {
+    return null;
+  }
+}

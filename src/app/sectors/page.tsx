@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Clock, FileDown, Copy, Check, Search, X, ExternalLink, Bell, BellOff, Zap } from "lucide-react";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Clock, FileDown, Search, X, ExternalLink, Bell, BellOff, Zap } from "lucide-react";
+import { CopyButton } from "@/components/copy-button";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
 import Link from "next/link";
 import type {
   SectorRotationResult,
@@ -236,23 +238,22 @@ type PhaseFilter = "all" | "basing" | "turnaround" | "trending" | "exhausting";
 const VERDICT_RANK: Record<string, number> = { "PRIORITY BUY": 0, KEEP: 1, WATCH: 2, DISCARD: 3, "": 4 };
 
 function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { stocks: StockInSector[]; sectorName?: string; hasRotationData?: boolean }) {
-  const [sortKey, setSortKey] = useState<StockSortKey>("rs20d");
-  const [sortAsc, setSortAsc] = useState(false);
-  const [sma50Filter, setSma50Filter] = useState<SmaFilter>("all");
-  const [volFilter, setVolFilter] = useState<VolFilter>("all");
-  const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
-  const [rsAccelFilter, setRsAccelFilter] = useState<RsAccelFilter>("all");
-  const [sectorRSFilter, setSectorRSFilter] = useState<RsAccelFilter>("all");
-  const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("all");
-  const [qualityFilter, setQualityFilter] = useState<"all" | "improving" | "high" | "fading">("all");
-  const [tableCopied, setTableCopied] = useState(false);
+  const [sortKey, setSortKey] = usePersistedFilter<StockSortKey>("ew-filter:sectors:sortKey", "rs20d");
+  const [sortAsc, setSortAsc] = usePersistedFilter<boolean>("ew-filter:sectors:sortAsc", false);
+  const [sma50Filter, setSma50Filter] = usePersistedFilter<SmaFilter>("ew-filter:sectors:sma50Filter", "all");
+  const [volFilter, setVolFilter] = usePersistedFilter<VolFilter>("ew-filter:sectors:volFilter", "all");
+  const [verdictFilter, setVerdictFilter] = usePersistedFilter<VerdictFilter>("ew-filter:sectors:verdictFilter", "all");
+  const [rsAccelFilter, setRsAccelFilter] = usePersistedFilter<RsAccelFilter>("ew-filter:sectors:rsAccelFilter", "all");
+  const [sectorRSFilter, setSectorRSFilter] = usePersistedFilter<RsAccelFilter>("ew-filter:sectors:sectorRSFilter", "all");
+  const [phaseFilter, setPhaseFilter] = usePersistedFilter<PhaseFilter>("ew-filter:sectors:phaseFilter", "all");
+  const [qualityFilter, setQualityFilter] = usePersistedFilter<"all" | "improving" | "high" | "fading">("ew-filter:sectors:qualityFilter", "all");
 
   const handleSort = (key: StockSortKey) => {
     if (sortKey === key) setSortAsc(!sortAsc);
     else { setSortKey(key); setSortAsc(key === "ticker"); }
   };
 
-  const resetFilters = () => { setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setSectorRSFilter("all"); setPhaseFilter("all"); setQualityFilter("all"); };
+  const resetFilters = () => { clearPersistedFilters("ew-filter:sectors"); setSma50Filter("all"); setVolFilter("all"); setVerdictFilter("all"); setRsAccelFilter("all"); setSectorRSFilter("all"); setPhaseFilter("all"); setQualityFilter("all"); };
   const hasFilters = sma50Filter !== "all" || volFilter !== "all" || verdictFilter !== "all" || rsAccelFilter !== "all" || sectorRSFilter !== "all" || phaseFilter !== "all" || qualityFilter !== "all";
 
   const earlyStrengthActive = phaseFilter === "turnaround";
@@ -299,15 +300,6 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
   }, [filtered, sortKey, sortAsc]);
 
   const sortArrow = (key: StockSortKey) => sortKey === key ? (sortAsc ? " \u25B2" : " \u25BC") : "";
-
-  // #8: Copy filtered tickers
-  const copyTickers = () => {
-    const tickers = sorted.map((s) => s.ticker).join(", ");
-    navigator.clipboard.writeText(tickers).then(() => {
-      setTableCopied(true);
-      setTimeout(() => setTableCopied(false), 2000);
-    }).catch(() => {});
-  };
 
   // #8: Export to CSV
   const csvEscape = (val: string) => {
@@ -437,9 +429,7 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
         )}
         {/* #8: Copy + Export */}
         <div className="flex items-center gap-1 ml-auto">
-          <button onClick={copyTickers} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" title="Copy filtered tickers">
-            {tableCopied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
-          </button>
+          <CopyButton tickers={sorted.map((s) => s.ticker)} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" />
           <button onClick={exportCsv} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" title="Export to CSV">
             <FileDown className="h-3 w-3" />
           </button>
@@ -1356,7 +1346,6 @@ export default function SectorRotationPage() {
   const [sortMode, setSortMode] = useState<SortMode>("score");
   const [compareDate, setCompareDate] = useState<string | null>(null);
   const [history, setHistory] = useState<DailySnapshot[]>([]);
-  const [copiedToast, setCopiedToast] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(0);
   const [rotationSectorRS, setRotationSectorRS] = useState<Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>>(new Map());
 
@@ -1503,11 +1492,7 @@ export default function SectorRotationPage() {
 
   const handleExport = useCallback(() => { if (data) exportSectorsToExcel(data); }, [data]);
 
-  const copyWatchlist = useCallback(() => {
-    if (!data) return;
-    const tickers = data.topStocksToWatch.flatMap((g) => g.stocks.map((s) => s.ticker)).join(", ");
-    navigator.clipboard.writeText(tickers).then(() => { setCopiedToast(true); setTimeout(() => setCopiedToast(false), 2000); }).catch(() => {});
-  }, [data]);
+  const watchlistTickers = useMemo(() => data?.topStocksToWatch.flatMap((g) => g.stocks.map((s) => s.ticker)) ?? [], [data]);
 
   const [loadingTimeout, setLoadingTimeout] = useState(false);
   useEffect(() => {
@@ -1582,9 +1567,7 @@ export default function SectorRotationPage() {
           <button onClick={handleExport} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white">
             <FileDown className="h-4 w-4" /><span className="hidden sm:inline">Export</span>
           </button>
-          <button onClick={copyWatchlist} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" title="Copy all top stock tickers to clipboard">
-            {copiedToast ? <><Check className="h-4 w-4 text-green-400" /><span className="text-green-400 hidden sm:inline">Copied</span></> : <><Copy className="h-4 w-4" /><span className="hidden sm:inline">Copy Tickers</span></>}
-          </button>
+          <CopyButton tickers={watchlistTickers} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" />
           <button onClick={() => fetchData(true)} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </button>

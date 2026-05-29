@@ -4,7 +4,7 @@
  */
 
 export interface ClientSignal {
-  scanner: "ew" | "squeeze" | "confluence" | "prerun";
+  scanner: "ew" | "squeeze" | "confluence" | "prerun" | "strat";
   ticker: string;
   signal_date: string; // YYYY-MM-DD
   price_at_signal: number;

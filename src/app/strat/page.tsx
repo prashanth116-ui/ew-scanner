@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef, memo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, memo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Search,
   Loader2,
@@ -11,8 +12,6 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronRight,
-  Copy,
-  Check,
   List,
 } from "lucide-react";
 import type {
@@ -51,6 +50,11 @@ import { PresetList } from "@/components/preset-list";
 import { ProgressBar } from "@/components/progress-bar";
 import { ScoreBar } from "@/components/score-bar";
 import { loadFromCache, saveToCache } from "@/lib/scan-cache";
+import { CopyButton } from "@/components/copy-button";
+import { TickerSearchInput } from "@/components/ticker-search-input";
+import { StalenessLabel } from "@/components/staleness-label";
+import { HitRateDashboard } from "@/components/hit-rate-dashboard";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
 
 const ACCENT = "#f97316"; // orange
 const BATCH_SIZE = 10;
@@ -104,22 +108,24 @@ function tfcDotColor(dir: string): string {
 export default function StratPageWrapper() {
   return (
     <>
-      <StratPage />
+      <Suspense fallback={null}>
+        <StratPage />
+      </Suspense>
       <ScannerCTA />
     </>
   );
 }
 
 function StratPage() {
-  // Filters
-  const [sectorBucket, setSectorBucket] = useState(DEFAULT_STRAT_FILTERS.sectorBucket);
-  const [tfcAlignment, setTfcAlignment] = useState(DEFAULT_STRAT_FILTERS.tfcAlignment);
-  const [activeCombo, setActiveCombo] = useState(DEFAULT_STRAT_FILTERS.activeCombo);
-  const [comboTimeframe, setComboTimeframe] = useState(DEFAULT_STRAT_FILTERS.comboTimeframe);
-  const [barTypeFilter, setBarTypeFilter] = useState(DEFAULT_STRAT_FILTERS.barTypeFilter);
-  const [minScore, setMinScore] = useState(DEFAULT_STRAT_FILTERS.minScore);
-  const [signalFilter, setSignalFilter] = useState(DEFAULT_STRAT_FILTERS.signalFilter);
-  const [hasBroadening, setHasBroadening] = useState(DEFAULT_STRAT_FILTERS.hasBroadening);
+  // Filters (persisted to localStorage)
+  const [sectorBucket, setSectorBucket] = usePersistedFilter("ew-filter:strat:sectorBucket", DEFAULT_STRAT_FILTERS.sectorBucket);
+  const [tfcAlignment, setTfcAlignment] = usePersistedFilter("ew-filter:strat:tfcAlignment", DEFAULT_STRAT_FILTERS.tfcAlignment);
+  const [activeCombo, setActiveCombo] = usePersistedFilter("ew-filter:strat:activeCombo", DEFAULT_STRAT_FILTERS.activeCombo);
+  const [comboTimeframe, setComboTimeframe] = usePersistedFilter("ew-filter:strat:comboTimeframe", DEFAULT_STRAT_FILTERS.comboTimeframe);
+  const [barTypeFilter, setBarTypeFilter] = usePersistedFilter("ew-filter:strat:barTypeFilter", DEFAULT_STRAT_FILTERS.barTypeFilter);
+  const [minScore, setMinScore] = usePersistedFilter("ew-filter:strat:minScore", DEFAULT_STRAT_FILTERS.minScore);
+  const [signalFilter, setSignalFilter] = usePersistedFilter("ew-filter:strat:signalFilter", DEFAULT_STRAT_FILTERS.signalFilter);
+  const [hasBroadening, setHasBroadening] = usePersistedFilter("ew-filter:strat:hasBroadening", DEFAULT_STRAT_FILTERS.hasBroadening);
 
   // Scan state
   const [scanning, setScanning] = useState(false);
@@ -135,9 +141,9 @@ function StratPage() {
   const [tickerError, setTickerError] = useState<string | null>(null);
   const [manualTickers, setManualTickers] = useState<Set<string>>(new Set());
 
-  // Sort
-  const [sortKey, setSortKey] = useState<SortKey>("score");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  // Sort (persisted)
+  const [sortKey, setSortKey] = usePersistedFilter<SortKey>("ew-filter:strat:sortKey", "score");
+  const [sortDir, setSortDir] = usePersistedFilter<SortDir>("ew-filter:strat:sortDir", "desc");
 
   // Sidebar collapse
   const [sidebarOpen, setSidebarOpen] = useSidebarState("strat");
@@ -149,12 +155,6 @@ function StratPage() {
 
   // Expanded rows
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
-
-  // Copy tickers
-  const [copiedToast, setCopiedToast] = useState(false);
-
-  // Cache age
-  const [cacheAge, setCacheAge] = useState<number | null>(null);
 
   // Watchlist
   const [watchlists, setWatchlists] = useState<StratWatchlist[]>([]);
@@ -168,14 +168,6 @@ function StratPage() {
     const cached = loadFromCache<StratResult[]>(CACHE_KEY, CACHE_TTL);
     if (cached && cached.length > 0) {
       setRawResults(cached);
-      // Read cache timestamp for age display
-      try {
-        const raw = localStorage.getItem(CACHE_KEY);
-        if (raw) {
-          const entry = JSON.parse(raw) as { savedAt: number };
-          setCacheAge(entry.savedAt);
-        }
-      } catch { /* ignore */ }
     }
   }, []);
 
@@ -363,7 +355,6 @@ function StratPage() {
     ];
     setRawResults(finalResults);
     saveToCache(CACHE_KEY, finalResults);
-    setCacheAge(Date.now());
     setScanning(false);
     setProgress("");
   }, [sectorBucket, rawResults]);
@@ -479,6 +470,7 @@ function StratPage() {
   }, []);
 
   const resetFilters = useCallback(() => {
+    clearPersistedFilters("ew-filter:strat");
     setSectorBucket(DEFAULT_STRAT_FILTERS.sectorBucket);
     setTfcAlignment(DEFAULT_STRAT_FILTERS.tfcAlignment);
     setActiveCombo(DEFAULT_STRAT_FILTERS.activeCombo);
@@ -489,13 +481,6 @@ function StratPage() {
     setHasBroadening(DEFAULT_STRAT_FILTERS.hasBroadening);
   }, []);
 
-  const copyTickers = useCallback(() => {
-    const symbols = sorted.map((r) => r.ticker).join(", ");
-    navigator.clipboard.writeText(symbols).then(() => {
-      setCopiedToast(true);
-      setTimeout(() => setCopiedToast(false), 2000);
-    }).catch(() => {});
-  }, [sorted]);
 
   const handleAddToWatchlist = useCallback((watchlistId: string, result: StratResult) => {
     const ok = addToStratWatchlist(watchlistId, result);
@@ -523,22 +508,17 @@ function StratPage() {
   const sectorBuckets = useMemo(() => getSectorBuckets(), []);
   const sectorTickerCount = useMemo(() => getTickersForSector(sectorBucket).length, [sectorBucket]);
 
-  // Format cache age for display (updates every 60s)
-  const [cacheAgeLabel, setCacheAgeLabel] = useState<string | null>(null);
+  // Deep link support
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!cacheAge) { setCacheAgeLabel(null); return; }
-    const compute = () => {
-      const mins = Math.floor((Date.now() - cacheAge) / 60000);
-      if (mins < 1) return "just now";
-      if (mins < 60) return `${mins}m ago`;
-      const hrs = Math.floor(mins / 60);
-      return `${hrs}h ${mins % 60}m ago`;
-    };
-    setCacheAgeLabel(compute());
-    const interval = setInterval(() => setCacheAgeLabel(compute()), 60000);
-    return () => clearInterval(interval);
-  }, [cacheAge]);
+    const ticker = searchParams.get("ticker");
+    if (ticker) {
+      setTickerSearch(ticker.toUpperCase());
+      const timer = setTimeout(() => lookupTicker(), 500);
+      return () => clearTimeout(timer);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1800px] mx-auto">
@@ -741,42 +721,24 @@ function StratPage() {
               </button>
             )}
           </div>
-          {cacheAgeLabel && !scanning && (
-            <p className="text-[10px] text-[#666] text-center">
-              Last scanned {cacheAgeLabel}
-            </p>
+          {!scanning && rawResults.length > 0 && (
+            <div className="text-center">
+              <StalenessLabel cacheKey={CACHE_KEY} ttlMs={CACHE_TTL} onRefresh={() => runScan(false)} />
+            </div>
           )}
         </div>
 
         {/* Ticker Search */}
         <SidebarSection title="Add Ticker" sectionKey="ticker" collapsed={collapsed.has("ticker")} onToggle={toggleSection}>
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={tickerSearch}
-                onChange={(e) => setTickerSearch(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === "Enter" && lookupTicker()}
-                placeholder="e.g. AAPL, TSLA..."
-                className="flex-1 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white placeholder-[#555] focus:border-[#f97316] focus:outline-none"
-              />
-              <button
-                onClick={lookupTicker}
-                disabled={tickerSearching || !tickerSearch.trim()}
-                className="rounded-md px-3 py-1.5 text-sm text-white hover:opacity-90 disabled:opacity-50 transition-colors"
-                style={{ backgroundColor: ACCENT }}
-              >
-                {tickerSearching ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-            {tickerError && (
-              <p className="text-xs text-red-400">{tickerError}</p>
-            )}
-          </div>
+          <TickerSearchInput
+            value={tickerSearch}
+            onChange={setTickerSearch}
+            onSearch={lookupTicker}
+            searching={tickerSearching}
+            error={tickerError}
+            placeholder="e.g. AAPL, TSLA..."
+            accentColor={ACCENT}
+          />
         </SidebarSection>
 
         {/* Saved Scans */}
@@ -831,6 +793,11 @@ function StratPage() {
               </div>
             ))}
           </div>
+        </SidebarSection>
+
+        {/* Hit Rates */}
+        <SidebarSection title="Hit Rates" sectionKey="hitrates" collapsed={collapsed.has("hitrates")} onToggle={toggleSection}>
+          <HitRateDashboard scanner="strat" />
         </SidebarSection>
       </SidebarShell>
 
@@ -943,23 +910,7 @@ function StratPage() {
                 </button>
               ))}
             </div>
-            <button
-              onClick={copyTickers}
-              className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
-              title="Copy all visible tickers to clipboard"
-            >
-              {copiedToast ? (
-                <>
-                  <Check className="h-3.5 w-3.5 text-green-400" />
-                  <span className="text-green-400 hidden sm:inline">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Copy Tickers</span>
-                </>
-              )}
-            </button>
+            <CopyButton tickers={sorted.map((r) => r.ticker)} />
           </div>
         )}
 

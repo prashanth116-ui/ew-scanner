@@ -60,6 +60,9 @@ import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 import { recordSignals, fetchClientHitRates, type HitRateEntry } from "@/lib/signal-client";
 import { checkTargetResistance } from "@/lib/ew-resistance";
 import { ProgressBar } from "@/components/progress-bar";
+import { loadFromCache, saveToCache } from "@/lib/scan-cache";
+import { StalenessLabel } from "@/components/staleness-label";
+import { HitRateDashboard } from "@/components/hit-rate-dashboard";
 
 const HTF_OPTIONS = ["Monthly", "Weekly"] as const;
 const LTF_OPTIONS = ["Daily", "4H", "1H"] as const;
@@ -302,10 +305,15 @@ function EWScannerPage() {
   const [tickerError, setTickerError] = useState<string | null>(null);
   const tickerAbort = useRef<AbortController | null>(null);
 
-  // Load saved scans and custom universes on mount
+  // Load saved scans, custom universes, and cached results on mount
   useEffect(() => {
     setSavedScans(loadScans());
     setCustomUniverses(loadCustomUniverses());
+    // Load cached results on mount
+    const cached = loadFromCache<EnhancedScoredCandidate[]>("ew-scan-v1", 30 * 60 * 1000);
+    if (cached && cached.length > 0) {
+      setResults(cached);
+    }
   }, []);
 
   // Load scan from URL param (from history page)
@@ -324,6 +332,16 @@ function EWScannerPage() {
   useEffect(() => {
     fetchClientHitRates("ew", mode).then(setHitRates).catch(() => {});
   }, [mode]);
+
+  // Deep link support: auto-search when ?ticker= param is present
+  useEffect(() => {
+    const ticker = searchParams.get("ticker");
+    if (ticker) {
+      setTickerSearch(ticker.toUpperCase());
+      const timer = setTimeout(() => runTickerSearch(), 500);
+      return () => clearTimeout(timer);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update slider defaults when mode changes
   const handleModeChange = useCallback((newMode: ScannerMode) => {
@@ -637,7 +655,7 @@ function EWScannerPage() {
     }
 
     setProgress("Analyzing & scoring...");
-    const scored = scoreBatchEnhanced(quotes, {
+    let scored = scoreBatchEnhanced(quotes, {
       minDecline,
       minDuration: minMonths,
       minRecovery,
@@ -698,10 +716,13 @@ function EWScannerPage() {
         })
       );
       // Update results immutably to trigger re-render
-      setResults(scored.map((s) => {
+      const mtfScored = scored.map((s) => {
         const u = mtfUpdates.get(s.ticker);
         return u ? { ...s, ...u } : s;
-      }));
+      });
+      setResults(mtfScored);
+      // Re-assign for caching below (scored is const, so use Object.assign pattern)
+      scored = mtfScored;
     }
 
     // Label top candidates only (token gate: top N above min score)
@@ -798,6 +819,9 @@ function EWScannerPage() {
         recordSignals(signalsForMode);
       }
     }
+
+    // Cache results for quick reload
+    saveToCache("ew-scan-v1", scored);
 
     setProgress("");
     setScanning(false);
@@ -1348,6 +1372,10 @@ function EWScannerPage() {
             <p className="text-center text-xs text-[#a0a0a0]">{progress}</p>
           ) : null}
 
+          {!scanning && results.length > 0 && (
+            <StalenessLabel cacheKey="ew-scan-v1" ttlMs={30 * 60 * 1000} onRefresh={runScan} />
+          )}
+
           {/* Saved Scans */}
           {savedScans.length > 0 && (
             <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
@@ -1391,6 +1419,12 @@ function EWScannerPage() {
               )}
             </div>
           )}
+
+          {/* Hit Rate Dashboard */}
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-[#a0a0a0] mb-2">Hit Rates</h3>
+            <HitRateDashboard scanner="ew" mode={mode} />
+          </div>
         </aside>
 
         {/* ── Right Panel ── */}
