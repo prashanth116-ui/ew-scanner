@@ -176,47 +176,47 @@ function WeekView({
           >
             {/* Day header */}
             <div
-              className={`flex items-center justify-between px-3 py-2.5 border-b ${
+              className={`flex items-center justify-between px-4 py-3.5 border-b ${
                 today
                   ? "border-[#5ba3e6]/40 bg-[#5ba3e6]/5"
                   : "border-[#2a2a2a]"
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-[#777]">
+                <span className="text-sm font-medium text-[#777]">
                   {WEEKDAY_NAMES[i]}
                 </span>
                 <span
-                  className={`text-sm font-bold ${
+                  className={`text-lg font-bold ${
                     today ? "text-[#5ba3e6]" : "text-white"
                   }`}
                 >
                   {d.getDate()}
                 </span>
                 {today && (
-                  <span className="rounded-full bg-[#5ba3e6] px-1.5 py-0.5 text-[9px] font-bold text-white leading-none">
+                  <span className="rounded-full bg-[#5ba3e6] px-2 py-0.5 text-[10px] font-bold text-white leading-none">
                     TODAY
                   </span>
                 )}
               </div>
-              <span className="text-[10px] text-[#555]">
-                {entries.length > 0 ? entries.length : ""}
+              <span className="text-xs text-[#555] font-medium">
+                {entries.length > 0 ? `${entries.length} reports` : ""}
               </span>
             </div>
 
             {/* Scrollable entries */}
-            <div className="flex-1 overflow-y-auto min-h-[120px] max-h-[calc(100vh-320px)]">
+            <div className="flex-1 overflow-y-auto min-h-[200px] max-h-[calc(100vh-280px)]">
               {entries.length === 0 && (
-                <div className="flex items-center justify-center py-8 text-[#2a2a2a]">
-                  <Calendar className="h-5 w-5" />
+                <div className="flex items-center justify-center py-12 text-[#2a2a2a]">
+                  <Calendar className="h-6 w-6" />
                 </div>
               )}
 
               {bmo.length > 0 && (
                 <div>
-                  <div className="flex items-center gap-1.5 px-3 pt-2 pb-1">
+                  <div className="flex items-center gap-1.5 px-4 pt-3 pb-1.5">
                     <Sun className="h-2.5 w-2.5 text-amber-400/60" />
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400/60">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-400/60">
                       Before Open
                     </span>
                   </div>
@@ -239,9 +239,9 @@ function WeekView({
 
               {amc.length > 0 && (
                 <div>
-                  <div className="flex items-center gap-1.5 px-3 pt-2 pb-1">
+                  <div className="flex items-center gap-1.5 px-4 pt-3 pb-1.5">
                     <Moon className="h-2.5 w-2.5 text-indigo-400/60" />
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400/60">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-400/60">
                       After Close
                     </span>
                   </div>
@@ -264,9 +264,9 @@ function WeekView({
 
               {other.length > 0 && (
                 <div>
-                  <div className="flex items-center gap-1.5 px-3 pt-2 pb-1">
+                  <div className="flex items-center gap-1.5 px-4 pt-3 pb-1.5">
                     <Clock className="h-2.5 w-2.5 text-[#555]" />
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[#555]">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#555]">
                       Other
                     </span>
                   </div>
@@ -308,14 +308,14 @@ function TickerRow({
   return (
     <Link
       href={`/earnings?ticker=${entry.symbol}`}
-      className={`group flex items-center justify-between gap-1 px-3 py-1.5 transition-colors hover:bg-[#1a1a1a] ${
+      className={`group flex items-center justify-between gap-2 px-4 py-2 transition-colors hover:bg-[#1a1a1a] ${
         highlighted ? "bg-[#5ba3e6]/10" : ""
       } ${dimmed ? "opacity-25" : ""}`}
     >
-      <span className="font-mono text-xs font-bold text-[#5ba3e6] group-hover:underline">
+      <span className="font-mono text-sm font-bold text-[#5ba3e6] group-hover:underline">
         {entry.symbol}
       </span>
-      <span className="text-[10px] text-[#555]">
+      <span className="text-xs text-[#555]">
         {formatEps(entry.epsEstimate)}
       </span>
     </Link>
@@ -374,7 +374,7 @@ function MonthView({
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <div
             key={d}
-            className={`bg-[#1a1a1a] py-2 text-center text-xs font-semibold ${
+            className={`bg-[#1a1a1a] py-3 text-center text-sm font-semibold ${
               d === "Sat" || d === "Sun" ? "text-[#444]" : "text-[#777]"
             }`}
           >
@@ -387,7 +387,7 @@ function MonthView({
       <div className="grid grid-cols-7 gap-px bg-[#2a2a2a]">
         {cells.map((dateStr, i) => {
           if (dateStr == null) {
-            return <div key={`blank-${i}`} className="bg-[#0a0a0a] min-h-[90px]" />;
+            return <div key={`blank-${i}`} className="bg-[#0a0a0a] min-h-[130px]" />;
           }
 
           const entries = grouped.get(dateStr) ?? [];
@@ -410,7 +410,7 @@ function MonthView({
               onClick={() =>
                 onSelectDay(isSelected ? null : dateStr)
               }
-              className={`relative min-h-[90px] p-1.5 text-left transition-colors ${
+              className={`relative min-h-[130px] p-2.5 text-left transition-colors ${
                 isWeekend ? "bg-[#0a0a0a]" : "bg-[#0f0f0f]"
               } ${today ? "bg-[#111] ring-1 ring-inset ring-[#5ba3e6]/30" : ""} ${
                 isSelected
@@ -425,7 +425,7 @@ function MonthView({
               {/* Day number + count */}
               <div className="flex items-start justify-between">
                 <span
-                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                  className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${
                     today
                       ? "bg-[#5ba3e6] text-white"
                       : isWeekend
@@ -436,7 +436,7 @@ function MonthView({
                   {dayNum}
                 </span>
                 {entries.length > 0 && (
-                  <span className="text-[10px] font-medium text-[#555]">
+                  <span className="text-xs font-medium text-[#555]">
                     {entries.length}
                   </span>
                 )}
@@ -444,9 +444,9 @@ function MonthView({
 
               {/* Density bar */}
               {entries.length > 0 && (
-                <div className="mt-1 h-1 rounded-full bg-[#1a1a1a]">
+                <div className="mt-1.5 h-1.5 rounded-full bg-[#1a1a1a]">
                   <div
-                    className="h-1 rounded-full bg-[#5ba3e6] transition-all"
+                    className="h-1.5 rounded-full bg-[#5ba3e6] transition-all"
                     style={{
                       width: `${Math.max(density * 100, 8)}%`,
                       opacity: 0.3 + density * 0.7,
@@ -457,14 +457,14 @@ function MonthView({
 
               {/* BMO/AMC breakdown */}
               {entries.length > 0 && (
-                <div className="mt-1 flex gap-2">
+                <div className="mt-2 flex gap-2.5">
                   {bmoCount > 0 && (
-                    <span className="text-[9px] text-amber-400/70">
+                    <span className="text-[11px] text-amber-400/70">
                       {bmoCount} BMO
                     </span>
                   )}
                   {amcCount > 0 && (
-                    <span className="text-[9px] text-indigo-400/70">
+                    <span className="text-[11px] text-indigo-400/70">
                       {amcCount} AMC
                     </span>
                   )}
@@ -473,11 +473,11 @@ function MonthView({
 
               {/* Ticker previews */}
               {entries.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-x-1.5 gap-y-0.5">
-                  {entries.slice(0, 3).map((e) => (
+                <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                  {entries.slice(0, 4).map((e) => (
                     <span
                       key={e.symbol}
-                      className={`font-mono text-[9px] ${
+                      className={`font-mono text-[11px] ${
                         hasSearch && e.symbol.includes(searchUpper)
                           ? "text-[#5ba3e6] font-bold"
                           : "text-[#666]"
@@ -486,9 +486,9 @@ function MonthView({
                       {e.symbol}
                     </span>
                   ))}
-                  {entries.length > 3 && (
-                    <span className="text-[9px] text-[#444]">
-                      +{entries.length - 3}
+                  {entries.length > 4 && (
+                    <span className="text-[11px] text-[#444]">
+                      +{entries.length - 4}
                     </span>
                   )}
                 </div>
