@@ -17,8 +17,10 @@ import {
   Crosshair,
 } from "lucide-react";
 import { tierColor, verdictColor } from "@/lib/color-utils";
-import type { ConfluenceScanResult } from "@/lib/confluence/types";
-import { getAllWatchlistTickers, getTickerWatchlistSources } from "@/lib/earnings-utils";
+import type { ConfluenceScanResult, ConfluenceResult } from "@/lib/confluence/types";
+import type { SectorRotationResult } from "@/lib/sector-rotation/types";
+import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
+import { getAllWatchlistTickers, getTickerWatchlistSources, enrichScanResults, type MomentumQuality } from "@/lib/earnings-utils";
 
 // ── Types ──
 
@@ -159,7 +161,7 @@ function WeekView({
   anchor: Date;
   grouped: Map<string, CalendarEntry[]>;
   search: string;
-  scanResults: Map<string, ConfluenceScanResult>;
+  scanResults: Map<string, ConfluenceResult>;
   watchlistTickers: Set<string> | null;
 }) {
   const mon = getMonday(anchor);
@@ -311,6 +313,36 @@ function WeekView({
   );
 }
 
+function QuadrantBadge({ quadrant }: { quadrant: string }) {
+  const color = quadrant === "LEADING"
+    ? "bg-green-500/10 border-green-500/20 text-green-400"
+    : quadrant === "IMPROVING"
+      ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
+      : quadrant === "WEAKENING"
+        ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+        : "bg-red-500/10 border-red-500/20 text-red-400";
+  return (
+    <span className={`rounded border px-1 py-0.5 text-[9px] font-medium ${color}`}>
+      {quadrant.slice(0, 4)}
+    </span>
+  );
+}
+
+function SignalBadge({ signal }: { signal: string }) {
+  const color = signal === "strong"
+    ? "bg-green-500/10 border-green-500/20 text-green-400"
+    : signal === "moderate"
+      ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+      : signal === "weak"
+        ? "bg-[#2a2a2a] border-[#333] text-[#a0a0a0]"
+        : "bg-[#1a1a1a] border-[#222] text-[#555]";
+  return (
+    <span className={`rounded border px-1 py-0.5 text-[9px] font-medium uppercase ${color}`}>
+      {signal}
+    </span>
+  );
+}
+
 function TickerRow({
   entry,
   highlighted,
@@ -321,7 +353,7 @@ function TickerRow({
   entry: CalendarEntry;
   highlighted: boolean;
   dimmed: boolean;
-  scanResult?: ConfluenceScanResult;
+  scanResult?: ConfluenceResult;
   watchlistSources?: string[];
 }) {
   return (
@@ -362,6 +394,9 @@ function TickerRow({
               PR
             </span>
           )}
+          {scanResult.sectorResult && (
+            <QuadrantBadge quadrant={scanResult.sectorResult.quadrant} />
+          )}
         </div>
       )}
       <span className="ml-auto text-xs text-[#555] shrink-0">
@@ -386,7 +421,7 @@ function MonthView({
   search: string;
   onSelectDay: (dateStr: string | null) => void;
   selectedDay: string | null;
-  scanResults: Map<string, ConfluenceScanResult>;
+  scanResults: Map<string, ConfluenceResult>;
 }) {
   const year = anchor.getFullYear();
   const month = anchor.getMonth();
@@ -559,6 +594,13 @@ function MonthView({
 
 // ── Day Detail Panel (for month view click) ──
 
+type SortKey = "ticker" | "time" | "eps" | "revenue" | "quarter" | "sector" | "quadrant" | "signal";
+type SortDir = "asc" | "desc";
+
+const HOUR_ORDER: Record<string, number> = { bmo: 0, dmh: 1, amc: 2 };
+const QUADRANT_ORDER: Record<string, number> = { LEADING: 0, IMPROVING: 1, WEAKENING: 2, LAGGING: 3 };
+const SIGNAL_ORDER: Record<string, number> = { strong: 0, moderate: 1, weak: 2, none: 3 };
+
 function DayDetail({
   dateStr,
   entries,
@@ -568,8 +610,57 @@ function DayDetail({
   dateStr: string;
   entries: CalendarEntry[];
   onClose: () => void;
-  scanResults: Map<string, ConfluenceScanResult>;
+  scanResults: Map<string, ConfluenceResult>;
 }) {
+  const [sortKey, setSortKey] = useState<SortKey>("ticker");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "ticker" ? "asc" : "desc");
+    }
+  };
+
+  const sorted = useMemo(() => {
+    const copy = [...entries];
+    const dir = sortDir === "asc" ? 1 : -1;
+    copy.sort((a, b) => {
+      switch (sortKey) {
+        case "ticker":
+          return dir * a.symbol.localeCompare(b.symbol);
+        case "time":
+          return dir * ((HOUR_ORDER[a.hour] ?? 3) - (HOUR_ORDER[b.hour] ?? 3));
+        case "eps":
+          return dir * ((a.epsEstimate ?? -Infinity) - (b.epsEstimate ?? -Infinity));
+        case "revenue":
+          return dir * ((a.revenueEstimate ?? -Infinity) - (b.revenueEstimate ?? -Infinity));
+        case "quarter":
+          return dir * ((a.quarter ?? 0) - (b.quarter ?? 0));
+        case "sector": {
+          const sA = scanResults.get(a.symbol)?.sector ?? "zzz";
+          const sB = scanResults.get(b.symbol)?.sector ?? "zzz";
+          return dir * sA.localeCompare(sB);
+        }
+        case "quadrant": {
+          const qA = QUADRANT_ORDER[scanResults.get(a.symbol)?.sectorResult?.quadrant ?? ""] ?? 9;
+          const qB = QUADRANT_ORDER[scanResults.get(b.symbol)?.sectorResult?.quadrant ?? ""] ?? 9;
+          return dir * (qA - qB);
+        }
+        case "signal": {
+          const sigA = SIGNAL_ORDER[scanResults.get(a.symbol)?.signal ?? ""] ?? 9;
+          const sigB = SIGNAL_ORDER[scanResults.get(b.symbol)?.signal ?? ""] ?? 9;
+          return dir * (sigA - sigB);
+        }
+        default:
+          return 0;
+      }
+    });
+    return copy;
+  }, [entries, sortKey, sortDir, scanResults]);
+
   const d = new Date(dateStr + "T12:00:00");
   const label = d.toLocaleDateString("en-US", {
     weekday: "long",
@@ -578,6 +669,16 @@ function DayDetail({
     year: "numeric",
   });
   const today = isToday(dateStr);
+
+  const sortIcon = (key: SortKey) => {
+    if (sortKey !== key) return <ChevronRight className="h-3 w-3 text-[#333] rotate-90" />;
+    return sortDir === "asc"
+      ? <ChevronLeft className="h-3 w-3 text-[#5ba3e6] rotate-90" />
+      : <ChevronRight className="h-3 w-3 text-[#5ba3e6] rotate-90" />;
+  };
+
+  const thClass = (key: SortKey, base: string) =>
+    `${base} cursor-pointer select-none hover:text-[#5ba3e6] transition-colors ${sortKey === key ? "text-[#5ba3e6]" : "text-white"}`;
 
   return (
     <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] overflow-hidden">
@@ -608,20 +709,53 @@ function DayDetail({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[#2a2a2a] bg-[#141414]">
-              <th className="px-3 py-2 text-left font-semibold text-white">
-                Ticker
+              <th
+                className={thClass("ticker", "px-3 py-2 text-left font-semibold")}
+                onClick={() => handleSort("ticker")}
+              >
+                <span className="inline-flex items-center gap-1">Ticker {sortIcon("ticker")}</span>
               </th>
-              <th className="px-3 py-2 text-center font-semibold text-white">
-                Time
+              <th
+                className={thClass("time", "px-3 py-2 text-center font-semibold")}
+                onClick={() => handleSort("time")}
+              >
+                <span className="inline-flex items-center justify-center gap-1">Time {sortIcon("time")}</span>
               </th>
-              <th className="px-3 py-2 text-right font-semibold text-white">
-                EPS Est.
+              <th
+                className={thClass("eps", "px-3 py-2 text-right font-semibold")}
+                onClick={() => handleSort("eps")}
+              >
+                <span className="inline-flex items-center justify-end gap-1">EPS Est. {sortIcon("eps")}</span>
               </th>
-              <th className="hidden px-3 py-2 text-right font-semibold text-white sm:table-cell">
-                Rev. Est.
+              <th
+                className={thClass("revenue", "hidden px-3 py-2 text-right font-semibold sm:table-cell")}
+                onClick={() => handleSort("revenue")}
+              >
+                <span className="inline-flex items-center justify-end gap-1">Rev. Est. {sortIcon("revenue")}</span>
               </th>
-              <th className="hidden px-3 py-2 text-center font-semibold text-white sm:table-cell">
-                Qtr
+              <th
+                className={thClass("quarter", "hidden px-3 py-2 text-center font-semibold sm:table-cell")}
+                onClick={() => handleSort("quarter")}
+              >
+                <span className="inline-flex items-center justify-center gap-1">Qtr {sortIcon("quarter")}</span>
+              </th>
+              <th
+                className={thClass("sector", "hidden px-3 py-2 text-left font-semibold lg:table-cell")}
+                onClick={() => handleSort("sector")}
+              >
+                <span className="inline-flex items-center gap-1">Sector {sortIcon("sector")}</span>
+              </th>
+              <th
+                className={thClass("quadrant", "hidden px-3 py-2 text-center font-semibold lg:table-cell")}
+                onClick={() => handleSort("quadrant")}
+              >
+                <span className="inline-flex items-center justify-center gap-1">Quadrant {sortIcon("quadrant")}</span>
+              </th>
+              <th
+                className={thClass("signal", "hidden px-3 py-2 text-center font-semibold lg:table-cell")}
+                onClick={() => handleSort("signal")}
+              >
+                <span className="inline-flex items-center justify-center gap-1">Signal {sortIcon("signal")}</span>
               </th>
               <th className="hidden px-3 py-2 text-center font-semibold text-white sm:table-cell">
                 Scanners
@@ -632,7 +766,7 @@ function DayDetail({
             </tr>
           </thead>
           <tbody className="divide-y divide-[#2a2a2a]">
-            {entries.map((e, i) => {
+            {sorted.map((e, i) => {
               const sr = scanResults.get(e.symbol);
               return (
                 <tr key={i} className="bg-[#141414] hover:bg-[#1a1a1a]">
@@ -652,6 +786,23 @@ function DayDetail({
                   </td>
                   <td className="hidden px-3 py-2 text-center text-[#777] sm:table-cell">
                     {e.quarter != null ? `Q${e.quarter}` : "\u2014"}
+                  </td>
+                  <td className="hidden px-3 py-2 text-left text-xs text-[#a0a0a0] lg:table-cell">
+                    {sr?.sector ?? "\u2014"}
+                  </td>
+                  <td className="hidden px-3 py-2 text-center lg:table-cell">
+                    {sr?.sectorResult ? (
+                      <QuadrantBadge quadrant={sr.sectorResult.quadrant} />
+                    ) : (
+                      <span className="text-[10px] text-[#333]">{"\u2014"}</span>
+                    )}
+                  </td>
+                  <td className="hidden px-3 py-2 text-center lg:table-cell">
+                    {sr ? (
+                      <SignalBadge signal={sr.signal} />
+                    ) : (
+                      <span className="text-[10px] text-[#333]">{"\u2014"}</span>
+                    )}
                   </td>
                   <td className="hidden px-3 py-2 text-center sm:table-cell">
                     {sr ? (
@@ -707,7 +858,7 @@ export function CalendarClient() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [watchlistFilter, setWatchlistFilter] = useState(false);
   const [watchlistTickers, setWatchlistTickers] = useState<Set<string> | null>(null);
-  const [scanResults, setScanResults] = useState<Map<string, ConfluenceScanResult>>(new Map());
+  const [scanResults, setScanResults] = useState<Map<string, ConfluenceResult>>(new Map());
   const [scanLoading, setScanLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -766,25 +917,51 @@ export function CalendarClient() {
     });
   }, []);
 
-  // Scan visible tickers via confluence API
+  // Scan visible tickers via confluence + sector + rotation APIs
   const handleScanEarnings = useCallback(async () => {
     const tickers = [...new Set(entries.map((e) => e.symbol))].slice(0, 25);
     if (tickers.length === 0) return;
     setScanLoading(true);
     try {
-      const res = await fetch("/api/confluence/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tickers }),
-      });
-      if (res.ok) {
-        const body = await res.json();
-        const map = new Map<string, ConfluenceScanResult>();
-        for (const r of body.results ?? []) {
-          map.set(r.ticker, r);
+      const [scanSettled, sectorSettled, rotSettled] = await Promise.allSettled([
+        fetch("/api/confluence/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tickers }),
+        }).then((res) => (res.ok ? res.json() : null)),
+        fetch("/api/sector-rotation")
+          .then((res) => (res.ok ? res.json() as Promise<SectorRotationResult> : null)),
+        fetch("/api/rotation-tracker")
+          .then((res) => (res.ok ? res.json() as Promise<RotationTrackerResult> : null)),
+      ]);
+
+      const scanBody = scanSettled.status === "fulfilled" ? scanSettled.value : null;
+      const rawResults: ConfluenceScanResult[] = scanBody?.results ?? [];
+
+      const sectorScores = sectorSettled.status === "fulfilled" && sectorSettled.value
+        ? sectorSettled.value.sectors
+        : [];
+
+      const rotStockMap = new Map<string, MomentumQuality>();
+      if (rotSettled.status === "fulfilled" && rotSettled.value) {
+        for (const rotation of rotSettled.value.activeRotations) {
+          for (const s of rotation.stocks) {
+            rotStockMap.set(s.symbol, {
+              rsAcceleration: s.rsAcceleration,
+              rsImproving: s.rsImproving,
+              rsDelta: s.rsDelta,
+              volumeConsistency: s.volumeConsistency,
+            });
+          }
         }
-        setScanResults(map);
       }
+
+      const enriched = enrichScanResults(rawResults, sectorScores, rotStockMap);
+      const map = new Map<string, ConfluenceResult>();
+      for (const r of enriched) {
+        map.set(r.ticker, r);
+      }
+      setScanResults(map);
     } catch {
       // silently fail
     } finally {

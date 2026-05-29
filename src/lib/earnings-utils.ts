@@ -7,7 +7,11 @@ import { loadScans } from "./ew-watchlist";
 import { loadSqueezeWatchlists } from "./squeeze-watchlists";
 import { loadPreRunWatchlist } from "./prerun/storage";
 import { loadStratWatchlists } from "./strat/watchlist";
-import type { ConfluenceScanResult } from "./confluence/types";
+import type { ConfluenceScanResult, ConfluenceResult } from "./confluence/types";
+import { DEFAULT_WEIGHTS, DEFAULT_THRESHOLDS } from "./confluence/types";
+import { computeConfluenceScore, classifySignal, deriveConfluenceBias, applyStratModifier } from "./confluence/scoring";
+import { getSectorForSymbol } from "@/data/sector-universe";
+import type { SectorRotationScore } from "./sector-rotation/types";
 
 // ── Types ──
 
@@ -35,6 +39,13 @@ export interface PlaybookResult {
   signals: PlaybookSignal[];
   bullishCount: number;
   bearishCount: number;
+}
+
+export interface MomentumQuality {
+  rsAcceleration: number;
+  rsImproving: boolean;
+  rsDelta: number;
+  volumeConsistency: number;
 }
 
 // ── 1a. Beat Streak ──
@@ -144,13 +155,70 @@ export function computeEstimateTrend(estimates: EstimateInput[]): EstimateTrend 
   return "stable";
 }
 
-// ── 1d. Playbook ──
+// ── 1d. Enrich Scan Results ──
+
+export function enrichScanResults(
+  rawResults: ConfluenceScanResult[],
+  sectorScores: SectorRotationScore[],
+  rotationStocks: Map<string, MomentumQuality>,
+): ConfluenceResult[] {
+  // Build sector lookup: displayName -> SectorRotationScore
+  const sectorMap = new Map<string, SectorRotationScore>();
+  for (const s of sectorScores) {
+    sectorMap.set(s.sector, s);
+  }
+
+  return rawResults.map((r) => {
+    const sector = getSectorForSymbol(r.ticker);
+    const sectorInfo = sectorMap.get(sector) ?? null;
+
+    const ewNorm = r.ewResult ? r.ewResult.enhancedNormalized : null;
+    const squeezeNorm = r.squeezeResult ? r.squeezeResult.squeezeScore / 100 : null;
+    const prerunNorm = r.prerunResult ? r.prerunResult.finalScore / 24 : null;
+    const sectorNorm = sectorInfo ? sectorInfo.compositeScore / 100 : null;
+
+    const scores = computeConfluenceScore(
+      ewNorm, squeezeNorm, prerunNorm, sectorNorm,
+      DEFAULT_WEIGHTS, DEFAULT_THRESHOLDS,
+    );
+
+    const sectorQuadrant = sectorInfo?.quadrant ?? null;
+    const bias = deriveConfluenceBias(scores, sectorQuadrant);
+    const { adjustedScore, stratBonus } = applyStratModifier(scores.confluenceScore, r.stratResult ?? null, bias);
+    const adjustedScores = { ...scores, confluenceScore: adjustedScore };
+    const signal = classifySignal(adjustedScores);
+
+    const momentumQuality = rotationStocks.get(r.ticker) ?? null;
+
+    return {
+      ticker: r.ticker,
+      name: r.name || r.ticker,
+      sector,
+      price: r.price,
+      scores: adjustedScores,
+      signal,
+      ewResult: r.ewResult,
+      squeezeResult: r.squeezeResult,
+      prerunResult: r.prerunResult,
+      sectorResult: sectorInfo ? {
+        compositeScore: sectorInfo.compositeScore,
+        quadrant: sectorInfo.quadrant,
+        trend: sectorInfo.trend,
+      } : null,
+      stratResult: r.stratResult ?? null,
+      stratBonus: stratBonus !== 0 ? stratBonus : undefined,
+      momentumQuality,
+    };
+  });
+}
+
+// ── 1e. Playbook ──
 
 export function computePlaybook(
   beatStreak: BeatStreakResult,
   trend: EstimateTrend,
   insiderSummary: InsiderSummary,
-  scanResult: ConfluenceScanResult | null
+  scanResult: ConfluenceResult | null
 ): PlaybookResult {
   const signals: PlaybookSignal[] = [];
 
@@ -207,6 +275,31 @@ export function computePlaybook(
         signals.push({ text: "Strat: ACTIONABLE SHORT", bullish: false });
       }
     }
+
+    // Sector quadrant signals
+    if (scanResult.sectorResult) {
+      const q = scanResult.sectorResult.quadrant;
+      if (q === "LEADING") {
+        signals.push({ text: `Sector: ${scanResult.sector} (LEADING)`, bullish: true });
+      } else if (q === "LAGGING") {
+        signals.push({ text: `Sector: ${scanResult.sector} (LAGGING)`, bullish: false });
+      }
+    }
+
+    // Momentum quality signals
+    if (scanResult.momentumQuality) {
+      const mq = scanResult.momentumQuality;
+      if (mq.rsImproving && mq.volumeConsistency >= 3) {
+        signals.push({ text: "Momentum: RS improving with volume support", bullish: true });
+      }
+    }
+
+    // Confluence signal strength
+    if (scanResult.signal === "strong") {
+      signals.push({ text: `Confluence: STRONG (${(scanResult.scores.confluenceScore * 100).toFixed(0)}%)`, bullish: true });
+    } else if (scanResult.signal === "none") {
+      signals.push({ text: "Confluence: NONE — no scanner alignment", bullish: false });
+    }
   }
 
   const bullishCount = signals.filter((s) => s.bullish).length;
@@ -219,7 +312,7 @@ export function computePlaybook(
   return { bias, signals, bullishCount, bearishCount };
 }
 
-// ── 1e. Watchlist Aggregation ──
+// ── 1f. Watchlist Aggregation ──
 
 export function getAllWatchlistTickers(): Set<string> {
   const tickers = new Set<string>();
@@ -279,7 +372,7 @@ export function getTickerWatchlistSources(ticker: string): string[] {
   return sources;
 }
 
-// ── 1f. Search History ──
+// ── 1g. Search History ──
 
 const SEARCH_HISTORY_KEY = "ew-earnings-search-history";
 const MAX_SEARCH_HISTORY = 10;

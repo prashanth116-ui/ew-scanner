@@ -25,15 +25,19 @@ import {
 } from "lucide-react";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 import { tierColor, verdictColor } from "@/lib/color-utils";
-import type { ConfluenceScanResult } from "@/lib/confluence/types";
+import type { ConfluenceResult } from "@/lib/confluence/types";
+import type { SectorRotationResult } from "@/lib/sector-rotation/types";
+import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
 import {
   computeBeatStreak,
   computeInsiderSummary,
   computeEstimateTrend,
   computePlaybook,
+  enrichScanResults,
   getSearchHistory,
   addToSearchHistory,
   clearSearchHistory,
+  type MomentumQuality,
 } from "@/lib/earnings-utils";
 
 // ── Types ──
@@ -489,7 +493,7 @@ export function EarningsClient() {
   const [error, setError] = useState<string | null>(null);
   const { isCollapsed, toggleSection } = useCollapsibleSections([], "earnings");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
-  const [scanResult, setScanResult] = useState<ConfluenceScanResult | null>(null);
+  const [scanResult, setScanResult] = useState<ConfluenceResult | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
 
   // Load search history on mount
@@ -527,20 +531,52 @@ export function EarningsClient() {
     }
   }, []);
 
-  // Fire lazy confluence scan when earnings data loads
+  // Fire lazy confluence scan + sector + rotation when earnings data loads
   useEffect(() => {
     if (!data) return;
     let cancelled = false;
     setScanLoading(true);
-    fetch("/api/confluence/scan", {
+
+    const scanPromise = fetch("/api/confluence/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tickers: [data.ticker] }),
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((body) => {
-        if (!cancelled && body?.results?.length) {
-          setScanResult(body.results[0]);
+    }).then((res) => (res.ok ? res.json() : null));
+
+    const sectorPromise = fetch("/api/sector-rotation")
+      .then((res) => (res.ok ? res.json() as Promise<SectorRotationResult> : null));
+
+    const rotationPromise = fetch("/api/rotation-tracker")
+      .then((res) => (res.ok ? res.json() as Promise<RotationTrackerResult> : null));
+
+    Promise.allSettled([scanPromise, sectorPromise, rotationPromise])
+      .then(([scanSettled, sectorSettled, rotSettled]) => {
+        if (cancelled) return;
+
+        const scanBody = scanSettled.status === "fulfilled" ? scanSettled.value : null;
+        const rawResults = scanBody?.results ?? [];
+
+        const sectorScores = sectorSettled.status === "fulfilled" && sectorSettled.value
+          ? sectorSettled.value.sectors
+          : [];
+
+        const rotStockMap = new Map<string, MomentumQuality>();
+        if (rotSettled.status === "fulfilled" && rotSettled.value) {
+          for (const rotation of rotSettled.value.activeRotations) {
+            for (const s of rotation.stocks) {
+              rotStockMap.set(s.symbol, {
+                rsAcceleration: s.rsAcceleration,
+                rsImproving: s.rsImproving,
+                rsDelta: s.rsDelta,
+                volumeConsistency: s.volumeConsistency,
+              });
+            }
+          }
+        }
+
+        if (rawResults.length > 0) {
+          const enriched = enrichScanResults(rawResults, sectorScores, rotStockMap);
+          setScanResult(enriched[0] ?? null);
         }
       })
       .catch(() => {})
@@ -783,8 +819,31 @@ export function EarningsClient() {
             )}
             {!scanLoading && (
               <div className="space-y-5">
+                {/* Confluence Signal Badge */}
+                {scanResult && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-[#777]">Signal:</span>
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-xs font-bold uppercase ${
+                        scanResult.signal === "strong"
+                          ? "bg-green-500/10 border-green-500/20 text-green-400"
+                          : scanResult.signal === "moderate"
+                            ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                            : scanResult.signal === "weak"
+                              ? "bg-[#2a2a2a] border-[#333] text-[#a0a0a0]"
+                              : "bg-[#1a1a1a] border-[#222] text-[#555]"
+                      }`}
+                    >
+                      {scanResult.signal}
+                    </span>
+                    <span className="text-xs text-[#777]">
+                      {(scanResult.scores.confluenceScore * 100).toFixed(0)}% · {scanResult.scores.passCount}/4 scanners
+                    </span>
+                  </div>
+                )}
+
                 {/* Scanner Signals Grid */}
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {/* EW */}
                   <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-3">
                     <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Elliott Wave</div>
@@ -795,7 +854,7 @@ export function EarningsClient() {
                         </div>
                         <div className="mt-0.5 text-xs text-[#a0a0a0]">
                           {scanResult.ewResult.confidenceTier} confidence
-                          {scanResult.ewResult.fibDepthLabel && ` \u00b7 ${scanResult.ewResult.fibDepthLabel}`}
+                          {scanResult.ewResult.fibDepthLabel && ` · ${scanResult.ewResult.fibDepthLabel}`}
                         </div>
                       </>
                     ) : (
@@ -855,7 +914,75 @@ export function EarningsClient() {
                           {scanResult.stratResult.signal}
                         </div>
                         <div className="mt-0.5 text-xs text-[#a0a0a0]">
-                          {scanResult.stratResult.actionDirection ?? "N/A"} \u00b7 TFC: {scanResult.stratResult.tfcAlignment.replace("_", " ")}
+                          {scanResult.stratResult.actionDirection ?? "N/A"} · TFC: {scanResult.stratResult.tfcAlignment.replace("_", " ")}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-1 text-xs text-[#555]">No data</div>
+                    )}
+                  </div>
+
+                  {/* Sector */}
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-3">
+                    <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Sector</div>
+                    {scanResult?.sectorResult ? (
+                      <>
+                        <div className="mt-1 text-sm font-semibold text-white">
+                          {scanResult.sector}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <span
+                            className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+                              scanResult.sectorResult.quadrant === "LEADING"
+                                ? "bg-green-500/10 border-green-500/20 text-green-400"
+                                : scanResult.sectorResult.quadrant === "IMPROVING"
+                                  ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                                  : scanResult.sectorResult.quadrant === "WEAKENING"
+                                    ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                                    : "bg-red-500/10 border-red-500/20 text-red-400"
+                            }`}
+                          >
+                            {scanResult.sectorResult.quadrant}
+                          </span>
+                          <span className="text-xs text-[#a0a0a0]">
+                            {scanResult.sectorResult.compositeScore.toFixed(0)} {scanResult.sectorResult.trend === "UP" ? "\u2191" : scanResult.sectorResult.trend === "DOWN" ? "\u2193" : "\u2192"}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-1 text-xs text-[#555]">No data</div>
+                    )}
+                  </div>
+
+                  {/* Momentum */}
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-3">
+                    <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Momentum</div>
+                    {scanResult?.momentumQuality ? (
+                      <>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-sm font-semibold text-white">
+                            {scanResult.momentumQuality.rsAcceleration.toFixed(2)}
+                          </span>
+                          <span
+                            className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+                              scanResult.momentumQuality.rsImproving
+                                ? "bg-green-500/10 border-green-500/20 text-green-400"
+                                : "bg-red-500/10 border-red-500/20 text-red-400"
+                            }`}
+                          >
+                            {scanResult.momentumQuality.rsImproving ? "Improving" : "Declining"}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1 text-xs text-[#a0a0a0]">
+                          <span>Vol:</span>
+                          {Array.from({ length: 5 }, (_, i) => (
+                            <span
+                              key={i}
+                              className={`inline-block h-1.5 w-1.5 rounded-full ${
+                                i < scanResult.momentumQuality!.volumeConsistency ? "bg-[#5ba3e6]" : "bg-[#2a2a2a]"
+                              }`}
+                            />
+                          ))}
                         </div>
                       </>
                     ) : (
