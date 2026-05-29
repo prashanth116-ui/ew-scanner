@@ -15,6 +15,7 @@ import {
   X,
   Bookmark,
   Crosshair,
+  SlidersHorizontal,
 } from "lucide-react";
 import { tierColor, verdictColor } from "@/lib/color-utils";
 import type { ConfluenceScanResult, ConfluenceResult } from "@/lib/confluence/types";
@@ -614,6 +615,9 @@ function DayDetail({
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("ticker");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [filterSector, setFilterSector] = useState<string>("all");
+  const [filterQuadrant, setFilterQuadrant] = useState<string>("all");
+  const [filterSignal, setFilterSignal] = useState<string>("all");
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -624,8 +628,43 @@ function DayDetail({
     }
   };
 
+  // Collect unique sectors/quadrants/signals for filter dropdowns
+  const filterOptions = useMemo(() => {
+    const sectors = new Set<string>();
+    const quadrants = new Set<string>();
+    const signals = new Set<string>();
+    for (const e of entries) {
+      const sr = scanResults.get(e.symbol);
+      if (sr?.sector) sectors.add(sr.sector);
+      if (sr?.sectorResult?.quadrant) quadrants.add(sr.sectorResult.quadrant);
+      if (sr?.signal) signals.add(sr.signal);
+    }
+    return {
+      sectors: [...sectors].sort(),
+      quadrants: ["LEADING", "IMPROVING", "WEAKENING", "LAGGING"].filter((q) => quadrants.has(q)),
+      signals: ["strong", "moderate", "weak", "none"].filter((s) => signals.has(s)),
+    };
+  }, [entries, scanResults]);
+
+  const hasFilters = filterSector !== "all" || filterQuadrant !== "all" || filterSignal !== "all";
+  const hasScanData = scanResults.size > 0;
+
+  const filtered = useMemo(() => {
+    let result = entries;
+    if (filterSector !== "all") {
+      result = result.filter((e) => scanResults.get(e.symbol)?.sector === filterSector);
+    }
+    if (filterQuadrant !== "all") {
+      result = result.filter((e) => scanResults.get(e.symbol)?.sectorResult?.quadrant === filterQuadrant);
+    }
+    if (filterSignal !== "all") {
+      result = result.filter((e) => scanResults.get(e.symbol)?.signal === filterSignal);
+    }
+    return result;
+  }, [entries, filterSector, filterQuadrant, filterSignal, scanResults]);
+
   const sorted = useMemo(() => {
-    const copy = [...entries];
+    const copy = [...filtered];
     const dir = sortDir === "asc" ? 1 : -1;
     copy.sort((a, b) => {
       switch (sortKey) {
@@ -659,7 +698,7 @@ function DayDetail({
       }
     });
     return copy;
-  }, [entries, sortKey, sortDir, scanResults]);
+  }, [filtered, sortKey, sortDir, scanResults]);
 
   const d = new Date(dateStr + "T12:00:00");
   const label = d.toLocaleDateString("en-US", {
@@ -680,6 +719,8 @@ function DayDetail({
   const thClass = (key: SortKey, base: string) =>
     `${base} cursor-pointer select-none hover:text-[#5ba3e6] transition-colors ${sortKey === key ? "text-[#5ba3e6]" : "text-white"}`;
 
+  const selectClass = "rounded-md border border-[#2a2a2a] bg-[#141414] px-2 py-1 text-xs text-white focus:border-[#5ba3e6] focus:outline-none appearance-none cursor-pointer";
+
   return (
     <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] overflow-hidden">
       {/* Header */}
@@ -693,7 +734,7 @@ function DayDetail({
             </span>
           )}
           <span className="text-xs text-[#555]">
-            {entries.length} report{entries.length !== 1 ? "s" : ""}
+            {hasFilters ? `${filtered.length} of ${entries.length}` : entries.length} report{(hasFilters ? filtered.length : entries.length) !== 1 ? "s" : ""}
           </span>
         </div>
         <button
@@ -703,6 +744,51 @@ function DayDetail({
           <X className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Filters */}
+      {hasScanData && (
+        <div className="flex flex-wrap items-center gap-2.5 border-b border-[#2a2a2a] px-4 py-2.5">
+          <SlidersHorizontal className="h-3.5 w-3.5 text-[#555]" />
+          <select
+            value={filterSector}
+            onChange={(e) => setFilterSector(e.target.value)}
+            className={`${selectClass} ${filterSector !== "all" ? "border-[#5ba3e6]/40 text-[#5ba3e6]" : ""}`}
+          >
+            <option value="all">All Sectors</option>
+            {filterOptions.sectors.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <select
+            value={filterQuadrant}
+            onChange={(e) => setFilterQuadrant(e.target.value)}
+            className={`${selectClass} ${filterQuadrant !== "all" ? "border-[#5ba3e6]/40 text-[#5ba3e6]" : ""}`}
+          >
+            <option value="all">All Quadrants</option>
+            {filterOptions.quadrants.map((q) => (
+              <option key={q} value={q}>{q}</option>
+            ))}
+          </select>
+          <select
+            value={filterSignal}
+            onChange={(e) => setFilterSignal(e.target.value)}
+            className={`${selectClass} ${filterSignal !== "all" ? "border-[#5ba3e6]/40 text-[#5ba3e6]" : ""}`}
+          >
+            <option value="all">All Signals</option>
+            {filterOptions.signals.map((s) => (
+              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+            ))}
+          </select>
+          {hasFilters && (
+            <button
+              onClick={() => { setFilterSector("all"); setFilterQuadrant("all"); setFilterSignal("all"); }}
+              className="text-xs text-[#555] hover:text-[#a0a0a0]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Table */}
       <div className="overflow-x-auto">
