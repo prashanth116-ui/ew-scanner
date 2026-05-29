@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useCallback, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Calendar,
@@ -17,7 +17,10 @@ import {
   ShieldCheck,
   PieChart,
   Minus,
+  ChevronRight,
+  type LucideIcon,
 } from "lucide-react";
+import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 
 // ── Types ──
 
@@ -360,6 +363,44 @@ function OwnershipBar({
   );
 }
 
+// ── Collapsible section wrapper ──
+
+function Section({
+  id,
+  icon: Icon,
+  title,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  collapsed: boolean;
+  onToggle: (key: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
+      <button
+        onClick={() => onToggle(id)}
+        className="flex w-full items-center gap-2 px-5 py-4 text-left"
+      >
+        <Icon className="h-5 w-5 text-[#5ba3e6]" />
+        <h3 className="flex-1 text-lg font-bold text-white">{title}</h3>
+        <ChevronRight
+          className={`h-4 w-4 text-[#555] transition-transform ${collapsed ? "" : "rotate-90"}`}
+        />
+      </button>
+      {!collapsed && (
+        <div className="border-t border-[#2a2a2a] px-5 pb-5 pt-4">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ──
 
 export function EarningsClient() {
@@ -368,6 +409,7 @@ export function EarningsClient() {
   const [data, setData] = useState<EarningsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { isCollapsed, toggleSection } = useCollapsibleSections([], "earnings");
 
   const doSearch = useCallback(async (ticker: string) => {
     if (!ticker) return;
@@ -519,99 +561,87 @@ export function EarningsClient() {
 
           {/* ── Analyst Consensus + Price Targets ── */}
           {data.analystRatings && (
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-6">
-                <div className="mb-4 flex items-center gap-2">
-                  <Target className="h-5 w-5 text-[#5ba3e6]" />
-                  <h3 className="text-lg font-bold text-white">Analyst Consensus</h3>
-                </div>
-                {data.analystRatings.recommendationKey && (
-                  <div className="mb-3 flex items-center gap-3">
-                    <span
-                      className={`rounded-md px-3 py-1 text-sm font-bold uppercase ${
-                        ["strongbuy", "buy"].includes(data.analystRatings.recommendationKey.toLowerCase())
-                          ? "bg-green-500/10 border border-green-500/20 text-green-400"
-                          : data.analystRatings.recommendationKey.toLowerCase() === "hold"
-                            ? "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400"
-                            : "bg-red-500/10 border border-red-500/20 text-red-400"
-                      }`}
-                    >
-                      {data.analystRatings.recommendationKey.replace("_", " ")}
-                    </span>
-                    {data.analystRatings.numAnalysts != null && (
-                      <span className="text-xs text-[#777]">
-                        {data.analystRatings.numAnalysts} analysts
-                      </span>
-                    )}
-                  </div>
-                )}
-                <RatingBar ratings={data.analystRatings} />
-              </div>
-
-              <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-6">
-                <div className="mb-4 flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-[#10b981]" />
-                  <h3 className="text-lg font-bold text-white">Price Targets</h3>
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-xs text-[#777]">Low</div>
-                    <div className="text-sm font-bold text-red-400">
-                      {formatCurrency(data.analystRatings.targetLow)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-[#777]">Mean</div>
-                    <div className="text-sm font-bold text-[#5ba3e6]">
-                      {formatCurrency(data.analystRatings.targetMean)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-[#777]">High</div>
-                    <div className="text-sm font-bold text-green-400">
-                      {formatCurrency(data.analystRatings.targetHigh)}
-                    </div>
-                  </div>
-                </div>
-                <PriceTargetRange
-                  low={data.analystRatings.targetLow}
-                  mean={data.analystRatings.targetMean}
-                  high={data.analystRatings.targetHigh}
-                  current={data.currentPrice}
-                />
-                {data.analystRatings.targetMean != null &&
-                  data.currentPrice != null && (
-                    <div className="mt-3 text-center text-xs text-[#777]">
-                      Upside/Downside:{" "}
+            <Section id="analyst" icon={Target} title="Analyst Consensus & Price Targets" collapsed={isCollapsed("analyst")} onToggle={toggleSection}>
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div>
+                  {data.analystRatings.recommendationKey && (
+                    <div className="mb-3 flex items-center gap-3">
                       <span
-                        className={
-                          data.analystRatings.targetMean > data.currentPrice
-                            ? "text-green-400"
-                            : "text-red-400"
-                        }
+                        className={`rounded-md px-3 py-1 text-sm font-bold uppercase ${
+                          ["strongbuy", "buy"].includes(data.analystRatings.recommendationKey.toLowerCase())
+                            ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                            : data.analystRatings.recommendationKey.toLowerCase() === "hold"
+                              ? "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400"
+                              : "bg-red-500/10 border border-red-500/20 text-red-400"
+                        }`}
                       >
-                        {(
-                          ((data.analystRatings.targetMean - data.currentPrice) /
-                            data.currentPrice) *
-                          100
-                        ).toFixed(1)}
-                        %
+                        {data.analystRatings.recommendationKey.replace("_", " ")}
                       </span>
+                      {data.analystRatings.numAnalysts != null && (
+                        <span className="text-xs text-[#777]">
+                          {data.analystRatings.numAnalysts} analysts
+                        </span>
+                      )}
                     </div>
                   )}
+                  <RatingBar ratings={data.analystRatings} />
+                </div>
+
+                <div>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-xs text-[#777]">Low</div>
+                      <div className="text-sm font-bold text-red-400">
+                        {formatCurrency(data.analystRatings.targetLow)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-[#777]">Mean</div>
+                      <div className="text-sm font-bold text-[#5ba3e6]">
+                        {formatCurrency(data.analystRatings.targetMean)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-[#777]">High</div>
+                      <div className="text-sm font-bold text-green-400">
+                        {formatCurrency(data.analystRatings.targetHigh)}
+                      </div>
+                    </div>
+                  </div>
+                  <PriceTargetRange
+                    low={data.analystRatings.targetLow}
+                    mean={data.analystRatings.targetMean}
+                    high={data.analystRatings.targetHigh}
+                    current={data.currentPrice}
+                  />
+                  {data.analystRatings.targetMean != null &&
+                    data.currentPrice != null && (
+                      <div className="mt-3 text-center text-xs text-[#777]">
+                        Upside/Downside:{" "}
+                        <span
+                          className={
+                            data.analystRatings.targetMean > data.currentPrice
+                              ? "text-green-400"
+                              : "text-red-400"
+                          }
+                        >
+                          {(
+                            ((data.analystRatings.targetMean - data.currentPrice) /
+                              data.currentPrice) *
+                            100
+                          ).toFixed(1)}
+                          %
+                        </span>
+                      </div>
+                    )}
+                </div>
               </div>
-            </div>
+            </Section>
           )}
 
           {/* ── Recent Upgrades / Downgrades ── */}
           {data.upgradeDowngrades.length > 0 && (
-            <div>
-              <div className="mb-3 flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-[#5ba3e6]" />
-                <h3 className="text-lg font-bold text-white">
-                  Recent Upgrades / Downgrades
-                </h3>
-              </div>
+            <Section id="upgrades" icon={ShieldCheck} title="Recent Upgrades / Downgrades" collapsed={isCollapsed("upgrades")} onToggle={toggleSection}>
               <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
                 <table className="w-full text-sm">
                   <thead>
@@ -638,15 +668,12 @@ export function EarningsClient() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Section>
           )}
 
           {/* ── Earnings History ── */}
           {data.history.length > 0 && (
-            <div>
-              <h3 className="mb-3 text-lg font-bold text-white">
-                Earnings History
-              </h3>
+            <Section id="history" icon={Calendar} title="Earnings History" collapsed={isCollapsed("history")} onToggle={toggleSection}>
               <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
                 <table className="w-full text-sm">
                   <thead>
@@ -693,15 +720,12 @@ export function EarningsClient() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Section>
           )}
 
           {/* ── Forward Estimates ── */}
           {data.estimates.length > 0 && (
-            <div>
-              <h3 className="mb-3 text-lg font-bold text-white">
-                Analyst Estimates
-              </h3>
+            <Section id="estimates" icon={TrendingUp} title="Analyst Estimates" collapsed={isCollapsed("estimates")} onToggle={toggleSection}>
               <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
                 <table className="w-full text-sm">
                   <thead>
@@ -728,15 +752,12 @@ export function EarningsClient() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Section>
           )}
 
           {/* ── Quarterly Financials ── */}
           {data.financials.length > 0 && (
-            <div>
-              <h3 className="mb-3 text-lg font-bold text-white">
-                Quarterly Financials
-              </h3>
+            <Section id="financials" icon={DollarSign} title="Quarterly Financials" collapsed={isCollapsed("financials")} onToggle={toggleSection}>
               <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
                 <table className="w-full text-sm">
                   <thead>
@@ -763,18 +784,14 @@ export function EarningsClient() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Section>
           )}
 
           {/* ── Key Financials + Ownership ── */}
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Key Financials */}
             {data.keyFinancials && (
-              <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-6">
-                <div className="mb-4 flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-[#8b5cf6]" />
-                  <h3 className="text-lg font-bold text-white">Key Financials</h3>
-                </div>
+              <Section id="keyfinancials" icon={BarChart3} title="Key Financials" collapsed={isCollapsed("keyfinancials")} onToggle={toggleSection}>
                 <div className="grid grid-cols-2 gap-3">
                   <MetricCard
                     label="Revenue Growth"
@@ -807,16 +824,12 @@ export function EarningsClient() {
                   <MetricCard label="Return on Equity" value={formatPercent(data.keyFinancials.returnOnEquity)} />
                   <MetricCard label="Current Ratio" value={formatRatio(data.keyFinancials.currentRatio)} />
                 </div>
-              </div>
+              </Section>
             )}
 
             {/* Ownership */}
             {data.ownership && (
-              <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-6">
-                <div className="mb-4 flex items-center gap-2">
-                  <PieChart className="h-5 w-5 text-[#f59e0b]" />
-                  <h3 className="text-lg font-bold text-white">Ownership</h3>
-                </div>
+              <Section id="ownership" icon={PieChart} title="Ownership" collapsed={isCollapsed("ownership")} onToggle={toggleSection}>
                 <div className="space-y-4">
                   <OwnershipBar
                     label="Institutional"
@@ -839,19 +852,13 @@ export function EarningsClient() {
                     </div>
                   )}
                 </div>
-              </div>
+              </Section>
             )}
           </div>
 
           {/* ── Insider Activity ── */}
           {data.insiderTransactions.length > 0 && (
-            <div>
-              <div className="mb-3 flex items-center gap-2">
-                <Users className="h-5 w-5 text-[#10b981]" />
-                <h3 className="text-lg font-bold text-white">
-                  Insider Activity
-                </h3>
-              </div>
+            <Section id="insiders" icon={Users} title="Insider Activity" collapsed={isCollapsed("insiders")} onToggle={toggleSection}>
               <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
                 <table className="w-full text-sm">
                   <thead>
@@ -904,7 +911,7 @@ export function EarningsClient() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Section>
           )}
         </div>
       )}
