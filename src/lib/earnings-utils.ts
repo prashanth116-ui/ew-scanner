@@ -48,6 +48,137 @@ export interface MomentumQuality {
   volumeConsistency: number;
 }
 
+export interface EarningsPreRunDetail {
+  data: {
+    putCallRatio: number | null;
+    avgVolumeUpDays: number | null;
+    avgVolumeDownDays: number | null;
+    pctFromAth: number | null;
+    shortFloat: number | null;
+    daysToEarnings: number | null;
+    emaM2TrendStrength: "strong" | "moderate" | "weak" | "bearish" | null;
+    emaM2BullishCross: boolean | null;
+    emaM2PriceAboveBoth: boolean | null;
+    emaM2DisplacementNearCross: boolean | null;
+    emaM2FvgNearCross: boolean | null;
+    emaM2CrossedWithin5Bars: boolean | null;
+    higherLowsCount: number | null;
+    closesNearRangeTop: boolean | null;
+    atrContracting: boolean | null;
+    failedBreakdownRecovery: number | null;
+    analystRevisionTrend: number | null;
+  };
+  gates: { gate1: boolean; gate2: boolean; gate3: boolean };
+  scores: {
+    scoreA: number; scoreB: number; scoreC: number; scoreD: number;
+    scoreE: number; scoreF: number; scoreG: number; scoreH: number;
+    scoreI: number; scoreJ: number; scoreK: number; scoreL: number;
+    scoreM: number; scoreM2: number; scoreN: number; scoreO: number;
+    scoreP: number; scoreQ: number;
+    sectorModifier: number; sectorQuadrant: number;
+    totalScore: number; finalScore: number;
+  };
+  verdict: string;
+  gate1Bypassed?: boolean;
+}
+
+export interface EarningsEdgeSignals {
+  putCallRatio: number | null;
+  optionsFlow: "bullish" | "neutral" | "bearish";
+  ftdImminent: boolean;
+  ftdTotalShares: number;
+  ftdNearestDeadline: string | null;
+  hasGammaTrigger: boolean;
+  nearestGammaStrike: number | null;
+  gammaAbovePrice: boolean;
+  volumeRatio: number | null;
+  volumePattern: "accumulation" | "distribution" | "neutral";
+  regime: "strong_bull" | "bull" | "bear" | "neutral";
+}
+
+// ── 1a-pre. Earnings Edge ──
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export function computeEarningsEdge(
+  prerun: EarningsPreRunDetail | null,
+  ftdBody: any,
+  gammaBody: any,
+  regimeBody: any,
+  ticker: string,
+  currentPrice: number | null,
+): EarningsEdgeSignals {
+  // Options flow
+  const pcr = prerun?.data.putCallRatio ?? null;
+  const optionsFlow: EarningsEdgeSignals["optionsFlow"] =
+    pcr != null ? (pcr < 0.5 ? "bullish" : pcr > 1.0 ? "bearish" : "neutral") : "neutral";
+
+  // FTD
+  let ftdImminent = false;
+  let ftdTotalShares = 0;
+  let ftdNearestDeadline: string | null = null;
+  if (ftdBody?.calendar) {
+    const now = Date.now();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    for (const week of ftdBody.calendar) {
+      for (const entry of week.entries ?? []) {
+        if (entry.ticker !== ticker) continue;
+        ftdTotalShares += entry.ftd_shares ?? 0;
+        const dl = new Date(entry.settlement_deadline).getTime();
+        if (dl - now <= sevenDays && dl >= now) {
+          ftdImminent = true;
+          if (!ftdNearestDeadline || entry.settlement_deadline < ftdNearestDeadline) {
+            ftdNearestDeadline = entry.settlement_deadline;
+          }
+        }
+      }
+    }
+  }
+
+  // Gamma
+  let hasGammaTrigger = false;
+  let nearestGammaStrike: number | null = null;
+  let gammaAbovePrice = false;
+  if (gammaBody?.gamma?.[ticker]) {
+    const g = gammaBody.gamma[ticker];
+    hasGammaTrigger = g.hasGammaTrigger ?? false;
+    nearestGammaStrike = g.nearestGammaStrike ?? null;
+    if (nearestGammaStrike != null && currentPrice != null) {
+      gammaAbovePrice = nearestGammaStrike > currentPrice;
+    }
+  }
+
+  // Volume
+  const upVol = prerun?.data.avgVolumeUpDays ?? null;
+  const downVol = prerun?.data.avgVolumeDownDays ?? null;
+  let volumeRatio: number | null = null;
+  let volumePattern: EarningsEdgeSignals["volumePattern"] = "neutral";
+  if (upVol != null && downVol != null && downVol > 0) {
+    volumeRatio = upVol / downVol;
+    volumePattern = volumeRatio > 1.0 ? "accumulation" : volumeRatio < 0.8 ? "distribution" : "neutral";
+  }
+
+  // Regime
+  let regime: EarningsEdgeSignals["regime"] = "neutral";
+  if (regimeBody?.available && regimeBody.regime) {
+    regime = regimeBody.regime;
+  }
+
+  return {
+    putCallRatio: pcr,
+    optionsFlow,
+    ftdImminent,
+    ftdTotalShares,
+    ftdNearestDeadline,
+    hasGammaTrigger,
+    nearestGammaStrike,
+    gammaAbovePrice,
+    volumeRatio,
+    volumePattern,
+    regime,
+  };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 // ── 1a. Beat Streak ──
 
 interface EarningsQuarterInput {
@@ -218,7 +349,8 @@ export function computePlaybook(
   beatStreak: BeatStreakResult,
   trend: EstimateTrend,
   insiderSummary: InsiderSummary,
-  scanResult: ConfluenceResult | null
+  scanResult: ConfluenceResult | null,
+  prerunDetail?: EarningsPreRunDetail | null,
 ): PlaybookResult {
   const signals: PlaybookSignal[] = [];
 
@@ -292,6 +424,13 @@ export function computePlaybook(
       if (mq.rsImproving && mq.volumeConsistency >= 3) {
         signals.push({ text: "Momentum: RS improving with volume support", bullish: true });
       }
+    }
+
+    // Analyst revision trend from pre-run detail
+    if (prerunDetail?.data.analystRevisionTrend === 1) {
+      signals.push({ text: "Analyst revisions trending UP", bullish: true });
+    } else if (prerunDetail?.data.analystRevisionTrend === -1) {
+      signals.push({ text: "Analyst revisions trending DOWN", bullish: false });
     }
 
     // Confluence signal strength

@@ -24,7 +24,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
-import { tierColor, verdictColor } from "@/lib/color-utils";
+import { tierColor, verdictColor, scoreDotColor } from "@/lib/color-utils";
 import type { ConfluenceResult } from "@/lib/confluence/types";
 import type { SectorRotationResult } from "@/lib/sector-rotation/types";
 import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
@@ -33,12 +33,16 @@ import {
   computeInsiderSummary,
   computeEstimateTrend,
   computePlaybook,
+  computeEarningsEdge,
   enrichScanResults,
   getSearchHistory,
   addToSearchHistory,
   clearSearchHistory,
   type MomentumQuality,
+  type EarningsPreRunDetail,
+  type EarningsEdgeSignals,
 } from "@/lib/earnings-utils";
+import { HitRateDashboard } from "@/components/hit-rate-dashboard";
 
 // ── Types ──
 
@@ -495,6 +499,9 @@ export function EarningsClient() {
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [scanResult, setScanResult] = useState<ConfluenceResult | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
+  const [prerunDetail, setPrerunDetail] = useState<EarningsPreRunDetail | null>(null);
+  const [earningsEdge, setEarningsEdge] = useState<EarningsEdgeSignals | null>(null);
+  const [enrichLoading, setEnrichLoading] = useState(false);
 
   // Load search history on mount
   useEffect(() => {
@@ -507,6 +514,8 @@ export function EarningsClient() {
     setError(null);
     setData(null);
     setScanResult(null);
+    setPrerunDetail(null);
+    setEarningsEdge(null);
 
     addToSearchHistory(ticker);
     setSearchHistory(getSearchHistory());
@@ -586,6 +595,58 @@ export function EarningsClient() {
     return () => { cancelled = true; };
   }, [data]);
 
+  // Fire enrichment fetches (pre-run detail, FTD, gamma, regime) when earnings data loads
+  useEffect(() => {
+    if (!data) return;
+    let cancelled = false;
+    setEnrichLoading(true);
+
+    const prerunPromise = fetch(`/api/prerun/stock?ticker=${encodeURIComponent(data.ticker)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null);
+
+    const ftdPromise = fetch(`/api/squeeze/ftd?tickers=${encodeURIComponent(data.ticker)}&days=14`)
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null);
+
+    const gammaPromise = data.currentPrice != null
+      ? fetch("/api/squeeze/gamma", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tickers: [{ ticker: data.ticker, price: data.currentPrice }] }),
+        }).then((res) => (res.ok ? res.json() : null)).catch(() => null)
+      : Promise.resolve(null);
+
+    const regimePromise = fetch("/api/regime")
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null);
+
+    Promise.allSettled([prerunPromise, ftdPromise, gammaPromise, regimePromise])
+      .then(([prerunSettled, ftdSettled, gammaSettled, regimeSettled]) => {
+        if (cancelled) return;
+
+        const prerunBody = prerunSettled.status === "fulfilled" ? prerunSettled.value : null;
+        const ftdBody = ftdSettled.status === "fulfilled" ? ftdSettled.value : null;
+        const gammaBody = gammaSettled.status === "fulfilled" ? gammaSettled.value : null;
+        const regimeBody = regimeSettled.status === "fulfilled" ? regimeSettled.value : null;
+
+        // Extract pre-run detail
+        const detail: EarningsPreRunDetail | null = prerunBody?.data
+          ? { data: prerunBody.data, gates: prerunBody.gates, scores: prerunBody.scores, verdict: prerunBody.verdict, gate1Bypassed: prerunBody.gate1Bypassed }
+          : null;
+        setPrerunDetail(detail);
+
+        // Compute edge signals
+        const edge = computeEarningsEdge(detail, ftdBody, gammaBody, regimeBody, data.ticker, data.currentPrice);
+        setEarningsEdge(edge);
+      })
+      .finally(() => {
+        if (!cancelled) setEnrichLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [data]);
+
   // Computed insights
   const beatStreak = useMemo(
     () => (data ? computeBeatStreak(data.history) : null),
@@ -602,9 +663,9 @@ export function EarningsClient() {
   const playbook = useMemo(
     () =>
       beatStreak && estimateTrend && insiderSummary
-        ? computePlaybook(beatStreak, estimateTrend, insiderSummary, scanResult)
+        ? computePlaybook(beatStreak, estimateTrend, insiderSummary, scanResult, prerunDetail)
         : null,
-    [beatStreak, estimateTrend, insiderSummary, scanResult]
+    [beatStreak, estimateTrend, insiderSummary, scanResult, prerunDetail]
   );
 
   // Auto-search if ?ticker= is in the URL (e.g. from calendar link)
@@ -990,6 +1051,279 @@ export function EarningsClient() {
                     )}
                   </div>
                 </div>
+
+                {/* Enrichment Loading */}
+                {enrichLoading && (
+                  <div className="flex items-center gap-2 text-sm text-[#777]">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#5ba3e6]" />
+                    Loading enrichment data...
+                  </div>
+                )}
+
+                {/* Earnings Edge Card */}
+                {!enrichLoading && earningsEdge && (
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-4">
+                    <div className="mb-3 text-sm font-bold text-white">Earnings Edge</div>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                      {/* Options Flow */}
+                      <div>
+                        <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Options Flow</div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-sm font-semibold text-white">
+                            {earningsEdge.putCallRatio != null ? earningsEdge.putCallRatio.toFixed(2) : DASH}
+                          </span>
+                          <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+                            earningsEdge.optionsFlow === "bullish"
+                              ? "bg-green-500/10 border-green-500/20 text-green-400"
+                              : earningsEdge.optionsFlow === "bearish"
+                                ? "bg-red-500/10 border-red-500/20 text-red-400"
+                                : "bg-[#2a2a2a] border-[#333] text-[#a0a0a0]"
+                          }`}>
+                            {earningsEdge.optionsFlow}
+                          </span>
+                        </div>
+                      </div>
+                      {/* FTD Pressure */}
+                      <div>
+                        <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">FTD Pressure</div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-sm font-semibold text-white">
+                            {earningsEdge.ftdTotalShares > 0 ? formatShares(earningsEdge.ftdTotalShares) : DASH}
+                          </span>
+                          {earningsEdge.ftdImminent && (
+                            <span className="rounded-full border px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/10 border-amber-500/20 text-amber-400">
+                              imminent
+                            </span>
+                          )}
+                        </div>
+                        {earningsEdge.ftdNearestDeadline && (
+                          <div className="mt-0.5 text-[10px] text-[#555]">
+                            Deadline: {earningsEdge.ftdNearestDeadline}
+                          </div>
+                        )}
+                      </div>
+                      {/* Gamma Zone */}
+                      <div>
+                        <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Gamma Zone</div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-sm font-semibold text-white">
+                            {earningsEdge.nearestGammaStrike != null ? `$${earningsEdge.nearestGammaStrike.toFixed(0)}` : DASH}
+                          </span>
+                          {earningsEdge.hasGammaTrigger && (
+                            <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium bg-purple-500/10 border-purple-500/20 text-purple-400`}>
+                              {earningsEdge.gammaAbovePrice ? "above price" : "below price"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Volume */}
+                      <div>
+                        <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Volume</div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-sm font-semibold text-white">
+                            {earningsEdge.volumeRatio != null ? earningsEdge.volumeRatio.toFixed(2) : DASH}
+                          </span>
+                          <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+                            earningsEdge.volumePattern === "accumulation"
+                              ? "bg-green-500/10 border-green-500/20 text-green-400"
+                              : earningsEdge.volumePattern === "distribution"
+                                ? "bg-red-500/10 border-red-500/20 text-red-400"
+                                : "bg-[#2a2a2a] border-[#333] text-[#a0a0a0]"
+                          }`}>
+                            {earningsEdge.volumePattern}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Regime */}
+                      <div>
+                        <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider">Regime</div>
+                        <div className="mt-1">
+                          <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+                            earningsEdge.regime === "strong_bull" || earningsEdge.regime === "bull"
+                              ? "bg-green-500/10 border-green-500/20 text-green-400"
+                              : earningsEdge.regime === "bear"
+                                ? "bg-red-500/10 border-red-500/20 text-red-400"
+                                : "bg-[#2a2a2a] border-[#333] text-[#a0a0a0]"
+                          }`}>
+                            {earningsEdge.regime.replace("_", " ")}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Technical Setup Card */}
+                {!enrichLoading && prerunDetail && (
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-4">
+                    <div className="mb-3 text-sm font-bold text-white">Technical Setup</div>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {/* M2 Timing */}
+                      <div>
+                        <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider mb-1.5">M2 Timing</div>
+                        <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+                          prerunDetail.data.emaM2TrendStrength === "strong"
+                            ? "bg-green-500/10 border-green-500/20 text-green-400"
+                            : prerunDetail.data.emaM2TrendStrength === "moderate"
+                              ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                              : prerunDetail.data.emaM2TrendStrength === "weak"
+                                ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                                : "bg-red-500/10 border-red-500/20 text-red-400"
+                        }`}>
+                          {prerunDetail.data.emaM2TrendStrength ?? "N/A"}
+                        </span>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] ${
+                            prerunDetail.data.emaM2BullishCross ? "border-green-500/30 text-green-400" : "border-[#333] text-[#555]"
+                          }`}>
+                            Cross {prerunDetail.data.emaM2BullishCross ? "\u2713" : "\u2717"}
+                          </span>
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] ${
+                            prerunDetail.data.emaM2PriceAboveBoth ? "border-green-500/30 text-green-400" : "border-[#333] text-[#555]"
+                          }`}>
+                            Above {prerunDetail.data.emaM2PriceAboveBoth ? "\u2713" : "\u2717"}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {prerunDetail.data.emaM2DisplacementNearCross && (
+                            <span className="rounded bg-[#2a2a2a] px-1.5 py-0.5 text-[9px] text-[#a0a0a0]">Displacement</span>
+                          )}
+                          {prerunDetail.data.emaM2FvgNearCross && (
+                            <span className="rounded bg-[#2a2a2a] px-1.5 py-0.5 text-[9px] text-[#a0a0a0]">FVG</span>
+                          )}
+                          {prerunDetail.data.emaM2CrossedWithin5Bars && (
+                            <span className="rounded bg-[#2a2a2a] px-1.5 py-0.5 text-[9px] text-[#a0a0a0]">Fresh cross</span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Higher Lows */}
+                      <div>
+                        <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider mb-1.5">Higher Lows</div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-1">
+                            {Array.from({ length: 3 }, (_, i) => (
+                              <span
+                                key={i}
+                                className={`inline-block h-3 w-3 rounded-full ${
+                                  i < (prerunDetail.data.higherLowsCount ?? 0)
+                                    ? "bg-green-500"
+                                    : "bg-[#2a2a2a]"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-sm font-semibold text-white">
+                            {prerunDetail.data.higherLowsCount ?? 0}/3
+                          </span>
+                        </div>
+                      </div>
+                      {/* Range Coil */}
+                      <div>
+                        <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider mb-1.5">Range Coil</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                            prerunDetail.data.closesNearRangeTop ? "border-green-500/30 text-green-400" : "border-[#333] text-[#555]"
+                          }`}>
+                            Near Top {prerunDetail.data.closesNearRangeTop ? "\u2713" : "\u2717"}
+                          </span>
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                            prerunDetail.data.atrContracting ? "border-green-500/30 text-green-400" : "border-[#333] text-[#555]"
+                          }`}>
+                            ATR Coil {prerunDetail.data.atrContracting ? "\u2713" : "\u2717"}
+                          </span>
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                            (prerunDetail.data.failedBreakdownRecovery ?? 0) >= 1 ? "border-green-500/30 text-green-400" : "border-[#333] text-[#555]"
+                          }`}>
+                            FBR {prerunDetail.data.failedBreakdownRecovery ?? 0}/2
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Pre-Run Breakdown Card */}
+                {!enrichLoading && prerunDetail && (
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-sm font-bold text-white">Pre-Run Breakdown</span>
+                      <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${verdictColor(prerunDetail.verdict)}`}>
+                        {prerunDetail.verdict}
+                      </span>
+                      <span className="text-xs text-[#777]">
+                        {prerunDetail.scores.totalScore}/39 pts
+                      </span>
+                    </div>
+                    {/* Gate row */}
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      {(["gate1", "gate2", "gate3"] as const).map((g, i) => (
+                        <span
+                          key={g}
+                          className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                            prerunDetail.gates[g]
+                              ? "border-green-500/30 text-green-400"
+                              : "border-red-500/30 text-red-400"
+                          }`}
+                        >
+                          G{i + 1} {prerunDetail.gates[g] ? "Pass" : "Fail"}
+                        </span>
+                      ))}
+                      {prerunDetail.gate1Bypassed && (
+                        <span className="rounded border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                          G1 Bypassed
+                        </span>
+                      )}
+                    </div>
+                    {/* Criteria dots */}
+                    <div className="flex flex-wrap gap-x-3 gap-y-1.5 mb-3">
+                      {([
+                        ["A", prerunDetail.scores.scoreA, 2],
+                        ["B", prerunDetail.scores.scoreB, 3],
+                        ["C", prerunDetail.scores.scoreC, 3],
+                        ["D", prerunDetail.scores.scoreD, 3],
+                        ["E", prerunDetail.scores.scoreE, 2],
+                        ["F", prerunDetail.scores.scoreF, 2],
+                        ["G", prerunDetail.scores.scoreG, 2],
+                        ["H", prerunDetail.scores.scoreH, 2],
+                        ["I", prerunDetail.scores.scoreI, 2],
+                        ["J", prerunDetail.scores.scoreJ, 2],
+                        ["K", prerunDetail.scores.scoreK, 2],
+                        ["L", prerunDetail.scores.scoreL, 2],
+                        ["M", prerunDetail.scores.scoreM, 2],
+                        ["M2", prerunDetail.scores.scoreM2, 2],
+                        ["N", prerunDetail.scores.scoreN, 2],
+                        ["O", prerunDetail.scores.scoreO, 2],
+                        ["P", prerunDetail.scores.scoreP, 2],
+                        ["Q", prerunDetail.scores.scoreQ, 2],
+                      ] as [string, number, number][]).map(([label, val, max]) => (
+                        <div key={label} className="flex items-center gap-1" title={`${label}: ${val}/${max}`}>
+                          <span className="text-[10px] text-[#555]">{label}</span>
+                          <span className={`inline-block h-2 w-2 rounded-full ${scoreDotColor(val, max)}`} />
+                        </div>
+                      ))}
+                    </div>
+                    {/* Key data */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#777]">
+                      {prerunDetail.data.pctFromAth != null && (
+                        <span>% from ATH: {(prerunDetail.data.pctFromAth * 100).toFixed(1)}%</span>
+                      )}
+                      {prerunDetail.data.shortFloat != null && (
+                        <span>SI%: {(prerunDetail.data.shortFloat * 100).toFixed(1)}%</span>
+                      )}
+                      {prerunDetail.data.daysToEarnings != null && (
+                        <span>{prerunDetail.data.daysToEarnings}d to earnings</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Signal Accuracy Card */}
+                {scanResult && (
+                  <div className="rounded-md border border-[#2a2a2a] bg-[#141414] p-4">
+                    <div className="mb-3 text-sm font-bold text-white">Signal Accuracy</div>
+                    <HitRateDashboard scanner="confluence" />
+                  </div>
+                )}
 
                 {/* Earnings Playbook */}
                 {playbook && (
