@@ -1,7 +1,7 @@
 /**
  * Catalyst Scanner v2 scoring engine.
  * 13 factors (max 100), 3 stubbed for Phase 2.
- * Max achievable score in phase 1: 85.
+ * Raw scores are normalized to 0-100 scale based on achievable max (83).
  */
 
 import type {
@@ -12,17 +12,15 @@ import type {
   CatalystResult,
   ETFPriceData,
 } from "./types";
+import { MAX_ACHIEVABLE_SCORE } from "./types";
 import type { CatalystTicker, CatalystLayer } from "@/data/catalyst-universe";
 import { getLayerPeers } from "@/data/catalyst-universe";
 
-// ── Verdict thresholds ──
-// Max achievable is 83 (3 factors stubbed). Mean reversion and momentum
-// breakout are mutually exclusive (~8 pts max from either), so practical
-// ceiling is ~75. Thresholds must be achievable in normal market conditions.
+// ── Verdict thresholds (applied to normalized 0-100 scores) ──
 
-const PRESPIKE_THRESHOLD = 45;
-const WATCH_THRESHOLD = 32;
-const MONITOR_THRESHOLD = 20;
+const PRESPIKE_THRESHOLD = 60;
+const WATCH_THRESHOLD = 42;
+const MONITOR_THRESHOLD = 28;
 
 // ── Individual Scoring Functions ──
 
@@ -44,6 +42,7 @@ export function scoreMeanReversion(ytdPct: number): number {
   if (ytdPct <= -30) return 6;
   if (ytdPct <= -20) return 5;
   if (ytdPct <= -10) return 3;
+  if (ytdPct <= 0) return 1; // flat/slight pullback — still some reversion potential
   return 0;
 }
 
@@ -62,6 +61,8 @@ export function scoreMomentumBreakout(
   if (pctFromHigh <= 5) return 4;
   if (pctFromHigh <= 10 && volRatio > 1.5) return 5;
   if (pctFromHigh <= 10) return 3;
+  if (pctFromHigh <= 15) return 2;
+  if (pctFromHigh <= 20) return 1;
   return 0;
 }
 
@@ -113,7 +114,7 @@ export function scorePeerSpiked(
 
   for (const peer of peers) {
     const peerData = allData.get(peer.symbol);
-    if (peerData && peerData.change5d >= 10) {
+    if (peerData && peerData.change5d >= 5) {
       spikedPeers.push(peer.symbol);
     }
   }
@@ -202,11 +203,13 @@ export function computeScores(
     newsCluster: scoreNewsCluster(),
   };
 
-  const totalScore = Object.values(scores).reduce((a, b) => a + b, 0);
+  const rawTotal = Object.values(scores).reduce((a, b) => a + b, 0);
+  // Normalize to 0-100 scale based on achievable max (accounts for stubbed factors)
+  const totalScore = Math.round((rawTotal / MAX_ACHIEVABLE_SCORE) * 100 * 10) / 10;
 
   return {
     scores,
-    totalScore: Math.round(totalScore * 10) / 10,
+    totalScore: Math.min(100, totalScore),
     peersThatSpiked: peerResult.spikedPeers,
   };
 }
@@ -362,12 +365,14 @@ export function buildResult(
   fireDrill: boolean,
   etfData: ETFPriceData | null
 ): CatalystResult {
-  // If fire drill, boost peer-spiked score
+  // If fire drill, boost peer-spiked score and re-normalize
   let adjustedScores = scores;
   let adjustedTotal = totalScore;
   if (fireDrill && scores.peerSpiked < 8) {
     adjustedScores = { ...scores, peerSpiked: 8 };
-    adjustedTotal = totalScore - scores.peerSpiked + 8;
+    const rawDelta = 8 - scores.peerSpiked;
+    adjustedTotal = Math.min(100, totalScore + (rawDelta / MAX_ACHIEVABLE_SCORE) * 100);
+    adjustedTotal = Math.round(adjustedTotal * 10) / 10;
   }
 
   const verdict = classifyVerdict(adjustedTotal);
