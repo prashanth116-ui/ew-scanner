@@ -13,6 +13,7 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const YAHOO_SUMMARY = "https://query1.finance.yahoo.com/v10/finance/quoteSummary";
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
+const YAHOO_OPTIONS = "https://query1.finance.yahoo.com/v7/finance/options";
 
 // ── Safe number coercion ──
 
@@ -145,6 +146,46 @@ function computeSMA(closes: number[], period: number): number {
   return slice.reduce((a, b) => a + b, 0) / slice.length;
 }
 
+/** Fetch options chain from Yahoo Finance and calculate put/call OI ratio. */
+async function fetchYahooPutCallRatio(
+  ticker: string
+): Promise<number | null> {
+  const auth = await getYahooCrumb();
+  if (!auth) return null;
+
+  try {
+    const url = `${YAHOO_OPTIONS}/${encodeURIComponent(ticker)}?crumb=${encodeURIComponent(auth.crumb)}`;
+    const res = await fetchWithRetry(url, {
+      headers: { "User-Agent": UA, Cookie: auth.cookie },
+    });
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      optionChain?: {
+        result?: {
+          options?: {
+            calls?: { openInterest?: number }[];
+            puts?: { openInterest?: number }[];
+          }[];
+        }[];
+      };
+    };
+
+    const options = data?.optionChain?.result?.[0]?.options?.[0];
+    if (!options) return null;
+
+    let totalCallOI = 0;
+    let totalPutOI = 0;
+    for (const c of options.calls ?? []) totalCallOI += c.openInterest ?? 0;
+    for (const p of options.puts ?? []) totalPutOI += p.openInterest ?? 0;
+
+    if (totalCallOI === 0) return totalPutOI > 0 ? 10 : null;
+    return totalPutOI / totalCallOI;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Fetch all catalyst data for a single ticker.
  * Combines chart data (3mo daily) with quoteSummary for fundamentals.
@@ -152,10 +193,14 @@ function computeSMA(closes: number[], period: number): number {
 export async function fetchCatalystData(
   symbol: string
 ): Promise<CatalystRawData | null> {
-  // Fetch chart and summary in parallel
-  const [chartData, summary] = await Promise.all([
+  // Fetch chart, summary, and options in parallel
+  const [chartData, summary, putCallRatio] = await Promise.all([
     fetchYahooChart(symbol, "3mo", "1d"),
-    fetchYahooSummary(symbol, ["price", "defaultKeyStatistics", "financialData", "summaryDetail"]),
+    fetchYahooSummary(symbol, [
+      "price", "defaultKeyStatistics", "financialData", "summaryDetail",
+      "earningsHistory", "insiderTransactions", "majorHoldersBreakdown",
+    ]),
+    fetchYahooPutCallRatio(symbol),
   ]);
 
   if (!chartData || !summary) return null;
@@ -243,6 +288,41 @@ export async function fetchCatalystData(
     currentPrice // fallback to current price if unavailable (neutral for scoring)
   );
 
+  // ── Earnings surprise history (last 4 quarters, newest first) ──
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const earningsHistory = summary.earningsHistory as Record<string, any> | undefined;
+  const historyRaw = (earningsHistory?.history ?? []) as Record<string, unknown>[];
+  const earningsSurprises: number[] = historyRaw
+    .map((h) => {
+      const surprise = extractRaw(h.surprisePercent);
+      return surprise !== null ? surprise * 100 : null;
+    })
+    .filter((v): v is number => v !== null)
+    .reverse()  // newest first
+    .slice(0, 4);
+
+  // ── Insider transactions (purchases vs sales in last 90 days) ──
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const insiderTx = summary.insiderTransactions as Record<string, any> | undefined;
+  const txRaw = (insiderTx?.transactions ?? []) as Record<string, unknown>[];
+  const now90 = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  let purchases = 0;
+  let sales = 0;
+  for (const t of txRaw) {
+    const dateStr = (t.startDate as { fmt?: string })?.fmt;
+    if (!dateStr) continue;
+    const txDate = new Date(dateStr).getTime();
+    if (txDate < now90) continue;
+    const text = ((t.transactionText as string) ?? "").toLowerCase();
+    if (text.includes("purchase") || text.includes("acquisition")) purchases++;
+    else if (text.includes("sale") || text.includes("disposition")) sales++;
+  }
+
+  // ── Institutional ownership ──
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const holders = summary.majorHoldersBreakdown as Record<string, any> | undefined;
+  const institutionalPercent = toNum(extractRaw(holders?.institutionsPercentHeld), 0);
+
   return {
     symbol,
     price: currentPrice,
@@ -256,8 +336,13 @@ export async function fetchCatalystData(
     volume5dAvg: vol5d,
     volume20dAvg: vol20d,
     closes,
+    volumes,
     sma50,
     sma200,
+    earningsSurprises,
+    putCallRatio,
+    insiderNetBuys: { purchases, sales },
+    institutionalPercent,
   };
 }
 

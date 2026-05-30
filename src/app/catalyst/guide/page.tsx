@@ -106,7 +106,7 @@ export default function CatalystGuidePage() {
           <p>
             The Catalyst Scanner identifies <strong className="text-white">AI infrastructure stocks</strong> that
             are setting up for a significant move — <em>before</em> the spike happens. It scans ~75 tickers across
-            11 layers of the AI supply chain, scores each stock on 13 factors, and classifies them into
+            11 layers of the AI supply chain, scores each stock on 17 factors, and classifies them into
             actionable categories.
           </p>
 
@@ -123,7 +123,7 @@ export default function CatalystGuidePage() {
             <ol className="list-inside list-decimal space-y-1.5 text-[#c0c0c0]">
               <li>Scans a curated universe of ~75 AI infrastructure tickers</li>
               <li>Fetches real-time price, volume, short interest, and analyst data</li>
-              <li>Scores each stock on <strong className="text-white">13 factors</strong> (max 100 pts)</li>
+              <li>Scores each stock on <strong className="text-white">17 factors</strong> (max 100 pts)</li>
               <li>Classifies into <strong className="text-white">PRE-SPIKE</strong>, <strong className="text-white">WATCH</strong>, <strong className="text-white">MONITOR</strong>, or <strong className="text-white">MISS</strong></li>
               <li>Detects <strong className="text-white">fire drills</strong> when a peer stock just spiked</li>
               <li>Overlays an <strong className="text-white">event calendar</strong> (earnings, FOMC, OPEX)</li>
@@ -199,12 +199,12 @@ export default function CatalystGuidePage() {
         {/* Section 3: Scoring */}
         <Section
           id="scoring"
-          title="13-Factor Scoring Engine"
+          title="17-Factor Scoring Engine"
           icon={<BarChart3 className="h-5 w-5 text-red-400" />}
         >
           <p>
-            Each stock is scored on 13 factors, with a maximum possible score of <strong className="text-white">100 points</strong>.
-            Three factors are currently stubbed at 0 (Phase 2), so the current maximum achievable score is <strong className="text-white">83</strong>.
+            Each stock is scored on 17 factors, with a raw maximum of <strong className="text-white">118 points</strong>.
+            Scores are normalized to 0-100 based on a practical ceiling of 100 (accounting for mutual exclusivities between factors).
           </p>
 
           <div className="mt-4 space-y-3">
@@ -335,27 +335,98 @@ export default function CatalystGuidePage() {
             />
 
             <FactorCard
-              name="Revenue Acceleration"
+              name="Earnings Surprise"
               max={8}
-              stub
-              description="Quarter-over-quarter revenue growth acceleration. Requires quarterly financial data — coming in Phase 2."
-              levels={[]}
+              active
+              description="Consecutive EPS beats over the last 4 quarters. Companies that consistently beat estimates tend to continue surprising to the upside."
+              levels={[
+                { range: "4 consecutive beats", score: "8" },
+                { range: "3 consecutive beats", score: "6" },
+                { range: "2 consecutive beats", score: "4" },
+                { range: "1 beat (most recent)", score: "2" },
+                { range: "Most recent miss", score: "0" },
+              ]}
             />
 
             <FactorCard
-              name="IV Rank"
+              name="Options Skew"
               max={4}
-              stub
-              description="Implied volatility rank — low IV rank means options are cheap relative to historical range. Coming in Phase 2."
-              levels={[]}
+              active
+              description="Put/call open interest ratio from the options chain. High put/call ratio means heavy put positioning — squeeze fuel when a positive catalyst hits."
+              levels={[
+                { range: "P/C >= 1.5 (heavy puts)", score: "4" },
+                { range: "P/C >= 1.0", score: "3" },
+                { range: "P/C <= 0.4 (very bullish)", score: "2" },
+                { range: "P/C 0.4-1.0", score: "1" },
+              ]}
             />
 
             <FactorCard
-              name="News Cluster"
+              name="Trend Acceleration"
               max={5}
-              stub
-              description="Density of recent analyst upgrades and AI-related news mentions. Requires news API — coming in Phase 2."
-              levels={[]}
+              active
+              description="Compares 10-day rate of change vs half of 20-day ROC. Positive acceleration means the trend is speeding up, not just continuing."
+              levels={[
+                { range: "Acceleration >= 5%", score: "5" },
+                { range: ">= 3%", score: "4" },
+                { range: ">= 1.5%", score: "3" },
+                { range: ">= 0.5%", score: "2" },
+                { range: "> 0%", score: "1" },
+              ]}
+            />
+
+            <FactorCard
+              name="Relative Strength vs Sector"
+              max={5}
+              active
+              description="Stock's 20-day return minus its sector ETF's 20-day return. Outperforming the sector means the stock has its own catalyst, not just riding the wave."
+              levels={[
+                { range: "Outperformance >= 10%", score: "5" },
+                { range: ">= 5%", score: "4" },
+                { range: ">= 2%", score: "3" },
+                { range: ">= 0%", score: "1" },
+                { range: "Underperforming", score: "0" },
+              ]}
+            />
+
+            <FactorCard
+              name="Insider Buying"
+              max={5}
+              active
+              description="Net insider purchase activity in the last 90 days. Insiders buying their own stock is a strong conviction signal — they have the most information."
+              levels={[
+                { range: "3+ purchases, 0 sales", score: "5" },
+                { range: "2+ purchases, net positive", score: "4" },
+                { range: "1 purchase, 0 sales", score: "3" },
+                { range: "Any purchase with sales", score: "1" },
+                { range: "Only sales or none", score: "0" },
+              ]}
+            />
+
+            <FactorCard
+              name="Institutional Ownership"
+              max={4}
+              active
+              description="Percentage of shares held by institutional investors. High institutional ownership means smart money is positioned and provides a floor of support."
+              levels={[
+                { range: ">= 90%", score: "4" },
+                { range: ">= 75%", score: "3" },
+                { range: ">= 50%", score: "2" },
+                { range: ">= 25%", score: "1" },
+              ]}
+            />
+
+            <FactorCard
+              name="Dark Pool Proxy"
+              max={4}
+              active
+              description="Days in last 10 with volume > 2x 20-day average but price change < 1%. High volume with no movement suggests large block trades being absorbed — accumulation before a move."
+              levels={[
+                { range: "3+ days", score: "4" },
+                { range: "2 days", score: "3" },
+                { range: "1 day", score: "2" },
+                { range: "0 days", score: "0" },
+              ]}
             />
           </div>
 
@@ -407,13 +478,13 @@ export default function CatalystGuidePage() {
           <SubSection title="Score Bar and Factor Dots">
             <p>
               Each result card shows a <strong className="text-white">score bar</strong> (total out of 100) and
-              a row of <strong className="text-white">13 colored dots</strong> representing individual factor scores:
+              a row of <strong className="text-white">17 colored dots</strong> representing individual factor scores:
             </p>
             <ul className="mt-2 list-inside list-disc space-y-1 text-[#c0c0c0]">
               <li><span className="inline-block h-2 w-2 rounded-full bg-green-500" /> <strong className="text-white">Green</strong> &mdash; Factor at 75%+ of its max</li>
               <li><span className="inline-block h-2 w-2 rounded-full bg-amber-500" /> <strong className="text-white">Amber</strong> &mdash; Factor at 40-74% of its max</li>
               <li><span className="inline-block h-2 w-2 rounded-full bg-red-500" /> <strong className="text-white">Red</strong> &mdash; Factor below 40% (contributing but weak)</li>
-              <li><span className="inline-block h-2 w-2 rounded-full bg-[#333]" /> <strong className="text-white">Gray</strong> &mdash; Factor at 0 (not contributing or stubbed)</li>
+              <li><span className="inline-block h-2 w-2 rounded-full bg-[#333]" /> <strong className="text-white">Gray</strong> &mdash; Factor at 0 (not contributing or data unavailable)</li>
             </ul>
             <p className="mt-2 text-[#a0a0a0]">
               Hover over any dot to see the factor name and exact score.
@@ -562,19 +633,18 @@ export default function CatalystGuidePage() {
           title="Limitations and Caveats"
           icon={<Shield className="h-5 w-5 text-amber-400" />}
         >
-          <SubSection title="Stubbed Factors (Phase 2)">
+          <SubSection title="Score Normalization">
             <p>
-              Three scoring factors are currently disabled (return 0):
+              All 17 factors are active with a raw maximum of 118 points. Scores are normalized to 0-100
+              based on a practical ceiling of 100, accounting for mutual exclusivities between factors
+              (e.g., mean reversion vs momentum breakout). Some data points may be unavailable for
+              certain tickers:
             </p>
             <ul className="mt-2 list-inside list-disc space-y-1 text-[#c0c0c0]">
-              <li><strong className="text-white">Revenue Acceleration</strong> (max 8 pts) &mdash; Requires quarterly financial data API</li>
-              <li><strong className="text-white">IV Rank</strong> (max 4 pts) &mdash; Requires options chain data</li>
-              <li><strong className="text-white">News Cluster</strong> (max 5 pts) &mdash; Requires news/headline API</li>
+              <li><strong className="text-white">Options Skew</strong> &mdash; ADR tickers (e.g., FANUY) may lack options chain data</li>
+              <li><strong className="text-white">Earnings Surprise</strong> &mdash; Pre-revenue or recently IPO&rsquo;d companies may have no history</li>
+              <li><strong className="text-white">Insider Transactions</strong> &mdash; Some companies have sparse insider filing data</li>
             </ul>
-            <p className="mt-2 text-[#a0a0a0]">
-              This means the current maximum achievable score is 83/100. Scores should be interpreted relative
-              to this ceiling, not the theoretical 100.
-            </p>
           </SubSection>
 
           <SubSection title="Data Freshness">

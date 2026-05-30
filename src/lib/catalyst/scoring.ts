@@ -1,7 +1,6 @@
 /**
- * Catalyst Scanner v2 scoring engine.
- * 13 factors (max 100), 3 stubbed for Phase 2.
- * Raw scores are normalized to 0-100 scale based on achievable max (83).
+ * Catalyst Scanner v3 scoring engine.
+ * 17 factors (raw max 118), normalized to 0-100 scale.
  */
 
 import type {
@@ -138,9 +137,20 @@ export function scoreSectorETF(etfData: ETFPriceData | null): number {
   return 0;
 }
 
-/** Factor 10: Revenue acceleration — STUB (Phase 2). */
-export function scoreRevenueAcceleration(): number {
-  return 0;
+/** Factor 10: Earnings surprise — consecutive EPS beats (max 8). */
+export function scoreEarningsSurprise(surprises: number[]): number {
+  if (surprises.length === 0) return 0;
+  // Count consecutive beats from most recent
+  let consecutive = 0;
+  for (const s of surprises) {
+    if (s > 0) consecutive++;
+    else break;
+  }
+  if (consecutive >= 4) return 8;
+  if (consecutive >= 3) return 6;
+  if (consecutive >= 2) return 4;
+  if (consecutive >= 1) return 2;
+  return 0; // most recent miss
 }
 
 /** Factor 11: MA position — trend alignment (max 5). */
@@ -162,19 +172,109 @@ export function scoreMAPosition(
   return score;
 }
 
-/** Factor 12: IV Rank — STUB (Phase 2). */
-export function scoreIVRank(): number {
+/** Factor 12: Options skew — put/call OI ratio (max 4). */
+export function scoreOptionsSkew(putCallRatio: number | null): number {
+  if (putCallRatio === null) return 0;
+  if (putCallRatio >= 1.5) return 4;  // heavy puts = squeeze fuel
+  if (putCallRatio >= 1.0) return 3;
+  if (putCallRatio <= 0.4) return 2;  // very bullish flow
+  return 1; // 0.4-1.0 neutral
+}
+
+/** Factor 13: Trend acceleration — 10d ROC vs half of 20d ROC (max 5). */
+export function scoreTrendAcceleration(closes: number[]): number {
+  if (closes.length < 21) return 0;
+  const len = closes.length;
+  const price10dAgo = closes[len - 11];
+  const price20dAgo = closes[len - 21];
+  const current = closes[len - 1];
+
+  if (price10dAgo <= 0 || price20dAgo <= 0) return 0;
+
+  const roc10d = ((current - price10dAgo) / price10dAgo) * 100;
+  const roc20d = ((current - price20dAgo) / price20dAgo) * 100;
+  const acceleration = roc10d - roc20d / 2;
+
+  if (acceleration >= 5) return 5;
+  if (acceleration >= 3) return 4;
+  if (acceleration >= 1.5) return 3;
+  if (acceleration >= 0.5) return 2;
+  if (acceleration > 0) return 1;
   return 0;
 }
 
-/** Factor 13: News cluster — STUB (Phase 2). */
-export function scoreNewsCluster(): number {
+/** Factor 14: Relative strength vs sector ETF (max 5). */
+export function scoreRelativeStrength(
+  closes: number[],
+  etfCloses: number[] | null
+): number {
+  if (!etfCloses || closes.length < 21 || etfCloses.length < 21) return 0;
+
+  const stockLen = closes.length;
+  const etfLen = etfCloses.length;
+  const stockReturn = ((closes[stockLen - 1] - closes[stockLen - 21]) / closes[stockLen - 21]) * 100;
+  const etfReturn = ((etfCloses[etfLen - 1] - etfCloses[etfLen - 21]) / etfCloses[etfLen - 21]) * 100;
+  const outperformance = stockReturn - etfReturn;
+
+  if (outperformance >= 10) return 5;
+  if (outperformance >= 5) return 4;
+  if (outperformance >= 2) return 3;
+  if (outperformance >= 0) return 1;
+  return 0; // underperforming
+}
+
+/** Factor 15: Insider buying — net purchases in last 90 days (max 5). */
+export function scoreInsiderBuying(
+  buys: { purchases: number; sales: number }
+): number {
+  const { purchases, sales } = buys;
+  if (purchases >= 3 && sales === 0) return 5;
+  if (purchases >= 2 && purchases > sales) return 4;
+  if (purchases >= 1 && sales === 0) return 3;
+  if (purchases > 0 && sales > 0) return 1;
+  return 0; // only sales or none
+}
+
+/** Factor 16: Institutional ownership — % held by institutions (max 4). */
+export function scoreInstitutionalOwnership(pct: number): number {
+  // pct is 0-1 fraction
+  if (pct >= 0.90) return 4;
+  if (pct >= 0.75) return 3;
+  if (pct >= 0.50) return 2;
+  if (pct >= 0.25) return 1;
+  return 0;
+}
+
+/** Factor 17: Dark pool proxy — high-volume low-move days (max 4). */
+export function scoreDarkPoolActivity(
+  closes: number[],
+  volumes: number[]
+): number {
+  if (closes.length < 21 || volumes.length < 21) return 0;
+
+  const len = Math.min(closes.length, volumes.length);
+  // 20d average volume
+  const vol20d = volumes.slice(len - 20, len).reduce((a, b) => a + b, 0) / 20;
+  if (vol20d <= 0) return 0;
+
+  // Count days in last 10 with volume > 2x 20d avg AND abs(daily change) < 1%
+  let count = 0;
+  for (let i = len - 10; i < len; i++) {
+    if (i < 1) continue;
+    const dailyChange = Math.abs((closes[i] - closes[i - 1]) / closes[i - 1]) * 100;
+    const volRatio = volumes[i] / vol20d;
+    if (volRatio > 2 && dailyChange < 1) count++;
+  }
+
+  if (count >= 3) return 4;
+  if (count >= 2) return 3;
+  if (count >= 1) return 2;
   return 0;
 }
 
 // ── Composite Scoring ──
 
-/** Compute all 13 factor scores for a ticker. */
+/** Compute all 17 factor scores for a ticker. */
 export function computeScores(
   data: CatalystRawData,
   daysToCatalyst: number | null,
@@ -198,14 +298,18 @@ export function computeScores(
     rsiPosition: scoreRSI(data.closes.length >= 15 ? computeRSIFromCloses(data.closes) : 50),
     peerSpiked: peerResult.score,
     sectorEtfMomentum: scoreSectorETF(etfData),
-    revenueAcceleration: scoreRevenueAcceleration(),
+    earningsSurprise: scoreEarningsSurprise(data.earningsSurprises),
     maPosition: scoreMAPosition(data.price, data.sma50, data.sma200),
-    ivRank: scoreIVRank(),
-    newsCluster: scoreNewsCluster(),
+    optionsSkew: scoreOptionsSkew(data.putCallRatio),
+    trendAcceleration: scoreTrendAcceleration(data.closes),
+    relativeStrength: scoreRelativeStrength(data.closes, etfData?.closes ?? null),
+    insiderBuying: scoreInsiderBuying(data.insiderNetBuys),
+    institutionalOwnership: scoreInstitutionalOwnership(data.institutionalPercent),
+    darkPoolActivity: scoreDarkPoolActivity(data.closes, data.volumes),
   };
 
   const rawTotal = Object.values(scores).reduce((a, b) => a + b, 0);
-  // Normalize to 0-100 scale based on achievable max (accounts for stubbed factors)
+  // Normalize to 0-100 scale based on practical achievable max
   const totalScore = Math.round((rawTotal / MAX_ACHIEVABLE_SCORE) * 100 * 10) / 10;
 
   return {

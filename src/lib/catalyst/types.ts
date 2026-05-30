@@ -8,26 +8,30 @@ import type { CatalystLayer } from "@/data/catalyst-universe";
 // ── Scoring ──
 
 export interface CatalystScores {
-  daysToCatalyst: number;     // 0-12
-  meanReversion: number;      // 0-8
-  momentumBreakout: number;   // 0-7
-  shortInterest: number;      // 0-10
-  analystUpside: number;      // 0-8
-  volumeRatio: number;        // 0-10
-  rsiPosition: number;        // 0-8
-  peerSpiked: number;         // 0-8
-  sectorEtfMomentum: number;  // 0-7
-  revenueAcceleration: number;// 0-8 (stub: 0)
-  maPosition: number;         // 0-5
-  ivRank: number;             // 0-4 (stub: 0)
-  newsCluster: number;        // 0-5 (stub: 0)
+  daysToCatalyst: number;        // 0-12
+  meanReversion: number;         // 0-8
+  momentumBreakout: number;      // 0-7
+  shortInterest: number;         // 0-10
+  analystUpside: number;         // 0-8
+  volumeRatio: number;           // 0-10
+  rsiPosition: number;           // 0-8
+  peerSpiked: number;            // 0-8
+  sectorEtfMomentum: number;     // 0-7
+  earningsSurprise: number;      // 0-8  (was revenueAcceleration stub)
+  maPosition: number;            // 0-5
+  optionsSkew: number;           // 0-4  (was ivRank stub)
+  trendAcceleration: number;     // 0-5  (was newsCluster stub)
+  relativeStrength: number;      // 0-5
+  insiderBuying: number;         // 0-5
+  institutionalOwnership: number;// 0-4
+  darkPoolActivity: number;      // 0-4
 }
 
-/** Max achievable score accounting for stubbed factors AND mutual exclusivity
- *  of mean reversion (8) vs momentum breakout (7). A stock can't be both beaten
- *  down YTD and near its 52-week high, so practical ceiling is ~75, not 83. */
-export const MAX_SCORE = 100;
-export const MAX_ACHIEVABLE_SCORE = 75;
+/** Max achievable score accounting for mutual exclusivity:
+ *  mean reversion (8) vs momentum breakout (7) ~-7, trend accel vs MR ~-3.
+ *  Raw max = 118, practical ceiling ~100. */
+export const MAX_SCORE = 118;
+export const MAX_ACHIEVABLE_SCORE = 100;
 
 // ── Verdicts ──
 
@@ -122,8 +126,13 @@ export interface CatalystRawData {
   volume5dAvg: number;
   volume20dAvg: number;
   closes: number[];      // daily closes (for RSI)
+  volumes: number[];     // daily volumes (for dark pool proxy)
   sma50: number;
   sma200: number;
+  earningsSurprises: number[];  // last 4 quarters surprise % (newest first)
+  putCallRatio: number | null;
+  insiderNetBuys: { purchases: number; sales: number };
+  institutionalPercent: number; // 0-1 fraction
 }
 
 // ── ETF Data ──

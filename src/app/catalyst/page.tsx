@@ -412,7 +412,7 @@ function CatalystPage() {
             <div>
               <h1 className="text-lg font-bold text-white">Catalyst Scanner</h1>
               <p className="text-xs text-[#888]">
-                AI infrastructure spike detector — 13-factor scoring across 76 tickers
+                AI infrastructure spike detector — 17-factor scoring across 76 tickers
                 {cacheMinutes !== null && ` (scanned ${cacheMinutes}m ago)`}
               </p>
             </div>
@@ -707,10 +707,14 @@ const SCORE_FACTOR_MAXES: Record<string, number> = {
   rsiPosition: 8,
   peerSpiked: 8,
   sectorEtfMomentum: 7,
-  revenueAcceleration: 8,
+  earningsSurprise: 8,
   maPosition: 5,
-  ivRank: 4,
-  newsCluster: 5,
+  optionsSkew: 4,
+  trendAcceleration: 5,
+  relativeStrength: 5,
+  insiderBuying: 5,
+  institutionalOwnership: 4,
+  darkPoolActivity: 4,
 };
 
 function ResultCard({
