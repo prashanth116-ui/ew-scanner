@@ -65,7 +65,7 @@ const UNIVERSE: CatalystTicker[] = [
   { symbol: "CSCO", name: "Cisco Systems", layer: "ai-networking", layerLabel: "AI Networking", tier: 2, sectorETF: "IGV" },
   { symbol: "JNPR", name: "Juniper Networks", layer: "ai-networking", layerLabel: "AI Networking", tier: 2, sectorETF: "IGV" },
   { symbol: "FFIV", name: "F5 Networks", layer: "ai-networking", layerLabel: "AI Networking", tier: 3, sectorETF: "IGV" },
-  { symbol: "INFN", name: "Infinera", layer: "ai-networking", layerLabel: "AI Networking", tier: 3, sectorETF: "IGV" },
+  { symbol: "CALX", name: "Calix", layer: "ai-networking", layerLabel: "AI Networking", tier: 3, sectorETF: "IGV" },
 
   // ── AI Optics (Tier 1-2) ──
   { symbol: "COHR", name: "Coherent Corp", layer: "ai-optics", layerLabel: "AI Optics", tier: 1, sectorETF: "SMH" },
@@ -135,7 +135,7 @@ const UNIVERSE: CatalystTicker[] = [
   { symbol: "ROK", name: "Rockwell Automation", layer: "robotics", layerLabel: "Robotics", tier: 3, sectorETF: "ROBO" },
   { symbol: "TER", name: "Teradyne", layer: "robotics", layerLabel: "Robotics", tier: 2, sectorETF: "ROBO" },
   { symbol: "IRBT", name: "iRobot", layer: "robotics", layerLabel: "Robotics", tier: 3, sectorETF: "ROBO" },
-  { symbol: "ABB", name: "ABB Ltd", layer: "robotics", layerLabel: "Robotics", tier: 2, sectorETF: "ROBO" },
+  { symbol: "ABBNY", name: "ABB Ltd", layer: "robotics", layerLabel: "Robotics", tier: 2, sectorETF: "ROBO" },
   { symbol: "FANUY", name: "Fanuc Corp", layer: "robotics", layerLabel: "Robotics", tier: 3, sectorETF: "ROBO" },
 ];
 
