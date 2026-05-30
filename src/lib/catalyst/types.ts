@@ -23,9 +23,11 @@ export interface CatalystScores {
   newsCluster: number;        // 0-5 (stub: 0)
 }
 
-/** Max achievable score (phase 1 = 83 since 3 factors are stubbed at 0). */
+/** Max achievable score accounting for stubbed factors AND mutual exclusivity
+ *  of mean reversion (8) vs momentum breakout (7). A stock can't be both beaten
+ *  down YTD and near its 52-week high, so practical ceiling is ~75, not 83. */
 export const MAX_SCORE = 100;
-export const MAX_ACHIEVABLE_SCORE = 83;
+export const MAX_ACHIEVABLE_SCORE = 75;
 
 // ── Verdicts ──
 

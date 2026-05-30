@@ -18,9 +18,9 @@ import { getLayerPeers } from "@/data/catalyst-universe";
 
 // ── Verdict thresholds (applied to normalized 0-100 scores) ──
 
-const PRESPIKE_THRESHOLD = 60;
-const WATCH_THRESHOLD = 42;
-const MONITOR_THRESHOLD = 28;
+const PRESPIKE_THRESHOLD = 72;
+const WATCH_THRESHOLD = 55;
+const MONITOR_THRESHOLD = 38;
 
 // ── Individual Scoring Functions ──
 
@@ -42,7 +42,8 @@ export function scoreMeanReversion(ytdPct: number): number {
   if (ytdPct <= -30) return 6;
   if (ytdPct <= -20) return 5;
   if (ytdPct <= -10) return 3;
-  if (ytdPct <= 0) return 1; // flat/slight pullback — still some reversion potential
+  if (ytdPct <= -5) return 2;
+  if (ytdPct <= 0) return 1;
   return 0;
 }
 
@@ -62,26 +63,26 @@ export function scoreMomentumBreakout(
   if (pctFromHigh <= 10 && volRatio > 1.5) return 5;
   if (pctFromHigh <= 10) return 3;
   if (pctFromHigh <= 15) return 2;
-  if (pctFromHigh <= 20) return 1;
+  if (pctFromHigh <= 25) return 1;
   return 0;
 }
 
 /** Factor 4: Short interest as % of float (max 10). */
 export function scoreShortInterest(siPct: number): number {
   if (siPct <= 0) return 0;
-  if (siPct >= 30) return 10;
-  // Linear interpolation: 0% → 0, 30% → 10
-  return Math.round((siPct / 30) * 10 * 10) / 10;
+  if (siPct >= 20) return 10;
+  // Linear interpolation: 0% → 0, 20% → 10
+  return Math.round((siPct / 20) * 10 * 10) / 10;
 }
 
 /** Factor 5: Analyst upside to target (max 8). */
 export function scoreAnalystUpside(target: number, price: number): number {
   if (price <= 0 || target <= 0) return 0;
   const upside = ((target - price) / price) * 100;
-  if (upside >= 50) return 8;
-  if (upside >= 35) return 6;
-  if (upside >= 20) return 4;
-  if (upside >= 10) return 2;
+  if (upside >= 40) return 8;
+  if (upside >= 25) return 6;
+  if (upside >= 15) return 4;
+  if (upside >= 5) return 2;
   return 0;
 }
 
@@ -89,10 +90,10 @@ export function scoreAnalystUpside(target: number, price: number): number {
 export function scoreVolumeRatio(vol5d: number, vol20d: number): number {
   if (vol20d <= 0) return 0;
   const ratio = vol5d / vol20d;
-  if (ratio >= 3) return 10;
+  if (ratio >= 2) return 10;
   if (ratio <= 1) return 0;
-  // Linear interpolation: 1x → 0, 3x → 10
-  return Math.round(((ratio - 1) / 2) * 10 * 10) / 10;
+  // Linear interpolation: 1x → 0, 2x → 10
+  return Math.round((ratio - 1) * 10 * 10) / 10;
 }
 
 /** Factor 7: RSI sweet spot 30-60 (max 8). */
