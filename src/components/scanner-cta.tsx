@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Zap, TrendingUp, BarChart3, Layers, Crosshair } from "lucide-react";
+import { Activity, Zap, TrendingUp, BarChart3, Layers, Crosshair, Flame } from "lucide-react";
 
 const scanners = [
   {
@@ -59,9 +59,19 @@ const scanners = [
     icon: Crosshair,
     color: "#f97316",
   },
+  {
+    id: "catalyst",
+    href: "/catalyst",
+    title: "Catalyst Scanner",
+    description:
+      "AI infrastructure spike detector — 13-factor scoring across 60 tickers with fire drill alerts and miss classification.",
+    icon: Flame,
+    color: "#ef4444",
+  },
 ];
 
 function getCurrentScannerId(pathname: string): string {
+  if (pathname.startsWith("/catalyst")) return "catalyst";
   if (pathname.startsWith("/strat")) return "strat";
   if (pathname.startsWith("/confluence")) return "confluence";
   if (pathname.startsWith("/sectors")) return "sectors";

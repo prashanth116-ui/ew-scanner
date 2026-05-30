@@ -10,7 +10,7 @@ import { createClient } from "./server";
 // ── Types ──
 
 export interface SignalRecord {
-  scanner: "ew" | "squeeze" | "confluence" | "prerun";
+  scanner: "ew" | "squeeze" | "confluence" | "prerun" | "catalyst";
   ticker: string;
   signal_date: string; // YYYY-MM-DD
   price_at_signal: number;
