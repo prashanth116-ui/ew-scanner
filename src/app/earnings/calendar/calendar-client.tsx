@@ -16,6 +16,7 @@ import {
   Bookmark,
   Crosshair,
   SlidersHorizontal,
+  Zap,
 } from "lucide-react";
 import { tierColor, verdictColor } from "@/lib/color-utils";
 import type { ConfluenceScanResult, ConfluenceResult } from "@/lib/confluence/types";
@@ -947,6 +948,7 @@ export function CalendarClient() {
   const [scanResults, setScanResults] = useState<Map<string, ConfluenceResult>>(new Map());
   const [scanLoading, setScanLoading] = useState(false);
   const [scanProgress, setScanProgress] = useState("");
+  const [focusMode, setFocusMode] = useState(false);
 
   const fetchData = useCallback(async () => {
     const range =
@@ -979,9 +981,10 @@ export function CalendarClient() {
     fetchData();
   }, [fetchData]);
 
-  // Clear selected day when switching views or navigating
+  // Clear selected day and focus mode when switching views or navigating
   useEffect(() => {
     setSelectedDay(null);
+    setFocusMode(false);
   }, [view, anchor]);
 
   const navigate = (dir: -1 | 1) => {
@@ -1085,6 +1088,22 @@ export function CalendarClient() {
     }
   }, [entries]);
 
+  // Count focus-eligible entries (for badge) — always uses full watchlist, not watchlist toggle
+  const focusCount = useMemo(() => {
+    if (scanResults.size === 0) return 0;
+    const wlTickers = getAllWatchlistTickers();
+    let count = 0;
+    for (const e of entries) {
+      const sr = scanResults.get(e.symbol);
+      if (sr && (sr.signal === "strong" || sr.signal === "moderate")) {
+        count++;
+      } else if (wlTickers.has(e.symbol) && sr) {
+        count++;
+      }
+    }
+    return count;
+  }, [entries, scanResults]);
+
   // Filter entries
   const filtered = useMemo(() => {
     let result = entries;
@@ -1094,8 +1113,16 @@ export function CalendarClient() {
     if (watchlistFilter && watchlistTickers) {
       result = result.filter((e) => watchlistTickers.has(e.symbol));
     }
+    if (focusMode && scanResults.size > 0) {
+      const wlTickers = getAllWatchlistTickers();
+      result = result.filter((e) => {
+        const sr = scanResults.get(e.symbol);
+        if (!sr) return false; // hide unscanned
+        return sr.signal === "strong" || sr.signal === "moderate" || wlTickers.has(e.symbol);
+      });
+    }
     return result;
-  }, [entries, hourFilter, watchlistFilter, watchlistTickers]);
+  }, [entries, hourFilter, watchlistFilter, watchlistTickers, focusMode, scanResults]);
 
   // Group filtered entries by date with smart sorting
   const grouped = useMemo(() => {
@@ -1272,6 +1299,21 @@ export function CalendarClient() {
           )}
           {scanLoading ? `Scanning${scanProgress ? ` ${scanProgress}` : "..."}` : "Scan Earnings"}
         </button>
+
+        {/* Focus mode */}
+        <button
+          onClick={() => setFocusMode((prev) => !prev)}
+          disabled={scanResults.size === 0}
+          title={focusMode ? "Showing strong/moderate signals + watchlist tickers" : "Filter to strong/moderate signals + watchlist tickers"}
+          className={`flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+            focusMode
+              ? "border-green-500/40 bg-green-500/10 text-green-400"
+              : "border-[#2a2a2a] text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50"
+          }`}
+        >
+          <Zap className="h-3 w-3" />
+          Focus{scanResults.size > 0 ? ` (${focusCount})` : ""}
+        </button>
       </div>
 
       {/* Summary */}
@@ -1283,6 +1325,9 @@ export function CalendarClient() {
             <span className="ml-1">
               ({hourFilter === "bmo" ? "Before Market Open" : "After Market Close"} only)
             </span>
+          )}
+          {focusMode && (
+            <span className="ml-1 text-green-400"> — Focus mode</span>
           )}
         </div>
       )}
@@ -1353,7 +1398,16 @@ export function CalendarClient() {
               <p className="text-sm text-[#555]">
                 No earnings reports found for this period
                 {hourFilter !== "all" && " with the selected filter"}
+                {focusMode && " in Focus mode"}
               </p>
+              {focusMode && (
+                <button
+                  onClick={() => setFocusMode(false)}
+                  className="mt-2 text-xs text-green-400 hover:underline"
+                >
+                  Disable Focus
+                </button>
+              )}
             </div>
           )}
         </>
