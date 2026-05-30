@@ -7,10 +7,12 @@ import {
   TrendingUp,
   Eye,
   EyeOff,
-  AlertTriangle,
   Calendar,
   ArrowUpDown,
   RefreshCw,
+  RotateCcw,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import type {
   CatalystScanResponse,
@@ -24,7 +26,7 @@ import { LAYER_LABELS } from "@/data/catalyst-universe";
 import {
   loadCatalystScanCache,
   saveCatalystScanCache,
-  getCatalystCacheAge,
+  clearCatalystScanCache,
   loadCatalystOverrides,
   addCatalystOverride,
   removeCatalystOverride,
@@ -49,7 +51,26 @@ const MISS_TABS: { key: MissCategory; label: string }[] = [
   { key: "too_early", label: "Too Early" },
 ];
 
-type SortKey = "totalScore" | "symbol" | "change5d" | "ytdChange" | "shortPercentFloat" | "volumeRatio5d20d";
+type SortKey = "totalScore" | "symbol" | "change5d" | "ytdChange" | "shortPercentFloat" | "volumeRatio5d20d" | "price" | "layerLabel";
+
+const CARD_SORT_OPTIONS: [SortKey, string][] = [
+  ["totalScore", "Score"],
+  ["symbol", "Symbol"],
+  ["change5d", "5d %"],
+  ["ytdChange", "YTD %"],
+  ["shortPercentFloat", "SI %"],
+  ["volumeRatio5d20d", "Vol Ratio"],
+];
+
+type MissSortKey = "symbol" | "price" | "ytdChange" | "layerLabel" | "totalScore";
+
+const MISS_COLUMNS: { key: MissSortKey; label: string }[] = [
+  { key: "symbol", label: "Ticker" },
+  { key: "price", label: "Price" },
+  { key: "ytdChange", label: "YTD %" },
+  { key: "layerLabel", label: "Layer" },
+  { key: "totalScore", label: "Score" },
+];
 
 export default function CatalystPageWrapper() {
   return (
@@ -67,6 +88,7 @@ function CatalystPage() {
   const [scanning, setScanning] = useState(false);
   const [scanData, setScanData] = useState<CatalystScanResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cacheMinutes, setCacheMinutes] = useState<number | null>(null);
 
   // Filters
   const [selectedLayers, setSelectedLayers] = useState<Set<CatalystLayer>>(new Set());
@@ -76,9 +98,13 @@ function CatalystPage() {
   const [showMisses, setShowMisses] = useState(false);
   const [activeMissTab, setActiveMissTab] = useState<MissCategory>("already_moved");
 
-  // Sort
+  // Sort (card view)
   const [sortKey, setSortKey] = useState<SortKey>("totalScore");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  // Sort (miss table)
+  const [missSortKey, setMissSortKey] = useState<MissSortKey>("totalScore");
+  const [missSortDir, setMissSortDir] = useState<"asc" | "desc">("desc");
 
   // Overrides
   const [overrides, setOverrides] = useState<Set<string>>(new Set());
@@ -93,6 +119,21 @@ function CatalystPage() {
     if (cached) setScanData(cached);
     setOverrides(loadCatalystOverrides());
   }, []);
+
+  // Compute cache age from scanData timestamp (avoids reading localStorage every render)
+  useEffect(() => {
+    if (!scanData?.scannedAt) {
+      setCacheMinutes(null);
+      return;
+    }
+    const update = () => {
+      const age = Date.now() - new Date(scanData.scannedAt).getTime();
+      setCacheMinutes(Math.round(age / 60_000));
+    };
+    update();
+    const timer = setInterval(update, 60_000);
+    return () => clearInterval(timer);
+  }, [scanData?.scannedAt]);
 
   // Scan handler
   const handleScan = useCallback(async () => {
@@ -124,6 +165,23 @@ function CatalystPage() {
     }
   }, [selectedLayers, selectedTiers]);
 
+  // Reset all filters, sort, and cache
+  const handleReset = useCallback(() => {
+    setSelectedLayers(new Set());
+    setSelectedTiers(new Set());
+    setMinScore(0);
+    setVerdictFilter("ALL");
+    setShowMisses(false);
+    setActiveMissTab("already_moved");
+    setSortKey("totalScore");
+    setSortDir("desc");
+    setMissSortKey("totalScore");
+    setMissSortDir("desc");
+    setScanData(null);
+    setError(null);
+    clearCatalystScanCache();
+  }, []);
+
   // Handle override toggle
   const handleOverride = useCallback((symbol: string) => {
     setOverrides((prev) => {
@@ -139,7 +197,7 @@ function CatalystPage() {
     });
   }, []);
 
-  // Toggle sort
+  // Toggle card sort
   const toggleSort = useCallback((key: SortKey) => {
     setSortKey((prev) => {
       if (prev === key) {
@@ -147,6 +205,18 @@ function CatalystPage() {
         return key;
       }
       setSortDir("desc");
+      return key;
+    });
+  }, []);
+
+  // Toggle miss table sort
+  const toggleMissSort = useCallback((key: MissSortKey) => {
+    setMissSortKey((prev) => {
+      if (prev === key) {
+        setMissSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return key;
+      }
+      setMissSortDir("desc");
       return key;
     });
   }, []);
@@ -171,7 +241,21 @@ function CatalystPage() {
     });
   }, []);
 
-  // Filter + sort results
+  // Generic sort function for CatalystResult arrays
+  const makeSortFn = useCallback((key: string, dir: "asc" | "desc") => {
+    return (a: CatalystResult, b: CatalystResult) => {
+      const aVal = a[key as keyof CatalystResult];
+      const bVal = b[key as keyof CatalystResult];
+      if (typeof aVal === "string" && typeof bVal === "string") {
+        return dir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      const numA = typeof aVal === "number" ? aVal : 0;
+      const numB = typeof bVal === "number" ? bVal : 0;
+      return dir === "asc" ? numA - numB : numB - numA;
+    };
+  }, []);
+
+  // Filter + sort results (card view)
   const filteredResults = useMemo(() => {
     if (!scanData) return { prespike: [], watch: [], monitor: [] };
 
@@ -182,37 +266,29 @@ function CatalystPage() {
       return true;
     };
 
-    const sortFn = (a: CatalystResult, b: CatalystResult) => {
-      const aVal = a[sortKey];
-      const bVal = b[sortKey];
-      if (typeof aVal === "string" && typeof bVal === "string") {
-        return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      }
-      const numA = typeof aVal === "number" ? aVal : 0;
-      const numB = typeof bVal === "number" ? bVal : 0;
-      return sortDir === "asc" ? numA - numB : numB - numA;
-    };
+    const sortFn = makeSortFn(sortKey, sortDir);
 
     return {
       prespike: scanData.prespike.filter(filterFn).sort(sortFn),
       watch: scanData.watch.filter(filterFn).sort(sortFn),
       monitor: scanData.monitor.filter(filterFn).sort(sortFn),
     };
-  }, [scanData, selectedLayers, selectedTiers, minScore, sortKey, sortDir]);
+  }, [scanData, selectedLayers, selectedTiers, minScore, sortKey, sortDir, makeSortFn]);
 
-  // Miss results (filtered by active tab)
+  // Miss results (filtered by active tab, sorted by miss sort)
   const missResults = useMemo(() => {
     if (!scanData) return [];
     const bucket = scanData.misses[activeMissTab] ?? [];
-    return bucket.filter((r) => {
+    const filtered = bucket.filter((r) => {
       if (selectedLayers.size > 0 && !selectedLayers.has(r.layer)) return false;
       if (selectedTiers.size > 0 && !selectedTiers.has(r.tier)) return false;
       return true;
     });
-  }, [scanData, activeMissTab, selectedLayers, selectedTiers]);
+    return filtered.sort(makeSortFn(missSortKey, missSortDir));
+  }, [scanData, activeMissTab, selectedLayers, selectedTiers, missSortKey, missSortDir, makeSortFn]);
 
-  const cacheAge = getCatalystCacheAge();
-  const cacheMinutes = cacheAge !== null ? Math.round(cacheAge / 60_000) : null;
+  const hasFiltersActive = selectedLayers.size > 0 || selectedTiers.size > 0 || minScore > 0 ||
+    verdictFilter !== "ALL" || showMisses || sortKey !== "totalScore" || sortDir !== "desc";
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-6">
@@ -331,27 +407,39 @@ function CatalystPage() {
 
         {/* Main Content */}
         <main className="min-w-0 flex-1">
-          {/* Header + Scan Button */}
+          {/* Header + Buttons */}
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h1 className="text-lg font-bold text-white">Catalyst Scanner</h1>
               <p className="text-xs text-[#888]">
                 AI infrastructure spike detector — 13-factor scoring across 60 tickers
-                {cacheMinutes !== null && ` (cached ${cacheMinutes}m ago)`}
+                {cacheMinutes !== null && ` (scanned ${cacheMinutes}m ago)`}
               </p>
             </div>
-            <button
-              onClick={handleScan}
-              disabled={scanning}
-              className="flex items-center gap-2 rounded-lg border border-[#5ba3e6] bg-[#5ba3e6]/10 px-4 py-2 text-sm font-medium text-[#5ba3e6] transition-colors hover:bg-[#5ba3e6]/20 disabled:opacity-50"
-            >
-              {scanning ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
+            <div className="flex items-center gap-2">
+              {(hasFiltersActive || scanData) && (
+                <button
+                  onClick={handleReset}
+                  className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-2 text-sm font-medium text-[#a0a0a0] transition-colors hover:border-[#555] hover:text-white"
+                  title="Reset all filters, sort, and cached data"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reset
+                </button>
               )}
-              {scanning ? "Scanning..." : "Run Scan"}
-            </button>
+              <button
+                onClick={handleScan}
+                disabled={scanning}
+                className="flex items-center gap-2 rounded-lg border border-[#5ba3e6] bg-[#5ba3e6]/10 px-4 py-2 text-sm font-medium text-[#5ba3e6] transition-colors hover:bg-[#5ba3e6]/20 disabled:opacity-50"
+              >
+                {scanning ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {scanning ? "Scanning..." : "Run Scan"}
+              </button>
+            </div>
           </div>
 
           {/* Error */}
@@ -371,23 +459,14 @@ function CatalystPage() {
             </div>
           )}
 
-          {/* Results */}
+          {/* Card View (Verdict Results) */}
           {scanData && !showMisses && (
             <div className="space-y-6">
               {/* Sort Controls */}
               <div className="flex items-center gap-2">
                 <ArrowUpDown className="h-3.5 w-3.5 text-[#666]" />
                 <span className="text-xs text-[#666]">Sort:</span>
-                {(
-                  [
-                    ["totalScore", "Score"],
-                    ["symbol", "Symbol"],
-                    ["change5d", "5d %"],
-                    ["ytdChange", "YTD %"],
-                    ["shortPercentFloat", "SI %"],
-                    ["volumeRatio5d20d", "Vol Ratio"],
-                  ] as [SortKey, string][]
-                ).map(([key, label]) => (
+                {CARD_SORT_OPTIONS.map(([key, label]) => (
                   <button
                     key={key}
                     onClick={() => toggleSort(key)}
@@ -480,11 +559,26 @@ function CatalystPage() {
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-[#2a2a2a] bg-[#141414] text-left text-[#888]">
-                        <th className="px-3 py-2 font-medium">Ticker</th>
-                        <th className="px-3 py-2 font-medium">Price</th>
-                        <th className="px-3 py-2 font-medium">YTD %</th>
-                        <th className="px-3 py-2 font-medium">Layer</th>
-                        <th className="px-3 py-2 font-medium">Score</th>
+                        {MISS_COLUMNS.map((col) => (
+                          <th
+                            key={col.key}
+                            className="cursor-pointer select-none px-3 py-2 font-medium transition-colors hover:text-white"
+                            onClick={() => toggleMissSort(col.key)}
+                          >
+                            <span className="inline-flex items-center gap-1">
+                              {col.label}
+                              {missSortKey === col.key ? (
+                                missSortDir === "desc" ? (
+                                  <ChevronDown className="h-3 w-3 text-[#5ba3e6]" />
+                                ) : (
+                                  <ChevronUp className="h-3 w-3 text-[#5ba3e6]" />
+                                )
+                              ) : (
+                                <ArrowUpDown className="h-3 w-3 text-[#444]" />
+                              )}
+                            </span>
+                          </th>
+                        ))}
                         <th className="px-3 py-2 font-medium">Miss Reason</th>
                         <th className="px-3 py-2 font-medium">Action</th>
                       </tr>
@@ -493,7 +587,7 @@ function CatalystPage() {
                       {missResults.map((r) => (
                         <tr
                           key={r.symbol}
-                          className="border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors"
+                          className="border-b border-[#1a1a1a] transition-colors hover:bg-[#1a1a1a]"
                         >
                           <td className="px-3 py-2">
                             <div className="font-medium text-white">{r.symbol}</div>
@@ -603,6 +697,22 @@ function ResultSection({
   );
 }
 
+const SCORE_FACTOR_MAXES: Record<string, number> = {
+  daysToCatalyst: 12,
+  meanReversion: 8,
+  momentumBreakout: 7,
+  shortInterest: 10,
+  analystUpside: 8,
+  volumeRatio: 10,
+  rsiPosition: 8,
+  peerSpiked: 8,
+  sectorEtfMomentum: 7,
+  revenueAcceleration: 8,
+  maPosition: 5,
+  ivRank: 4,
+  newsCluster: 5,
+};
+
 function ResultCard({
   result: r,
   borderColor,
@@ -678,22 +788,7 @@ function ResultCard({
       {/* Score Factor Dots */}
       <div className="mb-2 flex gap-0.5">
         {Object.entries(r.scores).map(([key, val]) => {
-          const maxes: Record<string, number> = {
-            daysToCatalyst: 12,
-            meanReversion: 8,
-            momentumBreakout: 7,
-            shortInterest: 10,
-            analystUpside: 8,
-            volumeRatio: 10,
-            rsiPosition: 8,
-            peerSpiked: 8,
-            sectorEtfMomentum: 7,
-            revenueAcceleration: 8,
-            maPosition: 5,
-            ivRank: 4,
-            newsCluster: 5,
-          };
-          const max = maxes[key] ?? 1;
+          const max = SCORE_FACTOR_MAXES[key] ?? 1;
           const pct = max > 0 ? val / max : 0;
           const color =
             pct >= 0.75

@@ -4,6 +4,8 @@ import { logError } from "@/lib/error-logger";
 import { runCatalystScan } from "@/lib/catalyst/scan";
 import type { CatalystLayer } from "@/data/catalyst-universe";
 
+export const maxDuration = 300; // 5 min — 60 tickers with batch delays
+
 const VALID_LAYERS: CatalystLayer[] = [
   "ai-chips", "ai-servers", "ai-networking", "ai-optics",
   "ai-power", "ai-builders", "ai-software", "semi-equipment",

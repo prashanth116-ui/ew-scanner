@@ -9,7 +9,6 @@ import type { CatalystLayer } from "@/data/catalyst-universe";
 import {
   getCatalystUniverse,
   getAllSectorETFs,
-  getCatalystTicker,
 } from "@/data/catalyst-universe";
 import { fetchBatchCatalystData, fetchAllETFData } from "./data";
 import { computeScores, buildResult, detectFireDrills } from "./scoring";

@@ -5,6 +5,8 @@ import { sendTelegramMessage } from "@/lib/ew-telegram";
 import { recordSignalBatch } from "@/lib/supabase/persistence";
 import type { CatalystResult, CatalystCalendarEvent } from "@/lib/catalyst/types";
 
+export const maxDuration = 300; // 5 min — full universe scan with batch delays
+
 function formatCalendarRibbon(events: CatalystCalendarEvent[]): string {
   const top = events.slice(0, 3);
   if (top.length === 0) return "";

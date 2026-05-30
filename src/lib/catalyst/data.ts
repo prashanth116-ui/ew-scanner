@@ -138,38 +138,6 @@ async function fetchYahooChart(
   };
 }
 
-/** Compute simple RSI from closes array. */
-function computeRSI(closes: number[], period = 14): number {
-  if (closes.length < period + 1) return 50;
-
-  let avgGain = 0;
-  let avgLoss = 0;
-
-  for (let i = 1; i <= period; i++) {
-    const change = closes[i] - closes[i - 1];
-    if (change > 0) avgGain += change;
-    else avgLoss += Math.abs(change);
-  }
-
-  avgGain /= period;
-  avgLoss /= period;
-
-  for (let i = period + 1; i < closes.length; i++) {
-    const change = closes[i] - closes[i - 1];
-    if (change > 0) {
-      avgGain = (avgGain * (period - 1) + change) / period;
-      avgLoss = (avgLoss * (period - 1)) / period;
-    } else {
-      avgGain = (avgGain * (period - 1)) / period;
-      avgLoss = (avgLoss * (period - 1) + Math.abs(change)) / period;
-    }
-  }
-
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return 100 - 100 / (1 + rs);
-}
-
 /** Compute simple moving average from last N values of closes. */
 function computeSMA(closes: number[], period: number): number {
   if (closes.length < period) return closes[closes.length - 1] ?? 0;
@@ -187,12 +155,12 @@ export async function fetchCatalystData(
   // Fetch chart and summary in parallel
   const [chartData, summary] = await Promise.all([
     fetchYahooChart(symbol, "3mo", "1d"),
-    fetchYahooSummary(symbol, ["price", "defaultKeyStatistics", "financialData"]),
+    fetchYahooSummary(symbol, ["price", "defaultKeyStatistics", "financialData", "summaryDetail"]),
   ]);
 
   if (!chartData || !summary) return null;
 
-  const { closes, volumes } = chartData;
+  const { closes, volumes, highs, lows } = chartData;
   if (closes.length < 2) return null;
 
   const currentPrice = closes[closes.length - 1];
@@ -204,10 +172,20 @@ export async function fetchCatalystData(
   const keyStats = summary.defaultKeyStatistics as Record<string, any> | undefined;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const financialData = summary.financialData as Record<string, any> | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const summaryDetail = summary.summaryDetail as Record<string, any> | undefined;
 
-  // 52-week high/low
-  const fiftyTwoWeekHigh = toNum(extractRaw(keyStats?.fiftyTwoWeekHigh) ?? extractRaw(price?.regularMarketDayHigh), currentPrice);
-  const fiftyTwoWeekLow = toNum(extractRaw(keyStats?.fiftyTwoWeekLow) ?? extractRaw(price?.regularMarketDayLow), currentPrice);
+  // 52-week high/low — prefer summaryDetail, then keyStats, then compute from chart
+  const chartHigh = highs.length > 0 ? Math.max(...highs) : currentPrice;
+  const chartLow = lows.length > 0 ? Math.min(...lows.filter((l) => l > 0)) : currentPrice;
+  const fiftyTwoWeekHigh = toNum(
+    extractRaw(summaryDetail?.fiftyTwoWeekHigh) ?? extractRaw(keyStats?.fiftyTwoWeekHigh),
+    chartHigh
+  );
+  const fiftyTwoWeekLow = toNum(
+    extractRaw(summaryDetail?.fiftyTwoWeekLow) ?? extractRaw(keyStats?.fiftyTwoWeekLow),
+    chartLow
+  );
 
   // Short interest
   const shortPercentFloat = toNum(extractRaw(keyStats?.shortPercentOfFloat), 0) * 100;
@@ -223,18 +201,23 @@ export async function fetchCatalystData(
     ? volumes.slice(-20).reduce((a, b) => a + b, 0) / 20
     : volumes.reduce((a, b) => a + b, 0) / (volumes.length || 1);
 
-  // YTD change — approximate using first trading day of year
-  const now = new Date();
-  const yearStart = new Date(now.getFullYear(), 0, 1);
-  const firstTradingIdx = chartData.timestamps.findIndex(
-    (ts) => ts * 1000 >= yearStart.getTime()
-  );
-  const ytdBasePrice = firstTradingIdx >= 0
-    ? closes[firstTradingIdx]
-    : closes[0];
-  const ytdChange = ytdBasePrice > 0
-    ? ((currentPrice - ytdBasePrice) / ytdBasePrice) * 100
-    : 0;
+  // YTD change — use Yahoo's ytdReturn or regularMarketChangePercent, fall back to chart
+  const yahooYtdReturn = extractRaw(keyStats?.ytdReturn);
+  let ytdChange: number;
+  if (yahooYtdReturn !== null) {
+    ytdChange = yahooYtdReturn * 100;
+  } else {
+    // Fall back to chart-based computation
+    const now = new Date();
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const firstTradingIdx = chartData.timestamps.findIndex(
+      (ts) => ts * 1000 >= yearStart.getTime()
+    );
+    const ytdBasePrice = firstTradingIdx >= 0 ? closes[firstTradingIdx] : closes[0];
+    ytdChange = ytdBasePrice > 0
+      ? ((currentPrice - ytdBasePrice) / ytdBasePrice) * 100
+      : 0;
+  }
 
   // 5d change
   const price5dAgo = closes.length >= 6 ? closes[closes.length - 6] : closes[0];
@@ -248,12 +231,17 @@ export async function fetchCatalystData(
     ? ((currentPrice - price1dAgo) / price1dAgo) * 100
     : 0;
 
-  // SMA 50 and SMA 200 (from 3mo data we can compute SMA50, SMA200 needs summary)
-  const sma50 = computeSMA(closes, Math.min(50, closes.length));
-  const sma200 = toNum(extractRaw(keyStats?.["200DayAverage"]), computeSMA(closes, closes.length));
+  // SMA 50 — prefer summaryDetail, fall back to chart computation
+  const sma50 = toNum(
+    extractRaw(summaryDetail?.fiftyDayAverage),
+    computeSMA(closes, Math.min(50, closes.length))
+  );
 
-  // RSI 14
-  const rsi14 = computeRSI(closes, 14);
+  // SMA 200 — must come from summaryDetail (3mo chart too short for 200-day)
+  const sma200 = toNum(
+    extractRaw(summaryDetail?.twoHundredDayAverage),
+    currentPrice // fallback to current price if unavailable (neutral for scoring)
+  );
 
   return {
     symbol,

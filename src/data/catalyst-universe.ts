@@ -63,7 +63,7 @@ const UNIVERSE: CatalystTicker[] = [
   // ── AI Optics (Tier 1-2) ──
   { symbol: "COHR", name: "Coherent Corp", layer: "ai-optics", layerLabel: "AI Optics", tier: 1, sectorETF: "SMH" },
   { symbol: "LITE", name: "Lumentum Holdings", layer: "ai-optics", layerLabel: "AI Optics", tier: 2, sectorETF: "SMH" },
-  { symbol: "IIVI", name: "II-VI / Coherent", layer: "ai-optics", layerLabel: "AI Optics", tier: 2, sectorETF: "SMH" },
+  { symbol: "FOXF", name: "Fox Factory", layer: "ai-optics", layerLabel: "AI Optics", tier: 2, sectorETF: "SMH" },
   { symbol: "CIEN", name: "Ciena Corporation", layer: "ai-optics", layerLabel: "AI Optics", tier: 2, sectorETF: "SMH" },
 
   // ── AI Power / Infrastructure (Tier 2-3) ──
@@ -93,7 +93,7 @@ const UNIVERSE: CatalystTicker[] = [
   { symbol: "WDAY", name: "Workday", layer: "ai-software", layerLabel: "AI Software", tier: 2, sectorETF: "IGV" },
   { symbol: "HUBS", name: "HubSpot", layer: "ai-software", layerLabel: "AI Software", tier: 2, sectorETF: "IGV" },
   { symbol: "NET", name: "Cloudflare", layer: "ai-software", layerLabel: "AI Software", tier: 2, sectorETF: "IGV" },
-  { symbol: "DLTR", name: "Dollar Tree", layer: "ai-software", layerLabel: "AI Software", tier: 3, sectorETF: "XLP" },
+  { symbol: "AI", name: "C3.ai", layer: "ai-software", layerLabel: "AI Software", tier: 3, sectorETF: "IGV" },
 
   // ── Semi Equipment (Tier 1-2) ──
   { symbol: "AMAT", name: "Applied Materials", layer: "semi-equipment", layerLabel: "Semi Equipment", tier: 1, sectorETF: "SMH" },
