@@ -105,7 +105,7 @@ export default function CatalystGuidePage() {
         >
           <p>
             The Catalyst Scanner identifies <strong className="text-white">AI infrastructure stocks</strong> that
-            are setting up for a significant move — <em>before</em> the spike happens. It scans ~60 tickers across
+            are setting up for a significant move — <em>before</em> the spike happens. It scans ~75 tickers across
             11 layers of the AI supply chain, scores each stock on 13 factors, and classifies them into
             actionable categories.
           </p>
@@ -121,7 +121,7 @@ export default function CatalystGuidePage() {
 
           <SubSection title="How It Works">
             <ol className="list-inside list-decimal space-y-1.5 text-[#c0c0c0]">
-              <li>Scans a curated universe of ~60 AI infrastructure tickers</li>
+              <li>Scans a curated universe of ~75 AI infrastructure tickers</li>
               <li>Fetches real-time price, volume, short interest, and analyst data</li>
               <li>Scores each stock on <strong className="text-white">13 factors</strong> (max 100 pts)</li>
               <li>Classifies into <strong className="text-white">PRE-SPIKE</strong>, <strong className="text-white">WATCH</strong>, <strong className="text-white">MONITOR</strong>, or <strong className="text-white">MISS</strong></li>
