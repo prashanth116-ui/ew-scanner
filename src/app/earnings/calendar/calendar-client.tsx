@@ -946,6 +946,7 @@ export function CalendarClient() {
   const [watchlistTickers, setWatchlistTickers] = useState<Set<string> | null>(null);
   const [scanResults, setScanResults] = useState<Map<string, ConfluenceResult>>(new Map());
   const [scanLoading, setScanLoading] = useState(false);
+  const [scanProgress, setScanProgress] = useState("");
 
   const fetchData = useCallback(async () => {
     const range =
@@ -1003,26 +1004,20 @@ export function CalendarClient() {
     });
   }, []);
 
-  // Scan visible tickers via confluence + sector + rotation APIs
+  // Scan ALL visible tickers via confluence + sector + rotation APIs (batched)
   const handleScanEarnings = useCallback(async () => {
-    const tickers = [...new Set(entries.map((e) => e.symbol))].slice(0, 25);
-    if (tickers.length === 0) return;
+    const allTickers = [...new Set(entries.map((e) => e.symbol))];
+    if (allTickers.length === 0) return;
     setScanLoading(true);
+    setScanProgress(`0/${allTickers.length}`);
     try {
-      const [scanSettled, sectorSettled, rotSettled] = await Promise.allSettled([
-        fetch("/api/confluence/scan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tickers }),
-        }).then((res) => (res.ok ? res.json() : null)),
+      // Fetch sector + rotation once (shared across all batches)
+      const [sectorSettled, rotSettled] = await Promise.allSettled([
         fetch("/api/sector-rotation")
           .then((res) => (res.ok ? res.json() as Promise<SectorRotationResult> : null)),
         fetch("/api/rotation-tracker")
           .then((res) => (res.ok ? res.json() as Promise<RotationTrackerResult> : null)),
       ]);
-
-      const scanBody = scanSettled.status === "fulfilled" ? scanSettled.value : null;
-      const rawResults: ConfluenceScanResult[] = scanBody?.results ?? [];
 
       const sectorScores = sectorSettled.status === "fulfilled" && sectorSettled.value
         ? sectorSettled.value.sectors
@@ -1042,7 +1037,41 @@ export function CalendarClient() {
         }
       }
 
-      const enriched = enrichScanResults(rawResults, sectorScores, rotStockMap);
+      // Batch tickers into groups of 25, scan in parallel batches of 2
+      const BATCH_SIZE = 25;
+      const PARALLEL_BATCHES = 2;
+      const allRawResults: ConfluenceScanResult[] = [];
+      let scanned = 0;
+
+      for (let i = 0; i < allTickers.length; i += BATCH_SIZE * PARALLEL_BATCHES) {
+        const batchGroup: string[][] = [];
+        for (let j = 0; j < PARALLEL_BATCHES; j++) {
+          const start = i + j * BATCH_SIZE;
+          const batch = allTickers.slice(start, start + BATCH_SIZE);
+          if (batch.length > 0) batchGroup.push(batch);
+        }
+
+        const batchResults = await Promise.allSettled(
+          batchGroup.map((batch) =>
+            fetch("/api/confluence/scan", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tickers: batch }),
+            }).then((res) => (res.ok ? res.json() : null))
+          )
+        );
+
+        for (const settled of batchResults) {
+          if (settled.status === "fulfilled" && settled.value?.results) {
+            allRawResults.push(...settled.value.results);
+          }
+        }
+
+        scanned = Math.min(i + BATCH_SIZE * PARALLEL_BATCHES, allTickers.length);
+        setScanProgress(`${scanned}/${allTickers.length}`);
+      }
+
+      const enriched = enrichScanResults(allRawResults, sectorScores, rotStockMap);
       const map = new Map<string, ConfluenceResult>();
       for (const r of enriched) {
         map.set(r.ticker, r);
@@ -1052,6 +1081,7 @@ export function CalendarClient() {
       // silently fail
     } finally {
       setScanLoading(false);
+      setScanProgress("");
     }
   }, [entries]);
 
@@ -1240,7 +1270,7 @@ export function CalendarClient() {
           ) : (
             <Crosshair className="h-3 w-3" />
           )}
-          {scanLoading ? "Scanning..." : "Scan Earnings"}
+          {scanLoading ? `Scanning${scanProgress ? ` ${scanProgress}` : "..."}` : "Scan Earnings"}
         </button>
       </div>
 
