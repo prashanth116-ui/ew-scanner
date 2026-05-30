@@ -17,12 +17,23 @@ import {
   Crosshair,
   SlidersHorizontal,
   Zap,
+  Eye,
+  EyeOff,
+  List,
 } from "lucide-react";
 import { tierColor, verdictColor } from "@/lib/color-utils";
 import type { ConfluenceScanResult, ConfluenceResult } from "@/lib/confluence/types";
 import type { SectorRotationResult } from "@/lib/sector-rotation/types";
 import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
-import { getAllWatchlistTickers, getTickerWatchlistSources, enrichScanResults, type MomentumQuality } from "@/lib/earnings-utils";
+import {
+  getAllWatchlistTickers,
+  getTickerWatchlistSources,
+  enrichScanResults,
+  loadEarningsWatchlist,
+  addToEarningsWatchlist,
+  removeFromEarningsWatchlist,
+  type MomentumQuality,
+} from "@/lib/earnings-utils";
 
 // ── Types ──
 
@@ -608,11 +619,15 @@ function DayDetail({
   entries,
   onClose,
   scanResults,
+  earningsWatchlist,
+  onToggleWatch,
 }: {
   dateStr: string;
   entries: CalendarEntry[];
   onClose: () => void;
   scanResults: Map<string, ConfluenceResult>;
+  earningsWatchlist: Set<string>;
+  onToggleWatch: (ticker: string, signal: string) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("ticker");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -850,6 +865,8 @@ function DayDetail({
               <th className="px-3 py-2 text-center font-semibold text-white">
                 Details
               </th>
+              <th className="px-2 py-2 text-center font-semibold text-white w-8">
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#2a2a2a]">
@@ -922,6 +939,358 @@ function DayDetail({
                       <ExternalLink className="h-3 w-3" />
                     </Link>
                   </td>
+                  <td className="px-2 py-2 text-center">
+                    <button
+                      onClick={() => onToggleWatch(e.symbol, sr?.signal ?? "none")}
+                      className={`rounded p-1 transition-colors ${
+                        earningsWatchlist.has(e.symbol)
+                          ? "text-green-400 hover:text-green-300"
+                          : "text-[#333] hover:text-[#a0a0a0]"
+                      }`}
+                      title={earningsWatchlist.has(e.symbol) ? "Remove from earnings watchlist" : "Add to earnings watchlist"}
+                    >
+                      {earningsWatchlist.has(e.symbol) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── All Entries Detail (month view bulk panel) ──
+
+function AllEntriesDetail({
+  entries,
+  monthLabel,
+  onClose,
+  scanResults,
+  earningsWatchlist,
+  onToggleWatch,
+}: {
+  entries: CalendarEntry[];
+  monthLabel: string;
+  onClose: () => void;
+  scanResults: Map<string, ConfluenceResult>;
+  earningsWatchlist: Set<string>;
+  onToggleWatch: (ticker: string, signal: string) => void;
+}) {
+  const [sortKey, setSortKey] = useState<SortKey | "date">("date");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [filterSector, setFilterSector] = useState<string>("all");
+  const [filterQuadrant, setFilterQuadrant] = useState<string>("all");
+  const [filterSignal, setFilterSignal] = useState<string>("all");
+
+  const handleSort = (key: SortKey | "date") => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "ticker" || key === "date" ? "asc" : "desc");
+    }
+  };
+
+  const filterOptions = useMemo(() => {
+    const sectors = new Set<string>();
+    const quadrants = new Set<string>();
+    const signals = new Set<string>();
+    for (const e of entries) {
+      const sr = scanResults.get(e.symbol);
+      if (sr?.sector) sectors.add(sr.sector);
+      if (sr?.sectorResult?.quadrant) quadrants.add(sr.sectorResult.quadrant);
+      if (sr?.signal) signals.add(sr.signal);
+    }
+    return {
+      sectors: [...sectors].sort(),
+      quadrants: ["LEADING", "IMPROVING", "WEAKENING", "LAGGING"].filter((q) => quadrants.has(q)),
+      signals: ["strong", "moderate", "weak", "none"].filter((s) => signals.has(s)),
+    };
+  }, [entries, scanResults]);
+
+  const hasFilters = filterSector !== "all" || filterQuadrant !== "all" || filterSignal !== "all";
+  const hasScanData = scanResults.size > 0;
+
+  const filtered = useMemo(() => {
+    let result = entries;
+    if (filterSector !== "all") {
+      result = result.filter((e) => scanResults.get(e.symbol)?.sector === filterSector);
+    }
+    if (filterQuadrant !== "all") {
+      result = result.filter((e) => scanResults.get(e.symbol)?.sectorResult?.quadrant === filterQuadrant);
+    }
+    if (filterSignal !== "all") {
+      result = result.filter((e) => scanResults.get(e.symbol)?.signal === filterSignal);
+    }
+    return result;
+  }, [entries, filterSector, filterQuadrant, filterSignal, scanResults]);
+
+  const sorted = useMemo(() => {
+    const copy = [...filtered];
+    const dir = sortDir === "asc" ? 1 : -1;
+    copy.sort((a, b) => {
+      switch (sortKey) {
+        case "date":
+          return dir * a.date.localeCompare(b.date);
+        case "ticker":
+          return dir * a.symbol.localeCompare(b.symbol);
+        case "time":
+          return dir * ((HOUR_ORDER[a.hour] ?? 3) - (HOUR_ORDER[b.hour] ?? 3));
+        case "eps":
+          return dir * ((a.epsEstimate ?? -Infinity) - (b.epsEstimate ?? -Infinity));
+        case "revenue":
+          return dir * ((a.revenueEstimate ?? -Infinity) - (b.revenueEstimate ?? -Infinity));
+        case "quarter":
+          return dir * ((a.quarter ?? 0) - (b.quarter ?? 0));
+        case "sector": {
+          const sA = scanResults.get(a.symbol)?.sector ?? "zzz";
+          const sB = scanResults.get(b.symbol)?.sector ?? "zzz";
+          return dir * sA.localeCompare(sB);
+        }
+        case "quadrant": {
+          const qA = QUADRANT_ORDER[scanResults.get(a.symbol)?.sectorResult?.quadrant ?? ""] ?? 9;
+          const qB = QUADRANT_ORDER[scanResults.get(b.symbol)?.sectorResult?.quadrant ?? ""] ?? 9;
+          return dir * (qA - qB);
+        }
+        case "signal": {
+          const sigA = SIGNAL_ORDER[scanResults.get(a.symbol)?.signal ?? ""] ?? 9;
+          const sigB = SIGNAL_ORDER[scanResults.get(b.symbol)?.signal ?? ""] ?? 9;
+          return dir * (sigA - sigB);
+        }
+        default:
+          return 0;
+      }
+    });
+    return copy;
+  }, [filtered, sortKey, sortDir, scanResults]);
+
+  const sortIcon = (key: SortKey | "date") => {
+    if (sortKey !== key) return <ChevronRight className="h-3 w-3 text-[#333] rotate-90" />;
+    return sortDir === "asc"
+      ? <ChevronLeft className="h-3 w-3 text-[#5ba3e6] rotate-90" />
+      : <ChevronRight className="h-3 w-3 text-[#5ba3e6] rotate-90" />;
+  };
+
+  const thClass = (key: SortKey | "date", base: string) =>
+    `${base} cursor-pointer select-none hover:text-[#5ba3e6] transition-colors ${sortKey === key ? "text-[#5ba3e6]" : "text-white"}`;
+
+  const selectClass = "rounded-md border border-[#2a2a2a] bg-[#141414] px-2 py-1 text-xs text-white focus:border-[#5ba3e6] focus:outline-none appearance-none cursor-pointer";
+
+  return (
+    <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-[#2a2a2a] px-4 py-3">
+        <div className="flex items-center gap-2">
+          <List className="h-4 w-4 text-[#5ba3e6]" />
+          <h3 className="text-sm font-bold text-white">All Earnings — {monthLabel}</h3>
+          <span className="text-xs text-[#555]">
+            {hasFilters ? `${filtered.length} of ${entries.length}` : entries.length} report{(hasFilters ? filtered.length : entries.length) !== 1 ? "s" : ""}
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-md p-1 text-[#555] hover:bg-[#2a2a2a] hover:text-white"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Filters */}
+      {hasScanData && (
+        <div className="flex flex-wrap items-center gap-2.5 border-b border-[#2a2a2a] px-4 py-2.5">
+          <SlidersHorizontal className="h-3.5 w-3.5 text-[#555]" />
+          <select
+            value={filterSector}
+            onChange={(e) => setFilterSector(e.target.value)}
+            className={`${selectClass} ${filterSector !== "all" ? "border-[#5ba3e6]/40 text-[#5ba3e6]" : ""}`}
+          >
+            <option value="all">All Sectors</option>
+            {filterOptions.sectors.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <select
+            value={filterQuadrant}
+            onChange={(e) => setFilterQuadrant(e.target.value)}
+            className={`${selectClass} ${filterQuadrant !== "all" ? "border-[#5ba3e6]/40 text-[#5ba3e6]" : ""}`}
+          >
+            <option value="all">All Quadrants</option>
+            {filterOptions.quadrants.map((q) => (
+              <option key={q} value={q}>{q}</option>
+            ))}
+          </select>
+          <select
+            value={filterSignal}
+            onChange={(e) => setFilterSignal(e.target.value)}
+            className={`${selectClass} ${filterSignal !== "all" ? "border-[#5ba3e6]/40 text-[#5ba3e6]" : ""}`}
+          >
+            <option value="all">All Signals</option>
+            {filterOptions.signals.map((s) => (
+              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+            ))}
+          </select>
+          {hasFilters && (
+            <button
+              onClick={() => { setFilterSector("all"); setFilterQuadrant("all"); setFilterSignal("all"); }}
+              className="text-xs text-[#555] hover:text-[#a0a0a0]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b border-[#2a2a2a] bg-[#141414]">
+              <th
+                className={thClass("date", "px-3 py-2 text-left font-semibold")}
+                onClick={() => handleSort("date")}
+              >
+                <span className="inline-flex items-center gap-1">Date {sortIcon("date")}</span>
+              </th>
+              <th
+                className={thClass("ticker", "px-3 py-2 text-left font-semibold")}
+                onClick={() => handleSort("ticker")}
+              >
+                <span className="inline-flex items-center gap-1">Ticker {sortIcon("ticker")}</span>
+              </th>
+              <th
+                className={thClass("time", "px-3 py-2 text-center font-semibold")}
+                onClick={() => handleSort("time")}
+              >
+                <span className="inline-flex items-center justify-center gap-1">Time {sortIcon("time")}</span>
+              </th>
+              <th
+                className={thClass("eps", "px-3 py-2 text-right font-semibold")}
+                onClick={() => handleSort("eps")}
+              >
+                <span className="inline-flex items-center justify-end gap-1">EPS Est. {sortIcon("eps")}</span>
+              </th>
+              <th
+                className={thClass("revenue", "hidden px-3 py-2 text-right font-semibold sm:table-cell")}
+                onClick={() => handleSort("revenue")}
+              >
+                <span className="inline-flex items-center justify-end gap-1">Rev. Est. {sortIcon("revenue")}</span>
+              </th>
+              <th
+                className={thClass("sector", "hidden px-3 py-2 text-left font-semibold lg:table-cell")}
+                onClick={() => handleSort("sector")}
+              >
+                <span className="inline-flex items-center gap-1">Sector {sortIcon("sector")}</span>
+              </th>
+              <th
+                className={thClass("quadrant", "hidden px-3 py-2 text-center font-semibold lg:table-cell")}
+                onClick={() => handleSort("quadrant")}
+              >
+                <span className="inline-flex items-center justify-center gap-1">Quadrant {sortIcon("quadrant")}</span>
+              </th>
+              <th
+                className={thClass("signal", "hidden px-3 py-2 text-center font-semibold lg:table-cell")}
+                onClick={() => handleSort("signal")}
+              >
+                <span className="inline-flex items-center justify-center gap-1">Signal {sortIcon("signal")}</span>
+              </th>
+              <th className="hidden px-3 py-2 text-center font-semibold text-white sm:table-cell">
+                Scanners
+              </th>
+              <th className="px-3 py-2 text-center font-semibold text-white">
+                Details
+              </th>
+              <th className="px-2 py-2 text-center font-semibold text-white w-8">
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#2a2a2a]">
+            {sorted.map((e, i) => {
+              const sr = scanResults.get(e.symbol);
+              const d = new Date(e.date + "T12:00:00");
+              const dateLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+              return (
+                <tr key={`${e.date}-${e.symbol}-${i}`} className="bg-[#141414] hover:bg-[#1a1a1a]">
+                  <td className="px-3 py-2 text-xs text-[#a0a0a0] whitespace-nowrap">
+                    {dateLabel}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="font-mono text-xs font-bold text-[#5ba3e6]">
+                      {e.symbol}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <HourBadge hour={e.hour} />
+                  </td>
+                  <td className="px-3 py-2 text-right text-[#a0a0a0]">
+                    {formatEps(e.epsEstimate)}
+                  </td>
+                  <td className="hidden px-3 py-2 text-right text-[#a0a0a0] sm:table-cell">
+                    {formatLargeNumber(e.revenueEstimate)}
+                  </td>
+                  <td className="hidden px-3 py-2 text-left text-xs text-[#a0a0a0] lg:table-cell">
+                    {sr?.sector ?? "\u2014"}
+                  </td>
+                  <td className="hidden px-3 py-2 text-center lg:table-cell">
+                    {sr?.sectorResult ? (
+                      <QuadrantBadge quadrant={sr.sectorResult.quadrant} />
+                    ) : (
+                      <span className="text-[10px] text-[#333]">{"\u2014"}</span>
+                    )}
+                  </td>
+                  <td className="hidden px-3 py-2 text-center lg:table-cell">
+                    {sr ? (
+                      <SignalBadge signal={sr.signal} />
+                    ) : (
+                      <span className="text-[10px] text-[#333]">{"\u2014"}</span>
+                    )}
+                  </td>
+                  <td className="hidden px-3 py-2 text-center sm:table-cell">
+                    {sr ? (
+                      <div className="flex items-center justify-center gap-1">
+                        {sr.ewResult?.wavePosition && (
+                          <span className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[9px] text-[#a0a0a0]">
+                            {sr.ewResult.wavePosition}
+                          </span>
+                        )}
+                        {sr.squeezeResult && (
+                          <span className={`rounded border px-1 py-0.5 text-[9px] ${tierColor(sr.squeezeResult.tier)}`}>
+                            SQ:{sr.squeezeResult.tier}
+                          </span>
+                        )}
+                        {sr.prerunResult && (
+                          <span className={`rounded border px-1 py-0.5 text-[9px] ${verdictColor(sr.prerunResult.verdict)}`}>
+                            {sr.prerunResult.verdict}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-[#333]">{"\u2014"}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <Link
+                      href={`/earnings?ticker=${e.symbol}`}
+                      className="inline-flex items-center gap-1 text-xs text-[#5ba3e6] hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    <button
+                      onClick={() => onToggleWatch(e.symbol, sr?.signal ?? "none")}
+                      className={`rounded p-1 transition-colors ${
+                        earningsWatchlist.has(e.symbol)
+                          ? "text-green-400 hover:text-green-300"
+                          : "text-[#333] hover:text-[#a0a0a0]"
+                      }`}
+                      title={earningsWatchlist.has(e.symbol) ? "Remove from earnings watchlist" : "Add to earnings watchlist"}
+                    >
+                      {earningsWatchlist.has(e.symbol) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -949,6 +1318,8 @@ export function CalendarClient() {
   const [scanLoading, setScanLoading] = useState(false);
   const [scanProgress, setScanProgress] = useState("");
   const [focusMode, setFocusMode] = useState(false);
+  const [showAllEntries, setShowAllEntries] = useState(false);
+  const [earningsWatchlist, setEarningsWatchlist] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     const range =
@@ -981,10 +1352,16 @@ export function CalendarClient() {
     fetchData();
   }, [fetchData]);
 
-  // Clear selected day and focus mode when switching views or navigating
+  // Load earnings watchlist on mount
+  useEffect(() => {
+    setEarningsWatchlist(new Set(loadEarningsWatchlist().map((i) => i.ticker)));
+  }, []);
+
+  // Clear selected day, focus mode, and showAllEntries when switching views or navigating
   useEffect(() => {
     setSelectedDay(null);
     setFocusMode(false);
+    setShowAllEntries(false);
   }, [view, anchor]);
 
   const navigate = (dir: -1 | 1) => {
@@ -1087,6 +1464,27 @@ export function CalendarClient() {
       setScanProgress("");
     }
   }, [entries]);
+
+  // Toggle earnings watchlist
+  const handleToggleWatch = useCallback((ticker: string, signal: string) => {
+    setEarningsWatchlist((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticker)) {
+        removeFromEarningsWatchlist(ticker);
+        next.delete(ticker);
+      } else {
+        addToEarningsWatchlist(ticker, signal);
+        next.add(ticker);
+      }
+      return next;
+    });
+  }, []);
+
+  // Handle selecting a day — close View All panel
+  const handleSelectDay = useCallback((dateStr: string | null) => {
+    setSelectedDay(dateStr);
+    if (dateStr != null) setShowAllEntries(false);
+  }, []);
 
   // Count focus-eligible entries (for badge) — always uses full watchlist, not watchlist toggle
   const focusCount = useMemo(() => {
@@ -1314,6 +1712,23 @@ export function CalendarClient() {
           <Zap className="h-3 w-3" />
           Focus{scanResults.size > 0 ? ` (${focusCount})` : ""}
         </button>
+
+        {/* View All (month view only) */}
+        {view === "month" && (
+          <button
+            onClick={() => { setShowAllEntries((prev) => !prev); if (!showAllEntries) setSelectedDay(null); }}
+            disabled={filtered.length === 0}
+            title="Show all entries for this month in a single table"
+            className={`flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+              showAllEntries
+                ? "border-[#5ba3e6]/40 bg-[#5ba3e6]/10 text-[#5ba3e6]"
+                : "border-[#2a2a2a] text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50"
+            }`}
+          >
+            <List className="h-3 w-3" />
+            View All{filtered.length > 0 ? ` (${filtered.length})` : ""}
+          </button>
+        )}
       </div>
 
       {/* Summary */}
@@ -1359,22 +1774,24 @@ export function CalendarClient() {
                 anchor={anchor}
                 grouped={grouped}
                 search={search}
-                onSelectDay={setSelectedDay}
+                onSelectDay={handleSelectDay}
                 selectedDay={selectedDay}
                 scanResults={scanResults}
               />
 
-              {/* Day detail panel */}
-              {selectedDay && selectedEntries.length > 0 && (
+              {/* Day detail panel (mutually exclusive with View All) */}
+              {selectedDay && !showAllEntries && selectedEntries.length > 0 && (
                 <DayDetail
                   dateStr={selectedDay}
                   entries={selectedEntries}
                   onClose={() => setSelectedDay(null)}
                   scanResults={scanResults}
+                  earningsWatchlist={earningsWatchlist}
+                  onToggleWatch={handleToggleWatch}
                 />
               )}
 
-              {selectedDay && selectedEntries.length === 0 && (
+              {selectedDay && !showAllEntries && selectedEntries.length === 0 && (
                 <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-6 text-center">
                   <p className="text-sm text-[#555]">
                     No earnings reports on this day
@@ -1387,6 +1804,18 @@ export function CalendarClient() {
                     Close
                   </button>
                 </div>
+              )}
+
+              {/* All entries panel */}
+              {showAllEntries && (
+                <AllEntriesDetail
+                  entries={filtered}
+                  monthLabel={formatMonthLabel(anchor)}
+                  onClose={() => setShowAllEntries(false)}
+                  scanResults={scanResults}
+                  earningsWatchlist={earningsWatchlist}
+                  onToggleWatch={handleToggleWatch}
+                />
               )}
             </div>
           )}

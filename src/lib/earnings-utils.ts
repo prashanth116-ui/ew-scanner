@@ -451,7 +451,47 @@ export function computePlaybook(
   return { bias, signals, bullishCount, bearishCount };
 }
 
-// ── 1f. Watchlist Aggregation ──
+// ── 1f. Earnings Watchlist ──
+
+const EARNINGS_WATCHLIST_KEY = "ew-scanner-earnings-watchlist";
+
+export interface EarningsWatchlistItem {
+  ticker: string;
+  addedAt: string;
+  signal: string;
+}
+
+export function loadEarningsWatchlist(): EarningsWatchlistItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(EARNINGS_WATCHLIST_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as EarningsWatchlistItem[];
+  } catch {
+    return [];
+  }
+}
+
+export function addToEarningsWatchlist(ticker: string, signal: string): boolean {
+  if (typeof window === "undefined") return false;
+  const list = loadEarningsWatchlist();
+  if (list.some((i) => i.ticker === ticker)) return false;
+  list.push({ ticker, addedAt: new Date().toISOString(), signal });
+  localStorage.setItem(EARNINGS_WATCHLIST_KEY, JSON.stringify(list));
+  return true;
+}
+
+export function removeFromEarningsWatchlist(ticker: string): void {
+  if (typeof window === "undefined") return;
+  const list = loadEarningsWatchlist().filter((i) => i.ticker !== ticker);
+  localStorage.setItem(EARNINGS_WATCHLIST_KEY, JSON.stringify(list));
+}
+
+export function isInEarningsWatchlist(ticker: string): boolean {
+  return loadEarningsWatchlist().some((i) => i.ticker === ticker);
+}
+
+// ── 1g. Watchlist Aggregation ──
 
 export function getAllWatchlistTickers(): Set<string> {
   const tickers = new Set<string>();
@@ -482,6 +522,11 @@ export function getAllWatchlistTickers(): Set<string> {
     }
   }
 
+  // Earnings watchlist
+  for (const item of loadEarningsWatchlist()) {
+    tickers.add(item.ticker);
+  }
+
   return tickers;
 }
 
@@ -506,6 +551,10 @@ export function getTickerWatchlistSources(ticker: string): string[] {
   const stratWatchlists = loadStratWatchlists();
   if (stratWatchlists.some((wl) => wl.items.some((i) => i.ticker === ticker))) {
     sources.push("Strat");
+  }
+
+  if (isInEarningsWatchlist(ticker)) {
+    sources.push("Earnings");
   }
 
   return sources;
