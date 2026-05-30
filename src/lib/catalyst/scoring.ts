@@ -15,11 +15,14 @@ import type {
 import type { CatalystTicker, CatalystLayer } from "@/data/catalyst-universe";
 import { getLayerPeers } from "@/data/catalyst-universe";
 
-// ── Verdict thresholds (adjusted for 85 max achievable) ──
+// ── Verdict thresholds ──
+// Max achievable is 83 (3 factors stubbed). Mean reversion and momentum
+// breakout are mutually exclusive (~8 pts max from either), so practical
+// ceiling is ~75. Thresholds must be achievable in normal market conditions.
 
-const PRESPIKE_THRESHOLD = 68;
-const WATCH_THRESHOLD = 58;
-const MONITOR_THRESHOLD = 48;
+const PRESPIKE_THRESHOLD = 45;
+const WATCH_THRESHOLD = 32;
+const MONITOR_THRESHOLD = 20;
 
 // ── Individual Scoring Functions ──
 
@@ -302,9 +305,9 @@ export function classifyMiss(
     };
   }
 
-  // Too early: score 40-47 AND no imminent catalyst (>30 days)
+  // Too early: score within 5 pts of MONITOR AND no imminent catalyst (>30 days)
   if (
-    totalScore >= 40 &&
+    totalScore >= MONITOR_THRESHOLD - 5 &&
     totalScore < MONITOR_THRESHOLD &&
     (daysToCatalyst === null || daysToCatalyst > 30)
   ) {

@@ -23,9 +23,9 @@ export interface CatalystScores {
   newsCluster: number;        // 0-5 (stub: 0)
 }
 
-/** Max achievable score (phase 1 = 85 since 3 factors are stubbed at 0). */
+/** Max achievable score (phase 1 = 83 since 3 factors are stubbed at 0). */
 export const MAX_SCORE = 100;
-export const MAX_ACHIEVABLE_SCORE = 85;
+export const MAX_ACHIEVABLE_SCORE = 83;
 
 // ── Verdicts ──
 

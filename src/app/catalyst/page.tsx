@@ -722,7 +722,7 @@ function ResultCard({
   borderColor: string;
   dimmed?: boolean;
 }) {
-  const scorePct = Math.min(100, (r.totalScore / 85) * 100);
+  const scorePct = Math.min(100, (r.totalScore / 83) * 100);
 
   return (
     <div

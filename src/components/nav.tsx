@@ -56,6 +56,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
   ],
   catalyst: [
     { href: "/catalyst", label: "Scanner" },
+    { href: "/catalyst/guide", label: "Guide" },
   ],
 };
 
