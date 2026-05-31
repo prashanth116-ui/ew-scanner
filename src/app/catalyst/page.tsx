@@ -13,6 +13,7 @@ import {
   RotateCcw,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import type {
   CatalystScanResponse,
@@ -31,6 +32,7 @@ import {
   addCatalystOverride,
   removeCatalystOverride,
 } from "@/lib/catalyst/storage";
+import { ScoreBar } from "@/components/score-bar";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
 import { useSidebarState } from "@/lib/use-sidebar-state";
@@ -106,6 +108,9 @@ function CatalystPage() {
   const [missSortKey, setMissSortKey] = useState<MissSortKey>("totalScore");
   const [missSortDir, setMissSortDir] = useState<"asc" | "desc">("desc");
 
+  // Detail panel
+  const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
+
   // Overrides
   const [overrides, setOverrides] = useState<Set<string>>(new Set());
 
@@ -177,6 +182,7 @@ function CatalystPage() {
     setSortDir("desc");
     setMissSortKey("totalScore");
     setMissSortDir("desc");
+    setExpandedTicker(null);
     setScanData(null);
     setError(null);
     clearCatalystScanCache();
@@ -499,6 +505,8 @@ function CatalystPage() {
                     borderColor="border-green-500/40"
                     titleColor="text-green-400"
                     icon={<Flame className="h-4 w-4 text-green-400" />}
+                    expandedTicker={expandedTicker}
+                    onSelectTicker={setExpandedTicker}
                   />
                 )}
 
@@ -511,6 +519,8 @@ function CatalystPage() {
                     borderColor="border-amber-500/40"
                     titleColor="text-amber-400"
                     icon={<Eye className="h-4 w-4 text-amber-400" />}
+                    expandedTicker={expandedTicker}
+                    onSelectTicker={setExpandedTicker}
                   />
                 )}
 
@@ -524,6 +534,8 @@ function CatalystPage() {
                     titleColor="text-[#888]"
                     icon={<EyeOff className="h-4 w-4 text-[#666]" />}
                     dimmed
+                    expandedTicker={expandedTicker}
+                    onSelectTicker={setExpandedTicker}
                   />
                 )}
 
@@ -680,6 +692,8 @@ function ResultSection({
   titleColor,
   icon,
   dimmed,
+  expandedTicker,
+  onSelectTicker,
 }: {
   title: string;
   results: CatalystResult[];
@@ -687,7 +701,13 @@ function ResultSection({
   titleColor: string;
   icon: React.ReactNode;
   dimmed?: boolean;
+  expandedTicker: string | null;
+  onSelectTicker: (symbol: string | null) => void;
 }) {
+  const expandedResult = expandedTicker
+    ? results.find((r) => r.symbol === expandedTicker) ?? null
+    : null;
+
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
@@ -698,9 +718,163 @@ function ResultSection({
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {results.map((r) => (
-          <ResultCard key={r.symbol} result={r} borderColor={borderColor} dimmed={dimmed} />
+          <ResultCard
+            key={r.symbol}
+            result={r}
+            borderColor={borderColor}
+            dimmed={dimmed}
+            selected={r.symbol === expandedTicker}
+            onSelect={() =>
+              onSelectTicker(r.symbol === expandedTicker ? null : r.symbol)
+            }
+          />
         ))}
       </div>
+      {expandedResult && <DetailPanel result={expandedResult} />}
+    </div>
+  );
+}
+
+const SCORE_FACTOR_LABELS: Record<string, string> = {
+  daysToCatalyst: "Catalyst",
+  meanReversion: "Mean Rev",
+  momentumBreakout: "Momentum",
+  shortInterest: "Short Int",
+  analystUpside: "Analyst",
+  volumeRatio: "Volume",
+  rsiPosition: "RSI",
+  peerSpiked: "Peers",
+  sectorEtfMomentum: "Sector ETF",
+  earningsSurprise: "Earnings",
+  maPosition: "MA Trend",
+  optionsSkew: "Options",
+  trendAcceleration: "Trend Accel",
+  relativeStrength: "Rel Strength",
+  insiderBuying: "Insiders",
+  institutionalOwnership: "Inst Own",
+  darkPoolActivity: "Dark Pool",
+};
+
+function scoreBarColor(value: number, max: number): string {
+  const pct = max > 0 ? value / max : 0;
+  if (pct >= 0.75) return "bg-green-500";
+  if (pct >= 0.4) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function DetailPanel({ result: r }: { result: CatalystResult }) {
+  const pctFromHigh =
+    r.fiftyTwoWeekHigh > 0
+      ? (((r.fiftyTwoWeekHigh - r.price) / r.fiftyTwoWeekHigh) * 100).toFixed(0)
+      : null;
+  const analystUpside =
+    r.analystTarget > 0 && r.analystTarget !== r.price
+      ? (((r.analystTarget - r.price) / r.price) * 100).toFixed(0)
+      : null;
+
+  return (
+    <div className="mt-3 rounded-lg border border-[#2a2a2a] bg-[#141414] p-5">
+      {/* Header */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-white">{r.symbol}</span>
+          <span className="text-xs text-[#888]">— {r.name}</span>
+        </div>
+        <span className="text-sm font-medium text-white">
+          Score: {r.totalScore.toFixed(0)}/100
+        </span>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Left: Score Breakdown */}
+        <div>
+          <h3 className="mb-2 text-xs font-semibold text-[#888]">Score Breakdown</h3>
+          <div className="space-y-1.5">
+            {Object.entries(r.scores).map(([key, val]) => {
+              const max = SCORE_FACTOR_MAXES[key] ?? 1;
+              const label = SCORE_FACTOR_LABELS[key] ?? key;
+              return (
+                <ScoreBar
+                  key={key}
+                  label={label}
+                  value={val}
+                  max={max}
+                  color={scoreBarColor(val, max)}
+                  size="sm"
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right: Key Metrics */}
+        <div>
+          <h3 className="mb-2 text-xs font-semibold text-[#888]">Key Metrics</h3>
+          <div className="space-y-1 text-xs">
+            <MetricRow label="Price" value={`$${r.price.toFixed(2)}`} />
+            <MetricRow
+              label="1d"
+              value={`${r.change1d >= 0 ? "+" : ""}${r.change1d.toFixed(1)}%`}
+              color={r.change1d >= 0 ? "text-green-400" : "text-red-400"}
+            />
+            <MetricRow
+              label="5d"
+              value={`${r.change5d >= 0 ? "+" : ""}${r.change5d.toFixed(1)}%`}
+              color={r.change5d >= 0 ? "text-green-400" : "text-red-400"}
+            />
+            <MetricRow
+              label="YTD"
+              value={`${r.ytdChange >= 0 ? "+" : ""}${r.ytdChange.toFixed(1)}%`}
+              color={r.ytdChange >= 0 ? "text-green-400" : "text-red-400"}
+            />
+            <MetricRow
+              label="52wk"
+              value={`$${r.fiftyTwoWeekLow.toFixed(0)} — $${r.fiftyTwoWeekHigh.toFixed(0)}${pctFromHigh ? ` (${pctFromHigh}% from high)` : ""}`}
+            />
+            {r.shortPercentFloat > 0 && (
+              <MetricRow label="SI" value={`${r.shortPercentFloat.toFixed(1)}% of float`} />
+            )}
+            <MetricRow label="Vol Ratio" value={`${r.volumeRatio5d20d.toFixed(1)}x (5d/20d)`} />
+            <MetricRow label="RSI-14" value={r.rsi14.toFixed(0)} />
+            <MetricRow label="SMA 50" value={`$${r.sma50.toFixed(2)}`} />
+            <MetricRow label="SMA 200" value={`$${r.sma200.toFixed(2)}`} />
+            {r.analystTarget > 0 && analystUpside && (
+              <MetricRow
+                label="Target"
+                value={`$${r.analystTarget.toFixed(0)} (${analystUpside}% upside)`}
+              />
+            )}
+            {r.nextCatalyst && (
+              <MetricRow
+                label="Catalyst"
+                value={`${r.nextCatalyst}${r.nextCatalystDays !== undefined ? ` in ${r.nextCatalystDays}d` : ""}`}
+              />
+            )}
+            {r.peersThatSpiked && r.peersThatSpiked.length > 0 && (
+              <MetricRow label="Peers" value={r.peersThatSpiked.join(", ")} color="text-green-400" />
+            )}
+            <MetricRow label="Verdict" value={r.verdict.replace("_", " ")} />
+            <MetricRow label="Layer" value={`${r.layerLabel} T${r.tier}`} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricRow({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-16 shrink-0 text-[#666]">{label}</span>
+      <span className={color ?? "text-[#ccc]"}>{value}</span>
     </div>
   );
 }
@@ -729,17 +903,24 @@ function ResultCard({
   result: r,
   borderColor,
   dimmed,
+  selected,
+  onSelect,
 }: {
   result: CatalystResult;
   borderColor: string;
   dimmed?: boolean;
+  selected?: boolean;
+  onSelect?: () => void;
 }) {
   const scorePct = Math.min(100, r.totalScore);
 
   return (
     <div
-      className={`rounded-lg border ${borderColor} bg-[#1a1a1a] p-4 transition-colors hover:bg-[#1f1f1f] ${
-        dimmed ? "opacity-60" : ""
+      onClick={onSelect}
+      className={`cursor-pointer rounded-lg border ${
+        selected ? "border-[#5ba3e6] bg-[#1c2330]" : `${borderColor} bg-[#1a1a1a]`
+      } p-4 transition-colors hover:bg-[#1f1f1f] ${
+        dimmed && !selected ? "opacity-60" : ""
       }`}
     >
       {/* Header */}
@@ -849,19 +1030,26 @@ function ResultCard({
         </div>
       )}
 
-      {/* Key Metrics Row */}
-      <div className="flex gap-3 text-[10px] text-[#888]">
-        {r.shortPercentFloat > 0 && (
-          <span>SI: {r.shortPercentFloat.toFixed(1)}%</span>
-        )}
-        <span>Vol: {r.volumeRatio5d20d.toFixed(1)}x</span>
-        <span>RSI: {r.rsi14.toFixed(0)}</span>
-        {r.analystTarget > 0 && r.analystTarget !== r.price && (
-          <span>
-            Target: ${r.analystTarget.toFixed(0)} (
-            {(((r.analystTarget - r.price) / r.price) * 100).toFixed(0)}%)
-          </span>
-        )}
+      {/* Key Metrics Row + Chevron */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-3 text-[10px] text-[#888]">
+          {r.shortPercentFloat > 0 && (
+            <span>SI: {r.shortPercentFloat.toFixed(1)}%</span>
+          )}
+          <span>Vol: {r.volumeRatio5d20d.toFixed(1)}x</span>
+          <span>RSI: {r.rsi14.toFixed(0)}</span>
+          {r.analystTarget > 0 && r.analystTarget !== r.price && (
+            <span>
+              Target: ${r.analystTarget.toFixed(0)} (
+              {(((r.analystTarget - r.price) / r.price) * 100).toFixed(0)}%)
+            </span>
+          )}
+        </div>
+        <ChevronRight
+          className={`h-3.5 w-3.5 text-[#555] transition-transform ${
+            selected ? "rotate-90 text-[#5ba3e6]" : ""
+          }`}
+        />
       </div>
     </div>
   );
