@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Zap,
   Shield,
+  Crosshair,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -22,6 +23,7 @@ const SECTIONS = [
   { id: "misses", label: "Misses" },
   { id: "fire-drills", label: "Fire Drills" },
   { id: "using-scanner", label: "Using It" },
+  { id: "finding-runners", label: "Runners" },
   { id: "limitations", label: "Limitations" },
 ];
 
@@ -627,7 +629,97 @@ export default function CatalystGuidePage() {
           </SubSection>
         </Section>
 
-        {/* Section 8: Limitations */}
+        {/* Section 8: Finding Runners */}
+        <Section
+          id="finding-runners"
+          title="Finding the Next Runner"
+          icon={<Crosshair className="h-5 w-5 text-green-400" />}
+        >
+          <p>
+            The scanner doesn&rsquo;t predict direction &mdash; it identifies <strong className="text-white">setup alignment</strong>.
+            AI infrastructure stocks spike in a cascade: chips first, then servers/networking, then power/software.
+            The scanner detects when a stock is loaded with fuel before the match is lit.
+          </p>
+
+          <SubSection title="What a Runner Looks Like">
+            <p>
+              A high-conviction runner typically has <strong className="text-white">5-6 green dots</strong> in
+              this specific combination:
+            </p>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-[#c0c0c0]">
+              <li><strong className="text-white">Catalyst imminent</strong> &mdash; Earnings or FOMC within 5 days (days to catalyst 10+)</li>
+              <li><strong className="text-white">Compressed price</strong> &mdash; Either beaten down (mean reversion 5+) OR coiled at highs (momentum 4+), never both</li>
+              <li><strong className="text-white">Accumulation</strong> &mdash; Volume ratio 5+ (smart money loading quietly)</li>
+              <li><strong className="text-white">Short fuel</strong> &mdash; SI 3+ means forced buying when the move starts</li>
+              <li><strong className="text-white">Sector tailwind</strong> &mdash; Sector ETF momentum 5+ means the whole layer is participating</li>
+              <li><strong className="text-white">Earnings beats</strong> &mdash; Earnings surprise 6+ means the company has a track record of beating</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Step-by-Step: Finding the Runner">
+            <ol className="list-inside list-decimal space-y-2 text-[#c0c0c0]">
+              <li>
+                <strong className="text-white">Filter for signal, not noise</strong> &mdash;
+                Set Min Score to 55+ to hide weak setups. Focus on PRE-SPIKE and top WATCH cards.
+              </li>
+              <li>
+                <strong className="text-white">Check the catalyst calendar</strong> &mdash;
+                A runner needs a trigger. Look at the ribbon for earnings within 5 days. Stocks with no upcoming catalyst rarely spike.
+              </li>
+              <li>
+                <strong className="text-white">Read the dots left to right</strong> &mdash;
+                The strongest setups have green on both sides of the dot row (timing factors on the left, sentiment/flow factors on the right).
+                A stock with green dots only on the left but gray on the right is missing conviction.
+              </li>
+              <li>
+                <strong className="text-white">Look for the sympathy setup</strong> &mdash;
+                When you see a FIRE DRILL badge, the stock that spiked already moved. Its peers that haven&rsquo;t moved yet are the runners.
+                Example: DELL spikes 15% on AI server demand &rarr; HPE and SMCI cards show fire drill badges. Those are your entries.
+              </li>
+              <li>
+                <strong className="text-white">Cross-reference the new factors</strong> &mdash;
+                Insider buying 3+ (management putting their own money in), institutional ownership 3+ (smart money positioned),
+                dark pool proxy 2+ (quiet large-block accumulation), options skew 3+ (heavy puts = squeeze fuel),
+                relative strength 3+ (outperforming sector, not just riding the wave).
+              </li>
+              <li>
+                <strong className="text-white">Disqualify false positives</strong> &mdash;
+                RSI &gt; 70 (overbought, move may be done), 5d change already &gt; +10% (you&rsquo;re late),
+                no catalyst within 30 days (score may decay), trend acceleration 0 (move decelerating).
+              </li>
+            </ol>
+          </SubSection>
+
+          <SubSection title="The Ideal Card">
+            <div className="mt-1 space-y-1 font-mono text-xs text-[#c0c0c0]">
+              <div>Score: <strong className="text-green-400">72+</strong></div>
+              <div>Dots: <strong className="text-white">5-6 green</strong>, 3-4 amber, few gray</div>
+              <div>Catalyst: <strong className="text-white">Earnings in 3-5 days</strong></div>
+              <div>Peers: <strong className="text-white">At least 1 peer spiked recently</strong></div>
+              <div>Layer: <strong className="text-white">AI Chips, Servers, or Networking</strong> (fastest movers)</div>
+              <div>SI: <strong className="text-white">&gt; 10%</strong></div>
+              <div>Insider: <strong className="text-white">Recent purchases, no sales</strong></div>
+              <div>Volume: <strong className="text-white">1.5x+ 20d average</strong></div>
+            </div>
+          </SubSection>
+
+          <SubSection title="What the Scanner Cannot Tell You">
+            <ul className="list-inside list-disc space-y-1 text-[#c0c0c0]">
+              <li><strong className="text-white">Direction</strong> &mdash; Earnings can beat or miss. The scanner finds loaded setups, not outcomes.</li>
+              <li><strong className="text-white">Timing precision</strong> &mdash; A PRE-SPIKE stock might move tomorrow or in 2 weeks.</li>
+              <li><strong className="text-white">Position sizing</strong> &mdash; That&rsquo;s your risk management, not the scanner&rsquo;s job.</li>
+            </ul>
+          </SubSection>
+
+          <Tip>
+            The scanner narrows 76 tickers down to the 3-5 that have the most factors aligned.
+            Your edge is acting on those 3-5 before the catalyst hits. The strongest signal is a
+            FIRE DRILL badge on a stock with insider buying and high short interest &mdash; that
+            combination creates the most explosive moves.
+          </Tip>
+        </Section>
+
+        {/* Section 9: Limitations */}
         <Section
           id="limitations"
           title="Limitations and Caveats"
