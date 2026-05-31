@@ -107,7 +107,7 @@ export default function CatalystGuidePage() {
         >
           <p>
             The Catalyst Scanner identifies <strong className="text-white">AI infrastructure stocks</strong> that
-            are setting up for a significant move — <em>before</em> the spike happens. It scans ~75 tickers across
+            are setting up for a significant move — <em>before</em> the spike happens. It scans ~82 tickers across
             11 layers of the AI supply chain, scores each stock on 17 factors, and classifies them into
             actionable categories.
           </p>
@@ -712,7 +712,7 @@ export default function CatalystGuidePage() {
           </SubSection>
 
           <Tip>
-            The scanner narrows 76 tickers down to the 3-5 that have the most factors aligned.
+            The scanner narrows 82 tickers down to the 3-5 that have the most factors aligned.
             Your edge is acting on those 3-5 before the catalyst hits. The strongest signal is a
             FIRE DRILL badge on a stock with insider buying and high short interest &mdash; that
             combination creates the most explosive moves.

@@ -426,7 +426,7 @@ function CatalystPage() {
             <div>
               <h1 className="text-lg font-bold text-white">Catalyst Scanner</h1>
               <p className="text-xs text-[#888]">
-                AI infrastructure spike detector — 17-factor scoring across 76 tickers
+                AI infrastructure spike detector — 17-factor scoring across 82 tickers
                 {cacheMinutes !== null && ` (scanned ${cacheMinutes}m ago)`}
               </p>
             </div>

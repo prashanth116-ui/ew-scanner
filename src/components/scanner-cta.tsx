@@ -64,7 +64,7 @@ const scanners = [
     href: "/catalyst",
     title: "Catalyst Scanner",
     description:
-      "AI infrastructure spike detector — 17-factor scoring across 76 tickers with fire drill alerts and miss classification.",
+      "AI infrastructure spike detector — 17-factor scoring across 82 tickers with fire drill alerts and miss classification.",
     icon: Flame,
     color: "#ef4444",
   },

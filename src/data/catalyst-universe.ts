@@ -59,6 +59,7 @@ const UNIVERSE: CatalystTicker[] = [
   { symbol: "VRT", name: "Vertiv Holdings", layer: "ai-servers", layerLabel: "AI Servers", tier: 2, sectorETF: "IGV" },
   { symbol: "NTAP", name: "NetApp", layer: "ai-servers", layerLabel: "AI Servers", tier: 2, sectorETF: "IGV" },
   { symbol: "IBM", name: "IBM", layer: "ai-servers", layerLabel: "AI Servers", tier: 2, sectorETF: "IGV" },
+  { symbol: "CLS", name: "Celestica", layer: "ai-servers", layerLabel: "AI Servers", tier: 2, sectorETF: "IGV" },
 
   // ── AI Networking (Tier 1-3) ──
   { symbol: "ANET", name: "Arista Networks", layer: "ai-networking", layerLabel: "AI Networking", tier: 1, sectorETF: "IGV" },
@@ -67,11 +68,12 @@ const UNIVERSE: CatalystTicker[] = [
   { symbol: "FFIV", name: "F5 Networks", layer: "ai-networking", layerLabel: "AI Networking", tier: 3, sectorETF: "IGV" },
   { symbol: "CALX", name: "Calix", layer: "ai-networking", layerLabel: "AI Networking", tier: 3, sectorETF: "IGV" },
 
-  // ── AI Optics (Tier 1-2) ──
+  // ── AI Optics (Tier 1-3) ──
   { symbol: "COHR", name: "Coherent Corp", layer: "ai-optics", layerLabel: "AI Optics", tier: 1, sectorETF: "SMH" },
   { symbol: "LITE", name: "Lumentum Holdings", layer: "ai-optics", layerLabel: "AI Optics", tier: 2, sectorETF: "SMH" },
   { symbol: "FOXF", name: "Fox Factory", layer: "ai-optics", layerLabel: "AI Optics", tier: 2, sectorETF: "SMH" },
   { symbol: "CIEN", name: "Ciena Corporation", layer: "ai-optics", layerLabel: "AI Optics", tier: 2, sectorETF: "SMH" },
+  { symbol: "AAOI", name: "Applied Optoelectronics", layer: "ai-optics", layerLabel: "AI Optics", tier: 3, sectorETF: "SMH" },
 
   // ── AI Power / Infrastructure (Tier 2-3) ──
   { symbol: "VST", name: "Vistra Corp", layer: "ai-power", layerLabel: "AI Power", tier: 2, sectorETF: "XLU" },
