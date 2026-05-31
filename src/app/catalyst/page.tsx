@@ -318,14 +318,22 @@ function CatalystPage() {
                   {LAYER_LABELS[layer]}
                 </label>
               ))}
-              {selectedLayers.size > 0 && (
+              <div className="mt-1 flex gap-2">
                 <button
-                  onClick={() => setSelectedLayers(new Set())}
-                  className="mt-1 text-xs text-[#5ba3e6] hover:underline"
+                  onClick={() => setSelectedLayers(new Set(ALL_LAYERS))}
+                  className={`text-xs hover:underline ${selectedLayers.size === ALL_LAYERS.length ? "text-[#666]" : "text-[#5ba3e6]"}`}
                 >
-                  Clear all
+                  Select all
                 </button>
-              )}
+                {selectedLayers.size > 0 && (
+                  <button
+                    onClick={() => setSelectedLayers(new Set())}
+                    className="text-xs text-[#5ba3e6] hover:underline"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
             </div>
           </SidebarSection>
 
