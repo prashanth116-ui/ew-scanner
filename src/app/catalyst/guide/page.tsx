@@ -82,7 +82,7 @@ export default function CatalystGuidePage() {
               <BookOpen className="h-8 w-8 text-red-400" />
               <div>
                 <h1 className="text-3xl font-bold tracking-tight text-white">
-                  Catalyst Scanner Guide
+                  AI Radar Guide
                 </h1>
                 <p className="mt-1 text-[#a0a0a0]">
                   How the AI infrastructure spike detector works, factor by factor.
@@ -102,11 +102,11 @@ export default function CatalystGuidePage() {
         {/* Section 1: Overview */}
         <Section
           id="overview"
-          title="What Does the Catalyst Scanner Do?"
+          title="What Does AI Radar Do?"
           icon={<Flame className="h-5 w-5 text-red-400" />}
         >
           <p>
-            The Catalyst Scanner identifies <strong className="text-white">AI infrastructure stocks</strong> that
+            AI Radar identifies <strong className="text-white">AI infrastructure stocks</strong> that
             are setting up for a significant move — <em>before</em> the spike happens. It scans ~82 tickers across
             11 layers of the AI supply chain, scores each stock on 17 factors, and classifies them into
             actionable categories.
@@ -770,7 +770,7 @@ export default function CatalystGuidePage() {
             href="/catalyst"
             className="inline-flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-2 text-sm font-medium text-[#5ba3e6] transition-colors hover:bg-[#262626]"
           >
-            &larr; Back to Catalyst Scanner
+            &larr; Back to AI Radar
           </Link>
         </div>
       </div>

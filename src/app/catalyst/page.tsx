@@ -424,7 +424,7 @@ function CatalystPage() {
           {/* Header + Buttons */}
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h1 className="text-lg font-bold text-white">Catalyst Scanner</h1>
+              <h1 className="text-lg font-bold text-white">AI Radar</h1>
               <p className="text-xs text-[#888]">
                 AI infrastructure spike detector — 17-factor scoring across 82 tickers
                 {cacheMinutes !== null && ` (scanned ${cacheMinutes}m ago)`}

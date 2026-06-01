@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Catalyst Scanner Guide",
+  title: "AI Radar Guide",
   description:
-    "How the catalyst scanner works — 17-factor scoring, verdict categories, AI infrastructure layers, and fire drill detection.",
+    "How AI Radar works — 17-factor scoring, verdict categories, AI infrastructure layers, and fire drill detection.",
 };
 
 export default function CatalystGuideLayout({

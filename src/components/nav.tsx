@@ -14,7 +14,7 @@ const scannerTabs = [
   { id: "confluence", label: "Confluence", href: "/confluence" },
   { id: "strat", label: "The Strat", href: "/strat" },
   { id: "earnings", label: "Earnings", href: "/earnings" },
-  { id: "catalyst", label: "Catalyst", href: "/catalyst" },
+  { id: "catalyst", label: "AI Radar", href: "/catalyst" },
 ] as const;
 
 const subPages: Record<string, { href: string; label: string }[]> = {

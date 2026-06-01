@@ -56,7 +56,7 @@ function formatTelegramMessage(
   });
 
   const lines: string[] = [];
-  lines.push(`<b>Catalyst Scanner</b>`);
+  lines.push(`<b>AI Radar</b>`);
   lines.push(`${date} | ${scannedCount} scanned`);
   lines.push("");
 
