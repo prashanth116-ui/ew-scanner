@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Watchlists | EW Scanner",
+  title: "Watchlists",
   description: "Manage stock watchlists and track score changes",
 };
 

@@ -10,7 +10,7 @@ export default function NotFound() {
       <p className="mb-8 max-w-md text-sm text-[#a0a0a0]">
         The page you&apos;re looking for doesn&apos;t exist or has been moved.
       </p>
-      <div className="flex gap-3">
+      <div className="flex flex-wrap justify-center gap-3">
         <Link
           href="/"
           className="rounded-md bg-[#185FA5] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1a6dba]"
@@ -28,6 +28,30 @@ export default function NotFound() {
           className="rounded-md border border-[#2a2a2a] px-5 py-2.5 text-sm font-medium text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
         >
           Pre-Run
+        </Link>
+        <Link
+          href="/sectors"
+          className="rounded-md border border-[#2a2a2a] px-5 py-2.5 text-sm font-medium text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+        >
+          Sectors
+        </Link>
+        <Link
+          href="/confluence"
+          className="rounded-md border border-[#2a2a2a] px-5 py-2.5 text-sm font-medium text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+        >
+          Confluence
+        </Link>
+        <Link
+          href="/strat"
+          className="rounded-md border border-[#2a2a2a] px-5 py-2.5 text-sm font-medium text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+        >
+          The Strat
+        </Link>
+        <Link
+          href="/catalyst"
+          className="rounded-md border border-[#2a2a2a] px-5 py-2.5 text-sm font-medium text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+        >
+          AI Radar
         </Link>
       </div>
     </div>

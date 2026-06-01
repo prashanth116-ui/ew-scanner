@@ -1,5 +1,5 @@
 /**
- * Catalyst Scanner universe: ~75 AI infrastructure tickers across 11 layers.
+ * AI Radar universe: ~78 AI infrastructure tickers across 11 layers.
  * Each ticker is tagged with a layer, tier (1-3), and sector ETF for scoring.
  */
 

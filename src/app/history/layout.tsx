@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "History | EW Scanner",
+  title: "Scan History",
   description: "View and compare past scan results",
 };
 

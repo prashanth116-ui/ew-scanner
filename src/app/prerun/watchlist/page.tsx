@@ -704,7 +704,7 @@ function WatchlistContent() {
                                   <input
                                     type="range"
                                     min={0}
-                                    max={2}
+                                    max={3}
                                     step={1}
                                     value={es.scoreC}
                                     onChange={(e) =>
@@ -718,6 +718,7 @@ function WatchlistContent() {
                                     <span>0</span>
                                     <span>1</span>
                                     <span>2</span>
+                                    <span>3</span>
                                   </div>
                                 </div>
 

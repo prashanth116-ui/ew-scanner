@@ -123,7 +123,7 @@ export default function CatalystGuidePage() {
 
           <SubSection title="How It Works">
             <ol className="list-inside list-decimal space-y-1.5 text-[#c0c0c0]">
-              <li>Scans a curated universe of ~75 AI infrastructure tickers</li>
+              <li>Scans a curated universe of ~78 AI infrastructure tickers</li>
               <li>Fetches real-time price, volume, short interest, and analyst data</li>
               <li>Scores each stock on <strong className="text-white">17 factors</strong> (max 100 pts)</li>
               <li>Classifies into <strong className="text-white">PRE-SPIKE</strong>, <strong className="text-white">WATCH</strong>, <strong className="text-white">MONITOR</strong>, or <strong className="text-white">MISS</strong></li>
@@ -162,16 +162,16 @@ export default function CatalystGuidePage() {
               </thead>
               <tbody className="text-[#c0c0c0]">
                 <LayerRow layer="AI Chips" desc="GPU/accelerator designers" examples="NVDA, AMD, AVGO" etf="SMH" />
-                <LayerRow layer="AI Servers" desc="Server OEMs and data center hardware" examples="DELL, HPE, SMCI" etf="SMH" />
-                <LayerRow layer="AI Networking" desc="Data center networking equipment" examples="ANET, CSCO, JNPR" etf="SMH" />
-                <LayerRow layer="AI Optics" desc="Optical transceivers and fiber" examples="COHR, LITE, FOXF" etf="SMH" />
+                <LayerRow layer="AI Servers" desc="Server OEMs and data center hardware" examples="DELL, HPE, SMCI" etf="IGV" />
+                <LayerRow layer="AI Networking" desc="Data center networking equipment" examples="ANET, CSCO, JNPR" etf="IGV" />
+                <LayerRow layer="AI Optics" desc="Optical transceivers and fiber" examples="COHR, LITE, CIEN" etf="SMH" />
                 <LayerRow layer="AI Power" desc="Utilities serving data centers" examples="VST, CEG, NRG" etf="XLU" />
-                <LayerRow layer="AI Builders" desc="Hyperscalers building AI infra" examples="MSFT, GOOG, AMZN" etf="QQQ" />
+                <LayerRow layer="AI Builders" desc="Hyperscalers building AI infra" examples="MSFT, GOOG, AMZN" etf="IGV" />
                 <LayerRow layer="AI Software" desc="AI platform and application companies" examples="AI, PLTR, SNOW" etf="IGV" />
                 <LayerRow layer="Semi Equipment" desc="Chip manufacturing equipment" examples="AMAT, LRCX, KLAC" etf="SMH" />
                 <LayerRow layer="Commodities" desc="Metals/materials for AI hardware" examples="FCX, NEM, SCCO" etf="XME" />
                 <LayerRow layer="Defense AI" desc="AI applied to defense/government" examples="LMT, RTX, NOC" etf="ITA" />
-                <LayerRow layer="Robotics" desc="Physical AI and automation" examples="ISRG, ROK, TER" etf="BOTZ" />
+                <LayerRow layer="Robotics" desc="Physical AI and automation" examples="ISRG, ROK, TER" etf="ROBO" />
               </tbody>
             </table>
           </div>
@@ -525,7 +525,7 @@ export default function CatalystGuidePage() {
             <MissCard
               category="Wrong Pattern"
               rule="Defense/Robotics layer + low score"
-              description="These stocks tend to grind higher gradually rather than spike. The catalyst scanner is designed for explosive moves, not slow trends."
+              description="These stocks tend to grind higher gradually rather than spike. AI Radar is designed for explosive moves, not slow trends."
             />
             <MissCard
               category="Too Early"

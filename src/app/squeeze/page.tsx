@@ -1159,11 +1159,11 @@ function SqueezePage() {
                 <p className="text-[10px] text-[#666]">Stocks</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
-                <p className="text-2xl font-bold text-[#f59e0b]">6</p>
+                <p className="text-2xl font-bold text-[#f59e0b]">7</p>
                 <p className="text-[10px] text-[#666]">Scoring Factors</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
-                <p className="text-2xl font-bold text-[#f59e0b]">5</p>
+                <p className="text-2xl font-bold text-[#f59e0b]">6</p>
                 <p className="text-[10px] text-[#666]">Presets</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
@@ -1352,6 +1352,12 @@ const TableRow = memo(function TableRow({
                   value={c.components.near52wLow}
                   max={15}
                   color="bg-purple-500"
+                />
+                <ScoreBar
+                  label="FTD Pressure"
+                  value={c.components.ftdPressure}
+                  max={15}
+                  color="bg-pink-500"
                 />
                 <ScoreBar
                   label="EW Align"

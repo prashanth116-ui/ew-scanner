@@ -196,7 +196,7 @@ function QuickReferenceCard() {
           {/* Criteria Table */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
-              18 Criteria (max 38 pts + sector modifier)
+              18 Criteria (max 39 pts + sector modifier)
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -215,7 +215,7 @@ function QuickReferenceCard() {
                     { l: "A", name: "Dead Money Base", max: 2, s0: "No discount", s1: "25%+ / 8+ wks", s2: "40%+ / 13+ wks" },
                     { l: "B", name: "Short Interest", max: 3, s0: "SI <5%", s1: "SI 5-15%", s2: "3: SI>20% + small cap" },
                     { l: "C", name: "Narrative Catalyst", max: 3, s0: "No catalyst", s1: "Speculative", s2: "3: Multiple catalysts" },
-                    { l: "D", name: "Earnings Inflection", max: 2, s0: "Declining rev", s1: "Growth or near earn", s2: "Accel rev + earn <60d" },
+                    { l: "D", name: "Earnings Inflection", max: 3, s0: "Declining rev", s1: "Growth or near earn", s2: "Accel rev + earn <60d" },
                     { l: "E", name: "Inst. Under-Ownership", max: 2, s0: "Inst >70%", s1: "Inst 40-70%", s2: "Inst <40%" },
                     { l: "F", name: "Volume Accumulation", max: 2, s0: "Distribution", s1: "Neutral", s2: "Up/Down >1.3x or float turnover" },
                     { l: "G", name: "Index Inclusion", max: 2, s0: "N/A", s1: "Possible", s2: "Plausible <18mo" },
@@ -409,10 +409,10 @@ export default function PreRunGuidePage() {
         </Section>
 
         {/* 15 Criteria */}
-        <Section icon={Layers} title="Layer 2: Eighteen Criteria (max 38 Points + Sector Modifier)">
+        <Section icon={Layers} title="Layer 2: Eighteen Criteria (max 39 Points + Sector Modifier)">
           <p>
-            Each criterion scores 0-2 (B and C expanded to 0-3 for higher
-            predictive weight). Total possible: 38 points + sector momentum
+            Each criterion scores 0-2 (B, C, and D expanded to 0-3 for higher
+            predictive weight). Total possible: 39 points + sector momentum
             modifier (&plusmn;1). Criteria A, B, C are highest weight. Criteria L-O
             power the &ldquo;Stage 1&rarr;2 / base breakout&rdquo; preset for identifying
             stocks transitioning from accumulation to markup. M2 adds

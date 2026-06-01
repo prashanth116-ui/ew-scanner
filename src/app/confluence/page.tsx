@@ -1329,7 +1329,7 @@ function ConfluencePage() {
                 Ready to Scan
               </h2>
               <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
-                Cross-reference {getConfluenceUniverse().length} stocks across all 4 scanners.
+                Cross-reference {getConfluenceUniverse().length} stocks across 4 core scanners (EW, Squeeze, Pre-Run, Strat).
                 Stocks passing multiple scanners simultaneously represent the highest conviction setups.
               </p>
               <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">

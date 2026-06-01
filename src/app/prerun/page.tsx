@@ -1244,7 +1244,7 @@ const ResultCard = memo(function ResultCard({
 
   const criteriaLabels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "M2", "N", "O", "P", "Q"] as const;
   const criteriaValues = [s.scoreA, s.scoreB, s.scoreC, s.scoreD, s.scoreE, s.scoreF, s.scoreG, s.scoreH, s.scoreI, s.scoreJ, s.scoreK, s.scoreL, s.scoreM, s.scoreM2, s.scoreN, s.scoreO, s.scoreP, s.scoreQ];
-  const criteriaMaxes = [2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
+  const criteriaMaxes = [2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
   const emaTfLabel = d.emaM2Timeframe ?? "15m";
   const criteriaNames = ["Base", "SI", "Catalyst", "Earnings", "Coverage", "Volume", "Index", "Insider", "Options", "RelStr", "Breakout", "HigherLows", "EMAReclaim", `${emaTfLabel}EMA`, "RangeCoil", "FailedBD", "Revisions", "Squeeze"];
 

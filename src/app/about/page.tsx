@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Activity, TrendingUp, Zap, BarChart3, Search, Shield, Clock, Database, Mail } from "lucide-react";
+import { Activity, TrendingUp, Zap, BarChart3, Search, Shield, Clock, Database, Mail, Layers, Crosshair, Flame, Calendar } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "About",
@@ -41,10 +41,10 @@ const scanners = [
     href: "/prerun",
     title: "Pre-Run Scanner",
     description:
-      "Multi-bagger stock screener with 11 algorithmic scoring criteria across 680+ stocks in 13 GICS sectors. Identify beaten-down stocks with structural catalysts before they run.",
+      "Multi-bagger stock screener with 18 algorithmic scoring criteria across 680+ stocks in 13 GICS sectors. Identify beaten-down stocks with structural catalysts before they run.",
     icon: TrendingUp,
     features: [
-      "3-gate qualification + 11-criteria scoring (0-24 scale)",
+      "3-gate qualification + 18-criteria scoring (0-39 scale)",
       "AI narrative catalyst scoring",
       "13 GICS sectors: Semis, Software, Biotech, Energy, and more",
       "TradingView webhook integration for price alerts",
@@ -64,6 +64,62 @@ const scanners = [
       "Historical snapshots with trend comparison",
     ],
     color: "#8b5cf6",
+  },
+  {
+    href: "/confluence",
+    title: "Confluence Scanner",
+    description:
+      "Highest conviction setups — stocks passing multiple scanners simultaneously for maximum signal alignment.",
+    icon: Layers,
+    features: [
+      "Cross-references EW, Squeeze, Pre-Run, and Strat signals",
+      "Composite scoring with per-scanner breakdown",
+      "AI-generated summary for top candidates",
+      "Preset strategies: Triple Signal, Squeeze+EW, and more",
+    ],
+    color: "#ec4899",
+  },
+  {
+    href: "/strat",
+    title: "The Strat",
+    description:
+      "Rob Smith's Strat methodology — bar classification (1/2U/2D/3), combo detection, and timeframe continuity across monthly, weekly, and daily charts.",
+    icon: Crosshair,
+    features: [
+      "Automated bar type classification (1, 2U, 2D, 3)",
+      "Combo detection: 2-1-2, 3-1-2, and reversal setups",
+      "Multi-timeframe continuity (M/W/D alignment)",
+      "Broadening formation and inside bar tracking",
+    ],
+    color: "#f97316",
+  },
+  {
+    href: "/earnings",
+    title: "Earnings Scanner",
+    description:
+      "Earnings date lookup and calendar for tracking upcoming reports. Cross-references with scanner signals to identify pre-earnings setups.",
+    icon: Calendar,
+    features: [
+      "Earnings date lookup for any ticker",
+      "Calendar view of upcoming reports",
+      "Beat/miss streak tracking",
+      "Integration with Pre-Run and AI Radar signals",
+    ],
+    color: "#06b6d4",
+  },
+  {
+    href: "/catalyst",
+    title: "AI Radar",
+    description:
+      "AI infrastructure spike detector — 17-factor scoring across 78 tickers in 11 layers with fire drill alerts and peer-spike detection.",
+    icon: Flame,
+    features: [
+      "17-factor scoring: momentum, volume, short interest, analyst targets",
+      "11 AI layers: Chips, Servers, Networking, Power, and more",
+      "Fire drill alerts when peer stocks spike",
+      "Event calendar overlay (earnings, FOMC, OPEX)",
+    ],
+    color: "#ef4444",
   },
 ];
 
@@ -120,7 +176,7 @@ export default function AboutPage() {
       {/* Scanner cards */}
       <section>
         <h2 className="mb-8 text-center text-2xl font-bold text-white">
-          Four Scanners, One Platform
+          Eight Scanners, One Platform
         </h2>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {scanners.map((s) => (

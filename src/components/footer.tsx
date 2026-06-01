@@ -8,6 +8,9 @@ const scannerLinks = [
   { href: "/prerun", label: "Pre-Run Scanner" },
   { href: "/sectors", label: "Sector Rotation" },
   { href: "/confluence", label: "Confluence Scanner" },
+  { href: "/strat", label: "The Strat" },
+  { href: "/earnings", label: "Earnings" },
+  { href: "/catalyst", label: "AI Radar" },
 ];
 
 const resourceLinks = [
@@ -17,6 +20,8 @@ const resourceLinks = [
   { href: "/prerun/guide", label: "Pre-Run Guide" },
   { href: "/sectors/guide", label: "Sector Rotation Guide" },
   { href: "/confluence/guide", label: "Confluence Guide" },
+  { href: "/strat/guide", label: "The Strat Guide" },
+  { href: "/catalyst/guide", label: "AI Radar Guide" },
   { href: "/learn", label: "Learn EW" },
   { href: "/pricing", label: "Pricing" },
 ];

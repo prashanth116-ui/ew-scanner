@@ -607,7 +607,7 @@ export default function SqueezeGuidePage() {
 
           <SubSection title="How Scores Work">
             <p className="mb-2">
-              The screener assigns a <strong className="text-white">0-100 composite score</strong> based on six components:
+              The screener assigns a <strong className="text-white">0-115 composite score</strong> based on seven components:
             </p>
             <div className="mt-2 overflow-x-auto">
               <table className="w-full text-xs">
@@ -643,6 +643,11 @@ export default function SqueezeGuidePage() {
                     <td className="px-3 py-1.5 text-white">Near 52w Low</td>
                     <td className="px-3 py-1.5">15</td>
                     <td className="px-3 py-1.5">Proximity to annual low &mdash; complacent short indicator</td>
+                  </tr>
+                  <tr className="border-b border-[#222]">
+                    <td className="px-3 py-1.5 text-white">FTD Pressure</td>
+                    <td className="px-3 py-1.5">15</td>
+                    <td className="px-3 py-1.5">Failures to deliver as % of float &mdash; settlement pressure on shorts</td>
                   </tr>
                   <tr>
                     <td className="px-3 py-1.5 text-white">EW Alignment</td>
