@@ -1332,6 +1332,87 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationDat
 
 // ── Main Page ──
 
+// ── Top Picks by Sector ──
+
+function TopPicksBySector({ stocks, sectors }: { stocks: EnrichedStock[]; sectors: SectorRotationScore[] }) {
+  const topPicks = useMemo(() => {
+    const map: Record<string, EnrichedStock[]> = {};
+    for (const s of stocks) {
+      if (!map[s.sectorEtf]) map[s.sectorEtf] = [];
+      map[s.sectorEtf].push(s);
+    }
+    const convOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
+    for (const etf of Object.keys(map)) {
+      map[etf].sort((a, b) => (convOrder[a.conviction] ?? 3) - (convOrder[b.conviction] ?? 3) || (b.rsAccel ?? -999) - (a.rsAccel ?? -999));
+      map[etf] = map[etf].slice(0, 3);
+    }
+    return map;
+  }, [stocks]);
+
+  const convColor = (c: string) => {
+    switch (c) {
+      case "HIGH": return "bg-green-500/20 text-green-400 border-green-500/30";
+      case "MEDIUM": return "bg-amber-500/20 text-amber-400 border-amber-500/30";
+      default: return "bg-[#2a2a2a] text-[#a0a0a0] border-[#333]";
+    }
+  };
+
+  if (Object.keys(topPicks).length === 0) {
+    return (
+      <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+        <h2 className="mb-3 text-base font-semibold text-white">Top Picks by Sector</h2>
+        <p className="text-sm text-[#666]">No stock picks available</p>
+      </div>
+    );
+  }
+
+  // Sort sectors by composite score (highest first)
+  const sortedEtfs = Object.keys(topPicks).sort((a, b) => {
+    const sa = sectors.find((s) => s.etf === a);
+    const sb = sectors.find((s) => s.etf === b);
+    return (sb?.compositeScore ?? 0) - (sa?.compositeScore ?? 0);
+  });
+
+  return (
+    <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+      <h2 className="mb-3 text-base font-semibold text-white">Top Picks by Sector</h2>
+      <div className="space-y-3">
+        {sortedEtfs.map((etf) => {
+          const sector = sectors.find((s) => s.etf === etf);
+          const picks = topPicks[etf];
+          return (
+            <div key={etf}>
+              <div className="mb-1 flex items-center gap-2">
+                <span className="font-mono text-xs font-semibold text-white">{etf}</span>
+                <span className="text-xs text-[#888]">{sector?.sector}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {picks.map((s) => (
+                  <span
+                    key={s.symbol}
+                    className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium ${convColor(s.conviction)}`}
+                    title={`${s.category} · ${s.rsAccelDesc} · Vol ${s.volRatio.toFixed(1)}x`}
+                  >
+                    <a
+                      href={`https://finance.yahoo.com/quote/${s.symbol}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:underline"
+                    >
+                      {s.symbol}
+                    </a>
+                    <span className="text-[10px] opacity-70">${s.price.toFixed(0)}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Stock Picks Panel ──
 
 const CONVICTION_STYLE: Record<ConvictionLevel, { bg: string; border: string; text: string }> = {
@@ -1869,28 +1950,7 @@ export default function SectorRotationPage() {
               );
             })()}
           </div>
-          <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
-            <h2 className="mb-3 text-base font-semibold text-white">Stocks to Watch</h2>
-            {data.topStocksToWatch.length === 0 ? (
-              <p className="text-sm text-[#666]">No rotation targets detected. Run a Pre-Run scan first for stock-level data.</p>
-            ) : (
-              <div className="space-y-3">
-                {data.topStocksToWatch.map((sw) => (
-                  <div key={sw.sector}>
-                    <div className="text-xs font-medium text-[#888] mb-1">{sw.sector}</div>
-                    <div className="flex flex-wrap gap-2">
-                      {sw.stocks.map((stock) => (
-                        <div key={stock.ticker} className="rounded-md border border-[#333] bg-[#1a1a1a] px-2.5 py-1.5 text-sm" title={stock.reasons.join(", ")}>
-                          <span className="font-medium text-white">{stock.ticker}</span>
-                          <span className="ml-1.5 text-xs text-[#888]">{stock.score}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} />
         </div>
       </div>
 
