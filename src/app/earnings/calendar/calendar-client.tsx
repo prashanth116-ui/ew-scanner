@@ -20,6 +20,7 @@ import {
   Eye,
   EyeOff,
   List,
+  FileDown,
 } from "lucide-react";
 import { tierColor, verdictColor } from "@/lib/color-utils";
 import type { ConfluenceScanResult, ConfluenceResult } from "@/lib/confluence/types";
@@ -34,6 +35,7 @@ import {
   removeFromEarningsWatchlist,
   type MomentumQuality,
 } from "@/lib/earnings-utils";
+import { exportEarningsToExcel } from "@/lib/earnings-export";
 
 // ── Types ──
 
@@ -1480,6 +1482,11 @@ export function CalendarClient() {
     });
   }, []);
 
+  // Export earnings + scan data to Excel
+  const handleExport = useCallback(() => {
+    exportEarningsToExcel(entries, scanResults);
+  }, [entries, scanResults]);
+
   // Handle selecting a day — close View All panel
   const handleSelectDay = useCallback((dateStr: string | null) => {
     setSelectedDay(dateStr);
@@ -1727,6 +1734,17 @@ export function CalendarClient() {
           >
             <List className="h-3 w-3" />
             View All{filtered.length > 0 ? ` (${filtered.length})` : ""}
+          </button>
+        )}
+
+        {/* Export to Excel */}
+        {scanResults.size > 0 && (
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-2.5 py-1.5 text-xs font-semibold text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white transition-colors"
+          >
+            <FileDown className="h-3 w-3" />
+            Export
           </button>
         )}
       </div>

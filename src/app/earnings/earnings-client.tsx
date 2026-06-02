@@ -21,6 +21,7 @@ import {
   Crosshair,
   Clock,
   X,
+  FileDown,
   type LucideIcon,
 } from "lucide-react";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
@@ -43,6 +44,7 @@ import {
   type EarningsEdgeSignals,
 } from "@/lib/earnings-utils";
 import { HitRateDashboard } from "@/components/hit-rate-dashboard";
+import { exportSingleEarningsToExcel } from "@/lib/earnings-export";
 
 // ── Types ──
 
@@ -690,6 +692,11 @@ export function EarningsClient() {
     setSearchHistory([]);
   }, []);
 
+  const handleExport = useCallback(() => {
+    if (!data) return;
+    exportSingleEarningsToExcel(data, scanResult);
+  }, [data, scanResult]);
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -816,12 +823,22 @@ export function EarningsClient() {
                   )}
                 </div>
               </div>
-              <div className="text-right">
-                {data.currentPrice != null && (
-                  <div className="text-2xl font-bold text-white">
-                    {formatCurrency(data.currentPrice)}
-                  </div>
-                )}
+              <div className="flex items-start gap-3">
+                <div className="text-right">
+                  {data.currentPrice != null && (
+                    <div className="text-2xl font-bold text-white">
+                      {formatCurrency(data.currentPrice)}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={handleExport}
+                  title="Export to Excel"
+                  className="mt-1 flex items-center gap-1 rounded-md border border-[#2a2a2a] px-2.5 py-1.5 text-xs font-semibold text-[#a0a0a0] hover:bg-[#2a2a2a] hover:text-white transition-colors"
+                >
+                  <FileDown className="h-3 w-3" />
+                  Export
+                </button>
               </div>
             </div>
 
