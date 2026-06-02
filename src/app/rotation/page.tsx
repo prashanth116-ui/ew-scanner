@@ -267,12 +267,12 @@ function computeConviction(event: RotationEvent): ConvictionResult {
 
   // Acceleration (-1 to +2)
   if (h.acceleration > 1) { score += 2; factors.push("strong acceleration"); }
-  else if (h.acceleration > 0) { score += 1; }
+  else if (h.acceleration > 0) { score += 1; factors.push("moderate acceleration"); }
   else { score -= 1; factors.push("negative acceleration"); }
 
   // CMF (-1 to +2)
   if (h.cmf20 > 0.1) { score += 2; factors.push("strong inflow"); }
-  else if (h.cmf20 > 0) { score += 1; }
+  else if (h.cmf20 > 0) { score += 1; factors.push("moderate inflow"); }
   else { score -= 1; factors.push("money outflow"); }
 
   // Signal trend (-1 to +1)
@@ -280,7 +280,7 @@ function computeConviction(event: RotationEvent): ConvictionResult {
   if (hist.length >= 3) {
     const recent = hist.slice(-3);
     const trending = recent[2].signalCount >= recent[0].signalCount;
-    if (trending) { score += 1; }
+    if (trending) { score += 1; factors.push("signals improving"); }
     else { score -= 1; factors.push("signals declining"); }
   }
 
@@ -967,10 +967,12 @@ function StockPerformanceTable({
   detail,
   lifecycle,
   sectorMap,
+  lifecycleMap,
 }: {
   detail: ActiveRotationDetail;
   lifecycle: LifecycleStage;
   sectorMap?: Map<string, string>;
+  lifecycleMap?: Map<string, LifecycleStage>;
 }) {
   const [sortKey, setSortKey] = useState<StockSortKey>("performancePct");
   const [sortAsc, setSortAsc] = useState(false);
@@ -994,12 +996,13 @@ function StockPerformanceTable({
     const actions = new Set<string>();
     for (const s of detail.stocks) {
       const cat = categorizeStock(s, sectorAvgPct);
-      const action = computeStockAction(cat, lifecycle);
+      const stockLifecycle = lifecycleMap?.get(s.symbol) ?? lifecycle;
+      const action = computeStockAction(cat, stockLifecycle);
       actions.add(action.label);
     }
     const ORDER = ["Buy", "Hold", "Trim", "Speculative Buy", "Risky", "Watch", "Avoid", "Exit"];
     return ORDER.filter(a => actions.has(a));
-  }, [detail.stocks, sectorAvgPct, lifecycle]);
+  }, [detail.stocks, sectorAvgPct, lifecycle, lifecycleMap]);
 
   const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all" || phaseFilter !== "all" || trendAccelFilter !== "all" || rs20dFilter !== "all" || qualityFilter !== "all";
 
@@ -1040,9 +1043,10 @@ function StockPerformanceTable({
   const sorted = useMemo(() => {
     let copy = detail.stocks.map((s) => {
       const cat = categorizeStock(s, sectorAvgPct);
-      const stockAction = computeStockAction(cat, lifecycle);
+      const stockLifecycle = lifecycleMap?.get(s.symbol) ?? lifecycle;
+      const stockAction = computeStockAction(cat, stockLifecycle);
       const vsEtf = s.performancePct - etfPerfPct;
-      const isTurnaroundSetup = !s.aboveSma50 && (s.rsAcceleration ?? 0) > 0 && s.volumeVsAvg >= 1.2;
+      const isTurnaroundSetup = !s.aboveSma50 && (s.trendAccel ?? 0) > 0 && s.volumeVsAvg >= 1.2;
       return { stock: s, cat, stockAction, vsEtf, isTurnaroundSetup };
     });
     // Filter
@@ -1096,8 +1100,8 @@ function StockPerformanceTable({
         av = a.stock.aboveSma50 ? 1 : 0;
         bv = b.stock.aboveSma50 ? 1 : 0;
       } else {
-        av = a.stock[sortKey];
-        bv = b.stock[sortKey];
+        av = a.stock[sortKey] ?? 0;
+        bv = b.stock[sortKey] ?? 0;
       }
       if (typeof av === "string" && typeof bv === "string") {
         return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
@@ -1105,7 +1109,7 @@ function StockPerformanceTable({
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return copy;
-  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter, qualityFilter, sectorMap]);
+  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, lifecycleMap, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter, qualityFilter, sectorMap]);
 
   if (detail.stocks.length === 0) {
     return (
@@ -2205,7 +2209,7 @@ export default function RotationTrackerPage() {
             ...s,
             daysToEarnings: preRun.data.daysToEarnings ?? null,
             nextEarningsDate: preRun.data.nextEarningsDate ?? null,
-            rs20d: preRun.data.relativeStrength20d ?? s.rs20d,
+            rs20d: s.rs20d ?? preRun.data.relativeStrength20d ?? null,
           };
         }),
       })),
@@ -2226,10 +2230,16 @@ export default function RotationTrackerPage() {
     if (!enrichedData || enrichedData.activeRotations.length === 0) return null;
     const allStocks: RotationStockPerformance[] = [];
     const sectorMap = new Map<string, string>();
+    const lifecycleMap = new Map<string, LifecycleStage>();
+    const seen = new Set<string>();
     for (const rot of enrichedData.activeRotations) {
+      const lc = computeLifecycleStage(rot.event);
       for (const s of rot.stocks) {
+        if (seen.has(s.symbol)) continue;
+        seen.add(s.symbol);
         allStocks.push(s);
         sectorMap.set(s.symbol, rot.event.sectorName);
+        lifecycleMap.set(s.symbol, lc);
       }
     }
     const detail: ActiveRotationDetail = {
@@ -2241,7 +2251,7 @@ export default function RotationTrackerPage() {
       },
       stocks: allStocks,
     };
-    return { detail, sectorMap };
+    return { detail, sectorMap, lifecycleMap };
   }, [enrichedData]);
 
   const handleExpandSector = useCallback((sectorId: string | null) => {
@@ -2376,6 +2386,7 @@ export default function RotationTrackerPage() {
                 detail={allSectorsForTable.detail}
                 lifecycle="EARLY"
                 sectorMap={allSectorsForTable.sectorMap}
+                lifecycleMap={allSectorsForTable.lifecycleMap}
               />
             </section>
           )}

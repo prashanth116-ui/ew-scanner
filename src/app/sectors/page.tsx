@@ -269,7 +269,7 @@ type PhaseFilter = "all" | "basing" | "turnaround" | "trending" | "exhausting";
 
 const VERDICT_RANK: Record<string, number> = { "PRIORITY BUY": 0, KEEP: 1, WATCH: 2, DISCARD: 3, "": 4 };
 
-function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { stocks: StockInSector[]; sectorName?: string; hasRotationData?: boolean }) {
+function SectorStockTable({ stocks, sectorName, hasRotationData = false, rotationFetchFailed = false }: { stocks: StockInSector[]; sectorName?: string; hasRotationData?: boolean; rotationFetchFailed?: boolean }) {
   const [sortKey, setSortKey] = usePersistedFilter<StockSortKey>("ew-filter:sectors:sortKey", "rs20d");
   const [sortAsc, setSortAsc] = usePersistedFilter<boolean>("ew-filter:sectors:sortAsc", false);
   const [sma50Filter, setSma50Filter] = usePersistedFilter<SmaFilter>("ew-filter:sectors:sma50Filter", "all");
@@ -302,6 +302,9 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
     if (verdictFilter === "priority") list = list.filter((s) => s.verdict === "PRIORITY BUY");
     else if (verdictFilter === "keep") list = list.filter((s) => s.verdict === "KEEP");
     else if (verdictFilter === "watch") list = list.filter((s) => s.verdict === "WATCH");
+    // Note: null-check is intentional — excludes stocks with no data from
+    // positive/negative filters. Equivalent to `(s.rsAccel ?? 0) > 0` but
+    // more explicit about the null handling.
     if (rsAccelFilter === "positive") list = list.filter((s) => s.rsAccel != null && s.rsAccel > 0);
     else if (rsAccelFilter === "negative") list = list.filter((s) => s.rsAccel != null && s.rsAccel < 0);
     if (sectorRSFilter === "positive") list = list.filter((s) => s.sectorRS != null && s.sectorRS > 0);
@@ -423,7 +426,7 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
           </select>
         </label>
         <label className={`flex items-center gap-1 ${hasRotationData ? "text-[#888]" : "text-[#555]"}`} title={hasRotationData ? "Relative strength acceleration vs sector ETF. Positive = catching up vs sector recently." : "Requires active rotation data — loading or unavailable"}>
-          Sector RS
+          Sector RS{rotationFetchFailed && <span className="text-red-400/70 text-[10px]">(unavailable)</span>}
           <select value={sectorRSFilter} onChange={(e) => setSectorRSFilter(e.target.value as RsAccelFilter)} disabled={!hasRotationData} className={`bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-xs ${hasRotationData ? "text-[#a0a0a0]" : "text-[#555] opacity-50 cursor-not-allowed"}`}>
             <option value="all">All</option>
             <option value="positive">Positive</option>
@@ -441,7 +444,7 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
           </select>
         </label>
         <label className={`flex items-center gap-1 ${hasRotationData ? "text-[#888]" : "text-[#555]"}`} title={hasRotationData ? "Filter by rotation quality signals" : "Requires active rotation data — loading or unavailable"}>
-          Quality
+          Quality{rotationFetchFailed && <span className="text-red-400/70 text-[10px]">(unavailable)</span>}
           <select value={qualityFilter} onChange={(e) => setQualityFilter(e.target.value as "all" | "improving" | "high" | "fading")} disabled={!hasRotationData} className={`bg-[#1a1a1a] border border-[#333] rounded px-1.5 py-0.5 text-xs ${hasRotationData ? "text-[#a0a0a0]" : "text-[#555] opacity-50 cursor-not-allowed"}`}>
             <option value="all">All</option>
             <option value="improving">RS Improving</option>
@@ -1232,6 +1235,8 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
       allMoms.push(pt.rsMomentum);
     }
   }
+  if (allRatios.length === 0) return <div className="text-center py-8 text-sm text-[#555]">No RRG data available</div>;
+
   const rMin = Math.min(99, ...allRatios) - 0.5;
   const rMax = Math.max(101, ...allRatios) + 0.5;
   const mMin = Math.min(99, ...allMoms) - 0.5;
@@ -1297,7 +1302,7 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
 
 // ── Sector Detail Accordion (enhanced with #7 cross-linking, #5 sparkline) ──
 
-function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationData = false }: { sector: SectorRotationScore; stocks: StockInSector[]; prevSnapshot?: SectorSnapshot | null; etfReturns?: number[]; hasRotationData?: boolean }) {
+function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationData = false, rotationFetchFailed = false }: { sector: SectorRotationScore; stocks: StockInSector[]; prevSnapshot?: SectorSnapshot | null; etfReturns?: number[]; hasRotationData?: boolean; rotationFetchFailed?: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -1351,7 +1356,7 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationDat
           </div>
           {stocks.length > 0 && (
             <div className="border-t border-[#2a2a2a] pt-3">
-              <SectorStockTable stocks={stocks} sectorName={sector.sector} hasRotationData={hasRotationData} />
+              <SectorStockTable stocks={stocks} sectorName={sector.sector} hasRotationData={hasRotationData} rotationFetchFailed={rotationFetchFailed} />
             </div>
           )}
         </div>
@@ -1661,6 +1666,7 @@ export default function SectorRotationPage() {
   const [history, setHistory] = useState<DailySnapshot[]>([]);
   const [loadingPhase, setLoadingPhase] = useState(0);
   const [rotationSectorRS, setRotationSectorRS] = useState<Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>>(new Map());
+  const [rotationFetchFailed, setRotationFetchFailed] = useState(false);
   const [collapsedPanels, togglePanel] = useCollapsedPanels();
 
   // Fetch rotation tracker data for Sector RS column (non-blocking)
@@ -1674,7 +1680,7 @@ export default function SectorRotationPage() {
         }
       }
       setRotationSectorRS(map);
-    }).catch(() => { /* non-critical */ });
+    }).catch(() => { setRotationFetchFailed(true); });
   }, []);
 
   useEffect(() => { if (data) setHistory(loadHistory()); }, [data]);
@@ -1695,8 +1701,10 @@ export default function SectorRotationPage() {
       const prev = comparisonMap.get(s.sector);
       if (!prev) { unchanged++; continue; }
       const delta = s.compositeScore - prev.compositeScore;
-      if (delta > 2) improved++;
-      else if (delta < -2) declined++;
+      /** Min composite-score delta to count as improved/declined (filters noise). */
+      const COMPARISON_CHANGE_THRESHOLD = 2;
+      if (delta > COMPARISON_CHANGE_THRESHOLD) improved++;
+      else if (delta < -COMPARISON_CHANGE_THRESHOLD) declined++;
       else unchanged++;
     }
     return { improved, declined, unchanged };
@@ -1719,7 +1727,7 @@ export default function SectorRotationPage() {
       const stocks: StockInSector[] = sectorDef.stocks.map((stock) => {
         const preRun = scanByTicker.get(stock.symbol);
         const quote = quotes[stock.symbol];
-        const rs20d = preRun?.data.relativeStrength20d ?? quote?.pctFromSma50 ?? null;
+        const rs20d = preRun?.data.relativeStrength20d ?? null;
         const aboveSma50 = quote?.sma50 != null && quote.sma50 > 0 ? quote.price > quote.sma50 : null;
         const volumeVsAvg = quote?.avgVolume10d != null && quote.avgVolume10d > 0
           ? Math.round((quote.volume / quote.avgVolume10d) * 100) / 100
@@ -2080,7 +2088,7 @@ export default function SectorRotationPage() {
       >
         <div className="space-y-2">
           {sortedSectors.map((s) => (
-            <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} prevSnapshot={comparisonMap?.get(s.sector)} etfReturns={data.etfReturns20d?.[s.etf]} hasRotationData={rotationSectorRS.size > 0} />
+            <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} prevSnapshot={comparisonMap?.get(s.sector)} etfReturns={data.etfReturns20d?.[s.etf]} hasRotationData={rotationSectorRS.size > 0} rotationFetchFailed={rotationFetchFailed} />
           ))}
         </div>
       </CollapsiblePanel>
