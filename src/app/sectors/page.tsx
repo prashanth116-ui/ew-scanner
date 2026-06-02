@@ -13,6 +13,8 @@ import type {
   RRGQuadrant,
   EnrichedStock,
   ConvictionLevel,
+  StockCategory,
+  StockPhase as RotationStockPhase,
 } from "@/lib/sector-rotation/types";
 import type { PreRunResult } from "@/lib/prerun/types";
 import type { RotationTrackerResult, ActiveRotationDetail, RotationPatternStats, LifecycleStage, ConvictionResult } from "@/lib/sector-rotation/rotation-types";
@@ -1507,8 +1509,14 @@ const PHASE_ORDER: Record<string, number> = { P1_BASING: 0, P2_TURNAROUND: 1, P3
 type PicksSortKey = "conviction" | "symbol" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "pctFrom50ma";
 
 function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
-  const [filter, setFilter] = useState<ConvictionLevel | "ALL">("ALL");
-  const [sectorFilter, setSectorFilter] = useState<string>("ALL");
+  const [filter, setFilter] = usePersistedFilter<ConvictionLevel | "ALL">("ew-filter:picks:conviction", "ALL");
+  const [sectorFilter, setSectorFilter] = usePersistedFilter<string>("ew-filter:picks:sector", "ALL");
+  const [categoryFilter, setCategoryFilter] = usePersistedFilter<StockCategory | "ALL">("ew-filter:picks:category", "ALL");
+  const [phaseFilter, setPhaseFilter] = usePersistedFilter<RotationStockPhase | "ALL">("ew-filter:picks:phase", "ALL");
+  const [quadrantFilter, setQuadrantFilter] = usePersistedFilter<RRGQuadrant | "ALL">("ew-filter:picks:quadrant", "ALL");
+  const [rsAccelFilter, setRsAccelFilter] = usePersistedFilter<"all" | "positive" | "strong">("ew-filter:picks:rsAccel", "all");
+  const [volFilter, setVolFilter] = usePersistedFilter<"all" | "above" | "high">("ew-filter:picks:vol", "all");
+  const [aboveSmaFilter, setAboveSmaFilter] = usePersistedFilter<"all" | "above" | "below">("ew-filter:picks:aboveSma", "all");
   const [sortKey, setSortKey] = useState<PicksSortKey>("conviction");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedSectors, setExpandedSectors] = useState<Set<string>>(new Set());
@@ -1522,6 +1530,15 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
     let list = stocks;
     if (filter !== "ALL") list = list.filter((s) => s.conviction === filter);
     if (sectorFilter !== "ALL") list = list.filter((s) => s.sector === sectorFilter);
+    if (categoryFilter !== "ALL") list = list.filter((s) => s.category === categoryFilter);
+    if (phaseFilter !== "ALL") list = list.filter((s) => s.phase === phaseFilter);
+    if (quadrantFilter !== "ALL") list = list.filter((s) => s.sectorQuadrant === quadrantFilter);
+    if (rsAccelFilter === "positive") list = list.filter((s) => s.rsAccel != null && s.rsAccel > 0);
+    if (rsAccelFilter === "strong") list = list.filter((s) => s.rsAccel != null && s.rsAccel >= 3);
+    if (volFilter === "above") list = list.filter((s) => s.volRatio >= 1.0);
+    if (volFilter === "high") list = list.filter((s) => s.volRatio >= 1.5);
+    if (aboveSmaFilter === "above") list = list.filter((s) => s.above50ma);
+    if (aboveSmaFilter === "below") list = list.filter((s) => !s.above50ma);
 
     const sorted = [...list].sort((a, b) => {
       let cmp = 0;
@@ -1538,7 +1555,7 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
       return sortDir === "desc" ? -cmp : cmp;
     });
     return sorted;
-  }, [stocks, filter, sectorFilter, sortKey, sortDir]);
+  }, [stocks, filter, sectorFilter, categoryFilter, phaseFilter, quadrantFilter, rsAccelFilter, volFilter, aboveSmaFilter, sortKey, sortDir]);
 
   // Group stocks by sector ETF, preserving sort order within each group
   const stocksBySector = useMemo(() => {
@@ -1586,24 +1603,73 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
     </div>
   );
 
-  const actions = (
-    <div className="flex items-center gap-2">
-      <select value={filter} onChange={(e) => setFilter(e.target.value as ConvictionLevel | "ALL")} className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-white">
-        <option value="ALL">All Conviction</option>
-        <option value="HIGH">HIGH only</option>
-        <option value="MEDIUM">MEDIUM only</option>
-        <option value="WATCH">WATCH only</option>
-      </select>
-      <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-white">
-        {sectorNames.map((s) => <option key={s} value={s}>{s === "ALL" ? "All Sectors" : s}</option>)}
-      </select>
-    </div>
-  );
+  const hasFilters = filter !== "ALL" || sectorFilter !== "ALL" || categoryFilter !== "ALL" ||
+    phaseFilter !== "ALL" || quadrantFilter !== "ALL" || rsAccelFilter !== "all" ||
+    volFilter !== "all" || aboveSmaFilter !== "all";
+
+  const resetFilters = () => {
+    clearPersistedFilters("ew-filter:picks");
+    setFilter("ALL"); setSectorFilter("ALL"); setCategoryFilter("ALL");
+    setPhaseFilter("ALL"); setQuadrantFilter("ALL");
+    setRsAccelFilter("all"); setVolFilter("all"); setAboveSmaFilter("all");
+  };
 
   const COL_COUNT = 8;
+  const selectClass = "rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]";
 
   return (
-    <CollapsiblePanel id="stock-picks" title="Stock Picks" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})} badge={badge} actions={actions}>
+    <CollapsiblePanel id="stock-picks" title="Stock Picks" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})} badge={badge}>
+      <div className="flex flex-wrap items-center gap-2 px-1 pb-3">
+        <select value={filter} onChange={(e) => setFilter(e.target.value as ConvictionLevel | "ALL")} className={selectClass}>
+          <option value="ALL">All Conviction</option>
+          <option value="HIGH">HIGH</option>
+          <option value="MEDIUM">MEDIUM</option>
+          <option value="WATCH">WATCH</option>
+        </select>
+        <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)} className={selectClass}>
+          {sectorNames.map((s) => <option key={s} value={s}>{s === "ALL" ? "All Sectors" : s}</option>)}
+        </select>
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as StockCategory | "ALL")} className={selectClass}>
+          <option value="ALL">All Category</option>
+          <option value="LEADER">LEADER</option>
+          <option value="CATCH_UP">CATCH_UP</option>
+          <option value="TURNAROUND">TURNAROUND</option>
+          <option value="AVOID">AVOID</option>
+        </select>
+        <select value={phaseFilter} onChange={(e) => setPhaseFilter(e.target.value as RotationStockPhase | "ALL")} className={selectClass}>
+          <option value="ALL">All Phase</option>
+          <option value="P1_BASING">P1 Basing</option>
+          <option value="P2_TURNAROUND">P2 Turnaround</option>
+          <option value="P3_TRENDING">P3 Trending</option>
+          <option value="P4_EXHAUSTING">P4 Exhausting</option>
+        </select>
+        <select value={quadrantFilter} onChange={(e) => setQuadrantFilter(e.target.value as RRGQuadrant | "ALL")} className={selectClass}>
+          <option value="ALL">All Quadrant</option>
+          <option value="LEADING">LEADING</option>
+          <option value="IMPROVING">IMPROVING</option>
+          <option value="WEAKENING">WEAKENING</option>
+          <option value="LAGGING">LAGGING</option>
+        </select>
+        <select value={rsAccelFilter} onChange={(e) => setRsAccelFilter(e.target.value as "all" | "positive" | "strong")} className={selectClass}>
+          <option value="all">All RS Accel</option>
+          <option value="positive">Positive (&gt;0)</option>
+          <option value="strong">Strong (&ge;3)</option>
+        </select>
+        <select value={volFilter} onChange={(e) => setVolFilter(e.target.value as "all" | "above" | "high")} className={selectClass}>
+          <option value="all">All Volume</option>
+          <option value="above">Above Avg (&ge;1.0x)</option>
+          <option value="high">High (&ge;1.5x)</option>
+        </select>
+        <select value={aboveSmaFilter} onChange={(e) => setAboveSmaFilter(e.target.value as "all" | "above" | "below")} className={selectClass}>
+          <option value="all">All 50MA</option>
+          <option value="above">Above 50MA</option>
+          <option value="below">Below 50MA</option>
+        </select>
+        <span className="text-[10px] text-[#666]">{filtered.length} / {stocks.length}</span>
+        {hasFilters && (
+          <button onClick={resetFilters} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#888] hover:text-white">Reset</button>
+        )}
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
