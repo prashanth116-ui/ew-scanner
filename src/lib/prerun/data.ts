@@ -463,7 +463,7 @@ export function calcSMA(values: number[], period: number): number | null {
 }
 
 /** Calculate EMA from closes. Returns array of EMA values (same length as input). */
-function calcEMA(closes: number[], period: number): number[] {
+export function calcEMA(closes: number[], period: number): number[] {
   if (closes.length === 0) return [];
   const k = 2 / (period + 1);
   const ema: number[] = [closes[0]];

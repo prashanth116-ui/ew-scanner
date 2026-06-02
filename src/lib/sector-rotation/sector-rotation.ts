@@ -173,27 +173,28 @@ function calcOBVSlope(closes: number[], volumes: number[], lookback = 20): -1 | 
   return 0;
 }
 
-/** Compute RS-Ratio and RS-Momentum at a given offset from the end of the DRS array. */
-function calcRRGPoint(
-  drs: number[],
-  offset: number
-): { rsRatio: number; rsMomentum: number } | null {
-  const end = drs.length - offset;
-  if (end < 31) return null;
-
-  const sma10 = drs.slice(end - 10, end).reduce((a, b) => a + b, 0) / 10;
-  const sma30 = drs.slice(end - 30, end).reduce((a, b) => a + b, 0) / 30;
-  const rsRatio = sma30 !== 0 ? (sma10 / sma30) * 100 : 100;
-
-  let prevRsRatio = 100;
-  if (end >= 32) {
-    const prevSma10 = drs.slice(end - 11, end - 1).reduce((a, b) => a + b, 0) / 10;
-    const prevSma30 = drs.slice(end - 31, end - 1).reduce((a, b) => a + b, 0) / 30;
-    prevRsRatio = prevSma30 !== 0 ? (prevSma10 / prevSma30) * 100 : 100;
+/** EMA of a number array. Returns array of same length. */
+function ema(values: number[], period: number): number[] {
+  if (values.length === 0) return [];
+  const k = 2 / (period + 1);
+  const result: number[] = [values[0]];
+  for (let i = 1; i < values.length; i++) {
+    result.push(values[i] * k + result[i - 1] * (1 - k));
   }
-  const rsMomentum = rsRatio - prevRsRatio;
+  return result;
+}
 
-  return { rsRatio, rsMomentum };
+/** Rolling Z-score: (value - rolling_mean) / rolling_stddev. Returns 0 for insufficient data. */
+function rollingZScore(values: number[], lookback: number): number[] {
+  const result: number[] = new Array(values.length).fill(0);
+  for (let i = lookback - 1; i < values.length; i++) {
+    const window = values.slice(i - lookback + 1, i + 1);
+    const mean = window.reduce((a, b) => a + b, 0) / window.length;
+    const variance = window.reduce((s, v) => s + (v - mean) ** 2, 0) / window.length;
+    const std = Math.sqrt(variance);
+    result[i] = std > 0 ? (values[i] - mean) / std : 0;
+  }
+  return result;
 }
 
 function calcRRG(
@@ -201,31 +202,57 @@ function calcRRG(
   spyCloses: number[]
 ): { rsRatio: number; rsMomentum: number; quadrant: RRGQuadrant; trail: { rsRatio: number; rsMomentum: number }[] } {
   const len = Math.min(sectorCloses.length, spyCloses.length);
-  if (len < 31) return { rsRatio: 100, rsMomentum: 0, quadrant: "LAGGING", trail: [] };
+  if (len < 31) return { rsRatio: 100, rsMomentum: 100, quadrant: "LAGGING", trail: [] };
 
   const sc = sectorCloses.slice(-len);
   const sp = spyCloses.slice(-len);
 
+  // Step 1: Raw RS ratio (sector / benchmark)
   const drs: number[] = [];
   for (let i = 0; i < len; i++) {
     drs.push(sp[i] !== 0 ? sc[i] / sp[i] : 0);
   }
 
-  // Current position
-  const current = calcRRGPoint(drs, 0)!;
-  const { rsRatio, rsMomentum } = current;
+  // Step 2: EMA smooth (period=10)
+  const rsSmooth = ema(drs, 10);
 
+  // Step 3: RS-Ratio = 100 + Z-score(rsSmooth, lookback)
+  // Cap at 200 (not 250) to ensure trail points at offset 20 have valid Z-scores
+  const lookback = Math.min(200, drs.length - 30);
+  if (lookback < 20) return { rsRatio: 100, rsMomentum: 100, quadrant: "LAGGING", trail: [] };
+  const rsRatioSeries = rollingZScore(rsSmooth, lookback).map((z) => 100 + z);
+
+  // Step 4: ROC of RS-Ratio (10-period)
+  const rocSeries: number[] = new Array(rsRatioSeries.length).fill(0);
+  for (let i = 10; i < rsRatioSeries.length; i++) {
+    const past = rsRatioSeries[i - 10];
+    rocSeries[i] = past !== 0 ? ((rsRatioSeries[i] - past) / past) * 100 : 0;
+  }
+
+  // Step 5: RS-Momentum = 100 + Z-score(ROC, lookback)
+  const rsMomentumSeries = rollingZScore(rocSeries, lookback).map((z) => 100 + z);
+
+  // Current position
+  const rsRatio = rsRatioSeries[rsRatioSeries.length - 1];
+  const rsMomentum = rsMomentumSeries[rsMomentumSeries.length - 1];
+
+  // Step 6: Quadrant classification at (100, 100)
   let quadrant: RRGQuadrant;
-  if (rsRatio >= 100 && rsMomentum >= 0) quadrant = "LEADING";
-  else if (rsRatio >= 100 && rsMomentum < 0) quadrant = "WEAKENING";
-  else if (rsRatio < 100 && rsMomentum < 0) quadrant = "LAGGING";
+  if (rsRatio >= 100 && rsMomentum >= 100) quadrant = "LEADING";
+  else if (rsRatio >= 100 && rsMomentum < 100) quadrant = "WEAKENING";
+  else if (rsRatio < 100 && rsMomentum < 100) quadrant = "LAGGING";
   else quadrant = "IMPROVING";
 
-  // Trailing tail: 4 weekly snapshots + current (oldest first)
+  // Step 7: Trail — 5 snapshots at offsets [20, 15, 10, 5, 0] from end
   const trail: { rsRatio: number; rsMomentum: number }[] = [];
   for (const offset of [20, 15, 10, 5, 0]) {
-    const pt = calcRRGPoint(drs, offset);
-    if (pt) trail.push(pt);
+    const idx = rsRatioSeries.length - 1 - offset;
+    if (idx >= 0) {
+      trail.push({
+        rsRatio: rsRatioSeries[idx],
+        rsMomentum: rsMomentumSeries[idx],
+      });
+    }
   }
 
   return { rsRatio, rsMomentum, quadrant, trail };
@@ -240,7 +267,7 @@ function calcRotationVelocity(trail: { rsRatio: number; rsMomentum: number }[]):
   let totalDist = 0;
   for (let i = 1; i < trail.length; i++) {
     const dx = trail[i].rsRatio - trail[i - 1].rsRatio;
-    const dy = (trail[i].rsMomentum - trail[i - 1].rsMomentum) * 1000; // Scale momentum to RS-Ratio magnitude
+    const dy = trail[i].rsMomentum - trail[i - 1].rsMomentum;
     totalDist += Math.sqrt(dx * dx + dy * dy);
   }
   return Math.round(totalDist * 100) / 100;
@@ -609,7 +636,7 @@ export async function calculateSectorRotation(
       earningsBeatPct: raw.earningsBeatPct,
       smartMoneyScore: Math.round(raw.smartMoneyScore),
       rsRatio: Math.round(raw.rsRatio * 100) / 100,
-      rsMomentum: Math.round(raw.rsMomentum * 10000) / 10000,
+      rsMomentum: Math.round(raw.rsMomentum * 100) / 100,
       quadrant: raw.quadrant,
       compositeScore,
       dataQuality,
@@ -619,7 +646,7 @@ export async function calculateSectorRotation(
       stealthAccumulation,
       rrgTrail: raw.rrgTrail.map((pt) => ({
         rsRatio: Math.round(pt.rsRatio * 100) / 100,
-        rsMomentum: Math.round(pt.rsMomentum * 10000) / 10000,
+        rsMomentum: Math.round(pt.rsMomentum * 100) / 100,
       })),
       rotationVelocity: 0, // Will be computed after mapping
     };

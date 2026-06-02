@@ -92,39 +92,78 @@ function calcCMF(
   return volSum !== 0 ? mfvSum / volSum : 0;
 }
 
-/** RRG quadrant: RS-Ratio (10d/30d SMA of sector/SPY ratio) vs RS-Momentum. */
+/** RRG quadrant using JdK-standard Z-score + EMA methodology. */
 function calcRRGQuadrant(
   sectorCloses: number[],
   spyCloses: number[]
 ): { quadrant: RRGQuadrant; rsRatio: number; rsMomentum: number } {
   const len = Math.min(sectorCloses.length, spyCloses.length);
-  if (len < 31) return { quadrant: "LAGGING", rsRatio: 100, rsMomentum: 0 };
+  if (len < 31) return { quadrant: "LAGGING", rsRatio: 100, rsMomentum: 100 };
 
   const sc = sectorCloses.slice(-len);
   const sp = spyCloses.slice(-len);
 
+  // Step 1: Raw RS
   const drs: number[] = [];
   for (let i = 0; i < len; i++) {
     drs.push(sp[i] !== 0 ? sc[i] / sp[i] : 0);
   }
 
-  const end = drs.length;
-  const sma10 = drs.slice(end - 10, end).reduce((a, b) => a + b, 0) / 10;
-  const sma30 = drs.slice(end - 30, end).reduce((a, b) => a + b, 0) / 30;
-  const rsRatio = sma30 !== 0 ? (sma10 / sma30) * 100 : 100;
-
-  let prevRsRatio = 100;
-  if (end >= 32) {
-    const prevSma10 = drs.slice(end - 11, end - 1).reduce((a, b) => a + b, 0) / 10;
-    const prevSma30 = drs.slice(end - 31, end - 1).reduce((a, b) => a + b, 0) / 30;
-    prevRsRatio = prevSma30 !== 0 ? (prevSma10 / prevSma30) * 100 : 100;
+  // Step 2: EMA smooth (period=10)
+  const k = 2 / (10 + 1);
+  const rsSmooth: number[] = [drs[0]];
+  for (let i = 1; i < drs.length; i++) {
+    rsSmooth.push(drs[i] * k + rsSmooth[i - 1] * (1 - k));
   }
-  const rsMomentum = rsRatio - prevRsRatio;
 
+  // Step 3: RS-Ratio = 100 + Z-score(rsSmooth, lookback)
+  // Cap at 200 (not 250) to ensure valid Z-scores with ~252 trading days of data
+  const lookback = Math.min(200, drs.length - 30);
+  if (lookback < 20) return { quadrant: "LAGGING", rsRatio: 100, rsMomentum: 100 };
+
+  function zScoreAt(values: number[], idx: number, lb: number): number {
+    if (idx < lb - 1) return 0;
+    const window = values.slice(idx - lb + 1, idx + 1);
+    const mean = window.reduce((a, b) => a + b, 0) / window.length;
+    const variance = window.reduce((s, v) => s + (v - mean) ** 2, 0) / window.length;
+    const std = Math.sqrt(variance);
+    return std > 0 ? (values[idx] - mean) / std : 0;
+  }
+
+  // Build RS-Ratio series (need last 11 values for ROC-10)
+  const rsRatioSeries: number[] = [];
+  const startIdx = Math.max(0, rsSmooth.length - 11);
+  for (let i = startIdx; i < rsSmooth.length; i++) {
+    rsRatioSeries.push(100 + zScoreAt(rsSmooth, i, lookback));
+  }
+
+  const rsRatio = rsRatioSeries[rsRatioSeries.length - 1];
+
+  // Step 4: ROC of RS-Ratio (10-period)
+  let roc = 0;
+  if (rsRatioSeries.length >= 11) {
+    const past = rsRatioSeries[rsRatioSeries.length - 11];
+    roc = past !== 0 ? ((rsRatio - past) / past) * 100 : 0;
+  }
+
+  // Step 5: RS-Momentum — for the tracker we only need the final quadrant,
+  // so we compute a full ROC series Z-score over available data
+  const rocFull: number[] = new Array(rsSmooth.length).fill(0);
+  for (let i = lookback - 1; i < rsSmooth.length; i++) {
+    const rsR = 100 + zScoreAt(rsSmooth, i, lookback);
+    if (i >= lookback - 1 + 10) {
+      const pastRsR = 100 + zScoreAt(rsSmooth, i - 10, lookback);
+      rocFull[i] = pastRsR !== 0 ? ((rsR - pastRsR) / pastRsR) * 100 : 0;
+    }
+  }
+  const lastIdx = rsSmooth.length - 1;
+  const rsMomentum = 100 + zScoreAt(rocFull, lastIdx, lookback);
+
+  // Step 6: Quadrant at (100, 100)
   let quadrant: RRGQuadrant;
-  if (rsRatio >= 100 && rsMomentum >= 0) quadrant = "LEADING";
-  else if (rsRatio >= 100 && rsMomentum < 0) quadrant = "WEAKENING";
-  else if (rsRatio < 100 && rsMomentum < 0) quadrant = "LAGGING";
+  if (rsRatio >= 100 && rsMomentum >= 100) quadrant = "LEADING";
+  else if (rsRatio >= 100 && rsMomentum < 100) quadrant = "WEAKENING";
+  else if (rsRatio < 100 && rsMomentum < 100) quadrant = "LAGGING";
   else quadrant = "IMPROVING";
 
   return { quadrant, rsRatio, rsMomentum };
