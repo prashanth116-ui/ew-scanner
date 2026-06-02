@@ -122,14 +122,17 @@ function quadrantDotColor(q: RRGQuadrant): string {
 
 type TradingAction = "TRADE" | "BUILD" | "WATCH" | "TRIM" | "AVOID";
 
+const COMPOSITE_TRADE_THRESHOLD = 60;
+const COMPOSITE_WATCH_THRESHOLD = 40;
+
 function getTradingAction(s: Pick<SectorRotationScore, "quadrant" | "compositeScore" | "acceleration">): TradingAction {
-  if (s.quadrant === "LEADING" && s.compositeScore >= 60 && s.acceleration > 0) return "TRADE";
+  if (s.quadrant === "LEADING" && s.compositeScore >= COMPOSITE_TRADE_THRESHOLD && s.acceleration > 0) return "TRADE";
   if (s.quadrant === "IMPROVING" && s.acceleration > 0) return "BUILD";
-  if (s.quadrant === "LEADING" && s.compositeScore >= 60) return "TRADE";
+  if (s.quadrant === "LEADING" && s.compositeScore >= COMPOSITE_TRADE_THRESHOLD) return "TRADE";
   if (s.quadrant === "LEADING") return "WATCH";
   if (s.quadrant === "WEAKENING") return "TRIM";
   if (s.quadrant === "IMPROVING") return "WATCH";
-  if (s.quadrant === "LAGGING" && s.acceleration > 0 && s.compositeScore >= 40) return "WATCH";
+  if (s.quadrant === "LAGGING" && s.acceleration > 0 && s.compositeScore >= COMPOSITE_WATCH_THRESHOLD) return "WATCH";
   return "AVOID";
 }
 
@@ -329,6 +332,8 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
   }, [filtered, sortKey, sortAsc]);
 
   const sortArrow = (key: StockSortKey) => sortKey === key ? (sortAsc ? " \u25B2" : " \u25BC") : "";
+  const ariaSort = (key: StockSortKey): "ascending" | "descending" | "none" =>
+    sortKey === key ? (sortAsc ? "ascending" : "descending") : "none";
 
   // #8: Export to CSV
   const csvEscape = (val: string) => {
@@ -474,17 +479,17 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
         <table className="w-full text-xs">
           <thead>
             <tr className="text-[#666] border-b border-[#2a2a2a]">
-              <th className="text-left py-1.5 pr-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("ticker")}>Ticker{sortArrow("ticker")}</th>
-              <th className="text-left py-1.5 pr-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("phase")}>Phase{sortArrow("phase")}</th>
+              <th className="text-left py-1.5 pr-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("ticker")} aria-sort={ariaSort("ticker")}>Ticker{sortArrow("ticker")}</th>
+              <th className="text-left py-1.5 pr-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("phase")} aria-sort={ariaSort("phase")}>Phase{sortArrow("phase")}</th>
               <th className="text-left py-1.5 pr-2 font-medium hidden md:table-cell">Company</th>
-              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rs20d")}>RS 20d{sortArrow("rs20d")}</th>
-              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rsAccel")} title="Short-term trend vs long-term trend (% from 50MA minus % from 200MA). Positive = accelerating uptrend.">Trend Accel{sortArrow("rsAccel")}</th>
-              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("sectorRS")} title="Sector RS: relative strength acceleration vs sector ETF. (stock 5d - ETF 5d) - (stock 20d - ETF 20d). Positive = catching up vs sector recently.">Sector RS{sortArrow("sectorRS")}</th>
-              <th className="text-center py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("aboveSma50")}>&gt;50MA{sortArrow("aboveSma50")}</th>
-              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("volumeVsAvg")}>Vol vs Avg{sortArrow("volumeVsAvg")}</th>
-              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("finalScore")}>Score{sortArrow("finalScore")}</th>
-              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("earnings")}>Earnings{sortArrow("earnings")}</th>
-              <th className="text-left py-1.5 pl-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("verdict")}>Verdict{sortArrow("verdict")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rs20d")} aria-sort={ariaSort("rs20d")}>RS 20d{sortArrow("rs20d")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("rsAccel")} aria-sort={ariaSort("rsAccel")} title="Short-term trend vs long-term trend (% from 50MA minus % from 200MA). Positive = accelerating uptrend.">Trend Accel{sortArrow("rsAccel")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("sectorRS")} aria-sort={ariaSort("sectorRS")} title="Sector RS: relative strength acceleration vs sector ETF. (stock 5d - ETF 5d) - (stock 20d - ETF 20d). Positive = catching up vs sector recently.">Sector RS{sortArrow("sectorRS")}</th>
+              <th className="text-center py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("aboveSma50")} aria-sort={ariaSort("aboveSma50")}>&gt;50MA{sortArrow("aboveSma50")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("volumeVsAvg")} aria-sort={ariaSort("volumeVsAvg")}>Vol vs Avg{sortArrow("volumeVsAvg")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("finalScore")} aria-sort={ariaSort("finalScore")}>Score{sortArrow("finalScore")}</th>
+              <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("earnings")} aria-sort={ariaSort("earnings")}>Earnings{sortArrow("earnings")}</th>
+              <th className="text-left py-1.5 pl-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("verdict")} aria-sort={ariaSort("verdict")}>Verdict{sortArrow("verdict")}</th>
             </tr>
           </thead>
           <tbody>
@@ -527,9 +532,9 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
                   </td>
                   <td className="py-1.5 px-2 text-center">
                     {s.aboveSma50 === true ? (
-                      <span className="inline-block h-2 w-2 rounded-full bg-green-400" title="Above 50d SMA" />
+                      <span className="inline-block h-2 w-2 rounded-full bg-green-400" title="Above 50d SMA" role="img" aria-label="Above 50d SMA" />
                     ) : s.aboveSma50 === false ? (
-                      <span className="inline-block h-2 w-2 rounded-full bg-red-400" title="Below 50d SMA" />
+                      <span className="inline-block h-2 w-2 rounded-full bg-red-400" title="Below 50d SMA" role="img" aria-label="Below 50d SMA" />
                     ) : (
                       <span className="text-[#444]">-</span>
                     )}
@@ -630,6 +635,7 @@ function FilterRecipes() {
     <div>
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className="mb-3 flex w-full items-center gap-2 text-lg font-semibold text-white text-left"
       >
         {open ? <ChevronUp className="h-5 w-5 text-[#5ba3e6]" /> : <ChevronDown className="h-5 w-5 text-[#5ba3e6]" />}
@@ -1062,7 +1068,7 @@ function AlertPanel({ sectors, data }: { sectors: SectorRotationScore[]; data: S
   }, [alerts, sectors]);
 
   const addAlert = (etf: string, condition: SectorAlert["condition"], value?: string) => {
-    const newAlert: SectorAlert = { id: Date.now().toString(), sectorEtf: etf, condition, value, enabled: true };
+    const newAlert: SectorAlert = { id: crypto.randomUUID(), sectorEtf: etf, condition, value, enabled: true };
     const updated = [...alerts, newAlert];
     setAlerts(updated);
     saveAlerts(updated);
@@ -1088,13 +1094,13 @@ function AlertPanel({ sectors, data }: { sectors: SectorRotationScore[]; data: S
           <div className="flex items-center gap-2 text-xs text-amber-400">
             <Bell className="h-3.5 w-3.5" />
             <span className="font-medium">Alerts triggered:</span>
-            {triggeredAlerts.map((t, i) => <span key={i} className="text-[#ccc]">{t}</span>)}
+            {triggeredAlerts.map((t, i) => <span key={`${t}-${i}`} className="text-[#ccc]">{t}</span>)}
           </div>
         </div>
       )}
 
       {/* Alert config button */}
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="Toggle alerts">
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="Toggle alerts">
         <Bell className="h-4 w-4" />
         <span className="hidden sm:inline">Alerts{alerts.length > 0 ? ` (${alerts.length})` : ""}</span>
       </button>
@@ -1296,7 +1302,7 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationDat
 
   return (
     <div className={`border rounded-lg ${sector.stealthAccumulation ? "border-cyan-500/40" : "border-[#2a2a2a]"}`}>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg" aria-label="Toggle sector details">
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg" aria-label="Toggle sector details">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-lg">{sector.trendArrow}</span>
           <div className="min-w-0">
@@ -1499,7 +1505,8 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
       if (!groups.has(key)) {
         groups.set(key, { etf: s.sectorEtf, sector: s.sector, quadrant: s.sectorQuadrant, stocks: [] });
       }
-      groups.get(key)!.stocks.push(s);
+      const group = groups.get(key);
+      if (group) group.stocks.push(s);
     }
     return Array.from(groups.values());
   }, [filtered]);
@@ -1524,6 +1531,9 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
     if (sortKey !== col) return null;
     return sortDir === "desc" ? <ChevronDown className="inline h-3 w-3" /> : <ChevronUp className="inline h-3 w-3" />;
   };
+
+  const picksAriaSort = (col: PicksSortKey): "ascending" | "descending" | "none" =>
+    sortKey === col ? (sortDir === "asc" ? "ascending" : "descending") : "none";
 
   const badge = (
     <div className="flex items-center gap-2">
@@ -1555,14 +1565,14 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-[#2a2a2a] text-left text-[#666]">
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("conviction")}>Conv. <SortArrow col="conviction" /></th>
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("symbol")}>Symbol <SortArrow col="symbol" /></th>
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("category")}>Category <SortArrow col="category" /></th>
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("phase")}>Phase <SortArrow col="phase" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("rsAccel")}>RS Accel <SortArrow col="rsAccel" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")}>Price <SortArrow col="price" /></th>
-              <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("conviction")} aria-sort={picksAriaSort("conviction")}>Conv. <SortArrow col="conviction" /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("symbol")} aria-sort={picksAriaSort("symbol")}>Symbol <SortArrow col="symbol" /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("category")} aria-sort={picksAriaSort("category")}>Category <SortArrow col="category" /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("phase")} aria-sort={picksAriaSort("phase")}>Phase <SortArrow col="phase" /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("rsAccel")} aria-sort={picksAriaSort("rsAccel")}>RS Accel <SortArrow col="rsAccel" /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")} aria-sort={picksAriaSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")} aria-sort={picksAriaSort("price")}>Price <SortArrow col="price" /></th>
+              <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")} aria-sort={picksAriaSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" /></th>
             </tr>
           </thead>
           <tbody>
@@ -1572,6 +1582,8 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
                 <Fragment key={group.etf}>
                   <tr
                     onClick={() => toggleSector(group.etf)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSector(group.etf); } }}
+                    tabIndex={0}
                     className="cursor-pointer border-b border-[#1a1a1a] bg-[#0f0f0f] hover:bg-[#1a1a1a]"
                   >
                     <td colSpan={COL_COUNT} className="px-2 py-2">
@@ -1654,7 +1666,7 @@ export default function SectorRotationPage() {
   // Fetch rotation tracker data for Sector RS column (non-blocking)
   useEffect(() => {
     fetch("/api/rotation-tracker").then(res => res.ok ? res.json() : null).then((result: RotationTrackerResult | null) => {
-      if (!result) return;
+      if (!result?.activeRotations) return;
       const map = new Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>();
       for (const rotation of result.activeRotations) {
         for (const s of rotation.stocks) {
@@ -1929,7 +1941,7 @@ export default function SectorRotationPage() {
               <span className="text-xs text-[#555] shrink-0 mr-1">Compare:</span>
               <button onClick={() => setCompareDate(null)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${compareDate === null ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>None</button>
               {history.map((snap) => {
-                const d = new Date(snap.date + "T12:00:00");
+                const d = new Date(snap.date + "T12:00:00Z");
                 const daysAgo = Math.round((Date.now() - d.getTime()) / 86_400_000);
                 let label: string;
                 if (daysAgo <= 1) label = "Yesterday";
@@ -1945,7 +1957,7 @@ export default function SectorRotationPage() {
           )}
           {compareDate && comparisonSummary && (
             <div className="flex items-center gap-2 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-1.5 text-xs text-[#a0a0a0]">
-              <span className="text-purple-400 font-medium">Comparing to {new Date(compareDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+              <span className="text-purple-400 font-medium">Comparing to {new Date(compareDate + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
               <span>&mdash;</span>
               <span className="text-green-400">{comparisonSummary.improved} improved</span>
               <span className="text-red-400">{comparisonSummary.declined} declined</span>
@@ -2079,16 +2091,16 @@ export default function SectorRotationPage() {
           <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <div className="text-xs font-medium text-[#888] mb-1">XLY / XLP (Risk Appetite)</div>
             <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold text-white">{data.crossSectorPairs.xlyXlp.ratio}</span>
-              <span className={`text-sm ${data.crossSectorPairs.xlyXlp.trend.includes("Rising") ? "text-green-400" : data.crossSectorPairs.xlyXlp.trend.includes("Falling") ? "text-red-400" : "text-[#888]"}`}>{data.crossSectorPairs.xlyXlp.trend}</span>
+              <span className="text-xl font-bold text-white">{data.crossSectorPairs.xlyXlp.ratio?.toFixed(2) ?? "\u2014"}</span>
+              <span className={`text-sm ${data.crossSectorPairs.xlyXlp.trend?.includes("Rising") ? "text-green-400" : data.crossSectorPairs.xlyXlp.trend?.includes("Falling") ? "text-red-400" : "text-[#888]"}`}>{data.crossSectorPairs.xlyXlp.trend ?? "\u2014"}</span>
             </div>
             <p className="mt-1 text-xs text-[#666]">Rising = cyclical rotation (risk-on). Falling = defensive rotation (risk-off).</p>
           </div>
           <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <div className="text-xs font-medium text-[#888] mb-1">XLK / XLU (Growth vs Defense)</div>
             <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold text-white">{data.crossSectorPairs.xlkXlu.ratio}</span>
-              <span className={`text-sm ${data.crossSectorPairs.xlkXlu.trend.includes("Rising") ? "text-green-400" : data.crossSectorPairs.xlkXlu.trend.includes("Falling") ? "text-red-400" : "text-[#888]"}`}>{data.crossSectorPairs.xlkXlu.trend}</span>
+              <span className="text-xl font-bold text-white">{data.crossSectorPairs.xlkXlu.ratio?.toFixed(2) ?? "\u2014"}</span>
+              <span className={`text-sm ${data.crossSectorPairs.xlkXlu.trend?.includes("Rising") ? "text-green-400" : data.crossSectorPairs.xlkXlu.trend?.includes("Falling") ? "text-red-400" : "text-[#888]"}`}>{data.crossSectorPairs.xlkXlu.trend ?? "\u2014"}</span>
             </div>
             <p className="mt-1 text-xs text-[#666]">Rising = growth favored. Falling = defensive/utilities favored.</p>
           </div>

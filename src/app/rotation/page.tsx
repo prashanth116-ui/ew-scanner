@@ -1129,6 +1129,9 @@ function StockPerformanceTable({
     return <span className="ml-1 text-[#5ba3e6]">{sortAsc ? "\u25B2" : "\u25BC"}</span>;
   }
 
+  const stockAriaSort = (col: StockSortKey): "ascending" | "descending" | "none" =>
+    sortKey === col ? (sortAsc ? "ascending" : "descending") : "none";
+
   const phaseCounts = useMemo(() => {
     const counts = { basing: 0, turnaround: 0, trending: 0, exhausting: 0, neutral: 0 };
     for (const s of detail.stocks) counts[getRotationStockPhase(s)]++;
@@ -1191,6 +1194,7 @@ function StockPerformanceTable({
         <select
           value={sma50Filter}
           onChange={e => setSma50Filter(e.target.value as "all" | "above" | "below")}
+          aria-label="Filter by 50-day SMA"
           className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
         >
           <option value="all">50MA: All</option>
@@ -1200,6 +1204,7 @@ function StockPerformanceTable({
         <select
           value={rsAccelFilter}
           onChange={e => setRsAccelFilter(e.target.value as "all" | "positive" | "negative")}
+          aria-label="Filter by sector RS"
           className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
         >
           <option value="all">Sector RS: All</option>
@@ -1209,6 +1214,7 @@ function StockPerformanceTable({
         <select
           value={trendAccelFilter}
           onChange={e => setTrendAccelFilter(e.target.value as "all" | "positive" | "negative")}
+          aria-label="Filter by trend acceleration"
           className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
         >
           <option value="all">Trend Accel: All</option>
@@ -1218,6 +1224,7 @@ function StockPerformanceTable({
         <select
           value={rs20dFilter}
           onChange={e => setRs20dFilter(e.target.value as "all" | "positive" | "negative")}
+          aria-label="Filter by RS 20d"
           className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
         >
           <option value="all">RS 20d: All</option>
@@ -1227,6 +1234,7 @@ function StockPerformanceTable({
         <select
           value={volFilter}
           onChange={e => setVolFilter(e.target.value as "all" | "above" | "below")}
+          aria-label="Filter by volume"
           className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
         >
           <option value="all">Volume: All</option>
@@ -1236,6 +1244,7 @@ function StockPerformanceTable({
         <select
           value={qualityFilter}
           onChange={e => setQualityFilter(e.target.value as "all" | "improving" | "high" | "fading")}
+          aria-label="Filter by quality"
           className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
         >
           <option value="all">Quality: All</option>
@@ -1246,6 +1255,7 @@ function StockPerformanceTable({
         <select
           value={phaseFilter}
           onChange={e => setPhaseFilter(e.target.value as "all" | "basing" | "turnaround" | "trending" | "exhausting")}
+          aria-label="Filter by phase"
           className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
         >
           <option value="all">Phase: All</option>
@@ -1284,54 +1294,54 @@ function StockPerformanceTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[#2a2a2a] text-left text-xs text-[#888]">
-            <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("symbol")}>
+            <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("symbol")} aria-sort={stockAriaSort("symbol")}>
               Symbol<SortArrow col="symbol" />
             </th>
             {sectorMap && (
-              <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("sector")}>
+              <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("sector")} aria-sort={stockAriaSort("sector")}>
                 Sector<SortArrow col="sector" />
               </th>
             )}
-            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("phase")}>
+            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("phase")} aria-sort={stockAriaSort("phase")}>
               Phase<SortArrow col="phase" />
             </th>
-            <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("name")}>
+            <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("name")} aria-sort={stockAriaSort("name")}>
               Name<SortArrow col="name" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("action")}>
+            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("action")} aria-sort={stockAriaSort("action")}>
               Action<SortArrow col="action" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("priceAtRotationStart")}>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("priceAtRotationStart")} aria-sort={stockAriaSort("priceAtRotationStart")}>
               Start Price<SortArrow col="priceAtRotationStart" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("priceNow")}>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("priceNow")} aria-sort={stockAriaSort("priceNow")}>
               Current<SortArrow col="priceNow" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("dailyChangePct")}>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("dailyChangePct")} aria-sort={stockAriaSort("dailyChangePct")}>
               Today<SortArrow col="dailyChangePct" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("performancePct")}>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("performancePct")} aria-sort={stockAriaSort("performancePct")}>
               % Change<SortArrow col="performancePct" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("vsEtf")}>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("vsEtf")} aria-sort={stockAriaSort("vsEtf")}>
               vs ETF<SortArrow col="vsEtf" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("aboveSma50")}>
+            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("aboveSma50")} aria-sort={stockAriaSort("aboveSma50")}>
               &gt;50MA<SortArrow col="aboveSma50" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("volumeVsAvg")}>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("volumeVsAvg")} aria-sort={stockAriaSort("volumeVsAvg")}>
               Vol vs Avg<SortArrow col="volumeVsAvg" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("rs20d")} title="20-day relative strength vs market. Positive = outperforming over 20 days.">
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("rs20d")} aria-sort={stockAriaSort("rs20d")} title="20-day relative strength vs market. Positive = outperforming over 20 days.">
               RS 20d<SortArrow col="rs20d" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("trendAccel")} title="Short-term trend vs long-term trend (% from 50MA minus % from 200MA). Positive = accelerating uptrend.">
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("trendAccel")} aria-sort={stockAriaSort("trendAccel")} title="Short-term trend vs long-term trend (% from 50MA minus % from 200MA). Positive = accelerating uptrend.">
               Trend Accel<SortArrow col="trendAccel" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("rsAcceleration")} title="Relative strength acceleration vs sector ETF (5d vs 20d). Positive = gaining ground vs sector recently.">
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("rsAcceleration")} aria-sort={stockAriaSort("rsAcceleration")} title="Relative strength acceleration vs sector ETF (5d vs 20d). Positive = gaining ground vs sector recently.">
               Sector RS<SortArrow col="rsAcceleration" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("earnings")}>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("earnings")} aria-sort={stockAriaSort("earnings")}>
               Earnings<SortArrow col="earnings" />
             </th>
           </tr>
@@ -1387,6 +1397,8 @@ function StockPerformanceTable({
                     className={`inline-block h-2 w-2 rounded-full ${
                       s.aboveSma50 ? "bg-green-400" : "bg-red-400"
                     }`}
+                    role="img"
+                    aria-label={s.aboveSma50 ? "Above 50d SMA" : "Below 50d SMA"}
                   />
                 </td>
                 <td className="px-3 py-2 text-right text-[#888]">
@@ -1515,7 +1527,8 @@ function HistoricalTimeline({ events }: { events: RotationEvent[] }) {
       if (!map.has(e.sectorId)) {
         map.set(e.sectorId, { etf: e.etf, name: e.sectorName, events: [] });
       }
-      map.get(e.sectorId)!.events.push(e);
+      const entry = map.get(e.sectorId);
+      if (entry) entry.events.push(e);
     }
     // Sort by sector name
     return Array.from(map.entries()).sort((a, b) =>
@@ -2179,7 +2192,7 @@ export default function RotationTrackerPage() {
     if (scanResults.length === 0) return data;
 
     const scanByTicker = new Map<string, (typeof scanResults)[number]>();
-    for (const r of scanResults) scanByTicker.set(r.data.ticker, r);
+    for (const r of scanResults) { if (r.data?.ticker) scanByTicker.set(r.data.ticker, r); }
 
     return {
       ...data,
