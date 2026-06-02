@@ -1978,11 +1978,12 @@ export default function SectorRotationPage() {
   const [rotationData, setRotationData] = useState<RotationTrackerResult | null>(null);
   const [collapsedPanels, togglePanel] = useCollapsedPanels();
 
-  // Fetch rotation tracker data for Sector RS column + Entry Signals panel (non-blocking)
-  useEffect(() => {
+  // Fetch rotation tracker data for Sector RS column + Entry Signals panel (non-blocking, with retry)
+  const fetchRotation = useCallback(() => {
     fetch("/api/rotation-tracker").then(res => res.ok ? res.json() : null).then((result: RotationTrackerResult | null) => {
       if (!result?.activeRotations) return;
       setRotationData(result);
+      setRotationFetchFailed(false);
       const map = new Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>();
       for (const rotation of result.activeRotations) {
         for (const s of rotation.stocks) {
@@ -1992,6 +1993,16 @@ export default function SectorRotationPage() {
       setRotationSectorRS(map);
     }).catch(() => { setRotationFetchFailed(true); });
   }, []);
+
+  useEffect(() => { fetchRotation(); }, [fetchRotation]);
+  // Retry rotation tracker every 10 min (matches sector-rotation refresh cadence)
+  useEffect(() => { const id = setInterval(fetchRotation, 10 * 60 * 1000); return () => clearInterval(id); }, [fetchRotation]);
+  // Retry sooner if initial fetch failed
+  useEffect(() => {
+    if (!rotationFetchFailed || rotationData) return;
+    const id = setTimeout(fetchRotation, 5_000);
+    return () => clearTimeout(id);
+  }, [rotationFetchFailed, rotationData, fetchRotation]);
 
   useEffect(() => { if (data) setHistory(loadHistory()); }, [data]);
 
