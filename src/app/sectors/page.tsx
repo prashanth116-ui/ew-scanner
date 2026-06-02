@@ -1369,7 +1369,7 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationDat
 
 // ── Top Picks by Sector ──
 
-function TopPicksBySector({ stocks, sectors }: { stocks: EnrichedStock[]; sectors: SectorRotationScore[] }) {
+function TopPicksBySector({ stocks, sectors, scanResultsDate }: { stocks: EnrichedStock[]; sectors: SectorRotationScore[]; scanResultsDate: string | null }) {
   const topPicks = useMemo(() => {
     const map: Record<string, EnrichedStock[]> = {};
     for (const s of stocks) {
@@ -1394,7 +1394,22 @@ function TopPicksBySector({ stocks, sectors }: { stocks: EnrichedStock[]; sector
   if (Object.keys(topPicks).length === 0) {
     return (
       <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
-        <h2 className="mb-3 text-base font-semibold text-white">Top Picks by Sector</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
+          Top Picks by Sector
+          {scanResultsDate ? (() => {
+            const ageMs = Date.now() - new Date(scanResultsDate).getTime();
+            const ageHours = ageMs / (1000 * 60 * 60);
+            if (ageHours > 24) return (
+              <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-normal text-amber-400">
+                <AlertTriangle className="h-3 w-3" />
+                Scan data is {Math.floor(ageHours / 24)}d old
+              </span>
+            );
+            return null;
+          })() : (
+            <span className="text-[10px] font-normal text-[#555]">No scan data</span>
+          )}
+        </h2>
         <p className="text-sm text-[#666]">No stock picks available</p>
       </div>
     );
@@ -1409,7 +1424,22 @@ function TopPicksBySector({ stocks, sectors }: { stocks: EnrichedStock[]; sector
 
   return (
     <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
-      <h2 className="mb-3 text-base font-semibold text-white">Top Picks by Sector</h2>
+      <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
+        Top Picks by Sector
+        {scanResultsDate ? (() => {
+          const ageMs = Date.now() - new Date(scanResultsDate).getTime();
+          const ageHours = ageMs / (1000 * 60 * 60);
+          if (ageHours > 24) return (
+            <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-normal text-amber-400">
+              <AlertTriangle className="h-3 w-3" />
+              Scan data is {Math.floor(ageHours / 24)}d old
+            </span>
+          );
+          return null;
+        })() : (
+          <span className="text-[10px] font-normal text-[#555]">No scan data</span>
+        )}
+      </h2>
       <div className="space-y-3">
         {sortedEtfs.map((etf) => {
           const sector = sectors.find((s) => s.etf === etf);
@@ -2046,7 +2076,7 @@ export default function SectorRotationPage() {
                 );
               })()}
             </div>
-            <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} />
+            <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} scanResultsDate={scanResultsDate} />
           </div>
         </div>
       </CollapsiblePanel>
