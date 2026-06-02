@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Clock, FileDown, Search, X, ExternalLink, Bell, BellOff, Zap } from "lucide-react";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, FileDown, Search, X, ExternalLink, Bell, BellOff, Zap } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
+import { DataAgeBadge } from "@/components/data-age-badge";
+import { type StockPhase, phaseBadge, PHASE_RANK } from "@/lib/phase-utils";
 import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
 import Link from "next/link";
 import type {
@@ -113,55 +115,8 @@ function quadrantDotColor(q: RRGQuadrant): string {
   }
 }
 
-// ── Data freshness helpers ──
-
-function timeAgo(isoDate: string): { text: string; stale: boolean; veryStale: boolean } {
-  const diffMs = Date.now() - new Date(isoDate).getTime();
-  const mins = Math.floor(diffMs / 60_000);
-  const hours = Math.floor(mins / 60);
-  const days = Math.floor(hours / 24);
-
-  let text: string;
-  if (mins < 1) text = "just now";
-  else if (mins < 60) text = `${mins}m ago`;
-  else if (hours < 24) text = `${hours}h ago`;
-  else text = `${days}d ago`;
-
-  return { text, stale: hours >= 6, veryStale: hours >= 24 };
-}
-
-function DataAgeBadge({ calculatedAt }: { calculatedAt: string }) {
-  const [age, setAge] = useState(() => timeAgo(calculatedAt));
-
-  useEffect(() => {
-    setAge(timeAgo(calculatedAt));
-    const interval = setInterval(() => setAge(timeAgo(calculatedAt)), 60_000);
-    return () => clearInterval(interval);
-  }, [calculatedAt]);
-
-  if (age.veryStale) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs text-red-400">
-        <AlertTriangle className="h-3 w-3" />
-        {age.text} — data is stale
-      </span>
-    );
-  }
-  if (age.stale) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
-        <Clock className="h-3 w-3" />
-        {age.text}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-xs text-[#888]">
-      <Clock className="h-3 w-3" />
-      {age.text}
-    </span>
-  );
-}
+// ── Data freshness badge (shared) ──
+// DataAgeBadge imported from @/components/data-age-badge
 
 // ── Trading action helpers ──
 
@@ -234,8 +189,7 @@ interface StockInSector {
 }
 
 // ── Phase-based stock grouping ──
-
-type StockPhase = "basing" | "turnaround" | "trending" | "exhausting" | "neutral";
+// StockPhase, phaseBadge, PHASE_RANK imported from @/lib/phase-utils
 
 function getStockPhase(s: StockInSector): StockPhase {
   const rsAccel = s.rsAccel ?? 0;
@@ -252,18 +206,6 @@ function getStockPhase(s: StockInSector): StockPhase {
   // Everything else
   return "neutral";
 }
-
-function phaseBadge(phase: StockPhase): { label: string; className: string; description: string } {
-  switch (phase) {
-    case "basing": return { label: "P1 Basing", className: "bg-purple-500/15 text-purple-400 border-purple-500/30", description: "Below 50MA, momentum turning — watch for confirmation" };
-    case "turnaround": return { label: "P2 Turnaround", className: "bg-amber-500/15 text-amber-400 border-amber-500/30", description: "Below 50MA, RS positive + volume — entry zone" };
-    case "trending": return { label: "P3 Trending", className: "bg-green-500/15 text-green-400 border-green-500/30", description: "Above 50MA, accelerating — hold or add on dips" };
-    case "exhausting": return { label: "P4 Exhausting", className: "bg-red-500/15 text-red-400 border-red-500/30", description: "Momentum fading (Trend Accel < -2) — take profit" };
-    case "neutral": return { label: "Neutral", className: "bg-[#333]/50 text-[#666] border-[#333]", description: "Mixed or insufficient signals" };
-  }
-}
-
-const PHASE_RANK: Record<StockPhase, number> = { basing: 0, turnaround: 1, trending: 2, exhausting: 3, neutral: 4 };
 
 function getEntryQuality(s: StockInSector): number {
   let quality = 0;

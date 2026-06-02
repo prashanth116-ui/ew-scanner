@@ -6,7 +6,6 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
-  Clock,
   AlertTriangle,
   TrendingUp,
   TrendingDown,
@@ -36,11 +35,14 @@ import type {
 } from "@/lib/sector-rotation/rotation-types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 import { loadScanResults } from "@/lib/prerun/storage";
+import { DataAgeBadge } from "@/components/data-age-badge";
+import { type StockPhase, phaseBadge, PHASE_RANK } from "@/lib/phase-utils";
 
 // ── localStorage cache (4-hour TTL) ──
 
 const CACHE_KEY = "ew-rotation-tracker-v7";
 const CACHE_TTL = 4 * 60 * 60 * 1000;
+const AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 function loadCached(): RotationTrackerResult | null {
   if (typeof window === "undefined") return null;
@@ -64,59 +66,8 @@ function saveCache(data: RotationTrackerResult) {
   }
 }
 
-// ── Data freshness badge ──
-
-function timeAgo(isoDate: string): {
-  text: string;
-  stale: boolean;
-  veryStale: boolean;
-} {
-  const diffMs = Date.now() - new Date(isoDate).getTime();
-  const mins = Math.floor(diffMs / 60_000);
-  const hours = Math.floor(mins / 60);
-  const days = Math.floor(hours / 24);
-
-  let text: string;
-  if (mins < 1) text = "just now";
-  else if (mins < 60) text = `${mins}m ago`;
-  else if (hours < 24) text = `${hours}h ago`;
-  else text = `${days}d ago`;
-
-  return { text, stale: hours >= 6, veryStale: hours >= 24 };
-}
-
-function DataAgeBadge({ calculatedAt }: { calculatedAt: string }) {
-  const [age, setAge] = useState(() => timeAgo(calculatedAt));
-
-  useEffect(() => {
-    setAge(timeAgo(calculatedAt));
-    const interval = setInterval(() => setAge(timeAgo(calculatedAt)), 60_000);
-    return () => clearInterval(interval);
-  }, [calculatedAt]);
-
-  if (age.veryStale) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs text-red-400">
-        <AlertTriangle className="h-3 w-3" />
-        {age.text} — data is stale
-      </span>
-    );
-  }
-  if (age.stale) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
-        <Clock className="h-3 w-3" />
-        {age.text}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-xs text-[#888]">
-      <Clock className="h-3 w-3" />
-      {age.text}
-    </span>
-  );
-}
+// ── Data freshness badge (shared) ──
+// DataAgeBadge imported from @/components/data-age-badge
 
 // ── Signal dot indicator ──
 
@@ -163,8 +114,7 @@ function perfBg(pct: number): string {
 }
 
 // ── Phase classification (additive to existing action system) ──
-
-type StockPhase = "basing" | "turnaround" | "trending" | "exhausting" | "neutral";
+// StockPhase, phaseBadge, PHASE_RANK imported from @/lib/phase-utils
 
 function getRotationStockPhase(s: RotationStockPerformance): StockPhase {
   const ta = s.trendAccel ?? 0; // stock's own momentum (pctFromSMA50 - pctFromSMA200)
@@ -175,24 +125,32 @@ function getRotationStockPhase(s: RotationStockPerformance): StockPhase {
   return "neutral";
 }
 
-function phaseBadge(phase: StockPhase): { label: string; className: string; description: string } {
-  switch (phase) {
-    case "basing": return { label: "P1 Basing", className: "bg-purple-500/15 text-purple-400 border-purple-500/30", description: "Below 50MA, momentum turning — watch for confirmation" };
-    case "turnaround": return { label: "P2 Turnaround", className: "bg-amber-500/15 text-amber-400 border-amber-500/30", description: "Below 50MA, RS positive + volume — entry zone" };
-    case "trending": return { label: "P3 Trending", className: "bg-green-500/15 text-green-400 border-green-500/30", description: "Above 50MA, accelerating — hold or add on dips" };
-    case "exhausting": return { label: "P4 Exhausting", className: "bg-red-500/15 text-red-400 border-red-500/30", description: "Momentum fading (Sector RS < -2) — take profit" };
-    case "neutral": return { label: "Neutral", className: "bg-[#333]/50 text-[#666] border-[#333]", description: "Mixed or insufficient signals" };
-  }
-}
-
-const PHASE_RANK: Record<StockPhase, number> = { basing: 0, turnaround: 1, trending: 2, exhausting: 3, neutral: 4 };
-
 function getEntryQuality(s: RotationStockPerformance): number {
   let quality = 0;
   if ((s.rsAcceleration ?? 0) > 1) quality++;
   if (s.volumeVsAvg >= 1.5) quality++;
   if (s.rsImproving && (s.volumeConsistency ?? 0) >= 3) quality++;
   return quality;
+}
+
+function RotationPhaseBadge({ stock }: { stock: RotationStockPerformance }) {
+  const phase = getRotationStockPhase(stock);
+  const badge = phaseBadge(phase);
+  const quality = getEntryQuality(stock);
+  return (
+    <span className="inline-flex items-center gap-1" title={badge.description}>
+      <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${badge.className}`}>
+        {badge.label}
+      </span>
+      {(phase === "basing" || phase === "turnaround") && quality > 0 && (
+        <span className="flex gap-0.5">
+          {Array.from({ length: quality }).map((_, i) => (
+            <span key={i} className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+          ))}
+        </span>
+      )}
+    </span>
+  );
 }
 
 // ── Safe health accessor (guards against stale cached data missing health) ──
@@ -248,16 +206,20 @@ function cmfLabel(val: number): string {
 
 // ── Enhancement #1: Lifecycle Stage ──
 
+const LIFECYCLE_EXHAUSTING_DAYS = 30;
+const LIFECYCLE_EARLY_MAX_DAYS = 5;
+const LIFECYCLE_MATURING_MAX_DAYS = 15;
+
 function computeLifecycleStage(event: RotationEvent): LifecycleStage {
   const h = getHealth(event);
   if (
-    event.daysActive > 30 ||
+    event.daysActive > LIFECYCLE_EXHAUSTING_DAYS ||
     (h.acceleration < 0 && (h.quadrant === "WEAKENING" || h.quadrant === "LAGGING"))
   ) {
     return "EXHAUSTING";
   }
-  if (event.daysActive <= 5) return "EARLY";
-  if (event.daysActive <= 15) return "MATURING";
+  if (event.daysActive <= LIFECYCLE_EARLY_MAX_DAYS) return "EARLY";
+  if (event.daysActive <= LIFECYCLE_MATURING_MAX_DAYS) return "MATURING";
   return "LATE";
 }
 
@@ -287,6 +249,10 @@ function lifecycleBadge(stage: LifecycleStage): { className: string; guidance: s
 }
 
 // ── Enhancement #2: Conviction Score ──
+
+const CONVICTION_HIGH_THRESHOLD = 6;
+const CONVICTION_MODERATE_THRESHOLD = 3;
+const CONVICTION_LOW_THRESHOLD = 0;
 
 function computeConviction(event: RotationEvent): ConvictionResult {
   const h = getHealth(event);
@@ -319,9 +285,9 @@ function computeConviction(event: RotationEvent): ConvictionResult {
   }
 
   let level: ConvictionLevel;
-  if (score >= 6) level = "HIGH";
-  else if (score >= 3) level = "MODERATE";
-  else if (score >= 0) level = "LOW";
+  if (score >= CONVICTION_HIGH_THRESHOLD) level = "HIGH";
+  else if (score >= CONVICTION_MODERATE_THRESHOLD) level = "MODERATE";
+  else if (score >= CONVICTION_LOW_THRESHOLD) level = "LOW";
   else level = "EXIT";
 
   const topFactor = factors[0] ?? "mixed signals";
@@ -371,6 +337,9 @@ function SignalSparkline({ history }: { history: { date: string; signalCount: nu
   );
 }
 
+const EXIT_SIGNAL_DECLINE_THRESHOLD = 0.5;
+const EXIT_ACCEL_FADE_THRESHOLD = -1;
+
 function computeExitWarnings(event: RotationEvent): string[] {
   const warnings: string[] = [];
   const h = getHealth(event);
@@ -382,13 +351,13 @@ function computeExitWarnings(event: RotationEvent): string[] {
     const prior = hist.slice(-5, -2);
     const recentAvg = recent.reduce((s, h) => s + h.signalCount, 0) / recent.length;
     const priorAvg = prior.reduce((s, h) => s + h.signalCount, 0) / prior.length;
-    if (recentAvg < priorAvg - 0.5) {
+    if (recentAvg < priorAvg - EXIT_SIGNAL_DECLINE_THRESHOLD) {
       warnings.push("Signal strength declining");
     }
   }
 
   // Negative acceleration
-  if (h.acceleration < -1) {
+  if (h.acceleration < EXIT_ACCEL_FADE_THRESHOLD) {
     warnings.push("Momentum fading sharply");
   }
 
@@ -1388,25 +1357,7 @@ function StockPerformanceTable({
                   <td className="px-3 py-2 text-xs text-[#a0a0a0]">{sectorMap.get(s.symbol) ?? ""}</td>
                 )}
                 <td className="px-3 py-2 text-center">
-                  {(() => {
-                    const phase = getRotationStockPhase(s);
-                    const badge = phaseBadge(phase);
-                    const quality = getEntryQuality(s);
-                    return (
-                      <span className="inline-flex items-center gap-1" title={badge.description}>
-                        <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                        {(phase === "basing" || phase === "turnaround") && quality > 0 && (
-                          <span className="flex gap-0.5">
-                            {Array.from({ length: quality }).map((_, i) => (
-                              <span key={i} className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
-                            ))}
-                          </span>
-                        )}
-                      </span>
-                    );
-                  })()}
+                  <RotationPhaseBadge stock={s} />
                 </td>
                 <td className="px-3 py-2 text-[#ccc]">{s.name}</td>
                 <td className="px-3 py-2 text-center">
@@ -1464,6 +1415,36 @@ function StockPerformanceTable({
     </div>
       )}
     </div>
+  );
+}
+
+// ── Expanded Rotation Detail (extracted from IIFE) ──
+
+function ExpandedRotationDetail({ detail, regime }: { detail: ActiveRotationDetail; regime: RegimeData | null | undefined }) {
+  const lc = computeLifecycleStage(detail.event);
+  const conv = computeConviction(detail.event);
+  const ra = regime ? isRegimeAligned(detail.event.sectorName, regime) : "neutral";
+  const as_ = computeActionSignal(lc, conv, ra);
+  return (
+    <section className="rounded-lg border border-[#2a2a2a] bg-[#111] overflow-hidden">
+      <div className="border-b border-[#2a2a2a] px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h2 className="font-semibold text-white">
+            {detail.event.sectorName} — Top Stocks Since Rotation
+            Start ({detail.event.startDate})
+          </h2>
+          <Link
+            href={`/sectors?sector=${encodeURIComponent(detail.event.etf)}`}
+            className="flex items-center gap-1 rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-[10px] text-[#5ba3e6] transition-colors hover:text-[#7bb8f0] hover:border-[#444]"
+          >
+            <ExternalLink className="h-3 w-3" /> Sector Dashboard
+          </Link>
+        </div>
+        <CopyExportBar stocks={detail.stocks} sectorName={detail.event.sectorName} />
+      </div>
+      <StrategySummaryBar detail={detail} lifecycle={lc} actionSignal={as_} />
+      <StockPerformanceTable detail={detail} lifecycle={lc} />
+    </section>
   );
 }
 
@@ -1999,6 +1980,7 @@ function CopyExportBar({
         onClick={copyTickers}
         className="flex items-center gap-1 rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-[10px] text-[#888] transition-colors hover:text-white hover:border-[#444]"
         title="Copy all tickers"
+        aria-label="Copy tickers"
       >
         {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
         {copied ? "Copied" : "Copy Tickers"}
@@ -2007,6 +1989,7 @@ function CopyExportBar({
         onClick={exportCsv}
         className="flex items-center gap-1 rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-[10px] text-[#888] transition-colors hover:text-white hover:border-[#444]"
         title="Export as CSV"
+        aria-label="Export to CSV"
       >
         <FileDown className="h-3 w-3" />
         CSV
@@ -2025,6 +2008,7 @@ function FilterRecipes() {
       <button
         onClick={() => setOpen(!open)}
         className="mb-3 flex w-full items-center gap-2 text-lg font-semibold text-white text-left"
+        aria-label="Toggle filter recipes"
       >
         {open ? <ChevronUp className="h-5 w-5 text-[#5ba3e6]" /> : <ChevronDown className="h-5 w-5 text-[#5ba3e6]" />}
         Filter Recipes
@@ -2184,7 +2168,7 @@ export default function RotationTrackerPage() {
 
   // Auto-refresh every 10 minutes
   useEffect(() => {
-    const interval = setInterval(() => fetchData(true), 10 * 60 * 1000);
+    const interval = setInterval(() => fetchData(true), AUTO_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -2384,33 +2368,7 @@ export default function RotationTrackerPage() {
           )}
 
           {/* Section 2b: Stock Performance (expanded) */}
-          {expandedDetail && (() => {
-            const lc = computeLifecycleStage(expandedDetail.event);
-            const conv = computeConviction(expandedDetail.event);
-            const ra = data.regime ? isRegimeAligned(expandedDetail.event.sectorName, data.regime) : "neutral";
-            const as_ = computeActionSignal(lc, conv, ra);
-            return (
-              <section className="rounded-lg border border-[#2a2a2a] bg-[#111] overflow-hidden">
-                <div className="border-b border-[#2a2a2a] px-4 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <h2 className="font-semibold text-white">
-                      {expandedDetail.event.sectorName} — Top Stocks Since Rotation
-                      Start ({expandedDetail.event.startDate})
-                    </h2>
-                    <Link
-                      href={`/sectors?sector=${encodeURIComponent(expandedDetail.event.etf)}`}
-                      className="flex items-center gap-1 rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-[10px] text-[#5ba3e6] transition-colors hover:text-[#7bb8f0] hover:border-[#444]"
-                    >
-                      <ExternalLink className="h-3 w-3" /> Sector Dashboard
-                    </Link>
-                  </div>
-                  <CopyExportBar stocks={expandedDetail.stocks} sectorName={expandedDetail.event.sectorName} />
-                </div>
-                <StrategySummaryBar detail={expandedDetail} lifecycle={lc} actionSignal={as_} />
-                <StockPerformanceTable detail={expandedDetail} lifecycle={lc} />
-              </section>
-            );
-          })()}
+          {expandedDetail && <ExpandedRotationDetail detail={expandedDetail} regime={data.regime} />}
 
           {/* Recently Ended */}
           {data.recentlyEndedRotations.length > 0 && (

@@ -10,7 +10,8 @@ export interface RotationSignalState {
   signalCount: number; // 0-3
 }
 
-export type RRGQuadrant = "LEADING" | "WEAKENING" | "LAGGING" | "IMPROVING";
+export type { RRGQuadrant } from "./types";
+import type { RRGQuadrant } from "./types";
 
 export interface RotationHealthSignals {
   acceleration: number; // change in 20d ROC — positive = gaining steam, negative = fading
