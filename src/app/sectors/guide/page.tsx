@@ -1917,7 +1917,7 @@ export default function SectorGuidePage() {
               <li>Action signal = <strong className="text-green-400">ENTER</strong> or <strong className="text-cyan-400">ADD ON PULLBACK</strong> (derived from lifecycle + conviction + regime)</li>
               <li>CMF &gt; 0 (institutional money flowing in)</li>
               <li>Acceleration &gt; 0 (momentum building, not fading)</li>
-              <li>At least 1 stock with conviction = <strong className="text-green-400">HIGH</strong> + category = <strong className="text-white">LEADER</strong> or <strong className="text-purple-400">TURNAROUND</strong></li>
+              <li>At least 1 stock with conviction = <strong className="text-green-400">HIGH</strong> or <strong className="text-cyan-400">MEDIUM</strong> + category = <strong className="text-white">LEADER</strong> or <strong className="text-purple-400">TURNAROUND</strong></li>
             </ul>
             <p className="mt-2 text-[10px] text-[#666]">
               Sector quadrant (LEADING/IMPROVING) is not a direct gate but influences the rotation conviction score.

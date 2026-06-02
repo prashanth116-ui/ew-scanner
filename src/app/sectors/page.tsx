@@ -1746,11 +1746,11 @@ function RotationEntrySignals({
         (s) => (s.conviction === "HIGH" || s.conviction === "MEDIUM") && (s.category === "LEADER" || s.category === "TURNAROUND")
       );
 
-      // Gate 4: At least 1 enriched stock with HIGH conviction + LEADER or TURNAROUND
-      const hasHighLeader = sectorStocks.some(
-        (s) => s.conviction === "HIGH" && (s.category === "LEADER" || s.category === "TURNAROUND")
+      // Gate 4: At least 1 enriched stock with HIGH or MEDIUM conviction + LEADER or TURNAROUND
+      const hasQualityStock = sectorStocks.some(
+        (s) => (s.conviction === "HIGH" || s.conviction === "MEDIUM") && (s.category === "LEADER" || s.category === "TURNAROUND")
       );
-      if (!hasHighLeader) continue;
+      if (!hasQualityStock) continue;
 
       // Top stocks: sort by conviction (HIGH first), then rsAccel descending
       const CONVICTION_SORT: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
@@ -1777,10 +1777,10 @@ function RotationEntrySignals({
     return results;
   }, [rotationData, enrichedStocks]);
 
-  if (entries.length === 0) return null;
-
   const hasEnter = entries.some((e) => e.signal.action === "ENTER");
-  const borderColor = hasEnter ? "border-green-500/30" : "border-cyan-500/30";
+  const borderColor = entries.length > 0
+    ? hasEnter ? "border-green-500/30" : "border-cyan-500/30"
+    : "";
 
   return (
     <CollapsiblePanel
@@ -1789,13 +1789,18 @@ function RotationEntrySignals({
       collapsed={collapsed}
       onToggle={onToggle}
       badge={
-        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${hasEnter ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"}`}>
+        entries.length === 0
+          ? <span className="rounded-full border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-medium text-[#666]">No signals</span>
+          : <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${hasEnter ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"}`}>
           {entries.length} {entries.length === 1 ? "signal" : "signals"}
         </span>
       }
       className={borderColor}
     >
       <div className="space-y-3">
+        {entries.length === 0 && (
+          <p className="text-xs text-[#666]">No active rotations currently pass all entry gates (action signal + CMF + acceleration + stock quality). Check the <a href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</a> for current rotation status.</p>
+        )}
         {entries.map((entry) => {
           const { rotation, signal, lifecycle, conviction, regimeAlignment, health, patternStats, topStocks } = entry;
           const event = rotation.event;
