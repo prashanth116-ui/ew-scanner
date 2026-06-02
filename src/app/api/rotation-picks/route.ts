@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { createClient } from "@/lib/supabase/server";
+import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
 
 export async function GET(request: NextRequest) {
   const rl = rateLimit(`rotation-picks:${getClientKey(request)}`, 10, 60_000);
@@ -21,12 +22,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
-      .from("rotation_scan_results")
-      .select("scan_date, sectors_data, passed_stocks, rejected_stocks, summary, created_at")
-      .order("scan_date", { ascending: false })
-      .limit(1)
-      .single();
+    // Fetch Supabase scan data + TS sector rotation in parallel
+    const [supabaseResult, tsRotation] = await Promise.all([
+      supabase
+        .from("rotation_scan_results")
+        .select("scan_date, sectors_data, passed_stocks, rejected_stocks, summary, created_at")
+        .order("scan_date", { ascending: false })
+        .limit(1)
+        .single(),
+      calculateSectorRotation().catch(() => null),
+    ]);
+
+    const { data, error } = supabaseResult;
 
     if (error || !data) {
       return NextResponse.json(
@@ -35,9 +42,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Overlay TS breadth onto Supabase sector data (full-universe breadth is more accurate)
+    let sectorsData = data.sectors_data;
+    if (tsRotation) {
+      const tsBreadthByEtf = new Map(
+        tsRotation.sectors.map((s) => [s.etf, s.breadthPct])
+      );
+      sectorsData = (sectorsData as Record<string, unknown>[]).map((s) => {
+        const etf = s.etf as string;
+        const tsBreadth = tsBreadthByEtf.get(etf);
+        if (tsBreadth != null) {
+          return { ...s, breadth_pct: tsBreadth };
+        }
+        return s;
+      });
+    }
+
     return NextResponse.json({
       scanDate: data.scan_date,
-      sectorsData: data.sectors_data,
+      sectorsData,
       passedStocks: data.passed_stocks,
       rejectedStocks: data.rejected_stocks,
       summary: data.summary,
