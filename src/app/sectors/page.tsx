@@ -1263,14 +1263,14 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
   }
   const rMin = Math.min(99, ...allRatios) - 0.5;
   const rMax = Math.max(101, ...allRatios) + 0.5;
-  const mMin = Math.min(-0.1, ...allMoms) - 0.02;
-  const mMax = Math.max(0.1, ...allMoms) + 0.02;
+  const mMin = Math.min(99, ...allMoms) - 0.5;
+  const mMax = Math.max(101, ...allMoms) + 0.5;
 
   const scaleX = (v: number) => PAD + ((v - rMin) / (rMax - rMin)) * (W - 2 * PAD);
   const scaleY = (v: number) => H - PAD - ((v - mMin) / (mMax - mMin)) * (H - 2 * PAD);
 
   const cx = scaleX(100);
-  const cy = scaleY(0);
+  const cy = scaleY(100);
 
   const [hovered, setHovered] = useState<string | null>(null);
 
