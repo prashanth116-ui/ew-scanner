@@ -12,6 +12,7 @@ import {
   Scale,
   AlertTriangle,
   Users,
+  Target,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -34,6 +35,7 @@ const SECTIONS = [
   { id: "trading-framework", label: "Trading Framework" },
   { id: "rotation-workflow", label: "Rotation Workflow" },
   { id: "workflow", label: "Top-Down Workflow" },
+  { id: "quick-checklist", label: "Trade Checklist" },
   { id: "filter-recipes", label: "Filter Recipes" },
   { id: "limitations", label: "Limitations" },
 ];
@@ -1885,6 +1887,125 @@ export default function SectorGuidePage() {
             <strong className="text-white"> Regime Aligned</strong> badge, containing amber-highlighted turnaround rows with
             <strong className="text-green-400"> Sector RS &gt; +2</strong>. This means fresh rotation + macro tailwind + lagging stock
             reversing with institutional volume. Cross-check on the Pre-Run scanner for additional confirmation.
+          </Tip>
+        </Section>
+
+        {/* Quick Trade Checklist */}
+        <Section
+          id="quick-checklist"
+          title="Quick Trade Checklist"
+          icon={<Target className="h-5 w-5 text-[#5ba3e6]" />}
+        >
+          <p>
+            Use these checklists to validate entries before committing capital.
+            The <Link href="/sectors" className="text-[#5ba3e6] hover:underline">Entry Signals panel</Link> on
+            the Sectors Dashboard already applies the sector-level gates automatically &mdash; this guide explains
+            the reasoning behind each check.
+          </p>
+
+          <SubSection title="Swing Trade Entry (2&ndash;15 Day Hold)">
+            <p className="mb-2 font-medium text-white">Rotation Tracker checks:</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Action signal = <strong className="text-green-400">ENTER</strong> or <strong className="text-cyan-400">ADD ON PULLBACK</strong></li>
+              <li>Lifecycle stage = <strong className="text-white">EARLY</strong> or <strong className="text-white">MATURING</strong></li>
+              <li>Conviction = <strong className="text-white">HIGH</strong> or <strong className="text-white">MODERATE</strong></li>
+              <li>Regime alignment = <strong className="text-green-400">Aligned</strong> or <strong className="text-white">Neutral</strong> (never enter on headwind)</li>
+            </ul>
+
+            <p className="mt-3 mb-2 font-medium text-white">Entry Signals panel gates (all must pass):</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Action signal = <strong className="text-green-400">ENTER</strong> or <strong className="text-cyan-400">ADD ON PULLBACK</strong> (derived from lifecycle + conviction + regime)</li>
+              <li>CMF &gt; 0 (institutional money flowing in)</li>
+              <li>Acceleration &gt; 0 (momentum building, not fading)</li>
+              <li>At least 1 stock with conviction = <strong className="text-green-400">HIGH</strong> + category = <strong className="text-white">LEADER</strong> or <strong className="text-purple-400">TURNAROUND</strong></li>
+            </ul>
+            <p className="mt-2 text-[10px] text-[#666]">
+              Sector quadrant (LEADING/IMPROVING) is not a direct gate but influences the rotation conviction score.
+              A LEADING quadrant adds +3 to conviction; IMPROVING adds +2.
+            </p>
+
+            <p className="mt-3 mb-2 font-medium text-white">Stock-level checks:</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Price above 50-day SMA (confirmed uptrend)</li>
+              <li>RS Acceleration positive (gaining vs sector ETF)</li>
+              <li>Volume ratio &ge; 1.0x (institutional participation)</li>
+              <li>Institutional ownership &gt; 50% (smart money present)</li>
+            </ul>
+
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Metric</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Green (Go)</th>
+                    <th className="py-1.5 text-left font-medium">Red (No-Go)</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">CMF (20d)</td>
+                    <td className="py-1.5 pr-3 text-green-400">&gt; +0.05</td>
+                    <td className="py-1.5 text-red-400">&lt; 0</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Acceleration</td>
+                    <td className="py-1.5 pr-3 text-green-400">&gt; +0.5</td>
+                    <td className="py-1.5 text-red-400">&lt; 0</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Rotation Age</td>
+                    <td className="py-1.5 pr-3 text-green-400">&le; 15 days</td>
+                    <td className="py-1.5 text-red-400">&gt; 30 days</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">Conviction Score</td>
+                    <td className="py-1.5 pr-3 text-green-400">&ge; 6 (HIGH)</td>
+                    <td className="py-1.5 text-red-400">&lt; 0 (EXIT)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Day Trade Entry (Intraday)">
+            <p className="mb-2 font-medium text-white">Pre-market (before 9:30 AM ET):</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Check <Link href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</Link> for active ENTER or ADD ON PULLBACK sectors</li>
+              <li>Note which sectors have <strong className="text-green-400">HIGH</strong> conviction and <strong className="text-green-400">Regime Aligned</strong></li>
+              <li>Identify 2&ndash;3 LEADER stocks from those sectors as your watchlist</li>
+            </ul>
+
+            <p className="mt-3 mb-2 font-medium text-white">Intraday execution:</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Trade LEADERs from the Entry Signals panel &mdash; these have passed all gates</li>
+              <li>Use the sector ETF as confirmation: if ETF is green, bias long on sector stocks</li>
+              <li>Prefer stocks with positive RS Acceleration (catching up = momentum)</li>
+            </ul>
+
+            <p className="mt-3 mb-2 font-medium text-white">Position sizing guide:</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong className="text-green-400">ENTER + HIGH conviction</strong> = full size</li>
+              <li><strong className="text-cyan-400">ADD ON PULLBACK + MODERATE conviction</strong> = half size</li>
+              <li>Anything else = skip or paper trade only</li>
+            </ul>
+          </SubSection>
+
+          <Warning>
+            <strong>Kill signals &mdash; exit or do not enter if any of these are true:</strong>
+            <ul className="mt-1 list-disc pl-4 space-y-0.5">
+              <li>CMF negative (money flowing out)</li>
+              <li>Acceleration negative (momentum fading)</li>
+              <li>Regime = headwind (macro working against sector)</li>
+              <li>Rotation age &gt; 30 days (exhausting)</li>
+              <li>Conviction = EXIT (multiple bearish signals)</li>
+            </ul>
+          </Warning>
+
+          <Tip>
+            The <Link href="/sectors" className="text-[#5ba3e6] hover:underline">Entry Signals panel</Link> on
+            the Sectors Dashboard already applies all sector-level gates (CMF+, Accel+, conviction, regime).
+            If a sector appears there, it has passed the checklist. Use this guide to understand <em>why</em> a
+            sector qualifies and to apply stock-level checks before placing trades.
           </Tip>
         </Section>
 
