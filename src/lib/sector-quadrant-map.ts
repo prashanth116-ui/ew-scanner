@@ -11,7 +11,7 @@ import type { RRGQuadrant } from "@/lib/sector-rotation/types";
 
 // Coarse sector names (EW universes) → fine-grained names (rotation data)
 const COARSE_TO_FINE: Record<string, string[]> = {
-  Technology: ["Semiconductors", "Software & Cloud"],
+  Technology: ["Semiconductors", "Software & Cloud", "Technology"],
   Consumer: ["Consumer Discretionary", "Consumer Staples"],
   Healthcare: ["Health Care", "Biotech"],
   Financials: ["Financials"],

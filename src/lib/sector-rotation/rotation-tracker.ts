@@ -633,7 +633,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     throw new Error("Failed to fetch SPY benchmark data");
   }
 
-  // 2. Fetch all 13 ETF charts in parallel
+  // 2. Fetch all 14 ETF charts in parallel
   const etfChartPromises = SECTOR_UNIVERSE.map((sector) =>
     fetchYahooChart(sector.etf, "1y", "1d")
       .then((chart) => ({ sectorId: sector.id, chart }))

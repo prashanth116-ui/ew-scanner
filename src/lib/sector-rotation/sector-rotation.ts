@@ -2,7 +2,7 @@
  * Sector Rotation Tracker engine.
  * SERVER-ONLY: Used by /api/sector-rotation route + nightly cron.
  *
- * 13 GICS-based sectors with 1:1 ETF proxy mapping.
+ * 14 sectors with 1:1 ETF proxy mapping.
  * Composite scoring: momentum, acceleration, Mansfield RS, CMF, breadth, smart money.
  * Dynamic weight redistribution when pre-run data is missing.
  */
