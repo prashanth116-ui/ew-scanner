@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Clock, FileDown, Search, X, ExternalLink, Bell, BellOff, Zap } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
@@ -1489,35 +1489,34 @@ const CATEGORY_STYLE: Record<string, string> = {
   AVOID: "text-red-400",
 };
 
-type PicksSortKey = "conviction" | "symbol" | "sector" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "pctFrom50ma";
+type PicksSortKey = "conviction" | "symbol" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "pctFrom50ma";
 
 function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
   const [filter, setFilter] = useState<ConvictionLevel | "ALL">("ALL");
   const [sectorFilter, setSectorFilter] = useState<string>("ALL");
-  const [showCount, setShowCount] = useState(25);
   const [sortKey, setSortKey] = useState<PicksSortKey>("conviction");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [expandedSectors, setExpandedSectors] = useState<Set<string>>(new Set());
 
-  const sectors = useMemo(() => {
+  const sectorNames = useMemo(() => {
     const s = new Set(stocks.map((st) => st.sector));
     return ["ALL", ...Array.from(s).sort()];
   }, [stocks]);
+
+  const convOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
+  const catOrder: Record<string, number> = { LEADER: 0, CATCH_UP: 1, TURNAROUND: 2, AVOID: 3 };
+  const phaseOrder: Record<string, number> = { P1_BASING: 0, P2_TURNAROUND: 1, P3_TRENDING: 2, P4_EXHAUSTING: 3 };
 
   const filtered = useMemo(() => {
     let list = stocks;
     if (filter !== "ALL") list = list.filter((s) => s.conviction === filter);
     if (sectorFilter !== "ALL") list = list.filter((s) => s.sector === sectorFilter);
 
-    const convOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
-    const catOrder: Record<string, number> = { LEADER: 0, CATCH_UP: 1, TURNAROUND: 2, AVOID: 3 };
-    const phaseOrder: Record<string, number> = { P1_BASING: 0, P2_TURNAROUND: 1, P3_TRENDING: 2, P4_EXHAUSTING: 3 };
-
     const sorted = [...list].sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
         case "conviction": cmp = (convOrder[a.conviction] ?? 3) - (convOrder[b.conviction] ?? 3); break;
         case "symbol": cmp = a.symbol.localeCompare(b.symbol); break;
-        case "sector": cmp = a.sector.localeCompare(b.sector); break;
         case "category": cmp = (catOrder[a.category] ?? 4) - (catOrder[b.category] ?? 4); break;
         case "phase": cmp = (phaseOrder[a.phase] ?? 4) - (phaseOrder[b.phase] ?? 4); break;
         case "rsAccel": cmp = (a.rsAccel ?? -999) - (b.rsAccel ?? -999); break;
@@ -1530,13 +1529,33 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
     return sorted;
   }, [stocks, filter, sectorFilter, sortKey, sortDir]);
 
-  const visible = filtered.slice(0, showCount);
+  // Group stocks by sector ETF, preserving sort order within each group
+  const stocksBySector = useMemo(() => {
+    const groups = new Map<string, { etf: string; sector: string; quadrant: RRGQuadrant; stocks: EnrichedStock[] }>();
+    for (const s of filtered) {
+      const key = s.sectorEtf;
+      if (!groups.has(key)) {
+        groups.set(key, { etf: s.sectorEtf, sector: s.sector, quadrant: s.sectorQuadrant, stocks: [] });
+      }
+      groups.get(key)!.stocks.push(s);
+    }
+    return Array.from(groups.values());
+  }, [filtered]);
+
   const highCount = stocks.filter((s) => s.conviction === "HIGH").length;
   const medCount = stocks.filter((s) => s.conviction === "MEDIUM").length;
 
   const handleSort = (key: PicksSortKey) => {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const toggleSector = (etf: string) => {
+    setExpandedSectors((prev) => {
+      const next = new Set(prev);
+      if (next.has(etf)) next.delete(etf); else next.add(etf);
+      return next;
+    });
   };
 
   const SortArrow = ({ col }: { col: PicksSortKey }) => {
@@ -1561,10 +1580,12 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
         <option value="WATCH">WATCH only</option>
       </select>
       <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-white">
-        {sectors.map((s) => <option key={s} value={s}>{s === "ALL" ? "All Sectors" : s}</option>)}
+        {sectorNames.map((s) => <option key={s} value={s}>{s === "ALL" ? "All Sectors" : s}</option>)}
       </select>
     </div>
   );
+
+  const COL_COUNT = 9;
 
   return (
     <CollapsiblePanel id="stock-picks" title="Stock Picks" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})} badge={badge} actions={actions}>
@@ -1574,7 +1595,6 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
             <tr className="border-b border-[#2a2a2a] text-left text-[#666]">
               <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("conviction")}>Conv. <SortArrow col="conviction" /></th>
               <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("symbol")}>Symbol <SortArrow col="symbol" /></th>
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("sector")}>Sector <SortArrow col="sector" /></th>
               <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("category")}>Category <SortArrow col="category" /></th>
               <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("phase")}>Phase <SortArrow col="phase" /></th>
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("rsAccel")}>RS Accel <SortArrow col="rsAccel" /></th>
@@ -1584,49 +1604,61 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
             </tr>
           </thead>
           <tbody>
-            {visible.map((s) => {
-              const cs = CONVICTION_STYLE[s.conviction];
+            {stocksBySector.map((group) => {
+              const isExpanded = expandedSectors.has(group.etf) || expandedSectors.size === 0;
               return (
-                <tr key={s.symbol} className="border-b border-[#1a1a1a] hover:bg-[#1a1a1a]">
-                  <td className="py-1.5 pr-3">
-                    <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${cs.bg} ${cs.border} ${cs.text}`}>
-                      {s.conviction}
-                    </span>
-                  </td>
-                  <td className="py-1.5 pr-3">
-                    <span className="font-medium text-white">{s.symbol}</span>
-                    <span className="ml-1.5 text-[#666]" title={s.shortName}>{s.shortName.length > 18 ? s.shortName.slice(0, 16) + "\u2026" : s.shortName}</span>
-                  </td>
-                  <td className="py-1.5 pr-3 text-[#888]">{s.sector}</td>
-                  <td className={`py-1.5 pr-3 font-medium ${CATEGORY_STYLE[s.category] ?? "text-[#888]"}`}>{s.category}</td>
-                  <td className="py-1.5 pr-3 text-[#888]">{s.phase.replace("P1_", "").replace("P2_", "").replace("P3_", "").replace("P4_", "")}</td>
-                  <td className="py-1.5 pr-3 text-right">
-                    <span className={s.rsAccel != null && s.rsAccel >= 3 ? "text-green-400 font-semibold" : s.rsAccel != null && s.rsAccel >= 0.5 ? "text-green-400/70" : s.rsAccel != null && s.rsAccel < -0.5 ? "text-red-400" : "text-[#888]"}>
-                      {s.rsAccel != null ? s.rsAccel.toFixed(1) : "—"}
-                    </span>
-                    <span className="ml-1 text-[10px] text-[#555]">{s.rsAccelDesc}</span>
-                  </td>
-                  <td className={`py-1.5 pr-3 text-right ${s.volRatio >= 1.2 ? "text-cyan-400" : "text-[#888]"}`}>
-                    {s.volRatio.toFixed(1)}x
-                  </td>
-                  <td className="py-1.5 pr-3 text-right text-white">${s.price.toFixed(2)}</td>
-                  <td className={`py-1.5 text-right ${s.pctFrom50ma != null && s.pctFrom50ma > 0 ? "text-green-400" : s.pctFrom50ma != null && s.pctFrom50ma < 0 ? "text-red-400" : "text-[#888]"}`}>
-                    {s.pctFrom50ma != null ? `${s.pctFrom50ma > 0 ? "+" : ""}${s.pctFrom50ma.toFixed(1)}%` : "—"}
-                  </td>
-                </tr>
+                <Fragment key={group.etf}>
+                  <tr
+                    onClick={() => toggleSector(group.etf)}
+                    className="cursor-pointer border-b border-[#1a1a1a] bg-[#0f0f0f] hover:bg-[#1a1a1a]"
+                  >
+                    <td colSpan={COL_COUNT} className="px-2 py-2">
+                      <div className="flex items-center gap-2">
+                        {isExpanded ? <ChevronDown className="h-3 w-3 text-[#888]" /> : <ChevronUp className="h-3 w-3 text-[#888] rotate-90" />}
+                        <span className="font-mono text-xs font-semibold text-white">{group.etf}</span>
+                        <span className="text-xs text-[#888]">{group.sector}</span>
+                        <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${quadrantColor(group.quadrant)}`}>{group.quadrant}</span>
+                        <span className="text-[10px] text-[#666]">{group.stocks.length} stocks</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded && group.stocks.map((s) => {
+                    const cs = CONVICTION_STYLE[s.conviction];
+                    return (
+                      <tr key={s.symbol} className="border-b border-[#1a1a1a] hover:bg-[#1a1a1a]/50">
+                        <td className="py-1.5 pr-3 pl-2">
+                          <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${cs.bg} ${cs.border} ${cs.text}`}>
+                            {s.conviction}
+                          </span>
+                        </td>
+                        <td className="py-1.5 pr-3">
+                          <a href={`https://finance.yahoo.com/quote/${s.symbol}`} target="_blank" rel="noopener noreferrer" className="font-mono font-semibold text-[#5ba3e6] hover:underline">{s.symbol}</a>
+                          <span className="ml-1.5 text-[10px] text-[#666]" title={s.shortName}>{s.shortName.length > 18 ? s.shortName.slice(0, 16) + "\u2026" : s.shortName}</span>
+                        </td>
+                        <td className={`py-1.5 pr-3 font-medium ${CATEGORY_STYLE[s.category] ?? "text-[#888]"}`}>{s.category}</td>
+                        <td className="py-1.5 pr-3 text-[#888]">{s.phase.replace("P1_", "").replace("P2_", "").replace("P3_", "").replace("P4_", "")}</td>
+                        <td className="py-1.5 pr-3 text-right">
+                          <span className={s.rsAccel != null && s.rsAccel >= 3 ? "text-green-400 font-semibold" : s.rsAccel != null && s.rsAccel >= 0.5 ? "text-green-400/70" : s.rsAccel != null && s.rsAccel < -0.5 ? "text-red-400" : "text-[#888]"}>
+                            {s.rsAccel != null ? s.rsAccel.toFixed(1) : "\u2014"}
+                          </span>
+                          <span className="ml-1 text-[10px] text-[#555]">{s.rsAccelDesc}</span>
+                        </td>
+                        <td className={`py-1.5 pr-3 text-right ${s.volRatio >= 1.2 ? "text-cyan-400" : "text-[#888]"}`}>
+                          {s.volRatio.toFixed(1)}x
+                        </td>
+                        <td className="py-1.5 pr-3 text-right text-white">${s.price.toFixed(2)}</td>
+                        <td className={`py-1.5 text-right ${s.pctFrom50ma != null && s.pctFrom50ma > 0 ? "text-green-400" : s.pctFrom50ma != null && s.pctFrom50ma < 0 ? "text-red-400" : "text-[#888]"}`}>
+                          {s.pctFrom50ma != null ? `${s.pctFrom50ma > 0 ? "+" : ""}${s.pctFrom50ma.toFixed(1)}%` : "\u2014"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
-      {filtered.length > showCount && (
-        <button
-          onClick={() => setShowCount((c) => c + 25)}
-          className="mt-2 w-full rounded border border-[#333] bg-[#1a1a1a] py-1.5 text-xs text-[#888] hover:text-white"
-        >
-          Show more ({filtered.length - showCount} remaining)
-        </button>
-      )}
     </CollapsiblePanel>
   );
 }
