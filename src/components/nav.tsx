@@ -39,6 +39,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
   sectors: [
     { href: "/sectors", label: "Dashboard" },
     { href: "/rotation", label: "Rotation Tracker" },
+    { href: "/sectors/picks", label: "Stock Picks" },
     { href: "/sectors/guide", label: "Guide" },
   ],
   confluence: [
