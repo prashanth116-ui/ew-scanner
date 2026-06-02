@@ -621,6 +621,11 @@ function ActiveRotationCards({
             <div className={`flex items-center gap-2 px-4 py-1.5 ${actionSignal.bgColor} border-b ${actionSignal.borderColor}`}>
               <ActionIcon icon={actionSignal.icon} className={`h-3.5 w-3.5 ${actionSignal.color}`} />
               <span className={`text-xs font-semibold ${actionSignal.color}`}>{actionSignal.action}</span>
+              {actionSignal.action === "EXIT" && lifecycle === "EXHAUSTING" && h.acceleration > 0 && conviction.level !== "EXIT" && (
+                <span className="text-[10px] text-[#888]">
+                  — Duration exhausted{h.cmf20 > 0 ? "; momentum & flow still positive" : "; momentum still positive"}
+                </span>
+              )}
             </div>
 
             <div className="p-4">
