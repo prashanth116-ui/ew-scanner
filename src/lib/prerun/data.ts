@@ -864,6 +864,7 @@ export interface BatchQuote {
   volume: number;
   avgVolume10d: number;
   dailyChangePct: number;
+  marketCap: number | null;
 }
 
 /**
@@ -940,6 +941,7 @@ export async function fetchBatchQuotes(
         volume: toNum(quote.regularMarketVolume, 0),
         avgVolume10d: toNum(quote.averageDailyVolume10Day, 0),
         dailyChangePct: toNum(quote.regularMarketChangePercent, 0),
+        marketCap: toNumOrNull(quote.marketCap),
       });
     }
   }
@@ -968,6 +970,7 @@ export async function fetchBatchQuotes(
           volume: toNum(quote.regularMarketVolume, 0),
           avgVolume10d: toNum(quote.averageDailyVolume10Day, 0),
           dailyChangePct: toNum(quote.regularMarketChangePercent, 0),
+          marketCap: toNumOrNull(quote.marketCap),
         });
       }
     }

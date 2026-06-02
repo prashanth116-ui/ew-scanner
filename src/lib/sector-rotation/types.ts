@@ -53,6 +53,45 @@ export interface SectorRotationScore {
   rotationVelocity: number;
 }
 
+export type StockCategory = "LEADER" | "CATCH_UP" | "TURNAROUND" | "AVOID";
+export type StockPhase = "P1_BASING" | "P2_TURNAROUND" | "P3_TRENDING" | "P4_EXHAUSTING";
+export type ConvictionLevel = "HIGH" | "MEDIUM" | "WATCH";
+
+export interface EnrichedStock {
+  symbol: string;
+  shortName: string;
+  sector: string;
+  sectorEtf: string;
+  price: number;
+  sma50: number | null;
+  sma200: number | null;
+  above50ma: boolean;
+  pctFrom50ma: number | null;
+  pctFrom200ma: number | null;
+  rsAccel: number | null;
+  volRatio: number;
+  volume: number;
+  avgVolume: number;
+  marketCap: number | null;
+  institutionalPct: number | null;
+  ret20d: number | null;
+  etfRet20d: number;
+  category: StockCategory;
+  phase: StockPhase;
+  rsAccelDesc: string;
+  conviction: ConvictionLevel;
+  convictionSignals: number;
+  sectorQuadrant: RRGQuadrant;
+  sectorComposite: number;
+  sectorStealth: boolean;
+}
+
+export interface RejectedStock {
+  symbol: string;
+  sector: string;
+  reasons: string[];
+}
+
 export interface SectorRotationResult {
   calculatedAt: string;
   sectors: SectorRotationScore[];
@@ -87,5 +126,10 @@ export interface SectorRotationResult {
     dxyTrend: "rising" | "falling" | "flat";
     favoredSectors: string[];
     avoidSectors: string[];
+  };
+  /** Stock-level enrichment: quality-gated, classified, conviction-scored */
+  enrichedStocks?: {
+    passed: EnrichedStock[];
+    rejected: RejectedStock[];
   };
 }

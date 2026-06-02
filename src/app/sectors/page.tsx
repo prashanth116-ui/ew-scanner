@@ -9,6 +9,8 @@ import type {
   SectorRotationResult,
   SectorRotationScore,
   RRGQuadrant,
+  EnrichedStock,
+  ConvictionLevel,
 } from "@/lib/sector-rotation/types";
 import type { PreRunResult } from "@/lib/prerun/types";
 import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
@@ -1330,6 +1332,136 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationDat
 
 // ── Main Page ──
 
+// ── Stock Picks Panel ──
+
+const CONVICTION_STYLE: Record<ConvictionLevel, { bg: string; border: string; text: string }> = {
+  HIGH: { bg: "bg-green-500/10", border: "border-green-500/40", text: "text-green-400" },
+  MEDIUM: { bg: "bg-amber-500/10", border: "border-amber-500/40", text: "text-amber-400" },
+  WATCH: { bg: "bg-[#1a1a1a]", border: "border-[#333]", text: "text-[#888]" },
+};
+
+const CATEGORY_STYLE: Record<string, string> = {
+  LEADER: "text-green-400",
+  CATCH_UP: "text-blue-400",
+  TURNAROUND: "text-cyan-400",
+  AVOID: "text-red-400",
+};
+
+function StockPicksPanel({ stocks }: { stocks: EnrichedStock[] }) {
+  const [filter, setFilter] = useState<ConvictionLevel | "ALL">("ALL");
+  const [sectorFilter, setSectorFilter] = useState<string>("ALL");
+  const [showCount, setShowCount] = useState(25);
+
+  const sectors = useMemo(() => {
+    const s = new Set(stocks.map((st) => st.sector));
+    return ["ALL", ...Array.from(s).sort()];
+  }, [stocks]);
+
+  const filtered = useMemo(() => {
+    let list = stocks;
+    if (filter !== "ALL") list = list.filter((s) => s.conviction === filter);
+    if (sectorFilter !== "ALL") list = list.filter((s) => s.sector === sectorFilter);
+    return list;
+  }, [stocks, filter, sectorFilter]);
+
+  const visible = filtered.slice(0, showCount);
+  const highCount = stocks.filter((s) => s.conviction === "HIGH").length;
+  const medCount = stocks.filter((s) => s.conviction === "MEDIUM").length;
+
+  return (
+    <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-white">Stock Picks</h2>
+          <span className="rounded-full bg-green-500/10 border border-green-500/30 px-2 py-0.5 text-[10px] text-green-400">{highCount} HIGH</span>
+          <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] text-amber-400">{medCount} MED</span>
+          <span className="text-[10px] text-[#555]">{stocks.length} total</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as ConvictionLevel | "ALL")}
+            className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-white"
+          >
+            <option value="ALL">All Conviction</option>
+            <option value="HIGH">HIGH only</option>
+            <option value="MEDIUM">MEDIUM only</option>
+            <option value="WATCH">WATCH only</option>
+          </select>
+          <select
+            value={sectorFilter}
+            onChange={(e) => setSectorFilter(e.target.value)}
+            className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-white"
+          >
+            {sectors.map((s) => (
+              <option key={s} value={s}>{s === "ALL" ? "All Sectors" : s}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-[#2a2a2a] text-left text-[#666]">
+              <th className="pb-2 pr-3 font-medium">Conv.</th>
+              <th className="pb-2 pr-3 font-medium">Symbol</th>
+              <th className="pb-2 pr-3 font-medium">Sector</th>
+              <th className="pb-2 pr-3 font-medium">Category</th>
+              <th className="pb-2 pr-3 font-medium">Phase</th>
+              <th className="pb-2 pr-3 font-medium text-right">RS Accel</th>
+              <th className="pb-2 pr-3 font-medium text-right">Vol Ratio</th>
+              <th className="pb-2 pr-3 font-medium text-right">Price</th>
+              <th className="pb-2 font-medium text-right">% from 50MA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((s) => {
+              const cs = CONVICTION_STYLE[s.conviction];
+              return (
+                <tr key={s.symbol} className="border-b border-[#1a1a1a] hover:bg-[#1a1a1a]">
+                  <td className="py-1.5 pr-3">
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${cs.bg} ${cs.border} ${cs.text}`}>
+                      {s.conviction}
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <span className="font-medium text-white">{s.symbol}</span>
+                    <span className="ml-1.5 text-[#666]" title={s.shortName}>{s.shortName.length > 18 ? s.shortName.slice(0, 16) + "\u2026" : s.shortName}</span>
+                  </td>
+                  <td className="py-1.5 pr-3 text-[#888]">{s.sector}</td>
+                  <td className={`py-1.5 pr-3 font-medium ${CATEGORY_STYLE[s.category] ?? "text-[#888]"}`}>{s.category}</td>
+                  <td className="py-1.5 pr-3 text-[#888]">{s.phase.replace("P1_", "").replace("P2_", "").replace("P3_", "").replace("P4_", "")}</td>
+                  <td className="py-1.5 pr-3 text-right">
+                    <span className={s.rsAccel != null && s.rsAccel >= 3 ? "text-green-400 font-semibold" : s.rsAccel != null && s.rsAccel >= 0.5 ? "text-green-400/70" : s.rsAccel != null && s.rsAccel < -0.5 ? "text-red-400" : "text-[#888]"}>
+                      {s.rsAccel != null ? s.rsAccel.toFixed(1) : "—"}
+                    </span>
+                    <span className="ml-1 text-[10px] text-[#555]">{s.rsAccelDesc}</span>
+                  </td>
+                  <td className={`py-1.5 pr-3 text-right ${s.volRatio >= 1.2 ? "text-cyan-400" : "text-[#888]"}`}>
+                    {s.volRatio.toFixed(1)}x
+                  </td>
+                  <td className="py-1.5 pr-3 text-right text-white">${s.price.toFixed(2)}</td>
+                  <td className={`py-1.5 text-right ${s.pctFrom50ma != null && s.pctFrom50ma > 0 ? "text-green-400" : s.pctFrom50ma != null && s.pctFrom50ma < 0 ? "text-red-400" : "text-[#888]"}`}>
+                    {s.pctFrom50ma != null ? `${s.pctFrom50ma > 0 ? "+" : ""}${s.pctFrom50ma.toFixed(1)}%` : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {filtered.length > showCount && (
+        <button
+          onClick={() => setShowCount((c) => c + 25)}
+          className="mt-2 w-full rounded border border-[#333] bg-[#1a1a1a] py-1.5 text-xs text-[#888] hover:text-white"
+        >
+          Show more ({filtered.length - showCount} remaining)
+        </button>
+      )}
+    </div>
+  );
+}
+
 const LOADING_PHASES = ["Fetching ETF data", "Fetching stock quotes", "Computing sector scores", "Building correlation matrix"] as const;
 
 type SortMode = "score" | "action" | "quadrant" | "acceleration" | "name";
@@ -1671,6 +1803,11 @@ export default function SectorRotationPage() {
                 <div className="mt-1 h-1.5 w-full rounded-full bg-[#2a2a2a]">
                   <div className={`h-1.5 rounded-full ${compositeColor(s.compositeScore)}`} style={{ width: `${s.compositeScore}%` }} />
                 </div>
+                <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-[#888]">
+                  <span>RS {s.rsRatio.toFixed(1)}</span>
+                  <span>CMF {s.cmf20 >= 0 ? "+" : ""}{s.cmf20.toFixed(3)}</span>
+                  <span>Breadth {s.breadthPct != null ? `${s.breadthPct.toFixed(0)}%` : "N/A"}</span>
+                </div>
                 <div className="mt-1.5 flex items-center justify-between">
                   {(() => { const action = getTradingAction(s); const badge = actionBadge(action); return <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>{badge.label}</span>; })()}
                   {(s.dataQuality ?? 100) < 100 && <span className="text-[10px] text-amber-400/70" title={`Scoring factors: momentum, acceleration, Mansfield RS, CMF (always available), breadth, smart money. ${s.dataQualityBreakdown ? `Missing: ${[!s.dataQualityBreakdown.breadth && "breadth", !s.dataQualityBreakdown.smartMoney && "smart money"].filter(Boolean).join(", ")}. ` : ""}Weights are redistributed across available factors.`}>{s.dataQuality ?? 100}% data</span>}
@@ -1762,6 +1899,11 @@ export default function SectorRotationPage() {
 
       {/* #9: Correlation Matrix */}
       <CorrelationMatrix correlationMatrix={data.correlationMatrix} sectors={data.sectors} />
+
+      {/* Stock Picks — conviction-scored stocks from enrichment pipeline */}
+      {data.enrichedStocks && data.enrichedStocks.passed.length > 0 && (
+        <StockPicksPanel stocks={data.enrichedStocks.passed} />
+      )}
 
       {/* Panel 5: Sector Detail Cards */}
       <div>

@@ -17,6 +17,8 @@ import type {
   SectorRotationResult,
   RRGQuadrant,
 } from "./types";
+import { enrichStocks } from "./stock-enrichment";
+import type { StockInput } from "./stock-enrichment";
 import type { PreRunResult } from "@/lib/prerun/types";
 
 // ── Pure math functions ──
@@ -807,6 +809,57 @@ export async function calculateSectorRotation(
     stockQuotes[symbol] = { price: q.price, sma50: q.sma50, sma200: q.sma200, pctFromSma50, rsAccel, volume: q.volume, avgVolume10d: q.avgVolume10d };
   }
 
+  // Build stock-level enrichment inputs from batch quotes + sector metadata
+  const stockInputs: StockInput[] = [];
+  // Build lookup: sector display name → scored sector
+  const sectorLookup = new Map(scoredSectors.map((s) => [s.sector, s]));
+  // Build lookup: sector display name → raw acceleration
+  const rawAccelLookup = new Map(rawScores.map((r) => [r.displayName, r.acceleration]));
+  // Build lookup: sector display name → ETF roc20d
+  const rawRoc20dLookup = new Map(rawScores.map((r) => [r.displayName, r.roc20d]));
+
+  for (const sectorDef of SECTOR_UNIVERSE) {
+    const scored = sectorLookup.get(sectorDef.displayName);
+    if (!scored) continue;
+    const etfRoc20d = rawRoc20dLookup.get(sectorDef.displayName) ?? 0;
+    const sectorAccel = rawAccelLookup.get(sectorDef.displayName) ?? 0;
+
+    // Look up pre-run data for institutional ownership
+    const preRunStocks = preRunBySector.get(sectorDef.displayName) ?? [];
+    const preRunByTicker = new Map(preRunStocks.map((r) => [r.data.ticker, r]));
+
+    for (const stock of sectorDef.stocks) {
+      const q = batchQuotes.get(stock.symbol);
+      if (!q || q.price <= 0) continue;
+
+      const preRun = preRunByTicker.get(stock.symbol);
+      const institutionalPct = preRun?.data.institutionalPct ?? null;
+
+      stockInputs.push({
+        symbol: stock.symbol,
+        shortName: stock.name,
+        sector: sectorDef.displayName,
+        sectorEtf: sectorDef.etf,
+        price: q.price,
+        sma50: q.sma50,
+        sma200: q.sma200,
+        volume: q.volume,
+        avgVolume10d: q.avgVolume10d,
+        marketCap: q.marketCap,
+        institutionalPct,
+        ret20d: null, // Not available from batch quotes
+        etfRet20d: etfRoc20d,
+        sectorQuadrant: scored.quadrant,
+        sectorComposite: scored.compositeScore,
+        sectorAcceleration: sectorAccel,
+        sectorStealth: scored.stealthAccumulation,
+      });
+    }
+  }
+
+  const enrichedStocks = enrichStocks(stockInputs);
+  console.log(`[sectorRotation] Enriched ${enrichedStocks.passed.length} stocks (${enrichedStocks.rejected.length} rejected)`);
+
   // Compute 20d daily returns per sector ETF for sparklines
   const etfReturns20d: Record<string, number[]> = {};
   for (const group of sectorGroups) {
@@ -864,6 +917,7 @@ export async function calculateSectorRotation(
     correlationBreak,
     correlationMatrix,
     etfReturns20d,
+    enrichedStocks,
   };
 
   cachedResult = { data: result, ts: Date.now() };
