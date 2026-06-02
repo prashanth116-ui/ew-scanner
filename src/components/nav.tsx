@@ -38,6 +38,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
   ],
   sectors: [
     { href: "/sectors", label: "Dashboard" },
+    { href: "/sectors/crypto", label: "Crypto" },
     { href: "/rotation", label: "Rotation Tracker" },
     { href: "/sectors/guide", label: "Guide" },
   ],

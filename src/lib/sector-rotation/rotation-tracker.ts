@@ -30,6 +30,7 @@ import { fetchYahooChart, calcSMA, fetchBatchQuotes } from "@/lib/prerun/data";
 import { SECTOR_UNIVERSE } from "@/data/sector-universe";
 import { fetchMacroRegime } from "./regime";
 import { computePairZScore } from "./pairs";
+import { calcAcceleration, calcCMF } from "./math";
 
 // ── Module-level cache (15 minutes) ──
 
@@ -50,46 +51,6 @@ function computeSMASeries(values: number[], period: number): (number | null)[] {
     }
   }
   return result;
-}
-
-// ── Health signal computation (Acceleration, CMF, RRG Quadrant) ──
-
-/** Change in 20d ROC over 6 bars — positive = momentum accelerating. */
-function calcAcceleration(closes: number[]): number {
-  if (closes.length < 26) return 0;
-  const rocSeries: number[] = [];
-  for (let i = 20; i < closes.length; i++) {
-    const past = closes[i - 20];
-    if (!past || past === 0) {
-      rocSeries.push(0);
-    } else {
-      rocSeries.push(((closes[i] - past) / past) * 100);
-    }
-  }
-  if (rocSeries.length < 6) return 0;
-  return rocSeries[rocSeries.length - 1] - rocSeries[rocSeries.length - 6];
-}
-
-/** Chaikin Money Flow over `period` bars — positive = buying pressure. */
-function calcCMF(
-  highs: number[],
-  lows: number[],
-  closes: number[],
-  volumes: number[],
-  period = 20
-): number {
-  const len = Math.min(highs.length, lows.length, closes.length, volumes.length);
-  if (len < period) return 0;
-
-  let mfvSum = 0;
-  let volSum = 0;
-  for (let i = len - period; i < len; i++) {
-    const hl = highs[i] - lows[i];
-    const mfm = hl !== 0 ? ((closes[i] - lows[i]) - (highs[i] - closes[i])) / hl : 0;
-    mfvSum += mfm * volumes[i];
-    volSum += volumes[i];
-  }
-  return volSum !== 0 ? mfvSum / volSum : 0;
 }
 
 /** RRG quadrant using JdK-standard Z-score + EMA methodology. */
