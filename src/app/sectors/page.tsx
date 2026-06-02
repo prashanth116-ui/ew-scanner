@@ -2008,11 +2008,11 @@ export default function SectorRotationPage() {
       {/* Panel 3: RRG + Panel 4: Leading Indicators / Smart Money */}
       <CollapsiblePanel id="rrg-indicators" title="RRG & Leading Indicators" collapsed={collapsedPanels.has("rrg-indicators")} onToggle={togglePanel}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <h3 className="mb-3 text-sm font-semibold text-[#888]">Relative Rotation Graph</h3>
-            <div className="flex justify-center"><RRGChart sectors={data.sectors} /></div>
+            <div className="mx-auto max-w-[500px]"><RRGChart sectors={data.sectors} /></div>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-4 rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <div>
               <h3 className="mb-2 text-sm font-semibold text-[#888]">Leading Indicators</h3>
               {(() => {
