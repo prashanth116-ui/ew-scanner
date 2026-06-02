@@ -31,6 +31,68 @@ import { compositeColor, compositeTextColor } from "@/lib/color-utils";
 import { useDebounce } from "@/lib/use-debounce";
 import { exportSectorsToExcel } from "@/lib/sector-rotation/export";
 
+// ── Collapsible Panel ──
+
+const COLLAPSED_KEY = "ew-sectors-collapsed-v1";
+
+function useCollapsedPanels(): [Set<string>, (id: string) => void] {
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const raw = localStorage.getItem(COLLAPSED_KEY);
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set<string>();
+    } catch { return new Set<string>(); }
+  });
+
+  const toggle = useCallback((id: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  return [collapsed, toggle];
+}
+
+function CollapsiblePanel({
+  id,
+  title,
+  collapsed,
+  onToggle,
+  badge,
+  actions,
+  children,
+  className = "",
+}: {
+  id: string;
+  title: string;
+  collapsed: boolean;
+  onToggle: (id: string) => void;
+  badge?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-xl border border-[#2a2a2a] bg-[#141414] ${className}`}>
+      <button
+        onClick={() => onToggle(id)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left"
+      >
+        <div className="flex items-center gap-2">
+          {collapsed ? <ChevronDown className="h-4 w-4 text-[#666]" /> : <ChevronUp className="h-4 w-4 text-[#666]" />}
+          <h2 className="text-base font-semibold text-white">{title}</h2>
+          {badge}
+        </div>
+        {actions && <div onClick={(e) => e.stopPropagation()}>{actions}</div>}
+      </button>
+      {!collapsed && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  );
+}
+
 // ── Color helpers ──
 
 function quadrantColor(q: RRGQuadrant): string {
@@ -825,7 +887,7 @@ function PreRotationWatchlist({ sectors }: { sectors: SectorRotationScore[] }) {
 
 // ── #9: Sector Correlation Matrix ──
 
-function CorrelationMatrix({ correlationMatrix, sectors }: { correlationMatrix?: Record<string, number>; sectors: SectorRotationScore[] }) {
+function CorrelationMatrix({ correlationMatrix, sectors, collapsed, onToggle }: { correlationMatrix?: Record<string, number>; sectors: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
   if (!correlationMatrix || Object.keys(correlationMatrix).length === 0) return null;
   const matrix = correlationMatrix;
   const etfs = sectors.map((s) => s.etf);
@@ -847,8 +909,7 @@ function CorrelationMatrix({ correlationMatrix, sectors }: { correlationMatrix?:
   }
 
   return (
-    <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
-      <h2 className="mb-3 text-base font-semibold text-white">Sector Correlation (20d Returns)</h2>
+    <CollapsiblePanel id="correlation" title="Sector Correlation (20d Returns)" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
       <div className="overflow-x-auto">
         <table className="text-[9px]">
           <thead>
@@ -877,7 +938,7 @@ function CorrelationMatrix({ correlationMatrix, sectors }: { correlationMatrix?:
         </table>
       </div>
       <p className="mt-2 text-[10px] text-[#555]">High correlation ({"\u2265"}0.8) = sectors move together. Low/negative = diversification opportunity.</p>
-    </div>
+    </CollapsiblePanel>
   );
 }
 
@@ -1428,10 +1489,14 @@ const CATEGORY_STYLE: Record<string, string> = {
   AVOID: "text-red-400",
 };
 
-function StockPicksPanel({ stocks }: { stocks: EnrichedStock[] }) {
+type PicksSortKey = "conviction" | "symbol" | "sector" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "pctFrom50ma";
+
+function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
   const [filter, setFilter] = useState<ConvictionLevel | "ALL">("ALL");
   const [sectorFilter, setSectorFilter] = useState<string>("ALL");
   const [showCount, setShowCount] = useState(25);
+  const [sortKey, setSortKey] = useState<PicksSortKey>("conviction");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const sectors = useMemo(() => {
     const s = new Set(stocks.map((st) => st.sector));
@@ -1442,57 +1507,80 @@ function StockPicksPanel({ stocks }: { stocks: EnrichedStock[] }) {
     let list = stocks;
     if (filter !== "ALL") list = list.filter((s) => s.conviction === filter);
     if (sectorFilter !== "ALL") list = list.filter((s) => s.sector === sectorFilter);
-    return list;
-  }, [stocks, filter, sectorFilter]);
+
+    const convOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
+    const catOrder: Record<string, number> = { LEADER: 0, CATCH_UP: 1, TURNAROUND: 2, AVOID: 3 };
+    const phaseOrder: Record<string, number> = { P1_BASING: 0, P2_TURNAROUND: 1, P3_TRENDING: 2, P4_EXHAUSTING: 3 };
+
+    const sorted = [...list].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "conviction": cmp = (convOrder[a.conviction] ?? 3) - (convOrder[b.conviction] ?? 3); break;
+        case "symbol": cmp = a.symbol.localeCompare(b.symbol); break;
+        case "sector": cmp = a.sector.localeCompare(b.sector); break;
+        case "category": cmp = (catOrder[a.category] ?? 4) - (catOrder[b.category] ?? 4); break;
+        case "phase": cmp = (phaseOrder[a.phase] ?? 4) - (phaseOrder[b.phase] ?? 4); break;
+        case "rsAccel": cmp = (a.rsAccel ?? -999) - (b.rsAccel ?? -999); break;
+        case "volRatio": cmp = a.volRatio - b.volRatio; break;
+        case "price": cmp = a.price - b.price; break;
+        case "pctFrom50ma": cmp = (a.pctFrom50ma ?? -999) - (b.pctFrom50ma ?? -999); break;
+      }
+      return sortDir === "desc" ? -cmp : cmp;
+    });
+    return sorted;
+  }, [stocks, filter, sectorFilter, sortKey, sortDir]);
 
   const visible = filtered.slice(0, showCount);
   const highCount = stocks.filter((s) => s.conviction === "HIGH").length;
   const medCount = stocks.filter((s) => s.conviction === "MEDIUM").length;
 
+  const handleSort = (key: PicksSortKey) => {
+    if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const SortArrow = ({ col }: { col: PicksSortKey }) => {
+    if (sortKey !== col) return null;
+    return sortDir === "desc" ? <ChevronDown className="inline h-3 w-3" /> : <ChevronUp className="inline h-3 w-3" />;
+  };
+
+  const badge = (
+    <div className="flex items-center gap-2">
+      <span className="rounded-full bg-green-500/10 border border-green-500/30 px-2 py-0.5 text-[10px] text-green-400">{highCount} HIGH</span>
+      <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] text-amber-400">{medCount} MED</span>
+      <span className="text-[10px] text-[#555]">{stocks.length} total</span>
+    </div>
+  );
+
+  const actions = (
+    <div className="flex items-center gap-2">
+      <select value={filter} onChange={(e) => setFilter(e.target.value as ConvictionLevel | "ALL")} className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-white">
+        <option value="ALL">All Conviction</option>
+        <option value="HIGH">HIGH only</option>
+        <option value="MEDIUM">MEDIUM only</option>
+        <option value="WATCH">WATCH only</option>
+      </select>
+      <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-white">
+        {sectors.map((s) => <option key={s} value={s}>{s === "ALL" ? "All Sectors" : s}</option>)}
+      </select>
+    </div>
+  );
+
   return (
-    <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-white">Stock Picks</h2>
-          <span className="rounded-full bg-green-500/10 border border-green-500/30 px-2 py-0.5 text-[10px] text-green-400">{highCount} HIGH</span>
-          <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] text-amber-400">{medCount} MED</span>
-          <span className="text-[10px] text-[#555]">{stocks.length} total</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as ConvictionLevel | "ALL")}
-            className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-white"
-          >
-            <option value="ALL">All Conviction</option>
-            <option value="HIGH">HIGH only</option>
-            <option value="MEDIUM">MEDIUM only</option>
-            <option value="WATCH">WATCH only</option>
-          </select>
-          <select
-            value={sectorFilter}
-            onChange={(e) => setSectorFilter(e.target.value)}
-            className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-white"
-          >
-            {sectors.map((s) => (
-              <option key={s} value={s}>{s === "ALL" ? "All Sectors" : s}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+    <CollapsiblePanel id="stock-picks" title="Stock Picks" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})} badge={badge} actions={actions}>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-[#2a2a2a] text-left text-[#666]">
-              <th className="pb-2 pr-3 font-medium">Conv.</th>
-              <th className="pb-2 pr-3 font-medium">Symbol</th>
-              <th className="pb-2 pr-3 font-medium">Sector</th>
-              <th className="pb-2 pr-3 font-medium">Category</th>
-              <th className="pb-2 pr-3 font-medium">Phase</th>
-              <th className="pb-2 pr-3 font-medium text-right">RS Accel</th>
-              <th className="pb-2 pr-3 font-medium text-right">Vol Ratio</th>
-              <th className="pb-2 pr-3 font-medium text-right">Price</th>
-              <th className="pb-2 font-medium text-right">% from 50MA</th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("conviction")}>Conv. <SortArrow col="conviction" /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("symbol")}>Symbol <SortArrow col="symbol" /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("sector")}>Sector <SortArrow col="sector" /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("category")}>Category <SortArrow col="category" /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("phase")}>Phase <SortArrow col="phase" /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("rsAccel")}>RS Accel <SortArrow col="rsAccel" /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")}>Price <SortArrow col="price" /></th>
+              <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" /></th>
             </tr>
           </thead>
           <tbody>
@@ -1539,7 +1627,7 @@ function StockPicksPanel({ stocks }: { stocks: EnrichedStock[] }) {
           Show more ({filtered.length - showCount} remaining)
         </button>
       )}
-    </div>
+    </CollapsiblePanel>
   );
 }
 
@@ -1561,6 +1649,7 @@ export default function SectorRotationPage() {
   const [history, setHistory] = useState<DailySnapshot[]>([]);
   const [loadingPhase, setLoadingPhase] = useState(0);
   const [rotationSectorRS, setRotationSectorRS] = useState<Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>>(new Map());
+  const [collapsedPanels, togglePanel] = useCollapsedPanels();
 
   // Fetch rotation tracker data for Sector RS column (non-blocking)
   useEffect(() => {
@@ -1917,61 +2006,64 @@ export default function SectorRotationPage() {
       </div>
 
       {/* Panel 3: RRG + Panel 4: Leading Indicators / Smart Money */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
-          <h2 className="mb-3 text-lg font-semibold text-white">Relative Rotation Graph</h2>
-          <div className="flex justify-center"><RRGChart sectors={data.sectors} /></div>
-        </div>
-        <div className="space-y-4">
-          <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
-            <h2 className="mb-3 text-base font-semibold text-white">Leading Indicators</h2>
-            {(() => {
-              const withSignals = data.sectors.filter((s) => s.stealthAccumulation || s.flowPriceDivergence || s.breadthDivergence || s.accelerationInflection);
-              if (withSignals.length === 0) return <p className="text-sm text-[#666]">No leading indicators detected</p>;
-              return (
-                <div className="space-y-2">
-                  {withSignals.map((s) => {
-                    const signals: string[] = [];
-                    if (s.flowPriceDivergence) signals.push("Flow/price divergence");
-                    if (s.breadthDivergence) signals.push("Breadth divergence");
-                    if (s.accelerationInflection) signals.push("Momentum inflection");
-                    return (
-                      <div key={s.sector} className="flex items-start gap-2 text-sm">
-                        <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${s.stealthAccumulation ? "bg-cyan-400" : "bg-amber-400"}`} />
-                        <div>
-                          <span className="font-medium text-white">{s.sector}</span>
-                          {s.stealthAccumulation && <span className="ml-2 text-xs text-cyan-400">(Stealth)</span>}
-                          <div className="text-xs text-[#888]">{signals.join(", ")}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+      <CollapsiblePanel id="rrg-indicators" title="RRG & Leading Indicators" collapsed={collapsedPanels.has("rrg-indicators")} onToggle={togglePanel}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-[#888]">Relative Rotation Graph</h3>
+            <div className="flex justify-center"><RRGChart sectors={data.sectors} /></div>
           </div>
-          <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} />
+          <div className="space-y-4">
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-[#888]">Leading Indicators</h3>
+              {(() => {
+                const withSignals = data.sectors.filter((s) => s.stealthAccumulation || s.flowPriceDivergence || s.breadthDivergence || s.accelerationInflection);
+                if (withSignals.length === 0) return <p className="text-sm text-[#666]">No leading indicators detected</p>;
+                return (
+                  <div className="space-y-2">
+                    {withSignals.map((s) => {
+                      const signals: string[] = [];
+                      if (s.flowPriceDivergence) signals.push("Flow/price divergence");
+                      if (s.breadthDivergence) signals.push("Breadth divergence");
+                      if (s.accelerationInflection) signals.push("Momentum inflection");
+                      return (
+                        <div key={s.sector} className="flex items-start gap-2 text-sm">
+                          <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${s.stealthAccumulation ? "bg-cyan-400" : "bg-amber-400"}`} />
+                          <div>
+                            <span className="font-medium text-white">{s.sector}</span>
+                            {s.stealthAccumulation && <span className="ml-2 text-xs text-cyan-400">(Stealth)</span>}
+                            <div className="text-xs text-[#888]">{signals.join(", ")}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+            <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} />
+          </div>
         </div>
-      </div>
+      </CollapsiblePanel>
 
       {/* #11: Sector Comparison */}
       <SectorComparison sectors={data.sectors} />
 
       {/* #9: Correlation Matrix */}
-      <CorrelationMatrix correlationMatrix={data.correlationMatrix} sectors={data.sectors} />
+      <CorrelationMatrix correlationMatrix={data.correlationMatrix} sectors={data.sectors} collapsed={collapsedPanels.has("correlation")} onToggle={togglePanel} />
 
       {/* Stock Picks — conviction-scored stocks from enrichment pipeline */}
       {data.enrichedStocks && data.enrichedStocks.passed.length > 0 && (
-        <StockPicksPanel stocks={data.enrichedStocks.passed} />
+        <StockPicksPanel stocks={data.enrichedStocks.passed} collapsed={collapsedPanels.has("stock-picks")} onToggle={togglePanel} />
       )}
 
       {/* Panel 5: Sector Detail Cards */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-white">Sector Details</h2>
-            <span className="text-[10px] text-[#555]" title="Data quality % shows how many of the 6 scoring factors (momentum, acceleration, Mansfield RS, CMF, breadth, smart money) have real data. Missing factors have their weights redistributed.">% = missing data</span>
-          </div>
+      <CollapsiblePanel
+        id="sector-details"
+        title="Sector Details"
+        collapsed={collapsedPanels.has("sector-details")}
+        onToggle={togglePanel}
+        badge={<span className="text-[10px] text-[#555]" title="Data quality % shows how many of the 6 scoring factors (momentum, acceleration, Mansfield RS, CMF, breadth, smart money) have real data. Missing factors have their weights redistributed.">% = missing data</span>}
+        actions={
           <div className="flex items-center gap-2">
             {scanResultsDate && (() => {
               const ageMs = Date.now() - new Date(scanResultsDate).getTime();
@@ -1986,19 +2078,19 @@ export default function SectorRotationPage() {
             })()}
             {scanResults.length === 0 && <span className="text-xs text-[#555]">Run a Pre-Run scan to see stock-level data</span>}
           </div>
-        </div>
+        }
+      >
         <div className="space-y-2">
           {sortedSectors.map((s) => (
             <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} prevSnapshot={comparisonMap?.get(s.sector)} etfReturns={data.etfReturns20d?.[s.etf]} hasRotationData={rotationSectorRS.size > 0} />
           ))}
         </div>
-      </div>
+      </CollapsiblePanel>
 
       {/* Panel 6: Cross-Sector Pairs */}
-      <div>
-        <h2 className="mb-3 text-lg font-semibold text-white">Cross-Sector Pairs</h2>
+      <CollapsiblePanel id="cross-pairs" title="Cross-Sector Pairs" collapsed={collapsedPanels.has("cross-pairs")} onToggle={togglePanel}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <div className="text-xs font-medium text-[#888] mb-1">XLY / XLP (Risk Appetite)</div>
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold text-white">{data.crossSectorPairs.xlyXlp.ratio}</span>
@@ -2006,7 +2098,7 @@ export default function SectorRotationPage() {
             </div>
             <p className="mt-1 text-xs text-[#666]">Rising = cyclical rotation (risk-on). Falling = defensive rotation (risk-off).</p>
           </div>
-          <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <div className="text-xs font-medium text-[#888] mb-1">XLK / XLU (Growth vs Defense)</div>
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold text-white">{data.crossSectorPairs.xlkXlu.ratio}</span>
@@ -2015,7 +2107,7 @@ export default function SectorRotationPage() {
             <p className="mt-1 text-xs text-[#666]">Rising = growth favored. Falling = defensive/utilities favored.</p>
           </div>
         </div>
-      </div>
+      </CollapsiblePanel>
       <FilterRecipes />
       <ScannerCTA />
     </div>
