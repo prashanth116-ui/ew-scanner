@@ -167,7 +167,7 @@ function DataAgeBadge({ calculatedAt }: { calculatedAt: string }) {
 
 type TradingAction = "TRADE" | "BUILD" | "WATCH" | "TRIM" | "AVOID";
 
-function getTradingAction(s: SectorRotationScore): TradingAction {
+function getTradingAction(s: Pick<SectorRotationScore, "quadrant" | "compositeScore" | "acceleration">): TradingAction {
   if (s.quadrant === "LEADING" && s.compositeScore >= 60 && s.acceleration > 0) return "TRADE";
   if (s.quadrant === "IMPROVING" && s.acceleration > 0) return "BUILD";
   if (s.quadrant === "LEADING" && s.compositeScore >= 60) return "TRADE";
@@ -186,6 +186,29 @@ function actionBadge(action: TradingAction): { label: string; className: string 
     case "TRIM": return { label: "TRIM", className: "bg-orange-500/15 text-orange-400 border-orange-500/30" };
     case "AVOID": return { label: "AVOID", className: "bg-red-500/15 text-red-400 border-red-500/30" };
   }
+}
+
+function TradingActionBadge({ sector }: { sector: Pick<SectorRotationScore, "quadrant" | "compositeScore" | "acceleration"> }) {
+  const badge = actionBadge(getTradingAction(sector));
+  return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>{badge.label}</span>;
+}
+
+function ComparisonDelta({ sector, comparisonMap }: { sector: SectorRotationScore; comparisonMap: Map<string, SectorSnapshot> | null }) {
+  const prev = comparisonMap?.get(sector.sector);
+  if (!prev) return null;
+  const delta = sector.compositeScore - prev.compositeScore;
+  const quadChanged = sector.quadrant !== prev.quadrant;
+  const curAction = getTradingAction(sector);
+  const prevAction = getTradingAction({ ...sector, compositeScore: prev.compositeScore, acceleration: prev.acceleration, quadrant: prev.quadrant });
+  const actionChanged = curAction !== prevAction;
+  if (delta === 0 && !quadChanged && !actionChanged) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+      {delta !== 0 && <span className={`text-[10px] font-semibold ${delta > 0 ? "text-green-400" : "text-red-400"}`}>{delta > 0 ? "+" : ""}{delta}</span>}
+      {quadChanged && <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 text-[9px] text-[#888]">was {prev.quadrant}</span>}
+      {actionChanged && <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 text-[9px] text-[#888]">was {prevAction}</span>}
+    </div>
+  );
 }
 
 // ── Stock ranking helpers ──
@@ -494,7 +517,7 @@ function SectorStockTable({ stocks, sectorName, hasRotationData = false }: { sto
         {/* #8: Copy + Export */}
         <div className="flex items-center gap-1 ml-auto">
           <CopyButton tickers={sorted.map((s) => s.ticker)} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" />
-          <button onClick={exportCsv} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" title="Export to CSV">
+          <button onClick={exportCsv} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" title="Export to CSV" aria-label="Export to CSV">
             <FileDown className="h-3 w-3" />
           </button>
           <span className="text-[#555] ml-1">
@@ -1129,7 +1152,7 @@ function AlertPanel({ sectors, data }: { sectors: SectorRotationScore[]; data: S
       )}
 
       {/* Alert config button */}
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="Toggle alerts">
         <Bell className="h-4 w-4" />
         <span className="hidden sm:inline">Alerts{alerts.length > 0 ? ` (${alerts.length})` : ""}</span>
       </button>
@@ -1140,7 +1163,7 @@ function AlertPanel({ sectors, data }: { sectors: SectorRotationScore[]; data: S
           <div className="mx-4 w-full max-w-md rounded-xl border border-[#2a2a2a] bg-[#111] p-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">Sector Alerts</h3>
-              <button onClick={() => setOpen(false)} className="text-[#666] hover:text-white"><X className="h-4 w-4" /></button>
+              <button onClick={() => setOpen(false)} className="text-[#666] hover:text-white" aria-label="Close alerts"><X className="h-4 w-4" /></button>
             </div>
             {/* Existing alerts */}
             {alerts.length > 0 && (
@@ -1153,10 +1176,10 @@ function AlertPanel({ sectors, data }: { sectors: SectorRotationScore[]; data: S
                         {sector?.sector ?? a.sectorEtf}: {a.condition === "enters_quadrant" ? `enters ${a.value}` : a.condition === "acceleration_positive" ? "accel turns +" : "CMF turns +"}
                       </span>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => toggleAlert(a.id)} className="text-[#666] hover:text-white">
+                        <button onClick={() => toggleAlert(a.id)} className="text-[#666] hover:text-white" aria-label="Toggle alert">
                           {a.enabled ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
                         </button>
-                        <button onClick={() => removeAlert(a.id)} className="text-[#666] hover:text-red-400"><X className="h-3 w-3" /></button>
+                        <button onClick={() => removeAlert(a.id)} className="text-[#666] hover:text-red-400" aria-label="Delete alert"><X className="h-3 w-3" /></button>
                       </div>
                     </div>
                   );
@@ -1216,7 +1239,7 @@ function StockSearch({ allStocks }: { allStocks: StockInSector[] }) {
           className="bg-transparent text-sm text-white placeholder:text-[#555] outline-none w-32 sm:w-48"
         />
         {query && (
-          <button onClick={() => { setQuery(""); inputRef.current?.focus(); }} className="text-[#666] hover:text-white">
+          <button onClick={() => { setQuery(""); inputRef.current?.focus(); }} className="text-[#666] hover:text-white" aria-label="Clear search">
             <X className="h-3.5 w-3.5" />
           </button>
         )}
@@ -1331,7 +1354,7 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationDat
 
   return (
     <div className={`border rounded-lg ${sector.stealthAccumulation ? "border-cyan-500/40" : "border-[#2a2a2a]"}`}>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg">
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg" aria-label="Toggle sector details">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-lg">{sector.trendArrow}</span>
           <div className="min-w-0">
@@ -1339,7 +1362,7 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationDat
               <span className="font-medium text-white truncate">{sector.sector}</span>
               <span className="text-xs text-[#666]">{sector.etf}</span>
               <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${quadrantColor(sector.quadrant)}`}>{sector.quadrant}</span>
-              {(() => { const action = getTradingAction(sector); const badge = actionBadge(action); return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>; })()}
+              <TradingActionBadge sector={sector} />
               {sector.stealthAccumulation && <span className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-400">STEALTH</span>}
               {(sector.dataQuality ?? 100) < 100 && <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400" title={`Scoring factors: momentum, acceleration, Mansfield RS, CMF (always available), breadth, smart money. ${sector.dataQualityBreakdown ? `Missing: ${[!sector.dataQualityBreakdown.breadth && "breadth", !sector.dataQualityBreakdown.smartMoney && "smart money"].filter(Boolean).join(", ")}. ` : ""}Weights are redistributed across available factors.`}>{sector.dataQuality ?? 100}% data</span>}
             </div>
@@ -1355,11 +1378,9 @@ function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRotationDat
           <span className="text-xs text-[#666]">{stocks.length} stocks</span>
           <span className={`text-lg font-bold ${compositeTextColor(sector.compositeScore)}`}>
             {sector.compositeScore}
-            {prevSnapshot && (() => {
-              const delta = sector.compositeScore - prevSnapshot.compositeScore;
-              if (delta === 0) return null;
-              return <span className={`ml-1 text-xs font-semibold ${delta > 0 ? "text-green-400" : "text-red-400"}`}>({delta > 0 ? "+" : ""}{delta})</span>;
-            })()}
+            {prevSnapshot && prevSnapshot.compositeScore !== sector.compositeScore && (
+              <span className={`ml-1 text-xs font-semibold ${sector.compositeScore - prevSnapshot.compositeScore > 0 ? "text-green-400" : "text-red-400"}`}>({sector.compositeScore - prevSnapshot.compositeScore > 0 ? "+" : ""}{sector.compositeScore - prevSnapshot.compositeScore})</span>
+            )}
           </span>
           {open ? <ChevronUp className="h-4 w-4 text-[#666]" /> : <ChevronDown className="h-4 w-4 text-[#666]" />}
         </div>
@@ -1402,9 +1423,8 @@ function TopPicksBySector({ stocks, sectors }: { stocks: EnrichedStock[]; sector
       if (!map[s.sectorEtf]) map[s.sectorEtf] = [];
       map[s.sectorEtf].push(s);
     }
-    const convOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
     for (const etf of Object.keys(map)) {
-      map[etf].sort((a, b) => (convOrder[a.conviction] ?? 3) - (convOrder[b.conviction] ?? 3) || (b.rsAccel ?? -999) - (a.rsAccel ?? -999));
+      map[etf].sort((a, b) => (CONV_ORDER[a.conviction] ?? 3) - (CONV_ORDER[b.conviction] ?? 3) || (b.rsAccel ?? -999) - (a.rsAccel ?? -999));
       map[etf] = map[etf].slice(0, 3);
     }
     return map;
@@ -1489,6 +1509,10 @@ const CATEGORY_STYLE: Record<string, string> = {
   AVOID: "text-red-400",
 };
 
+const CONV_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
+const CAT_ORDER: Record<string, number> = { LEADER: 0, CATCH_UP: 1, TURNAROUND: 2, AVOID: 3 };
+const PHASE_ORDER: Record<string, number> = { P1_BASING: 0, P2_TURNAROUND: 1, P3_TRENDING: 2, P4_EXHAUSTING: 3 };
+
 type PicksSortKey = "conviction" | "symbol" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "pctFrom50ma";
 
 function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
@@ -1503,10 +1527,6 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
     return ["ALL", ...Array.from(s).sort()];
   }, [stocks]);
 
-  const convOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
-  const catOrder: Record<string, number> = { LEADER: 0, CATCH_UP: 1, TURNAROUND: 2, AVOID: 3 };
-  const phaseOrder: Record<string, number> = { P1_BASING: 0, P2_TURNAROUND: 1, P3_TRENDING: 2, P4_EXHAUSTING: 3 };
-
   const filtered = useMemo(() => {
     let list = stocks;
     if (filter !== "ALL") list = list.filter((s) => s.conviction === filter);
@@ -1515,10 +1535,10 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
     const sorted = [...list].sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
-        case "conviction": cmp = (convOrder[a.conviction] ?? 3) - (convOrder[b.conviction] ?? 3); break;
+        case "conviction": cmp = (CONV_ORDER[a.conviction] ?? 3) - (CONV_ORDER[b.conviction] ?? 3); break;
         case "symbol": cmp = a.symbol.localeCompare(b.symbol); break;
-        case "category": cmp = (catOrder[a.category] ?? 4) - (catOrder[b.category] ?? 4); break;
-        case "phase": cmp = (phaseOrder[a.phase] ?? 4) - (phaseOrder[b.phase] ?? 4); break;
+        case "category": cmp = (CAT_ORDER[a.category] ?? 4) - (CAT_ORDER[b.category] ?? 4); break;
+        case "phase": cmp = (PHASE_ORDER[a.phase] ?? 4) - (PHASE_ORDER[b.phase] ?? 4); break;
         case "rsAccel": cmp = (a.rsAccel ?? -999) - (b.rsAccel ?? -999); break;
         case "volRatio": cmp = a.volRatio - b.volRatio; break;
         case "price": cmp = a.price - b.price; break;
@@ -1585,7 +1605,7 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
     </div>
   );
 
-  const COL_COUNT = 9;
+  const COL_COUNT = 8;
 
   return (
     <CollapsiblePanel id="stock-picks" title="Stock Picks" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})} badge={badge} actions={actions}>
@@ -1664,8 +1684,14 @@ function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStoc
 }
 
 const LOADING_PHASES = ["Fetching ETF data", "Fetching stock quotes", "Computing sector scores", "Building correlation matrix"] as const;
+const LOADING_TIMEOUT_MS = 90_000;
+const LOADING_PHASE_INTERVAL_MS = 8_000;
 
 type SortMode = "score" | "action" | "quadrant" | "acceleration" | "name";
+
+const SORT_MODE_OPTIONS: [SortMode, string][] = [
+  ["score", "Score"], ["action", "Action"], ["quadrant", "Quadrant"], ["acceleration", "Accel"], ["name", "Name"],
+];
 
 const ACTION_RANK: Record<TradingAction, number> = { TRADE: 0, BUILD: 1, WATCH: 2, TRIM: 3, AVOID: 4 };
 const QUADRANT_RANK: Record<RRGQuadrant, number> = { LEADING: 0, IMPROVING: 1, WEAKENING: 2, LAGGING: 3 };
@@ -1831,15 +1857,17 @@ export default function SectorRotationPage() {
   const [loadingTimeout, setLoadingTimeout] = useState(false);
   useEffect(() => {
     if (!loading || data) { setLoadingTimeout(false); return; }
-    const timer = setTimeout(() => setLoadingTimeout(true), 90_000);
+    const timer = setTimeout(() => setLoadingTimeout(true), LOADING_TIMEOUT_MS);
     return () => clearTimeout(timer);
   }, [loading, data]);
 
   // Loading phase cycling
   useEffect(() => {
     if (!loading || data) { setLoadingPhase(0); return; }
-    const timer = setInterval(() => setLoadingPhase((p) => (p + 1) % LOADING_PHASES.length), 8000);
+    const timer = setInterval(() => setLoadingPhase((p) => (p + 1) % LOADING_PHASES.length), LOADING_PHASE_INTERVAL_MS);
     return () => clearInterval(timer);
+  // Loading phase cycling — only depends on loading/data state, not loadingPhase itself
+  // (uses functional setState to avoid stale closure)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, data]);
 
@@ -1898,11 +1926,11 @@ export default function SectorRotationPage() {
           <StockSearch allStocks={allStocks} />
           {/* #10: Alerts */}
           <AlertPanel sectors={data.sectors} data={data} />
-          <button onClick={handleExport} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white">
+          <button onClick={handleExport} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="Export to Excel">
             <FileDown className="h-4 w-4" /><span className="hidden sm:inline">Export</span>
           </button>
           <CopyButton tickers={watchlistTickers} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" />
-          <button onClick={() => fetchData(true)} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50">
+          <button onClick={() => fetchData(true)} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50" aria-label="Refresh data">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </button>
         </div>
@@ -1949,7 +1977,7 @@ export default function SectorRotationPage() {
             <h2 className="text-lg font-semibold text-white">Sector Scores</h2>
             <div className="flex items-center gap-1 overflow-x-auto">
               <span className="text-xs text-[#555] shrink-0 mr-1">Sort:</span>
-              {([["score", "Score"], ["action", "Action"], ["quadrant", "Quadrant"], ["acceleration", "Accel"], ["name", "Name"]] as [SortMode, string][]).map(([mode, label]) => (
+              {SORT_MODE_OPTIONS.map(([mode, label]) => (
                 <button key={mode} onClick={() => setSortMode(mode)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${sortMode === mode ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>{label}</button>
               ))}
             </div>
@@ -2011,26 +2039,10 @@ export default function SectorRotationPage() {
                   <span>Breadth {s.breadthPct != null ? `${s.breadthPct.toFixed(0)}%` : "N/A"}</span>
                 </div>
                 <div className="mt-1.5 flex items-center justify-between">
-                  {(() => { const action = getTradingAction(s); const badge = actionBadge(action); return <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>{badge.label}</span>; })()}
+                  <TradingActionBadge sector={s} />
                   {(s.dataQuality ?? 100) < 100 && <span className="text-[10px] text-amber-400/70" title={`Scoring factors: momentum, acceleration, Mansfield RS, CMF (always available), breadth, smart money. ${s.dataQualityBreakdown ? `Missing: ${[!s.dataQualityBreakdown.breadth && "breadth", !s.dataQualityBreakdown.smartMoney && "smart money"].filter(Boolean).join(", ")}. ` : ""}Weights are redistributed across available factors.`}>{s.dataQuality ?? 100}% data</span>}
                 </div>
-                {(() => {
-                  const prev = comparisonMap?.get(s.sector);
-                  if (!prev) return null;
-                  const delta = s.compositeScore - prev.compositeScore;
-                  const quadChanged = s.quadrant !== prev.quadrant;
-                  const curAction = getTradingAction(s);
-                  const prevAction = getTradingAction({ ...s, compositeScore: prev.compositeScore, acceleration: prev.acceleration, quadrant: prev.quadrant } as SectorRotationScore);
-                  const actionChanged = curAction !== prevAction;
-                  if (delta === 0 && !quadChanged && !actionChanged) return null;
-                  return (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                      {delta !== 0 && <span className={`text-[10px] font-semibold ${delta > 0 ? "text-green-400" : "text-red-400"}`}>{delta > 0 ? "+" : ""}{delta}</span>}
-                      {quadChanged && <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 text-[9px] text-[#888]">was {prev.quadrant}</span>}
-                      {actionChanged && <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 text-[9px] text-[#888]">was {prevAction}</span>}
-                    </div>
-                  );
-                })()}
+                <ComparisonDelta sector={s} comparisonMap={comparisonMap} />
               </div>
             </div>
           ))}
