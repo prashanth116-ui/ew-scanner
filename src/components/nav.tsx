@@ -38,8 +38,9 @@ const subPages: Record<string, { href: string; label: string }[]> = {
   ],
   sectors: [
     { href: "/sectors", label: "Dashboard" },
-    { href: "/sectors/crypto", label: "Crypto" },
+    { href: "/sectors/picks", label: "Picks" },
     { href: "/rotation", label: "Rotation Tracker" },
+    { href: "/sectors/crypto", label: "Crypto" },
     { href: "/sectors/guide", label: "Guide" },
   ],
   confluence: [
