@@ -114,45 +114,53 @@ export default function SectorRotationPage() {
       </div>
 
       {/* Regime Banner */}
-      <RegimeBanner regime={data.regime} />
+      <CollapsiblePanel id="regime" title="Macro Regime" collapsed={collapsedPanels.has("regime")} onToggle={togglePanel}
+        badge={data.regime ? <span className={`text-[10px] font-medium ${data.regime.regime === "RISK_ON" ? "text-green-400" : data.regime.regime === "RISK_OFF" ? "text-red-400" : data.regime.regime === "INFLATIONARY" ? "text-amber-400" : "text-[#888]"}`}>{data.regime.regime.replace("_", " ")}</span> : undefined}
+      >
+        <RegimeBanner regime={data.regime} />
+      </CollapsiblePanel>
 
       {/* Rotation Status Banner */}
-      <div className={`rounded-xl border p-4 ${data.rotationActive ? "border-green-500/30 bg-green-500/5" : "border-[#2a2a2a] bg-[#141414]"}`}>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className={`h-3 w-3 rounded-full ${data.rotationActive ? "bg-green-500 animate-pulse" : "bg-[#555]"}`} />
-            <div>
-              <div className="font-semibold text-white">{data.rotationActive ? "Rotation Active" : "No Clear Rotation"}</div>
-              <div className="text-sm text-[#a0a0a0]">{data.rotationSummary}</div>
+      <CollapsiblePanel id="rotation-status" title="Rotation Status" collapsed={collapsedPanels.has("rotation-status")} onToggle={togglePanel}
+        badge={<span className={`text-[10px] font-medium ${data.rotationActive ? "text-green-400" : "text-[#888]"}`}>{data.rotationActive ? "Active" : "Inactive"}</span>}
+      >
+        <div className={`rounded-lg border p-4 ${data.rotationActive ? "border-green-500/30 bg-green-500/5" : "border-[#2a2a2a] bg-[#0f0f0f]"}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className={`h-3 w-3 rounded-full ${data.rotationActive ? "bg-green-500 animate-pulse" : "bg-[#555]"}`} />
+              <div>
+                <div className="font-semibold text-white">{data.rotationActive ? "Rotation Active" : "No Clear Rotation"}</div>
+                <div className="text-sm text-[#a0a0a0]">{data.rotationSummary}</div>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="text-right">
-              <div className="text-xs text-[#666]">Dispersion</div>
-              <div className={`text-lg font-bold ${data.dispersionIndex > 4 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{data.dispersionIndex}</div>
-              <div className="text-xs text-[#555]">{data.dispersionIndex > 4 ? "High" : data.dispersionIndex > 2 ? "Moderate" : "Low"}</div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs text-[#666]">Sector Spread</div>
-              <div className={`text-lg font-bold ${(data.sectorSpread ?? 0) > 8 ? "text-green-400" : (data.sectorSpread ?? 0) > 4 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{data.sectorSpread ?? 0}%</div>
-              <div className="text-xs text-[#555]">{(data.sectorSpread ?? 0) > 8 ? "Wide" : (data.sectorSpread ?? 0) > 4 ? "Moderate" : "Narrow"}</div>
+            <div className="flex items-center gap-6">
+              <div className="text-right">
+                <div className="text-xs text-[#666]">Dispersion</div>
+                <div className={`text-lg font-bold ${data.dispersionIndex > 4 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{data.dispersionIndex}</div>
+                <div className="text-xs text-[#555]">{data.dispersionIndex > 4 ? "High" : data.dispersionIndex > 2 ? "Moderate" : "Low"}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-[#666]">Sector Spread</div>
+                <div className={`text-lg font-bold ${(data.sectorSpread ?? 0) > 8 ? "text-green-400" : (data.sectorSpread ?? 0) > 4 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{data.sectorSpread ?? 0}%</div>
+                <div className="text-xs text-[#555]">{(data.sectorSpread ?? 0) > 8 ? "Wide" : (data.sectorSpread ?? 0) > 4 ? "Moderate" : "Narrow"}</div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </CollapsiblePanel>
 
       {/* Sector Heatmap Grid */}
-      <div>
-        <div className="mb-3 flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-white">Sector Scores</h2>
-            <div className="flex items-center gap-1 overflow-x-auto">
-              <span className="text-xs text-[#555] shrink-0 mr-1">Sort:</span>
-              {SORT_MODE_OPTIONS.map(([mode, label]) => (
-                <button key={mode} onClick={() => setSortMode(mode)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${sortMode === mode ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>{label}</button>
-              ))}
-            </div>
+      <CollapsiblePanel id="sector-scores" title="Sector Scores" collapsed={collapsedPanels.has("sector-scores")} onToggle={togglePanel}
+        actions={
+          <div className="flex items-center gap-1 overflow-x-auto">
+            <span className="text-xs text-[#555] shrink-0 mr-1">Sort:</span>
+            {SORT_MODE_OPTIONS.map(([mode, label]) => (
+              <button key={mode} onClick={() => setSortMode(mode)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${sortMode === mode ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>{label}</button>
+            ))}
           </div>
+        }
+      >
+        <div className="flex flex-col gap-2 mb-3">
           {history.length > 0 && (
             <div className="flex items-center gap-1 overflow-x-auto">
               <span className="text-xs text-[#555] shrink-0 mr-1">Compare:</span>
@@ -217,7 +225,7 @@ export default function SectorRotationPage() {
             </div>
           ))}
         </div>
-      </div>
+      </CollapsiblePanel>
 
       {/* RRG & Leading Indicators */}
       <CollapsiblePanel id="rrg-indicators" title="RRG & Leading Indicators" collapsed={collapsedPanels.has("rrg-indicators")} onToggle={togglePanel}>
@@ -257,10 +265,14 @@ export default function SectorRotationPage() {
       </CollapsiblePanel>
 
       {/* Breadth Thrust */}
-      <BreadthThrustBanner sectors={data.sectors} />
+      <CollapsiblePanel id="breadth-thrust" title="Breadth Thrust Signal" collapsed={collapsedPanels.has("breadth-thrust")} onToggle={togglePanel}>
+        <BreadthThrustBanner sectors={data.sectors} />
+      </CollapsiblePanel>
 
       {/* Pre-Rotation Watchlist */}
-      <PreRotationWatchlist sectors={data.sectors} />
+      <CollapsiblePanel id="rotation-watchlist" title="Rotation Watchlist" collapsed={collapsedPanels.has("rotation-watchlist")} onToggle={togglePanel}>
+        <PreRotationWatchlist sectors={data.sectors} />
+      </CollapsiblePanel>
 
       {/* Correlation Matrix */}
       <CorrelationMatrix correlationMatrix={data.correlationMatrix} sectors={data.sectors} collapsed={collapsedPanels.has("correlation")} onToggle={togglePanel} />
@@ -288,7 +300,9 @@ export default function SectorRotationPage() {
       </CollapsiblePanel>
 
       {/* Sector Comparison */}
-      <SectorComparison sectors={data.sectors} />
+      <CollapsiblePanel id="sector-comparison" title="Compare Sectors" collapsed={collapsedPanels.has("sector-comparison")} onToggle={togglePanel}>
+        <SectorComparison sectors={data.sectors} />
+      </CollapsiblePanel>
 
       <ScannerCTA />
     </div>

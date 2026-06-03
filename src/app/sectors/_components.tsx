@@ -301,19 +301,16 @@ export function EtfSparkline({ returns }: { returns: number[] | undefined }) {
 export function RegimeBanner({ regime }: { regime: SectorRotationResult["regime"] }) {
   if (!regime) {
     return (
-      <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
-        <div className="flex items-center gap-2 text-sm text-[#666]">
-          <AlertTriangle className="h-4 w-4 text-[#555]" />
-          Macro regime data unavailable &mdash; VIX, yield, and DXY signals are not loading
-        </div>
+      <div className="flex items-center gap-2 text-sm text-[#666]">
+        <AlertTriangle className="h-4 w-4 text-[#555]" />
+        Macro regime data unavailable &mdash; VIX, yield, and DXY signals are not loading
       </div>
     );
   }
   const regimeColor = regime.regime === "RISK_ON" ? "text-green-400" : regime.regime === "RISK_OFF" ? "text-red-400" : regime.regime === "INFLATIONARY" ? "text-amber-400" : "text-[#888]";
-  const borderColor = regime.regime === "RISK_ON" ? "border-green-500/30" : regime.regime === "RISK_OFF" ? "border-red-500/30" : regime.regime === "INFLATIONARY" ? "border-amber-500/30" : "border-[#333]";
 
   return (
-    <div className={`rounded-lg border ${borderColor} bg-[#1a1a1a] p-4`}>
+    <div>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <div>
           <span className="text-xs text-[#888]">Regime</span>
@@ -371,14 +368,10 @@ export function PreRotationWatchlist({ sectors }: { sectors: SectorRotationScore
   const nearCandidates = sectors.filter(
     (s) => s.quadrant === "LAGGING" && s.acceleration > 0 && s.cmf20 <= 0 && !candidates.includes(s)
   );
-  if (candidates.length === 0 && nearCandidates.length === 0) return null;
+  if (candidates.length === 0 && nearCandidates.length === 0) return <p className="text-sm text-[#666]">No rotation watchlist candidates</p>;
 
   return (
-    <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4">
-      <h2 className="mb-2 text-base font-semibold text-white flex items-center gap-2">
-        <Zap className="h-4 w-4 text-purple-400" />
-        Rotation Watchlist
-      </h2>
+    <div>
       <p className="text-xs text-[#888] mb-3">LAGGING sectors with positive acceleration — textbook LAGGING-to-IMPROVING rotation entries</p>
       <div className="space-y-2">
         {candidates.map((s) => (
@@ -423,14 +416,10 @@ export function BreadthThrustBanner({ sectors }: { sectors: SectorRotationScore[
   const thrustCandidates = sectors.filter(
     (s) => s.breadthPct !== null && s.breadthPct >= 70 && s.accelerationInflection
   );
-  if (thrustCandidates.length === 0) return null;
+  if (thrustCandidates.length === 0) return <p className="text-sm text-[#666]">No breadth thrust signals detected</p>;
 
   return (
-    <div className="rounded-xl border border-green-500/40 bg-green-500/5 p-4">
-      <h2 className="mb-2 text-sm font-semibold text-green-400 flex items-center gap-2">
-        <Zap className="h-4 w-4" />
-        Breadth Thrust Signal
-      </h2>
+    <div>
       <p className="text-xs text-[#888] mb-2">Sectors with breadth &gt;70% and momentum inflection — historically one of the strongest bullish signals</p>
       <div className="flex flex-wrap gap-2">
         {thrustCandidates.map((s) => (
@@ -506,15 +495,6 @@ export function CorrelationMatrix({ correlationMatrix, sectors, collapsed, onTog
 
 export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }) {
   const [selected, setSelected] = useState<string[]>([]);
-  const [open, setOpen] = useState(false);
-
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className="rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#888] hover:text-white hover:border-[#444] transition-colors">
-        Compare Sectors
-      </button>
-    );
-  }
 
   const toggleSector = (etf: string) => {
     setSelected((prev) => prev.includes(etf) ? prev.filter((s) => s !== etf) : prev.length < 3 ? [...prev, etf] : prev);
@@ -534,11 +514,7 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
   ];
 
   return (
-    <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-base font-semibold text-white">Compare Sectors</h2>
-        <button onClick={() => { setOpen(false); setSelected([]); }} className="text-[#666] hover:text-white"><X className="h-4 w-4" /></button>
-      </div>
+    <div>
       <div className="flex flex-wrap gap-1.5 mb-3">
         {sectors.map((s) => (
           <button key={s.etf} onClick={() => toggleSector(s.etf)}
