@@ -41,6 +41,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/sectors/picks", label: "Picks" },
     { href: "/rotation", label: "Rotation Tracker" },
     { href: "/sectors/crypto", label: "Crypto" },
+    { href: "/sectors/crypto/guide", label: "Crypto Guide" },
     { href: "/sectors/guide", label: "Guide" },
   ],
   confluence: [
@@ -84,6 +85,7 @@ export function Nav() {
     if (href === "/squeeze") return pathname === "/squeeze";
     if (href === "/prerun") return pathname === "/prerun";
     if (href === "/sectors") return pathname === "/sectors";
+    if (href === "/sectors/crypto") return pathname === "/sectors/crypto";
     if (href === "/rotation") return pathname === "/rotation";
     if (href === "/confluence") return pathname === "/confluence";
     if (href === "/strat") return pathname === "/strat";
