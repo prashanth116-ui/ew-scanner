@@ -87,9 +87,6 @@ export default function PicksPage() {
         </button>
       </div>
 
-      {/* Top Picks by Sector */}
-      <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} scanResultsDate={scanResultsDate} />
-
       {/* Entry Signals */}
       {rotationData && data.enrichedStocks && (
         <RotationEntrySignals
@@ -100,6 +97,26 @@ export default function PicksPage() {
           onToggle={togglePanel}
         />
       )}
+
+      {/* Top Picks by Sector */}
+      <CollapsiblePanel
+        id="top-picks-sector"
+        title="Top Picks by Sector"
+        collapsed={collapsedPanels.has("top-picks-sector")}
+        onToggle={togglePanel}
+        badge={scanResultsDate ? (() => {
+          const ageHours = (Date.now() - new Date(scanResultsDate).getTime()) / (1000 * 60 * 60);
+          if (ageHours > 24) return (
+            <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-normal text-amber-400">
+              <AlertTriangle className="h-3 w-3" />
+              Scan data is {Math.floor(ageHours / 24)}d old
+            </span>
+          );
+          return null;
+        })() : <span className="text-[10px] font-normal text-[#555]">No scan data</span>}
+      >
+        <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} scanResultsDate={scanResultsDate} />
+      </CollapsiblePanel>
 
       {/* Stock Picks */}
       {data.enrichedStocks && data.enrichedStocks.passed.length > 0 && (

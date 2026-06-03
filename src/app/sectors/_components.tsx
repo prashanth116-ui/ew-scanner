@@ -1383,27 +1383,7 @@ export function TopPicksBySector({ stocks, sectors, scanResultsDate }: { stocks:
   };
 
   if (Object.keys(topPicks).length === 0) {
-    return (
-      <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
-          Top Picks by Sector
-          {scanResultsDate ? (() => {
-            const ageMs = Date.now() - new Date(scanResultsDate).getTime();
-            const ageHours = ageMs / (1000 * 60 * 60);
-            if (ageHours > 24) return (
-              <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-normal text-amber-400">
-                <AlertTriangle className="h-3 w-3" />
-                Scan data is {Math.floor(ageHours / 24)}d old
-              </span>
-            );
-            return null;
-          })() : (
-            <span className="text-[10px] font-normal text-[#555]">No scan data</span>
-          )}
-        </h2>
-        <p className="text-sm text-[#666]">No stock picks available</p>
-      </div>
-    );
+    return <p className="text-sm text-[#666]">No stock picks available</p>;
   }
 
   const sortedEtfs = Object.keys(topPicks).sort((a, b) => {
@@ -1413,56 +1393,38 @@ export function TopPicksBySector({ stocks, sectors, scanResultsDate }: { stocks:
   });
 
   return (
-    <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] p-4">
-      <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
-        Top Picks by Sector
-        {scanResultsDate ? (() => {
-          const ageMs = Date.now() - new Date(scanResultsDate).getTime();
-          const ageHours = ageMs / (1000 * 60 * 60);
-          if (ageHours > 24) return (
-            <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-normal text-amber-400">
-              <AlertTriangle className="h-3 w-3" />
-              Scan data is {Math.floor(ageHours / 24)}d old
-            </span>
-          );
-          return null;
-        })() : (
-          <span className="text-[10px] font-normal text-[#555]">No scan data</span>
-        )}
-      </h2>
-      <div className="space-y-3">
-        {sortedEtfs.map((etf) => {
-          const sector = sectors.find((s) => s.etf === etf);
-          const picks = topPicks[etf];
-          return (
-            <div key={etf}>
-              <div className="mb-1 flex items-center gap-2">
-                <span className="font-mono text-xs font-semibold text-white">{etf}</span>
-                <span className="text-xs text-[#888]">{sector?.sector}</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {picks.map((s) => (
-                  <span
-                    key={s.symbol}
-                    className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium ${convColor(s.conviction)}`}
-                    title={`${s.category} · ${s.rsAccelDesc} · Vol ${s.volRatio.toFixed(1)}x`}
-                  >
-                    <a
-                      href={`https://finance.yahoo.com/quote/${s.symbol}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:underline"
-                    >
-                      {s.symbol}
-                    </a>
-                    <span className="text-[10px] opacity-70">${s.price.toFixed(0)}</span>
-                  </span>
-                ))}
-              </div>
+    <div className="space-y-3">
+      {sortedEtfs.map((etf) => {
+        const sector = sectors.find((s) => s.etf === etf);
+        const picks = topPicks[etf];
+        return (
+          <div key={etf}>
+            <div className="mb-1 flex items-center gap-2">
+              <span className="font-mono text-xs font-semibold text-white">{etf}</span>
+              <span className="text-xs text-[#888]">{sector?.sector}</span>
             </div>
-          );
-        })}
-      </div>
+            <div className="flex flex-wrap gap-2">
+              {picks.map((s) => (
+                <span
+                  key={s.symbol}
+                  className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium ${convColor(s.conviction)}`}
+                  title={`${s.category} · ${s.rsAccelDesc} · Vol ${s.volRatio.toFixed(1)}x`}
+                >
+                  <a
+                    href={`https://finance.yahoo.com/quote/${s.symbol}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline"
+                  >
+                    {s.symbol}
+                  </a>
+                  <span className="text-[10px] opacity-70">${s.price.toFixed(0)}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
