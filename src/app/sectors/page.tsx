@@ -21,7 +21,6 @@ import {
   TradingActionBadge,
   ComparisonDelta,
   EtfSparkline,
-  TopPicksBySector,
   SORT_MODE_OPTIONS,
   LOADING_PHASES,
   type SortMode,
@@ -34,7 +33,6 @@ export default function SectorRotationPage() {
     loading,
     error,
     fetchData,
-    scanResultsDate,
     sortMode,
     setSortMode,
     compareDate,
@@ -229,34 +227,31 @@ export default function SectorRotationPage() {
             <div className="mx-auto max-w-[500px]"><RRGChart sectors={data.sectors} /></div>
           </div>
           <div className="space-y-4 rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
-            <div>
-              <h3 className="mb-2 text-sm font-semibold text-[#888]">Leading Indicators</h3>
-              {(() => {
-                const withSignals = data.sectors.filter((s) => s.stealthAccumulation || s.flowPriceDivergence || s.breadthDivergence || s.accelerationInflection);
-                if (withSignals.length === 0) return <p className="text-sm text-[#666]">No leading indicators detected</p>;
-                return (
-                  <div className="space-y-2">
-                    {withSignals.map((s) => {
-                      const signals: string[] = [];
-                      if (s.flowPriceDivergence) signals.push("Flow/price divergence");
-                      if (s.breadthDivergence) signals.push("Breadth divergence");
-                      if (s.accelerationInflection) signals.push("Momentum inflection");
-                      return (
-                        <div key={s.sector} className="flex items-start gap-2 text-sm">
-                          <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${s.stealthAccumulation ? "bg-cyan-400" : "bg-amber-400"}`} />
-                          <div>
-                            <span className="font-medium text-white">{s.sector}</span>
-                            {s.stealthAccumulation && <span className="ml-2 text-xs text-cyan-400">(Stealth)</span>}
-                            <div className="text-xs text-[#888]">{signals.join(", ")}</div>
-                          </div>
+            <h3 className="mb-2 text-sm font-semibold text-[#888]">Leading Indicators</h3>
+            {(() => {
+              const withSignals = data.sectors.filter((s) => s.stealthAccumulation || s.flowPriceDivergence || s.breadthDivergence || s.accelerationInflection);
+              if (withSignals.length === 0) return <p className="text-sm text-[#666]">No leading indicators detected</p>;
+              return (
+                <div className="space-y-2">
+                  {withSignals.map((s) => {
+                    const signals: string[] = [];
+                    if (s.flowPriceDivergence) signals.push("Flow/price divergence");
+                    if (s.breadthDivergence) signals.push("Breadth divergence");
+                    if (s.accelerationInflection) signals.push("Momentum inflection");
+                    return (
+                      <div key={s.sector} className="flex items-start gap-2 text-sm">
+                        <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${s.stealthAccumulation ? "bg-cyan-400" : "bg-amber-400"}`} />
+                        <div>
+                          <span className="font-medium text-white">{s.sector}</span>
+                          {s.stealthAccumulation && <span className="ml-2 text-xs text-cyan-400">(Stealth)</span>}
+                          <div className="text-xs text-[#888]">{signals.join(", ")}</div>
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
-            <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} scanResultsDate={scanResultsDate} />
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </CollapsiblePanel>

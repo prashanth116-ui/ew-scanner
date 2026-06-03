@@ -10,6 +10,7 @@ import {
   StockPicksPanel,
   PullbackWatchPanel,
   SectorDetail,
+  TopPicksBySector,
   FilterRecipes,
   LOADING_PHASES,
 } from "../_components";
@@ -85,6 +86,9 @@ export default function PicksPage() {
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>
+
+      {/* Top Picks by Sector */}
+      <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} scanResultsDate={scanResultsDate} />
 
       {/* Entry Signals */}
       {rotationData && data.enrichedStocks && (
