@@ -7,6 +7,8 @@ import type {
   RRGQuadrant,
   EnrichedStock,
   RejectedStock,
+  PullbackWatchStock,
+  PullbackTier,
   StockCategory,
   StockPhase,
   ConvictionLevel,
@@ -54,64 +56,120 @@ function calcVolRatio(volume: number, avgVolume: number): number {
 
 export function applyQualityGates(
   stocks: StockInput[]
-): { passed: StockInput[]; rejected: RejectedStock[] } {
+): { passed: StockInput[]; rejected: RejectedStock[]; extensionOnly: StockInput[] } {
   const passed: StockInput[] = [];
   const rejected: RejectedStock[] = [];
+  const extensionOnly: StockInput[] = [];
 
   for (const s of stocks) {
-    const reasons: string[] = [];
+    const otherReasons: string[] = [];
     const pctFrom50ma = calcPctFrom(s.price, s.sma50);
     const pctFrom200ma = calcPctFrom(s.price, s.sma200);
     const rsAccel = calcRsAccel(pctFrom50ma, pctFrom200ma);
     const volRatio = calcVolRatio(s.volume, s.avgVolume10d);
     const above50ma = s.sma50 != null && s.price > s.sma50;
+    let failedExtension = false;
 
     // Gate 1: Market cap >= $2B (skip if null)
     if (s.marketCap != null && s.marketCap < 2_000_000_000) {
-      reasons.push(`market_cap=$${(s.marketCap / 1e9).toFixed(1)}B (<$2B)`);
+      otherReasons.push(`market_cap=$${(s.marketCap / 1e9).toFixed(1)}B (<$2B)`);
     }
 
     // Gate 2: Avg daily volume >= 1M shares
     if (s.avgVolume10d < 1_000_000) {
-      reasons.push(`vol_20d=${(s.avgVolume10d / 1e6).toFixed(1)}M (<1M)`);
+      otherReasons.push(`vol_20d=${(s.avgVolume10d / 1e6).toFixed(1)}M (<1M)`);
     }
 
     // Gate 3: Volume spike ratio <= 5x
     if (volRatio > 5.0) {
-      reasons.push(`vol_spike=${volRatio.toFixed(1)}x (>5x)`);
+      otherReasons.push(`vol_spike=${volRatio.toFixed(1)}x (>5x)`);
     }
 
     // Gate 4: Price extension <= 80% above 200-SMA
     if (pctFrom200ma != null && pctFrom200ma > 80) {
-      reasons.push(`extension=${pctFrom200ma.toFixed(0)}% (>80%)`);
+      failedExtension = true;
     }
 
     // Gate 5: Above 50-SMA or turnaround signal
     if (!above50ma && !(rsAccel != null && rsAccel > 0.5 && volRatio >= 1.0)) {
-      reasons.push("below_50MA_no_turnaround");
+      otherReasons.push("below_50MA_no_turnaround");
     }
 
     // Gate 6: Institutional ownership > 30% (skip if unavailable)
     if (s.institutionalPct != null && s.institutionalPct < 30) {
-      reasons.push(`institutional=${s.institutionalPct.toFixed(0)}% (<30%)`);
+      otherReasons.push(`institutional=${s.institutionalPct.toFixed(0)}% (<30%)`);
     }
 
     // Gate 7: Sector correlation — stock 20d return within 30% of ETF
     if (s.ret20d != null) {
       const retDiff = Math.abs(s.ret20d - s.etfRet20d);
       if (retDiff > 30) {
-        reasons.push(`uncorrelated_ret_diff=${retDiff.toFixed(1)}%`);
+        otherReasons.push(`uncorrelated_ret_diff=${retDiff.toFixed(1)}%`);
       }
     }
 
-    if (reasons.length > 0) {
-      rejected.push({ symbol: s.symbol, sector: s.sector, reasons });
-    } else {
+    const allReasons = [...otherReasons];
+    if (failedExtension) {
+      allReasons.push(`extension=${(pctFrom200ma ?? 0).toFixed(0)}% (>80%)`);
+    }
+
+    if (allReasons.length === 0) {
       passed.push(s);
+    } else if (failedExtension && otherReasons.length === 0 && above50ma) {
+      // Failed ONLY Gate 4, passed all others, still above 50-SMA → pullback candidate
+      extensionOnly.push(s);
+      rejected.push({ symbol: s.symbol, sector: s.sector, reasons: allReasons });
+    } else {
+      rejected.push({ symbol: s.symbol, sector: s.sector, reasons: allReasons });
     }
   }
 
-  return { passed, rejected };
+  return { passed, rejected, extensionOnly };
+}
+
+// ── Pullback Watch ──
+
+export function buildPullbackWatch(extensionOnly: StockInput[]): PullbackWatchStock[] {
+  return extensionOnly
+    .map((s) => {
+      const pctFrom200ma = calcPctFrom(s.price, s.sma200)!;
+      const pctFrom50ma = calcPctFrom(s.price, s.sma50)!;
+      const volRatio = calcVolRatio(s.volume, s.avgVolume10d);
+      const distanceTo80Pct = Math.round((pctFrom200ma - 80) * 10) / 10;
+
+      let tier: PullbackTier;
+      if (pctFrom200ma <= 100) {
+        tier = "NEAR_ENTRY";
+      } else if (pctFrom200ma <= 150 && pctFrom50ma <= 15) {
+        tier = "PULLING_BACK";
+      } else {
+        tier = "WATCHING";
+      }
+
+      return {
+        symbol: s.symbol,
+        shortName: s.shortName,
+        sector: s.sector,
+        sectorEtf: s.sectorEtf,
+        price: s.price,
+        sma50: s.sma50!,
+        sma200: s.sma200!,
+        pctFrom200ma: Math.round(pctFrom200ma * 10) / 10,
+        pctFrom50ma: Math.round(pctFrom50ma * 10) / 10,
+        distanceTo80Pct,
+        volRatio,
+        marketCap: s.marketCap,
+        institutionalPct: s.institutionalPct,
+        sectorQuadrant: s.sectorQuadrant,
+        tier,
+      };
+    })
+    .sort((a, b) => {
+      const tierOrder: Record<PullbackTier, number> = { NEAR_ENTRY: 0, PULLING_BACK: 1, WATCHING: 2 };
+      const tierCmp = tierOrder[a.tier] - tierOrder[b.tier];
+      if (tierCmp !== 0) return tierCmp;
+      return a.pctFrom200ma - b.pctFrom200ma;
+    });
 }
 
 // ── Step 6: Classification ──
@@ -225,9 +283,10 @@ export function scoreConviction(
 export function enrichStocks(stocks: StockInput[]): {
   passed: EnrichedStock[];
   rejected: RejectedStock[];
+  pullbackWatch: PullbackWatchStock[];
 } {
   // Step 5: Quality gates
-  const { passed: gated, rejected } = applyQualityGates(stocks);
+  const { passed: gated, rejected, extensionOnly } = applyQualityGates(stocks);
 
   // Steps 6-7: Classify + score each passing stock
   const enriched: EnrichedStock[] = gated.map((s) => {
@@ -280,5 +339,8 @@ export function enrichStocks(stocks: StockInput[]): {
     return (b.rsAccel ?? -999) - (a.rsAccel ?? -999);
   });
 
-  return { passed: enriched, rejected };
+  // Build pullback watch from extension-only rejects
+  const pullbackWatch = buildPullbackWatch(extensionOnly);
+
+  return { passed: enriched, rejected, pullbackWatch };
 }

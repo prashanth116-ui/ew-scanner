@@ -120,6 +120,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "AYX", name: "Alteryx" },
       { symbol: "BASE", name: "Couchbase" },
       { symbol: "BB", name: "BlackBerry" },
+      { symbol: "BBAI", name: "BigBear.ai" },
       { symbol: "BIGC", name: "BigCommerce" },
       { symbol: "BILL", name: "Bill Holdings" },
       { symbol: "BLKB", name: "Blackbaud" },
@@ -167,6 +168,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "FIVN", name: "Five9" },
       { symbol: "FROG", name: "JFrog" },
       { symbol: "FRSH", name: "Freshworks" },
+      { symbol: "FSLY", name: "Fastly" },
       { symbol: "FTNT", name: "Fortinet" },
       { symbol: "GDDY", name: "GoDaddy" },
       { symbol: "GDRX", name: "GoodRx" },
@@ -224,8 +226,10 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "PRGS", name: "Progress Software" },
       { symbol: "PSTG", name: "Pure Storage" },
       { symbol: "PTC", name: "PTC" },
+      { symbol: "QBTS", name: "D-Wave Quantum" },
       { symbol: "QLYS", name: "Qualys" },
       { symbol: "QTWO", name: "Q2 Holdings" },
+      { symbol: "QUBT", name: "Quantum Computing" },
       { symbol: "RAMP", name: "LiveRamp" },
       { symbol: "RBRK", name: "Rubrik" },
       { symbol: "RGTI", name: "Rigetti Computing" },
@@ -1214,6 +1218,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "CTRA", name: "Coterra Energy" },
       { symbol: "CVX", name: "Chevron" },
       { symbol: "DINO", name: "HF Sinclair" },
+      { symbol: "DNN", name: "Denison Mines" },
       { symbol: "DNOW", name: "DNOW" },
       { symbol: "DVN", name: "Devon Energy" },
       { symbol: "ENPH", name: "Enphase Energy" },
@@ -1261,6 +1266,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "TELL", name: "Tellurian" },
       { symbol: "TPL", name: "Texas Pacific Land" },
       { symbol: "TRGP", name: "Targa Resources" },
+      { symbol: "UEC", name: "Uranium Energy" },
       { symbol: "USAC", name: "USA Compression Partners" },
       { symbol: "VLO", name: "Valero Energy" },
       { symbol: "WKC", name: "World Kinect" },
@@ -1450,7 +1456,9 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "MOS", name: "Mosaic" },
       { symbol: "MP", name: "MP Materials" },
       { symbol: "MTX", name: "Minerals Technologies" },
+      { symbol: "NB", name: "NioCorp Developments" },
       { symbol: "NEM", name: "Newmont" },
+      { symbol: "NEXA", name: "Nexa Resources" },
       { symbol: "NGVT", name: "Ingevity" },
       { symbol: "NTR", name: "Nutrien" },
       { symbol: "NUE", name: "Nucor" },
@@ -1474,6 +1482,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "STLD", name: "Steel Dynamics" },
       { symbol: "SUM", name: "Summit Materials" },
       { symbol: "TECK", name: "Teck Resources" },
+      { symbol: "UAMY", name: "United States Antimony" },
       { symbol: "UUUU", name: "Energy Fuels" },
       { symbol: "VALE", name: "Vale" },
       { symbol: "VMC", name: "Vulcan Materials" },
@@ -1494,18 +1503,18 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "AMD", name: "AMD" },
       { symbol: "AVGO", name: "Broadcom" },
       { symbol: "CRM", name: "Salesforce" },
-      { symbol: "CSCO", name: "Cisco Systems" },
+      { symbol: "CSCO", name: "Cisco" },
       { symbol: "FTNT", name: "Fortinet" },
       { symbol: "IBM", name: "IBM" },
       { symbol: "INTC", name: "Intel" },
       { symbol: "INTU", name: "Intuit" },
-      { symbol: "KLAC", name: "KLA Corporation" },
+      { symbol: "KLAC", name: "KLA" },
       { symbol: "MSFT", name: "Microsoft" },
       { symbol: "NOW", name: "ServiceNow" },
       { symbol: "NVDA", name: "NVIDIA" },
       { symbol: "ORCL", name: "Oracle" },
       { symbol: "PANW", name: "Palo Alto Networks" },
-      { symbol: "PLTR", name: "Palantir Technologies" },
+      { symbol: "PLTR", name: "Palantir" },
       { symbol: "QCOM", name: "Qualcomm" },
       { symbol: "TXN", name: "Texas Instruments" },
     ],
@@ -1514,10 +1523,14 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
 
 // ── Helper functions ──
 
+// First-wins: stocks appearing in multiple sectors (e.g. NVDA in Semiconductors AND
+// Technology) map to their first (most specific) sector for classification purposes.
 const _symbolToSector = new Map<string, SectorDefinition>();
 for (const sector of SECTOR_UNIVERSE) {
   for (const stock of sector.stocks) {
-    _symbolToSector.set(stock.symbol, sector);
+    if (!_symbolToSector.has(stock.symbol)) {
+      _symbolToSector.set(stock.symbol, sector);
+    }
   }
 }
 
@@ -1530,7 +1543,7 @@ export function getSectorETFForSymbol(symbol: string): string | null {
 }
 
 export function getAllSectorSymbols(): string[] {
-  return SECTOR_UNIVERSE.flatMap((s) => s.stocks.map((st) => st.symbol)).sort();
+  return [...new Set(SECTOR_UNIVERSE.flatMap((s) => s.stocks.map((st) => st.symbol)))].sort();
 }
 
 export function getSectorDefinitions(): SectorDefinition[] {

@@ -6,7 +6,7 @@
 
 import "server-only";
 
-import type { EnrichedStock, RejectedStock } from "../sector-rotation/types";
+import type { EnrichedStock, RejectedStock, PullbackWatchStock } from "../sector-rotation/types";
 import type { StockInput } from "../sector-rotation/stock-enrichment";
 import { classifyStock, scoreConviction } from "../sector-rotation/stock-enrichment";
 
@@ -65,6 +65,7 @@ function applyCryptoQualityGates(
 export function enrichCryptoTokens(stocks: StockInput[]): {
   passed: EnrichedStock[];
   rejected: RejectedStock[];
+  pullbackWatch: PullbackWatchStock[];
 } {
   // Crypto quality gates
   const { passed: gated, rejected } = applyCryptoQualityGates(stocks);
@@ -120,5 +121,5 @@ export function enrichCryptoTokens(stocks: StockInput[]): {
     return (b.rsAccel ?? -999) - (a.rsAccel ?? -999);
   });
 
-  return { passed: enriched, rejected };
+  return { passed: enriched, rejected, pullbackWatch: [] };
 }

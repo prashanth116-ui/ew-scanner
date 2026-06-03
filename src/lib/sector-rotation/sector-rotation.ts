@@ -210,7 +210,8 @@ export async function calculateSectorRotation(
       const aboveSma = quotesInSector.filter((q) => q.price > q.sma50!).length;
       breadthPct = Math.round((aboveSma / quotesInSector.length) * 100);
     } else {
-      // Tier 2: Pre-run stock-level data
+      // Tier 2: Pre-run stock-level data (uses SMA-20 — only SMA available in PreRunStockData;
+      // Tier 1 uses SMA-50 from batch quotes for better consistency with standard breadth metrics)
       const stocksWithPrice = allStocks.filter(
         (r) => r.data.currentPrice !== null && r.data.sma20 !== null
       );
@@ -556,6 +557,10 @@ export async function calculateSectorRotation(
   // Build lookup: sector display name → ETF roc20d
   const rawRoc20dLookup = new Map(rawScores.map((r) => [r.displayName, r.roc20d]));
 
+  // Stocks in multiple sectors (e.g. NVDA in Semiconductors + Technology) are intentionally
+  // enriched under EACH sector so they appear in per-sector stock tables filtered by sectorEtf.
+  // Each instance is scored against its respective sector's metrics (quadrant, composite, etc.).
+
   for (const sectorDef of SECTOR_UNIVERSE) {
     const scored = sectorLookup.get(sectorDef.displayName);
     if (!scored) continue;
@@ -573,6 +578,13 @@ export async function calculateSectorRotation(
       const preRun = preRunByTicker.get(stock.symbol);
       const institutionalPct = preRun?.data.institutionalPct ?? null;
 
+      // Approximate ret20d from pctFrom50SMA — batch quotes don't provide
+      // historical closes, but distance from 50-SMA captures similar recent
+      // outperformance signal. Without this, LEADER classification is unreachable.
+      const ret20d = q.sma50 != null && q.sma50 > 0
+        ? ((q.price - q.sma50) / q.sma50) * 100
+        : null;
+
       stockInputs.push({
         symbol: stock.symbol,
         shortName: stock.name,
@@ -585,7 +597,7 @@ export async function calculateSectorRotation(
         avgVolume10d: q.avgVolume10d,
         marketCap: q.marketCap,
         institutionalPct,
-        ret20d: null, // Not available from batch quotes
+        ret20d,
         etfRet20d: etfRoc20d,
         sectorQuadrant: scored.quadrant,
         sectorComposite: scored.compositeScore,
@@ -596,7 +608,7 @@ export async function calculateSectorRotation(
   }
 
   const enrichedStocks = enrichStocks(stockInputs);
-  console.log(`[sectorRotation] Enriched ${enrichedStocks.passed.length} stocks (${enrichedStocks.rejected.length} rejected)`);
+  console.log(`[sectorRotation] Enriched ${enrichedStocks.passed.length} stocks (${enrichedStocks.rejected.length} rejected, ${enrichedStocks.pullbackWatch.length} pullback watch)`);
 
   // Compute 20d daily returns per sector ETF for sparklines
   const etfReturns20d: Record<string, number[]> = {};

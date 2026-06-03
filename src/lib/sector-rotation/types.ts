@@ -92,6 +92,26 @@ export interface RejectedStock {
   reasons: string[];
 }
 
+export type PullbackTier = "NEAR_ENTRY" | "PULLING_BACK" | "WATCHING";
+
+export interface PullbackWatchStock {
+  symbol: string;
+  shortName: string;
+  sector: string;
+  sectorEtf: string;
+  price: number;
+  sma50: number;
+  sma200: number;
+  pctFrom200ma: number;
+  pctFrom50ma: number;
+  distanceTo80Pct: number;
+  volRatio: number;
+  marketCap: number | null;
+  institutionalPct: number | null;
+  sectorQuadrant: RRGQuadrant;
+  tier: PullbackTier;
+}
+
 export interface SectorRotationResult {
   calculatedAt: string;
   sectors: SectorRotationScore[];
@@ -131,5 +151,6 @@ export interface SectorRotationResult {
   enrichedStocks?: {
     passed: EnrichedStock[];
     rejected: RejectedStock[];
+    pullbackWatch: PullbackWatchStock[];
   };
 }

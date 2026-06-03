@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
-import { fetchMacroRegime, getRegimeAdjustment } from "@/lib/sector-rotation/regime";
+import { fetchMacroRegime } from "@/lib/sector-rotation/regime";
 import { recordSectorSnapshotBatch } from "@/lib/supabase/persistence";
+
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const rl = rateLimit(`sector-rotation:${getClientKey(request)}`, 5, 60_000);
@@ -34,21 +36,24 @@ export async function GET(request: NextRequest) {
     }));
     await recordSectorSnapshotBatch(snapshots).catch(() => {});
 
-    return NextResponse.json({
-      ...result,
-      regime: regime
-        ? {
-            regime: regime.regime,
-            vix: regime.vix,
-            vixSlope: regime.vixSlope,
-            yield10y: regime.yield10y,
-            dxy: regime.dxy,
-            dxyTrend: regime.dxyTrend,
-            favoredSectors: regime.favoredSectors,
-            avoidSectors: regime.avoidSectors,
-          }
-        : undefined,
-    });
+    return NextResponse.json(
+      {
+        ...result,
+        regime: regime
+          ? {
+              regime: regime.regime,
+              vix: regime.vix,
+              vixSlope: regime.vixSlope,
+              yield10y: regime.yield10y,
+              dxy: regime.dxy,
+              dxyTrend: regime.dxyTrend,
+              favoredSectors: regime.favoredSectors,
+              avoidSectors: regime.avoidSectors,
+            }
+          : undefined,
+      },
+      { headers: { "Cache-Control": "s-maxage=900, stale-while-revalidate=60" } }
+    );
   } catch (err) {
     logError("api/sector-rotation", err);
     return NextResponse.json(
