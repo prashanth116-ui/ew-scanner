@@ -1,7 +1,7 @@
 # Research: Next AMD/MU/SNDK/DELL/SNOW Candidates
 
 **Date:** May 31, 2026
-**Last Updated:** May 31, 2026 (live scan results added)
+**Last Updated:** June 2, 2026 (HPE earnings blowout, MRVL Computex surge, AVGO earnings preview)
 **Trade Style:** Equity + Options | $2,500-$5,000 risk per trade
 **Universe Updated:** AAOI and CLS added (now 82 tickers)
 
@@ -36,22 +36,50 @@
 
 ---
 
-## Live Scan Results (May 31, 2026)
+## June 2 Update — Key Developments
+
+### HPE Earnings Blowout (Jun 1 AMC)
+- **EPS:** $0.79 vs $0.54 est (+46% beat) | **Revenue:** $10.7B vs $9.9B est
+- **Guidance raise:** FY26 EPS raised to $3.35-$3.45 (from $2.30-$2.50), FCF to $3.5B+
+- **Stock:** $56.04 (+28% from $43), CEO says biggest server backlog ever
+- **Validation:** HPE was flagged at #8 (score 65) and as NTAP sympathy play — thesis confirmed
+- **Next:** Extended at RSI ~95+. DO NOT chase. Wait for pullback to $45-$48 for re-entry.
+
+### MRVL Computex Surge (Jun 2)
+- **Stock:** $271.63 (+24% in single day, was $205 on May 31)
+- **Catalyst:** Jensen Huang called MRVL "the next trillion-dollar company" at Computex
+- **Product:** Launched Teralynx T100 — industry's first 102.4 Tbps AI-optimized switch chip
+- **Guidance:** Revenue ~$11.5B in FY27 (~40% growth)
+- **Note:** Was in "Wait for Pullback" at RSI 70 — now extremely extended. Previous entry zone ($185-$191) blown through. New support likely $220-$240 on pullback.
+
+### AVGO Earnings Tomorrow (Jun 3 AMC)
+- **Price:** ~$487 (up from $447 on May 31, at new ATH)
+- **Consensus:** EPS $2.40, Revenue $22.1B | Buy-side AI revenue bar: ~$5.0B (vs $4.1B Q1)
+- **Setup:** Trading at ATH into earnings = high bar. Binary event — size accordingly.
+
+### CIEN Earnings Wednesday (Jun 4 BMO)
+- **Consensus:** EPS $1.45 (up from $1.40-$1.46 prior est), Revenue $1.50B
+- **Context:** Record Q1 revenue $1.43B, analysts expect 247% YoY EPS growth
+- **Impact:** Validates optical thesis for LITE, COHR, AAOI
+
+---
+
+## Live Scan Results (May 31, 2026 — prices updated Jun 2)
 
 ### Scanner Top 10 (by 17-factor score)
 
-| Rank | Ticker | Score | Verdict | Price | 1d | 5d | YTD | RSI | SI% | Vol | Layer |
-|------|--------|-------|---------|-------|-----|-----|------|-----|-----|-----|-------|
-| 1 | **NTAP** | **70** | WATCH | $174 | +22.4% | +40.6% | +74% | 92 | 14.0 | 2.2x | AI Servers T2 |
-| 2 | CALX | 69 | WATCH | $40 | -0.7% | +3.5% | -25% | 39 | 11.8 | 0.9x | AI Net T3 |
-| 3 | DELL | 68 | WATCH | $421 | +32.8% | +66.5% | +174% | 89 | 7.1 | 2.1x | AI Servers T1 |
-| 4 | ZS | 67 | WATCH | $140 | +7.5% | -18.3% | -6% | 45 | 10.6 | 2.4x | AI Software T2 |
-| 5 | CRM | 66 | WATCH | $191 | +8.5% | +8.4% | -1% | 61 | 8.9 | 1.4x | AI Software T1 |
-| 6 | HUBS | 66 | WATCH | $221 | +11.0% | +11.2% | -16% | 55 | 14.1 | 1.1x | AI Software T2 |
-| 7 | SNOW | 65 | WATCH | $256 | +6.8% | +54.4% | +50% | 87 | 5.8 | 1.8x | AI Software T2 |
-| 8 | HPE | 65 | WATCH | $43 | +12.6% | +26.7% | +95% | 83 | 5.8 | 1.7x | AI Servers T2 |
-| 9 | WDAY | 64 | WATCH | $146 | +12.4% | +20.0% | +9% | 67 | 15.2 | 1.3x | AI Software T2 |
-| 10 | IBM | 62 | WATCH | $298 | +12.7% | +17.7% | +24% | 80 | 3.2 | 1.7x | AI Servers T2 |
+| Rank | Ticker | Score | Verdict | Price (Jun 2) | Since May 31 | Layer | Note |
+|------|--------|-------|---------|---------------|-------------|-------|------|
+| 1 | **NTAP** | **70** | WATCH | $180 | +3% | AI Servers T2 | Post-spike consolidation |
+| 2 | CALX | 69 | WATCH | $40 | flat | AI Net T3 | |
+| 3 | DELL | 68 | WATCH | $466 | +11% | AI Servers T1 | New ATH |
+| 4 | ZS | 67 | WATCH | ~$289 | +106% | AI Software T2 | Massive move |
+| 5 | CRM | 66 | WATCH | ~$191 | flat | AI Software T1 | |
+| 6 | HUBS | 66 | WATCH | ~$221 | flat | AI Software T2 | |
+| 7 | SNOW | 65 | WATCH | $280 | +9% | AI Software T2 | Post-earnings momentum |
+| 8 | **HPE** | 65 | **FIRED** | **$56** | **+30%** | AI Servers T2 | **Earnings blowout Jun 1** |
+| 9 | WDAY | 64 | WATCH | ~$146 | flat | AI Software T2 | |
+| 10 | IBM | 62 | WATCH | ~$298 | flat | AI Servers T2 | |
 
 ### Watchlist Candidates — Live 17-Factor Scores
 
@@ -78,105 +106,111 @@
 ### Priority 1: FIRE DRILL — NTAP (Scanner #1, Score 70)
 
 #### NTAP — NetApp | FIRE DRILL: +22% 1d, +41% 5d
-- **Price:** ~$174 | **52wk High:** $192 | **RSI:** 92 (overbought but fire drill)
+- **Price:** ~$180 (consolidating after spike) | **ATH:** $185 (Jun 2) | **RSI:** ~88 (still overbought)
 - **Scanner Score:** 70/100 — highest in entire scan
-- **Why:** AI storage/data management, spiked on blowout earnings. SI at 14% providing squeeze fuel. Volume 2.2x (institutional buying). Layer peers (DELL +33%, HPE +13%) also spiking.
+- **Why:** AI storage/data management, spiked on blowout earnings. SI at 14% providing squeeze fuel. Volume 2.2x (institutional buying). Layer peers (DELL +33%, HPE +28%) also spiking.
 - **DNA Match:** SNDK + DELL (storage/server infrastructure spike with high SI)
 - **Key Scores:** Catalyst 10/12, Volume 10/10, Peers 8/8, Short Int 7/10, Momentum 5/7
-- **Equity Plan:** DO NOT chase at RSI 92. Wait for post-spike consolidation.
+- **Equity Plan:** Consolidating at $180 — wait continues.
   - Entry zone: $155-$165 on pullback (SMA-50 area)
-  - Aggressive: First daily close above $192 (new ATH breakout) with volume
-  - Stop: below $145
+  - Aggressive: First daily close above $185 (new ATH breakout) with volume
+  - Stop: below $155
   - Target: $220+ (analyst upgrades will cascade after this move)
-- **Options Plan:** Jul 18 $180C on first consolidation day (~$3,000). Or sell Jul 18 $160/$150 put spread for income.
+- **Options Plan:** Jul 18 $190C on first consolidation day (~$3,000). Or sell Jul 18 $165/$155 put spread for income.
 - **Risk:** $3,000. Fire drill means extreme volatility — size down.
-- **SYMPATHY PLAYS:** VRT, CLS, HPE all benefit from NTAP's AI server/storage spike
+- **SYMPATHY PLAYS:** VRT, CLS, HPE all benefit — HPE has now CONFIRMED the thesis with its own blowout (+28%)
 
 ---
 
 ### Priority 2: HIGHEST SCANNER SCORES (Score 60, WATCH Verdict)
 
 #### LITE — Lumentum | Score 60 | RSI Sweet Spot
-- **Price:** ~$855 | **ATH:** $1,085 | **RSI:** 46.9 (neutral, post-pullback)
+- **Price:** ~$905 (up from $855, range $807-$932 on Jun 2) | **ATH:** $1,085 | **RSI:** ~55
 - **Why:** NVIDIA $2B+ investment, demand > supply by 30%, $400M+ OCS backlog
 - **DNA Match:** MU + SNDK (supply constraint narrative)
 - **Key Scores:** RSI 8/8, Earnings 8/8, Analyst 6/8, SI 6.5/10, Inst Own 4/4, Options 4/4
-- **SMA 50:** $609 | **SMA 200:** $301
+- **SMA 50:** ~$609 | **SMA 200:** ~$301
 - **Equity Plan:** BEST RISK/REWARD IN THE GROUP
-  - Entry zone: $700-$750 (accumulated volume support at $706)
-  - Current $855 acceptable if RSI turns up + daily close above $900
-  - Stop: below $680
-  - Target: $1,105 (analyst consensus = +29%)
-- **Options Plan:** Aug 15 $900C on reversal confirmation (~$3,500)
+  - Entry zone: $850-$900 on any dip (old $700-$750 zone now far below)
+  - $905 acceptable — stock broke above $900 level
+  - Stop: below $800
+  - Target: $1,105 (analyst consensus = +22%)
+  - **CIEN earnings Wed** is the next catalyst — if CIEN beats, LITE sympathy move likely
+- **Options Plan:** Aug 15 $950C on CIEN sympathy or close above $930 (~$3,500)
 - **Risk:** $3,000-$5,000 (higher sizing — best setup)
 
 #### VRT — Vertiv Holdings | Score 60 | Peers Spiking
-- **Price:** ~$316 | **ATH:** $379 | **RSI:** 45 (sweet spot)
+- **Price:** ~$336 (up from $316) | **ATH:** $379 | **RSI:** ~52
 - **Why:** $15B backlog (+109%), NVIDIA co-dev, 34% rev growth
 - **DNA Match:** DELL (physical infrastructure)
 - **Key Scores:** RSI 8/8, Peers 8/8, Earnings 8/8, Sector 7/7, Options 4/4, MA 5/5
-- **SMA 50:** $257 | **SMA 200:** $182
-- **Equity Plan:** NTAP/DELL spike = peers catalyst firing NOW
-  - Entry: Current $316 acceptable (RSI 45 is ideal)
-  - Pullback entry: $280-$300
-  - Stop: below $250
+- **SMA 50:** ~$257 | **SMA 200:** ~$182
+- **Equity Plan:** NTAP/DELL/HPE earnings cascade = thesis confirming
+  - Entry: Current $336 still acceptable (RSI 52 = neutral)
+  - Pullback entry: $310-$320
+  - Stop: below $280
   - Target: $394 (consensus), $450+ if backlog thesis plays out
-- **Options Plan:** Aug 15 $340C (~$3,000). Or Jul 18 $330C for NTAP sympathy trade (~$2,500)
+- **Options Plan:** Aug 15 $360C (~$3,000). Or Jul 18 $350C (~$2,500)
 - **Risk:** $3,000
 
 #### CLS — Celestica | Score 60 | Trend Accelerating
-- **Price:** ~$385 | **RSI:** 56 | **1d:** +9.8%
+- **Price:** ~$439 (up from $385, +14%) | **RSI:** ~62
 - **Why:** 53% rev growth, 146% earnings growth, "cleanest AI infra play left"
 - **DNA Match:** DELL (AI server pure-play)
 - **Key Scores:** Peers 8/8, Sector 7/7, Earnings 8/8, Options 4/4, Trend Acc 4/5, MA 5/5
 - **Next Earnings:** Jul 27
-- **Equity Plan:** Newly added, already scoring well
-  - Entry: Current $385 or pullback to $350-$360
-  - Stop: below $330
-  - Target: $427 (analyst high), $500+ on continued momentum
-- **Options Plan:** Aug 15 $400C (~$2,500)
+- **Equity Plan:** Running hard on DELL/HPE earnings sympathy
+  - Entry: $420-$440 or pullback to $400-$410 (old resistance = support)
+  - Stop: below $380
+  - Target: $500+ (analyst high raised with peer momentum)
+- **Options Plan:** Aug 15 $460C (~$2,500)
 - **Risk:** $2,500-$3,000
 
 ---
 
 ### Priority 3: EARNINGS THIS WEEK
 
-#### AVGO — Broadcom | Earnings Tue Jun 3 AMC | Score 49
-- **Price:** ~$447 | **ATH:** $448.90 | **RSI:** 66
+#### AVGO — Broadcom | Earnings Tue Jun 3 AMC | Score 49 | **TOMORROW**
+- **Price:** ~$487 (up from $447, new ATH) | **RSI:** ~72 (elevated)
 - **Why:** PEG 0.9x, 60%+ rev/earnings growth, Meta XPU, AI bellwether
 - **DNA Match:** AMD (compute leader re-rating)
 - **Scanner Note:** Score 49 (MONITOR) because RSI elevated and low SI. Fundamental thesis strong but timing not ideal per scanner.
-- **Consensus EPS:** $2.40 (raised 11% over 90 days)
-- **Equity Plan:** DO NOT chase at ATH pre-earnings. Wait for post-ER reaction.
-  - Bull scenario (beat + raise): Buy breakout above $450 on volume, stop $420, target $500+
-  - Bear scenario (sell-the-news): Buy pullback to $400-$410, stop $380
+- **Consensus EPS:** $2.40 (37 analysts, range $2.36-$2.54) | **Revenue:** $22.1B (range $21.9B-$22.9B)
+- **Buy-side bar:** AI semiconductor revenue ~$5.0B (vs $4.1B Q1) — this is the real number to watch
+- **EPS estimate climbed 11%** in 90 days ($2.16 → $2.40) — Street is getting more bullish
+- **Equity Plan:** Now at ATH ($487) — even riskier to chase pre-earnings than at $447.
+  - Bull scenario (beat + raise): Buy breakout above $500 on volume, stop $460, target $550+
+  - Bear scenario (sell-the-news): Buy pullback to $440-$450 (prior ATH = support), stop $420
   - Deep pullback: $330-$335 (SMA-50/200 convergence = fortress support)
-- **Options Plan:** If bullish conviction, buy Jun 20 $450C before close Mon Jun 2 (~$2,500). Or sell Jun 20 $420/$410 put spread for income.
-- **Risk:** $2,500 max. Binary event — size accordingly.
+- **Options Plan:** Jun 20 $500C if you have strong conviction (~$2,500). Or sell Jun 20 $460/$450 put spread for income.
+- **Risk:** $2,500 max. Binary event at ATH — HIGH risk. HPE blowout + MRVL surge set bullish tone for AI earnings, but expectations are elevated.
 
-#### CIEN — Ciena Corp | Earnings Wed Jun 4 BMO | Score 51
-- **Price:** ~$580 | **52wk High:** $605 | **RSI:** 57.7
-- **Why:** Cloud revenue +76%, optical networking AI demand read
+#### CIEN — Ciena Corp | Earnings Wed Jun 4 BMO | Score 51 | **WEDNESDAY**
+- **Price:** ~$580 | **52wk High:** $605 | **RSI:** ~58
+- **Why:** Cloud revenue +76%, optical networking AI demand read. Record Q1 revenue $1.43B.
 - **DNA Match:** SNOW (revenue re-acceleration)
-- **Consensus EPS:** $1.40-$1.46
+- **Consensus EPS:** $1.45 (17 analysts, range $1.36-$1.55) | **Revenue:** $1.50B ($1.45B-$1.52B)
+- **Note:** Analysts expect 247% YoY EPS growth. Estimates revised upward in past 60 days.
 - **Equity Plan:** Buy post-ER if beat + guidance raise, target $605 breakout then $650+
   - Entry on pullback: $560-$563 (first support), deeper at $520-$525
   - Stop: below $540
 - **Options Plan:** Jul 18 $600C on post-ER breakout confirmation (~$3,000)
 - **Risk:** $2,500-$3,000
+- **Impact:** Validates optical thesis for LITE ($905), COHR, AAOI — watch sympathy moves Wed AM
 
 ---
 
 ### Priority 4: WAIT FOR PULLBACK (Scanner says RSI too high)
 
-#### MRVL — Marvell Technology | Score 52 | RSI 70
-- **Price:** ~$205 | **ATH:** $218 | **RSI:** 70 (elevated)
-- **Why:** Custom silicon Amazon/MSFT, 50% undervalued, record revenue, guided Q2 above consensus
-- **DNA Match:** AMD + MU
-- **Scanner Note:** Peers 8/8 and Earnings 6/8 are strong, but RSI 1/8 drags score. Wait for RSI to cool.
-- **Entry:** $185-$191 (SMA-50 test), stop $175
-- **Target:** $250+
-- **Options Plan:** Aug 15 $220C on breakout above $218 ATH (~$3,000)
+#### MRVL — Marvell Technology | Score 52 | **FIRED Jun 2 (+24%)**
+- **Price:** ~$272 (was $205) | **New ATH** | **RSI:** ~95+ (extremely overbought)
+- **Catalyst:** Jensen Huang called MRVL "the next trillion-dollar company" at Computex. Launched Teralynx T100 (102.4 Tbps AI switch chip). Revenue guidance ~$11.5B FY27 (+40%).
+- **DNA Match:** AMD + MU — Huang endorsement mirrors AMD's 2023 re-rating
+- **Scanner Note:** Previous entry zone ($185-$191) blown through. DO NOT chase at $272.
+- **New Entry:** Wait for pullback to $220-$240 (prior ATH becomes support)
+- **Stop:** Below $200
+- **Target:** $350+ (if trillion-dollar thesis plays out = ~$300/share)
+- **Options Plan:** WAIT. Post-spike vol crush will make options expensive. Buy Aug 15 $280C on first pullback day (~$3,500)
 
 #### COHR — Coherent Corp | Score 52 | Extended from MAs
 - **Price:** ~$361 | **ATH:** $413 | **RSI:** 52
@@ -209,16 +243,17 @@
 
 ## Earnings Calendar vs. Macro Events (June 2026)
 
-| Date | Event | Impact |
-|------|-------|--------|
-| **Tue Jun 3** | **AVGO Earnings (AMC)** | HIGHEST PRIORITY — AI bellwether, sets tone for entire sector |
-| **Wed Jun 4** | **CIEN Earnings (BMO)** | Optical/networking demand signal for COHR, LITE, AAOI |
-| Fri Jun 5 | Jobs Report | Fed rate path |
-| Tue Jun 10 | CPI | Inflation data, FOMC input |
-| **Jun 16-17** | **FOMC Meeting** | Rate decision — 98.2% no change expected |
-| Thu Jun 19 | S&P Rebalance | Index add/drop flows |
-| Fri Jun 20 | OPEX | Options expiration, gamma/pin risk |
-| Fri Jun 26 | Russell Rebalance | Small/mid-cap index flows |
+| Date | Event | Impact | Status |
+|------|-------|--------|--------|
+| ~~Sun Jun 1~~ | ~~HPE Earnings (AMC)~~ | AI server bellwether — EPS $0.79 vs $0.54 est, stock +28% | **DONE — BEAT** |
+| **Tue Jun 3** | **AVGO Earnings (AMC)** | HIGHEST PRIORITY — AI bellwether, sets tone for entire sector | **TOMORROW** |
+| **Wed Jun 4** | **CIEN Earnings (BMO)** | Optical/networking demand signal for COHR, LITE, AAOI | **WEDNESDAY** |
+| Fri Jun 5 | Jobs Report | Fed rate path | |
+| Tue Jun 10 | CPI | Inflation data, FOMC input | |
+| **Jun 16-17** | **FOMC Meeting** | Rate decision — 98.2% no change expected | |
+| Thu Jun 19 | S&P Rebalance | Index add/drop flows | |
+| Fri Jun 20 | OPEX | Options expiration, gamma/pin risk | |
+| Fri Jun 26 | Russell Rebalance | Small/mid-cap index flows | |
 
 ### Next Earnings Wave (Jul-Aug)
 
@@ -269,56 +304,186 @@
 
 ### Portfolio Allocation (Revised with Live Scan Data)
 
-| Slot | Ticker | Type | Size | Trigger | Scanner Score |
-|------|--------|------|------|---------|---------------|
-| 1 | LITE | Equity | $5,000 | RSI reversal or close above $900 | 60 (WATCH) |
-| 2 | VRT | Equity | $3,000 | Current $316 (RSI 45 = sweet spot) | 60 (WATCH) |
-| 3 | CLS | Equity | $3,000 | Current $385 or pullback to $350 | 60 (WATCH) |
-| 4 | AVGO | Options | $2,500 | Post-earnings Jun 3 reaction | 49 (catalyst play) |
-| 5 | NTAP | Options | $3,000 | Post-spike pullback to $155-$165 | 70 (WATCH) |
-| -- | MRVL | Wait | -- | RSI needs to cool below 50 | 52 |
-| -- | COHR | Wait | -- | Pullback to $330 or lower | 52 |
-| -- | VST | Watch | -- | Close above SMA-200 ($174) | 54 |
+| Slot | Ticker | Type | Size | Trigger | Scanner Score | Jun 2 Status |
+|------|--------|------|------|---------|---------------|-------------|
+| 1 | LITE | Equity | $5,000 | Closed above $900 ✓ | 60 (WATCH) | **Triggered** — $905 |
+| 2 | VRT | Equity | $3,000 | Current $336 (RSI 52) | 60 (WATCH) | Actionable |
+| 3 | CLS | Equity | $3,000 | Running at $439 | 60 (WATCH) | Stretched — wait for $400-$410 |
+| 4 | AVGO | Options | $2,500 | Post-earnings Jun 3 reaction | 49 (catalyst play) | **TOMORROW** |
+| 5 | NTAP | Options | $3,000 | Post-spike pullback to $155-$165 | 70 (WATCH) | Waiting ($180) |
+| -- | MRVL | Wait | -- | Was $205 → now $272 — reset to $220-$240 | 52 | **FIRED** — do NOT chase |
+| -- | HPE | Wait | -- | Was $43 → now $56 — wait for $45-$48 | 65 | **FIRED** — do NOT chase |
+| -- | COHR | Wait | -- | Pullback to $330 or lower | 52 | Waiting |
+| -- | VST | Watch | -- | Close above SMA-200 ($174) | 54 | Waiting |
 
 **Total initial deployment: ~$16,500 across 5 positions**
-**Reserve: MRVL, COHR, VST on pullback**
+**Reserve: MRVL ($220-$240 pullback), HPE ($45-$48 pullback), COHR, VST**
 
 ---
 
 ## Technical Levels Quick Reference
 
-| Ticker | Price | SMA 50 | SMA 200 | RSI | Entry Zone | Stop | Target |
-|--------|-------|--------|---------|-----|-----------|------|--------|
-| NTAP | $174 | ~$112 | ~$111 | 92 | $155-$165 (post-spike pullback) | $145 | $220+ |
-| LITE | $855 | $609 | $302 | 47 | $700-$750 or $855 w/reversal | $680 | $1,105 |
-| VRT | $316 | $257 | $182 | 45 | Current $316 or $280-$300 | $250 | $394 |
-| CLS | $385 | -- | -- | 56 | $350-$385 | $330 | $427+ |
-| AVGO | $447 | $333 | $332 | 66 | Post-ER: $400-$410 or $450+ breakout | $380/$420 | $500+ |
-| CIEN | $580 | $493 | $337 | 58 | Post-ER: $560-$563 | $540 | $650 |
-| MRVL | $205 | $191 | $170 | 70 | $185-$191 (wait) | $175 | $250+ |
-| ASML | $1,613 | $1,445 | $1,183 | 58 | $1,500-$1,613 | $1,440 | $1,900 |
-| AMAT | $450 | $389 | $287 | 58 | $435-$440 | $410 | $527 |
-| ANET | $155 | $149 | $135 | 58 | $148-$150 | $134 | $188 |
-| COHR | $361 | $208 | $152 | 52 | $330-$343 (wait) | $300 | $395 |
-| VST | $160 | $160 | $174 | 57 | Close above $174 (SMA-200) | $138 | $219 |
+| Ticker | Price (Jun 2) | Was (May 31) | Move | Entry Zone | Stop | Target |
+|--------|--------------|-------------|------|-----------|------|--------|
+| **HPE** | **$56** | $43 | **+30%** | $45-$48 pullback (DON'T CHASE) | $40 | $70+ |
+| **MRVL** | **$272** | $205 | **+33%** | $220-$240 pullback (DON'T CHASE) | $200 | $350+ |
+| NTAP | $180 | $174 | +3% | $155-$165 (post-spike pullback) | $155 | $220+ |
+| LITE | $905 | $855 | +6% | $850-$900 dip or $930 breakout | $800 | $1,105 |
+| VRT | $336 | $316 | +6% | $310-$336 | $280 | $394+ |
+| CLS | $439 | $385 | +14% | $400-$440 | $380 | $500+ |
+| DELL | $466 | $421 | +11% | $440-$450 pullback | $420 | $550+ |
+| AVGO | $487 | $447 | +9% | Post-ER: $440-$450 or $500+ breakout | $420/$460 | $550+ |
+| CIEN | ~$580 | $580 | flat | Post-ER: $560-$563 | $540 | $650 |
+| SNOW | $280 | $256 | +9% | $260-$270 pullback | $240 | $320+ |
+| ASML | ~$1,613 | $1,613 | flat | $1,500-$1,613 | $1,440 | $1,900 |
+| AMAT | ~$458 | $450 | +2% | $435-$445 | $410 | $527 |
+| COHR | ~$361 | $361 | flat | $330-$343 (wait) | $300 | $395 |
+| VST | ~$160 | $160 | flat | Close above $174 (SMA-200) | $138 | $219 |
+| CALX | $40 | $40 | flat | $38-$40 | $35 | $55+ |
 
 ---
 
-## Action Items
+## Action Items (Updated Jun 2)
 
-1. **TODAY/MONDAY:** NTAP fired — set alerts for pullback entry at $155-$165
-2. **TODAY/MONDAY:** VRT at RSI 45 with Peers 8/8 — consider scaling into equity position
-3. **TUESDAY NIGHT:** React to AVGO earnings — sets sector direction
-4. **WEDNESDAY AM:** React to CIEN earnings — validates optical thesis for LITE, COHR, AAOI
-5. **THIS WEEK:** Set limit orders for LITE at $750, CLS at $350
-6. **MID-JUNE:** Navigate macro gauntlet (Jobs Jun 5, CPI Jun 10, FOMC Jun 16-17) — tighten stops or reduce size
-7. **LATE JUNE:** Watch for Russell/S&P rebalance flows affecting smaller names (AAOI, CLS, CIEN)
+1. ~~**MONDAY:** NTAP fired — set alerts for pullback entry at $155-$165~~ (consolidating at $180, still waiting)
+2. ~~**MONDAY:** VRT at RSI 45 — consider scaling in~~ → VRT now $336, still acceptable at RSI 52
+3. **TUESDAY NIGHT (TOMORROW):** React to AVGO earnings — sets sector direction. AI revenue buy-side bar $5B.
+4. **WEDNESDAY AM:** React to CIEN earnings — validates optical thesis for LITE ($905), COHR, AAOI
+5. **THIS WEEK:** HPE blowout + MRVL surge confirm AI server/infra thesis. Watch for profit-taking in extended names (DELL $466, HPE $56, MRVL $272).
+6. **THIS WEEK:** MRVL previous entry zone ($185-$191) blown — reset to $220-$240 on pullback
+7. **THIS WEEK:** LITE broke $900 — set alerts for pullback to $850-$880 or breakout above $930
+8. **MID-JUNE:** Navigate macro gauntlet (Jobs Jun 5, CPI Jun 10, FOMC Jun 16-17) — tighten stops or reduce size
+9. **LATE JUNE:** Watch for Russell/S&P rebalance flows affecting smaller names (AAOI, CLS, CIEN)
 
 ---
 
-## Key Market Context (as of May 31, 2026)
+## Sector Rotation Framework
 
-- **NTAP fire drill** — +22% 1d spike signals AI storage/server layer is heating up. Sympathy beneficiaries: VRT, CLS, HPE, DELL
+### Sector Rotation Heatmap (Live Scan Data — May 31, 2026)
+
+| Sector | Tickers | Phase | RSI | 1d | 5d | YTD | Avg Score |
+|--------|---------|-------|-----|-----|-----|------|-----------|
+| AI Servers (7) | NTAP, DELL, HPE, IBM, VRT, CLS, SMCI | **OVERBOUGHT** | 75 | +14.6% | +27.9% | +68% | 63 |
+| AI Software (17) | ZS, CRM, HUBS, SNOW, WDAY, MDB, ADBE, S, PATH, NOW, AI, PANW, NET, PLTR, CRWD, DDOG, FTNT | **SPIKING NOW** | 68 | +7.0% | +11.9% | +31% | 57 |
+| Commodities (6) | MP, CLF, NEM, SCCO, FCX, AA | **SPIKING NOW** | 60 | +0.2% | +10.4% | +2% | 55 |
+| AI Chips (10) | NVDA, MCHP, ARM, QCOM, MRVL, AVGO, MU, ON, INTC, AMD | **SPIKING NOW** | 67 | +0.8% | +10.0% | +103% | 52 |
+| AI Builders (5) | META, MSFT, GOOGL, AMZN, ORCL | **ACCELERATING** | 63 | +2.4% | +5.9% | +23% | 50 |
+| Semi Equipment (5) | TSM, KLAC, AMAT, LRCX, ASML | **ACCELERATING** | 61 | -0.2% | +3.8% | +22% | 48 |
+| AI Power (8) | TLN, NRG, VST, DLR, GEV, CEG, FSLR, EQIX | **ACCELERATING** | 53 | -0.4% | +3.3% | +6% | 53 |
+| AI Networking (4) | CALX, FFIV, ANET, CSCO | **ACCELERATING** | 60 | +0.9% | +3.1% | +22% | 55 |
+| Defense AI (4) | LDOS, NOC, RTX, LMT | **NEXT UP** | 44 | -0.7% | +2.4% | -23% | 50 |
+| Robotics (5) | ISRG, ROK, TER, FANUY, ABBNY | **NEXT UP** | 54 | -0.9% | +1.7% | +8% | 44 |
+| AI Optics (5) | LITE, COHR, CIEN, FOXF, AAOI | **PULLING BACK** | 52 | -2.7% | -3.4% | +30% | 51 |
+
+### The AI Infrastructure Capex Waterfall
+
+The confirmed rotation sequence (2023-2026 data):
+
+```
+Phase 1: Chips (2023-mid 2024)     — PEAKED, RSI 67, YTD +103%
+Phase 2: Servers (mid 2024-now)    — OVERBOUGHT, RSI 75, +28% in 5 days
+Phase 3: Optics/Networking (2025+) — PULLING BACK (-3.4% 5d) = BUY ZONE
+Phase 4: Power/Utilities (2025+)   — NEXT UP, RSI 53, longest-duration play
+Phase 5: Storage (emerging)        — NTAP just fired (score 70)
+Phase 6: Enterprise Software       — ACTIVATING NOW, IGV at 25-year low vs SMH
+```
+
+This isn't strictly serial — multiple layers spike simultaneously — but there's a clear staggered waterfall where chip earnings drive server orders which drive networking buildout which drive power demand. Each layer spikes 2-6 weeks after the one above it.
+
+### Cycle Times by Layer
+
+| Layer | Cycle Time | Characteristics |
+|-------|-----------|-----------------|
+| GPUs/Chips | 6-12 months | Can halt in a single quarter |
+| Servers | 12-18 months | Following GPU availability |
+| Networking/Optics | 12-24 months | Following server deployment |
+| Power/Utilities | 36-60+ months | Binding constraint, cannot be cancelled |
+| Software | Continuous | Accelerates after hardware deployed |
+
+**Power is the floor** — PPAs and grid interconnection queues create committed spend that persists even if model demand plateaus. This makes AI Power (VST, CEG, TLN) the lowest-risk, longest-duration play.
+
+### Predictive Indicators — How to Know Which Sector is Next
+
+**Leading signals a sector is about to rotate in:**
+
+1. **RSI < 50 while peers are spiking** — the sector is coiling while money flows into adjacent layers
+2. **5d momentum turning positive** while YTD is still negative or flat — early rotation signal
+3. **Volume divergence** — volume picking up on flat/down days = accumulation before the move
+4. **Peer spike confirmation** — when one name in a layer spikes (like NTAP did), sympathy follows within 1-2 weeks
+5. **Earnings clustering** — sectors with earnings 2-4 weeks out start pricing in expectations
+
+**ETF ratio analysis:**
+
+| Pair | What It Measures | Current Signal |
+|------|-----------------|----------------|
+| **IGV / SMH** | Software vs Semiconductors | **25-year low** — most oversold reading ever. Highest conviction mean reversion setup |
+| **SMH / SPY** | Semis vs broad market | Extended. SMH 168% above 50-month MA (double prior record) |
+| **XLU / XLK** | Power vs Tech | XLU outperforming (up while tech was down) — power rotation active |
+| **SOXX / SMH** | Broad semis vs top-heavy semis | Diverging MACD (SOXX positive May 26, SMH negative May 18) — breadth rotation within semis |
+
+**Key data points:**
+- 87% of IGV components started 2026 negative while 64% of SMH traded positive — extreme breadth divergence
+- IGV just received $1.5B in fresh inflows — institutional rotation beginning
+- DELL server blowout (May 29) immediately cascaded: NOW +14.4%, PLTR +9.2%, CRWD rallied — earnings clustering creates sympathy rotation events
+
+### The Rotation Playbook
+
+```
+Step 1: Watch overbought sectors (Servers RSI 75) for distribution signals
+Step 2: Money leaving Servers/Chips flows into:
+        → Power (physical bottleneck, RSI 53)
+        → Defense AI (most beaten-down, RSI 44)
+        → Optics (pulling back, earnings catalyst imminent)
+Step 3: Entry trigger = daily close above SMA-50 with rising volume
+Step 4: Confirmation = one peer in the sector spikes on earnings
+        (CIEN Jun 4 → optics; ASML Jul 15 → semi equipment)
+Step 5: Full rotation into Software last (IGV/SMH reversion)
+```
+
+### Best Rotation Entry Targets (from "Next Up" / "Pulling Back" sectors)
+
+| Ticker | Score | RSI | 5d | Sector | Setup |
+|--------|-------|-----|----|--------|-------|
+| **CALX** | 69 | 39 | +3.5% | AI Networking | WATCH — lowest RSI of any top scorer |
+| **LITE** | 60 | 45 | -11.4% | AI Optics | WATCH — pullback entry, CIEN ER catalyst |
+| **LDOS** | 57 | 38 | +3.9% | Defense AI | WATCH — beaten-down sector leader |
+| **ISRG** | 57 | 40 | -3.5% | Robotics | WATCH — surgical AI, not AI infra crowded |
+| **TLN** | 56 | 58 | +7.3% | AI Power | WATCH — accelerating into momentum |
+| **NRG** | 55 | 42 | -2.1% | AI Power | WATCH — pulling back, low RSI |
+| **TSM** | 55 | 59 | +2.8% | Semi Equipment | WATCH — foundry bellwether |
+| **VST** | 54 | 57 | +7.5% | AI Power | MONITOR — needs SMA-200 ($174) reclaim |
+| **NOC** | 54 | 42 | +2.2% | Defense AI | MONITOR — defense AI spending accelerating |
+
+### Where to Position NOW (Priority Order)
+
+| Priority | Sector | Thesis | Best Names | Timing |
+|----------|--------|--------|------------|--------|
+| 1 | **AI Optics** | Pulling back (-3.4% 5d), CIEN ER Jun 4 catalyst | LITE (RSI 45), CIEN, COHR | This week |
+| 2 | **AI Software** | IGV/SMH 25-year low, mean reversion | ZS (RSI 45), HUBS, WDAY | Now-6 weeks |
+| 3 | **AI Power** | Longest duration, structural bottleneck | VST, TLN, NRG | Accumulate now |
+| 4 | **Defense AI** | Most beaten-down (-23% YTD), RSI 44 | LDOS (RSI 38), NOC | Contrarian entry |
+
+### Sources
+
+- [The Second Wave: Why 2026 Marks the Great Rotation into AI Networking and Storage](https://markets.financialcontent.com/wral/article/marketminute-2026-1-1-the-second-wave-why-2026-marks-the-great-rotation-into-ai-networking-and-storage-picks-and-shovels)
+- [AI Infrastructure Stocks 2026: Picks and Shovels Playbook](https://www.heygotrade.com/en/blog/ai-infrastructure-stocks-picks-and-shovels-playbook/)
+- [Dell Shocks Wall Street with Booming AI Server Sales — CNBC](https://www.cnbc.com/2026/05/29/dell-shocked-street-on-booming-q1-server-sales-analysts-weigh-in.html)
+- [AI Software vs AI Hardware: The Coming Capital Rotation](https://www.heygotrade.com/en/blog/ai-software-vs-hardware-capital-rotation-2026/)
+- [IGV's $1.5 Billion Inflow Signals Renewed Software Optimism — Finviz](https://finviz.com/news/304823/igvs-15-billion-inflow-signals-renewed-software-optimism)
+- [Parabolic Semiconductor Rally: What Breaks The Trade? — Seeking Alpha](https://seekingalpha.com/article/4910424-parabolic-semiconductor-rally-what-breaks-trade)
+- [Applied Optoelectronics Rips 24%, Lumentum Jumps 17% — 24/7 Wall St.](https://247wallst.com/investing/2026/05/11/applied-optoelectronics-rips-24-lumentum-jumps-17-coherent-rallies-13-as-optics-trade-catches-fire/)
+- [Top 5 Stocks For AI's Optical Revolution In 2026 — Seeking Alpha](https://seekingalpha.com/article/4889217-top-5-stocks-for-ais-optical-revolution-in-2026)
+- [3 Nuclear Power Stocks Set to Flourish in 2026 — Nasdaq](https://www.nasdaq.com/articles/3-nuclear-power-stocks-set-flourish-2026-ai-data-center-boom)
+- [The $3 Trillion AI Infrastructure Supercycle](https://www.unboxfuture.com/2026/05/the-3-trillion-ai-infrastructure_0428382793.html)
+
+---
+
+## Key Market Context (as of June 2, 2026)
+
+- **AI server earnings cascade firing:** NTAP (+22% May 29), DELL (+33% May 29), HPE (+28% Jun 1) — three consecutive blowouts confirm AI infrastructure demand is real and accelerating
+- **MRVL Computex surge (+24%):** Jensen Huang called it "next trillion-dollar company" — custom silicon thesis validated
+- **Earnings week:** AVGO (Tue AMC) and CIEN (Wed BMO) — two more AI bellwethers this week
+- **HPE raised FY guidance by $1/share** — from $2.30-$2.50 to $3.35-$3.45 EPS. CEO says "biggest server backlog ever"
 - Hyperscaler capex: ~$690B in 2026 (all supply-constrained, not demand-constrained)
 - PHLX Semiconductor Index: +65% YTD (some dot-com late-1999 comparisons -- buy pullbacks, don't chase)
 - FOMC: June 16-17 (98.2% probability no change, rates 3.50-3.75%)
