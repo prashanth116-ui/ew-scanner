@@ -149,6 +149,16 @@ export default function SectorRotationPage() {
         </div>
       </CollapsiblePanel>
 
+      {/* Breadth Thrust */}
+      <CollapsiblePanel id="breadth-thrust" title="Breadth Thrust Signal" collapsed={collapsedPanels.has("breadth-thrust")} onToggle={togglePanel}>
+        <BreadthThrustBanner sectors={data.sectors} />
+      </CollapsiblePanel>
+
+      {/* Rotation Watchlist */}
+      <CollapsiblePanel id="rotation-watchlist" title="Rotation Watchlist" collapsed={collapsedPanels.has("rotation-watchlist")} onToggle={togglePanel}>
+        <PreRotationWatchlist sectors={data.sectors} />
+      </CollapsiblePanel>
+
       {/* Sector Heatmap Grid */}
       <CollapsiblePanel id="sector-scores" title="Sector Scores" collapsed={collapsedPanels.has("sector-scores")} onToggle={togglePanel}
         actions={
@@ -262,16 +272,6 @@ export default function SectorRotationPage() {
             })()}
           </div>
         </div>
-      </CollapsiblePanel>
-
-      {/* Breadth Thrust */}
-      <CollapsiblePanel id="breadth-thrust" title="Breadth Thrust Signal" collapsed={collapsedPanels.has("breadth-thrust")} onToggle={togglePanel}>
-        <BreadthThrustBanner sectors={data.sectors} />
-      </CollapsiblePanel>
-
-      {/* Pre-Rotation Watchlist */}
-      <CollapsiblePanel id="rotation-watchlist" title="Rotation Watchlist" collapsed={collapsedPanels.has("rotation-watchlist")} onToggle={togglePanel}>
-        <PreRotationWatchlist sectors={data.sectors} />
       </CollapsiblePanel>
 
       {/* Correlation Matrix */}
