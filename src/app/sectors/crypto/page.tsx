@@ -24,7 +24,7 @@ import {
 } from "@/lib/crypto-rotation/storage";
 import { exportCryptoRotationToExcel } from "@/lib/crypto-rotation/export";
 import { CRYPTO_UNIVERSE } from "@/data/crypto-sector-universe";
-import { compositeColor, compositeTextColor } from "@/lib/color-utils";
+import { compositeTextColor } from "@/lib/color-utils";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { ScannerCTA } from "@/components/scanner-cta";
 
@@ -76,6 +76,7 @@ function CollapsiblePanel({
     <div className={`rounded-xl border border-[#2a2a2a] bg-[#141414] ${className}`}>
       <button
         onClick={() => onToggle(id)}
+        aria-expanded={!collapsed}
         className="flex w-full items-center justify-between px-4 py-3 text-left"
       >
         <div className="flex items-center gap-2">
@@ -132,10 +133,15 @@ function Sparkline({ returns }: { returns?: number[] }) {
 
 // ── RRG Chart ──
 
-function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
+function RRGChart({ sectors: rawSectors }: { sectors: SectorRotationScore[] }) {
   const W = 500;
   const H = 400;
   const PAD = 50;
+
+  // Filter out sectors with invalid RRG data (NaN from bad Yahoo responses)
+  const sectors = rawSectors.filter(
+    (s) => isFinite(s.rsRatio) && isFinite(s.rsMomentum)
+  );
 
   const allRatios: number[] = [];
   const allMoms: number[] = [];
@@ -143,8 +149,10 @@ function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
     allRatios.push(s.rsRatio);
     allMoms.push(s.rsMomentum);
     for (const pt of s.rrgTrail ?? []) {
-      allRatios.push(pt.rsRatio);
-      allMoms.push(pt.rsMomentum);
+      if (isFinite(pt.rsRatio) && isFinite(pt.rsMomentum)) {
+        allRatios.push(pt.rsRatio);
+        allMoms.push(pt.rsMomentum);
+      }
     }
   }
   if (allRatios.length === 0) return <div className="text-center py-8 text-sm text-[#555]">No RRG data available</div>;
@@ -228,6 +236,8 @@ function SectorCard({
   return (
     <button
       onClick={onClick}
+      aria-expanded={isExpanded}
+      aria-label={`${sector.sector} — score ${sector.compositeScore}, ${sector.quadrant}`}
       className={`rounded-lg border p-3 text-left transition-colors hover:bg-[#1a1a1a] ${
         isExpanded ? "border-[#5ba3e6]/50 bg-[#1a1a1a]" : "border-[#2a2a2a] bg-[#141414]"
       }`}
@@ -343,6 +353,7 @@ function EntrySignalsPanel({ trackerData, regime }: {
 
   const rawRegime = regime?.regime ?? "MIXED";
   const mappedRegime = rawRegime === "INFLATIONARY" ? "MIXED" as const : rawRegime as "RISK_ON" | "RISK_OFF" | "MIXED";
+  // Invert vixSlope back to marketTrend (server inverts marketTrend→vixSlope for equity UI compat)
   const cryptoRegime: CryptoRegimeData = {
     regime: mappedRegime,
     btcVolatility: regime?.vix ?? 0,
@@ -507,7 +518,7 @@ export default function CryptoRotationPage() {
   }, []);
 
   useEffect(() => { fetchData(); return () => { abortRef.current?.abort(); }; }, [fetchData]);
-  useEffect(() => { const id = setInterval(() => fetchData(true), 10 * 60 * 1000); return () => clearInterval(id); }, [fetchData]);
+  useEffect(() => { const id = setInterval(() => { fetchData(true); fetchTracker(); }, 10 * 60 * 1000); return () => clearInterval(id); }, [fetchData, fetchTracker]);
 
   const handleExport = useCallback(() => { if (data) exportCryptoRotationToExcel(data); }, [data]);
 
@@ -730,6 +741,7 @@ function SectorAccordion({ sector, tokens }: { sector: SectorRotationScore; toke
     <div className="border rounded-lg border-[#2a2a2a]">
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg"
       >
         <div className="flex items-center gap-2">

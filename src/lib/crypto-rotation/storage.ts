@@ -37,6 +37,10 @@ export function loadCryptoRotation(): CryptoRotationResult | null {
 
 export function saveCryptoRotation(data: CryptoRotationResult): void {
   if (!isClient()) return;
-  const cached: CachedRotation = { data, savedAt: Date.now(), version: SCHEMA_VERSION };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cached));
+  try {
+    const cached: CachedRotation = { data, savedAt: Date.now(), version: SCHEMA_VERSION };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cached));
+  } catch {
+    // localStorage quota exceeded or stringify failure — ignore
+  }
 }

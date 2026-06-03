@@ -27,8 +27,9 @@ function applyCryptoQualityGates(
       reasons.push(`market_cap=$${(s.marketCap / 1e6).toFixed(0)}M (<$50M)`);
     }
 
-    // Gate 2: Dollar volume >= $500K (crypto uses dollar volume, not share count)
-    const dollarVolume = s.volume; // For crypto, volume from Yahoo is already in USD terms
+    // Gate 2: Dollar volume >= $500K
+    // Yahoo Finance reports crypto volume in coin units, not USD — multiply by price
+    const dollarVolume = s.volume * s.price;
     if (dollarVolume < 500_000) {
       reasons.push(`dollar_vol=$${(dollarVolume / 1e3).toFixed(0)}K (<$500K)`);
     }

@@ -29,16 +29,16 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
       { symbol: "ICP-USD", name: "Internet Computer" },
       { symbol: "ALGO-USD", name: "Algorand" },
       { symbol: "SEI-USD", name: "Sei" },
-      { symbol: "FTM-USD", name: "Fantom" },
+      { symbol: "S32684-USD", name: "Sonic" },
     ],
   },
   {
     id: "layer-2",
     displayName: "Layer 2 & Scaling",
-    etf: "MATIC-USD",
+    etf: "POL28321-USD",
     description: "Scaling solutions and rollups",
     stocks: [
-      { symbol: "MATIC-USD", name: "Polygon" },
+      { symbol: "POL28321-USD", name: "Polygon" },
       { symbol: "ARB11841-USD", name: "Arbitrum" },
       { symbol: "OP-USD", name: "Optimism" },
       { symbol: "MNT27075-USD", name: "Mantle" },
@@ -138,7 +138,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
       { symbol: "GALA-USD", name: "Gala" },
       { symbol: "ILV-USD", name: "Illuvium" },
       { symbol: "ENJ-USD", name: "Enjin Coin" },
-      { symbol: "RONIN-USD", name: "Ronin" },
+      { symbol: "RON14101-USD", name: "Ronin" },
     ],
   },
   {

@@ -16,7 +16,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await calculateCryptoRotationTracker();
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: { "Cache-Control": "s-maxage=900, stale-while-revalidate=60" },
+    });
   } catch (err) {
     logError("api/crypto-rotation-tracker", err);
     return NextResponse.json(

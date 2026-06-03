@@ -350,19 +350,19 @@ export async function calculateCryptoRotationTracker(): Promise<RotationTrackerR
     return cachedResult;
   }
 
-  // Fetch BTC chart
-  const btcChart = await fetchYahooChart(CRYPTO_BENCHMARK, "1y", "1d");
-  if (!btcChart || btcChart.closes.length < 50) {
-    throw new Error("Failed to fetch BTC-USD benchmark data");
-  }
-
-  // Fetch all proxy charts
+  // Fetch BTC + all proxy charts in parallel
   const etfChartPromises = CRYPTO_UNIVERSE.map((sector) =>
     fetchYahooChart(sector.etf, "1y", "1d")
       .then((chart) => ({ sectorId: sector.id, chart }))
       .catch(() => ({ sectorId: sector.id, chart: null }))
   );
-  const etfCharts = await Promise.all(etfChartPromises);
+  const [btcChart, ...etfCharts] = await Promise.all([
+    fetchYahooChart(CRYPTO_BENCHMARK, "1y", "1d"),
+    ...etfChartPromises,
+  ]);
+  if (!btcChart || btcChart.closes.length < 50) {
+    throw new Error("Failed to fetch BTC-USD benchmark data");
+  }
 
   // Detect events per sector
   const allEvents: RotationEvent[] = [];
@@ -408,10 +408,10 @@ export async function calculateCryptoRotationTracker(): Promise<RotationTrackerR
     stocks: [], // No per-token chart fetching in tracker — use main rotation page for that
   }));
 
-  // Recently ended
-  const tenDaysAgo = new Date();
-  tenDaysAgo.setDate(tenDaysAgo.getDate() - 14);
-  const cutoff = tenDaysAgo.toISOString().slice(0, 10);
+  // Recently ended (14 calendar days ≈ 10 trading days; crypto trades 24/7)
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - 14);
+  const cutoff = cutoffDate.toISOString().slice(0, 10);
   const recentlyEndedRotations = allEvents.filter(
     (e) => e.endDate !== null && e.endDate >= cutoff
   );

@@ -216,7 +216,8 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
       raw.flowPriceDivergence,
       raw.accelerationInflection,
     ].filter(Boolean).length;
-    const stealthAccumulation = leadingCount >= 2;
+    // Crypto has 2 signals (no breadth), so require 1/2 (vs equity 2/3)
+    const stealthAccumulation = leadingCount >= 1;
 
     return {
       sector: raw.displayName,
@@ -309,6 +310,7 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
   const rawRoc20dLookup = new Map(rawScores.map((r) => [r.displayName, r.roc20d]));
 
   const stockInputs: StockInput[] = [];
+  const seenTokens = new Set<string>();
   for (const sectorDef of CRYPTO_UNIVERSE) {
     const scored = sectorLookup.get(sectorDef.displayName);
     if (!scored) continue;
@@ -316,6 +318,10 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
     const sectorAccel = rawAccelLookup.get(sectorDef.displayName) ?? 0;
 
     for (const token of sectorDef.stocks) {
+      // Deduplicate: tokens appearing in multiple sectors use first sector only
+      if (seenTokens.has(token.symbol)) continue;
+      seenTokens.add(token.symbol);
+
       const q = batchQuotes.get(token.symbol);
       if (!q || q.price <= 0) continue;
 
@@ -409,6 +415,9 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
     regime: {
       regime: regime.regime,
       vix: regime.btcVolatility, // Repurpose VIX field for BTC vol
+      // Invert marketTrend→vixSlope: equity UI treats "falling vixSlope" as bullish.
+      // By mapping rising market → falling vixSlope, the equity regime banner renders correctly.
+      // The client-side EntrySignalsPanel inverts this back to recover the original marketTrend.
       vixSlope: regime.marketTrend === "rising" ? "falling" : regime.marketTrend === "falling" ? "rising" : "flat",
       yield10y: 0,
       dxy: 0,
