@@ -49,6 +49,8 @@ export interface PreRunStockData {
   // Phase 1: New data fields
   insiderBuys90d: number | null;           // H: Insider buy transactions in last 90d
   putCallRatio: number | null;             // I: Put/call OI ratio for near-term expiry
+  callVolume: number | null;              // Total call contracts traded (nearest expiry)
+  putVolume: number | null;               // Total put contracts traded (nearest expiry)
   relativeStrength20d: number | null;      // J: Stock 20d return minus sector ETF 20d return (pct pts)
   sectorReturn20d: number | null;          // J: Sector ETF 20d return (%)
   pctFromBaseHigh: number | null;          // K: % below 3mo high (base resistance)

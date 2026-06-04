@@ -22,6 +22,8 @@ export async function exportPreRunToExcel(results: PreRunResult[]): Promise<void
     "Earnings Beat Streak": r.data.earningsBeatStreak ?? "-",
     "Insider Buys 90d": r.data.insiderBuys90d ?? "-",
     "Put/Call Ratio": r.data.putCallRatio?.toFixed(2) ?? "-",
+    "Call Volume": r.data.callVolume?.toLocaleString() ?? "-",
+    "Put Volume": r.data.putVolume?.toLocaleString() ?? "-",
     "Rel Strength 20d": r.data.relativeStrength20d?.toFixed(1) ?? "-",
     "Sector Return 20d": r.data.sectorReturn20d?.toFixed(1) ?? "-",
     "% From Base High": r.data.pctFromBaseHigh?.toFixed(1) ?? "-",

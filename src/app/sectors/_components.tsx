@@ -368,7 +368,22 @@ export function PreRotationWatchlist({ sectors }: { sectors: SectorRotationScore
   const nearCandidates = sectors.filter(
     (s) => s.quadrant === "LAGGING" && s.acceleration > 0 && s.cmf20 <= 0 && !candidates.includes(s)
   );
-  if (candidates.length === 0 && nearCandidates.length === 0) return <p className="text-sm text-[#666]">No rotation watchlist candidates</p>;
+  if (candidates.length === 0 && nearCandidates.length === 0) {
+    const lagging = sectors.filter((s) => s.quadrant === "LAGGING");
+    const laggingWithAccel = lagging.filter((s) => s.acceleration > 0);
+    return (
+      <div className="space-y-1">
+        <p className="text-sm text-[#666]">No rotation watchlist candidates</p>
+        <p className="text-[11px] text-[#555]">
+          {lagging.length === 0
+            ? "No sectors are in the LAGGING quadrant — rotation entry setups require a lagging-to-improving transition."
+            : laggingWithAccel.length === 0
+              ? `${lagging.length} LAGGING sector${lagging.length !== 1 ? "s" : ""} (${lagging.map((s) => s.sector).join(", ")}) but all have negative acceleration — no inflection yet.`
+              : `${laggingWithAccel.map((s) => s.sector).join(", ")} ${laggingWithAccel.length === 1 ? "is" : "are"} LAGGING with positive acceleration but CMF is negative — money flow hasn't confirmed.`}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -416,7 +431,20 @@ export function BreadthThrustBanner({ sectors }: { sectors: SectorRotationScore[
   const thrustCandidates = sectors.filter(
     (s) => s.breadthPct !== null && s.breadthPct >= 70 && s.accelerationInflection
   );
-  if (thrustCandidates.length === 0) return <p className="text-sm text-[#666]">No breadth thrust signals detected</p>;
+  if (thrustCandidates.length === 0) {
+    const highBreadth = sectors.filter((s) => s.breadthPct !== null && s.breadthPct >= 70);
+    const hasInflection = sectors.filter((s) => s.accelerationInflection);
+    return (
+      <div className="space-y-1">
+        <p className="text-sm text-[#666]">No breadth thrust signals detected</p>
+        <p className="text-[11px] text-[#555]">
+          {highBreadth.length === 0
+            ? "No sectors have breadth \u226570% — broad participation is weak across all sectors."
+            : `${highBreadth.map((s) => s.sector).join(", ")} ${highBreadth.length === 1 ? "has" : "have"} breadth \u226570% but ${hasInflection.length === 0 ? "no sectors show acceleration inflection" : "inflection is in " + hasInflection.map((s) => s.sector).join(", ") + " (below 70% breadth)"}.`}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -1886,7 +1914,35 @@ export function RotationEntrySignals({
     >
       <div className="space-y-3">
         {entries.length === 0 && (
-          <p className="text-xs text-[#666]">No active rotations currently pass all entry gates (action signal + CMF + acceleration + stock quality). Check the <a href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</a> for current rotation status.</p>
+          <div className="space-y-1">
+            <p className="text-xs text-[#666]">No active rotations currently pass all entry gates (action signal + CMF + acceleration + stock quality). Check the <a href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</a> for current rotation status.</p>
+            {rotationData.activeRotations.length > 0 && (
+              <div className="text-[11px] text-[#555] space-y-0.5">
+                <p>{rotationData.activeRotations.length} active rotation{rotationData.activeRotations.length !== 1 ? "s" : ""} blocked:</p>
+                {rotationData.activeRotations.map((r) => {
+                  const ev = r.event;
+                  const h = getHealth(ev);
+                  const lc = computeLifecycleStage(ev);
+                  const conv = computeConviction(ev);
+                  const regime = rotationData.regime;
+                  const alignment = regime ? isRegimeAligned(ev.sectorName, regime) : "neutral";
+                  const sig = computeActionSignal(lc, conv, alignment);
+                  const blocks: string[] = [];
+                  if (sig.action !== "ENTER" && sig.action !== "ADD ON PULLBACK") blocks.push(`action=${sig.action ?? "none"}`);
+                  if (h.cmf20 <= 0) blocks.push(`CMF ${h.cmf20.toFixed(3)}`);
+                  if (h.acceleration <= 0) blocks.push(`accel ${h.acceleration.toFixed(1)}`);
+                  const sectorStocks = enrichedStocks.filter((s) => s.sectorEtf === ev.etf);
+                  const hasQuality = sectorStocks.some(
+                    (s) => (s.conviction === "HIGH" || s.conviction === "MEDIUM") && (s.category === "LEADER" || s.category === "TURNAROUND")
+                  );
+                  if (!hasQuality) blocks.push("no quality stocks");
+                  return (
+                    <p key={ev.etf}><span className="text-[#888]">{ev.sectorName}</span> — {blocks.join(", ")}</p>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
         {entries.map((entry) => {
           const { rotation, signal, lifecycle, conviction, regimeAlignment, health, patternStats, topStocks } = entry;

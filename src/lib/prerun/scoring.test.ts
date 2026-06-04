@@ -30,6 +30,8 @@ function makeData(overrides: Partial<PreRunStockData> = {}): PreRunStockData {
     institutionalPct: null,
     insiderBuys90d: null,
     putCallRatio: null,
+    callVolume: null,
+    putVolume: null,
     relativeStrength20d: null,
     sectorReturn20d: null,
     pctFromBaseHigh: null,

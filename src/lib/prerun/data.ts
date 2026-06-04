@@ -298,10 +298,16 @@ async function fetchFinnhubEarningsSurprises(
   }
 }
 
-/** Fetch options chain from Yahoo Finance and calculate put/call OI ratio. */
-async function fetchYahooPutCallRatio(
+interface OptionsFlowData {
+  putCallRatio: number;
+  callVolume: number;
+  putVolume: number;
+}
+
+/** Fetch options chain from Yahoo Finance and calculate put/call OI ratio + volume. */
+async function fetchYahooOptionsFlow(
   ticker: string
-): Promise<number | null> {
+): Promise<OptionsFlowData | null> {
   const auth = await getYahooCrumb();
   if (!auth) return null;
 
@@ -316,8 +322,8 @@ async function fetchYahooPutCallRatio(
       optionChain?: {
         result?: {
           options?: {
-            calls?: { openInterest?: number }[];
-            puts?: { openInterest?: number }[];
+            calls?: { openInterest?: number; volume?: number }[];
+            puts?: { openInterest?: number; volume?: number }[];
           }[];
         }[];
       };
@@ -328,11 +334,21 @@ async function fetchYahooPutCallRatio(
 
     let totalCallOI = 0;
     let totalPutOI = 0;
-    for (const c of options.calls ?? []) totalCallOI += c.openInterest ?? 0;
-    for (const p of options.puts ?? []) totalPutOI += p.openInterest ?? 0;
+    let totalCallVol = 0;
+    let totalPutVol = 0;
+    for (const c of options.calls ?? []) {
+      totalCallOI += c.openInterest ?? 0;
+      totalCallVol += c.volume ?? 0;
+    }
+    for (const p of options.puts ?? []) {
+      totalPutOI += p.openInterest ?? 0;
+      totalPutVol += p.volume ?? 0;
+    }
 
-    if (totalCallOI === 0) return totalPutOI > 0 ? 10 : null; // All puts, very bearish
-    return totalPutOI / totalCallOI;
+    const putCallRatio = totalCallOI === 0 ? (totalPutOI > 0 ? 10 : 0) : totalPutOI / totalCallOI;
+    if (totalCallOI === 0 && totalPutOI === 0) return null;
+
+    return { putCallRatio, callVolume: totalCallVol, putVolume: totalPutVol };
   } catch {
     return null;
   }
@@ -1162,7 +1178,7 @@ export async function fetchPreRunData(
     fetchFinnhubEarnings(ticker),
     fetchFinnhubInsiderTransactions(ticker), // H: Insider buying
     fetchFinnhubEarningsSurprises(ticker),   // D: Beat streak
-    fetchYahooPutCallRatio(ticker),          // I: Options flow
+    fetchYahooOptionsFlow(ticker),           // I: Options flow
     fetchSectorETFReturn(sectorETF),         // J: Sector return
     fetchSECQuarterlyRevenue(ticker),        // D: Revenue acceleration
   ]);
@@ -1173,7 +1189,10 @@ export async function fetchPreRunData(
   const finnhubEarnings = settled[3].status === "fulfilled" ? settled[3].value : null;
   const insiderBuys = settled[4].status === "fulfilled" ? settled[4].value : 0;
   const earningsBeatStreak = settled[5].status === "fulfilled" ? settled[5].value : 0;
-  const putCallRatio = settled[6].status === "fulfilled" ? settled[6].value : null;
+  const optionsFlow = settled[6].status === "fulfilled" ? settled[6].value : null;
+  const putCallRatio = optionsFlow?.putCallRatio ?? null;
+  const callVolume = optionsFlow?.callVolume ?? null;
+  const putVolume = optionsFlow?.putVolume ?? null;
   const sectorReturn20d = settled[7].status === "fulfilled" ? settled[7].value : null;
   const quarterlyRevenue = settled[8].status === "fulfilled" ? settled[8].value : null;
 
@@ -1440,6 +1459,8 @@ export async function fetchPreRunData(
     // New fields
     insiderBuys90d: insiderBuys,
     putCallRatio,
+    callVolume,
+    putVolume,
     relativeStrength20d,
     sectorReturn20d,
     pctFromBaseHigh,

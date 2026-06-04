@@ -146,10 +146,16 @@ function computeSMA(closes: number[], period: number): number {
   return slice.reduce((a, b) => a + b, 0) / slice.length;
 }
 
-/** Fetch options chain from Yahoo Finance and calculate put/call OI ratio. */
-async function fetchYahooPutCallRatio(
+interface OptionsFlowData {
+  putCallRatio: number;
+  callVolume: number;
+  putVolume: number;
+}
+
+/** Fetch options chain from Yahoo Finance and calculate put/call OI ratio + volume. */
+async function fetchYahooOptionsFlow(
   ticker: string
-): Promise<number | null> {
+): Promise<OptionsFlowData | null> {
   const auth = await getYahooCrumb();
   if (!auth) return null;
 
@@ -164,8 +170,8 @@ async function fetchYahooPutCallRatio(
       optionChain?: {
         result?: {
           options?: {
-            calls?: { openInterest?: number }[];
-            puts?: { openInterest?: number }[];
+            calls?: { openInterest?: number; volume?: number }[];
+            puts?: { openInterest?: number; volume?: number }[];
           }[];
         }[];
       };
@@ -176,11 +182,21 @@ async function fetchYahooPutCallRatio(
 
     let totalCallOI = 0;
     let totalPutOI = 0;
-    for (const c of options.calls ?? []) totalCallOI += c.openInterest ?? 0;
-    for (const p of options.puts ?? []) totalPutOI += p.openInterest ?? 0;
+    let totalCallVol = 0;
+    let totalPutVol = 0;
+    for (const c of options.calls ?? []) {
+      totalCallOI += c.openInterest ?? 0;
+      totalCallVol += c.volume ?? 0;
+    }
+    for (const p of options.puts ?? []) {
+      totalPutOI += p.openInterest ?? 0;
+      totalPutVol += p.volume ?? 0;
+    }
 
-    if (totalCallOI === 0) return totalPutOI > 0 ? 10 : null;
-    return totalPutOI / totalCallOI;
+    const putCallRatio = totalCallOI === 0 ? (totalPutOI > 0 ? 10 : 0) : totalPutOI / totalCallOI;
+    if (totalCallOI === 0 && totalPutOI === 0) return null;
+
+    return { putCallRatio, callVolume: totalCallVol, putVolume: totalPutVol };
   } catch {
     return null;
   }
@@ -194,14 +210,17 @@ export async function fetchCatalystData(
   symbol: string
 ): Promise<CatalystRawData | null> {
   // Fetch chart, summary, and options in parallel
-  const [chartData, summary, putCallRatio] = await Promise.all([
+  const [chartData, summary, optionsFlow] = await Promise.all([
     fetchYahooChart(symbol, "3mo", "1d"),
     fetchYahooSummary(symbol, [
       "price", "defaultKeyStatistics", "financialData", "summaryDetail",
       "earningsHistory", "insiderTransactions", "majorHoldersBreakdown",
     ]),
-    fetchYahooPutCallRatio(symbol),
+    fetchYahooOptionsFlow(symbol),
   ]);
+  const putCallRatio = optionsFlow?.putCallRatio ?? null;
+  const callVolume = optionsFlow?.callVolume ?? null;
+  const putVolume = optionsFlow?.putVolume ?? null;
 
   if (!chartData || !summary) return null;
 
@@ -341,6 +360,8 @@ export async function fetchCatalystData(
     sma200,
     earningsSurprises,
     putCallRatio,
+    callVolume,
+    putVolume,
     insiderNetBuys: { purchases, sales },
     institutionalPercent,
   };

@@ -131,6 +131,8 @@ export interface CatalystRawData {
   sma200: number;
   earningsSurprises: number[];  // last 4 quarters surprise % (newest first)
   putCallRatio: number | null;
+  callVolume: number | null;   // total call contracts traded (nearest expiry)
+  putVolume: number | null;    // total put contracts traded (nearest expiry)
   insiderNetBuys: { purchases: number; sales: number };
   institutionalPercent: number; // 0-1 fraction
 }
