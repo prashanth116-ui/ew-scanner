@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { RefreshCw, ArrowLeft, AlertTriangle, TrendingUp, Shield, Banknote, Crosshair } from "lucide-react";
+import { RefreshCw, ArrowLeft, AlertTriangle, TrendingUp, Shield, Banknote, Crosshair, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { useSectorData } from "../_use-sector-data";
@@ -50,11 +50,14 @@ const LIFECYCLE_STYLE: Record<LifecycleStage, { bg: string; text: string }> = {
   EXHAUSTING: { bg: "bg-red-500/15", text: "text-red-400" },
 };
 
+type TabView = "brief" | "guide";
+
 export default function DailyBriefPage() {
   const { data, loading, error, fetchData, rotationData } = useSectorData();
   const [collapsed, toggle] = useCollapsedPanels("ew-brief-collapsed-v1");
   const [macroEvents, setMacroEvents] = useState<CatalystCalendarEvent[]>([]);
   const [macroLoading, setMacroLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabView>("brief");
 
   // Fetch macro events
   useEffect(() => {
@@ -144,6 +147,33 @@ export default function DailyBriefPage() {
           </button>
         </div>
       </div>
+
+      {/* Tab Toggle */}
+      <div className="flex gap-1 rounded-lg border border-[#333] bg-[#111] p-1 w-fit">
+        <button
+          onClick={() => setActiveTab("brief")}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            activeTab === "brief" ? "bg-[#222] text-white" : "text-[#888] hover:text-white"
+          }`}
+        >
+          Brief
+        </button>
+        <button
+          onClick={() => setActiveTab("guide")}
+          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            activeTab === "guide" ? "bg-[#222] text-white" : "text-[#888] hover:text-white"
+          }`}
+        >
+          <BookOpen className="h-3 w-3" />
+          Guide
+        </button>
+      </div>
+
+      {/* Guide Tab */}
+      {activeTab === "guide" && <BriefGuide />}
+
+      {/* Brief Content */}
+      {activeTab === "brief" && <>
 
       {/* Market Posture Banner */}
       {posture && <PostureBanner posture={posture} />}
@@ -398,6 +428,8 @@ export default function DailyBriefPage() {
           </div>
         </CollapsiblePanel>
       )}
+
+      </>}
     </div>
   );
 }
@@ -622,6 +654,243 @@ function StockTable({ stocks }: { stocks: EnrichedStock[] }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ── Guide Component ──
+
+function BriefGuide() {
+  return (
+    <div className="space-y-6 pb-8">
+      {/* Overview */}
+      <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-5">
+        <h2 className="text-lg font-bold text-white mb-3">What is the Daily Brief?</h2>
+        <p className="text-sm text-[#ccc] leading-relaxed">
+          The Daily Brief synthesizes raw sector rotation data into an opinionated, actionable summary. While the
+          Sectors Dashboard shows you <em>all</em> the data and the Rotation Tracker shows <em>event history</em>,
+          the Brief answers one question: <strong className="text-white">&quot;What should I do today?&quot;</strong>
+        </p>
+        <p className="mt-3 text-sm text-[#ccc] leading-relaxed">
+          All analysis is <strong className="text-cyan-400">100% rule-based</strong> — deterministic formulas with
+          no AI interpretation. The same inputs always produce the same outputs. You can trace every recommendation
+          back to specific data points.
+        </p>
+      </div>
+
+      {/* How it differs */}
+      <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-5">
+        <h2 className="text-lg font-bold text-white mb-3">How is this different from other pages?</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="text-xs text-[#666] border-b border-[#222]">
+                <th className="pb-2 pr-4">Page</th>
+                <th className="pb-2 pr-4">Shows you</th>
+                <th className="pb-2">Analogy</th>
+              </tr>
+            </thead>
+            <tbody className="text-[#ccc]">
+              <tr className="border-b border-[#1a1a1a]">
+                <td className="py-2.5 pr-4 text-white font-medium">Sectors Dashboard</td>
+                <td className="py-2.5 pr-4">Raw data — 14 sector scores, quadrants, RRG chart, correlations, all enriched stocks</td>
+                <td className="py-2.5 text-[#888]">The spreadsheet</td>
+              </tr>
+              <tr className="border-b border-[#1a1a1a]">
+                <td className="py-2.5 pr-4 text-white font-medium">Rotation Tracker</td>
+                <td className="py-2.5 pr-4">Event timeline — when rotations started/ended, signal count history, duration, performance</td>
+                <td className="py-2.5 text-[#888]">The activity log</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 pr-4 text-white font-medium">Daily Brief</td>
+                <td className="py-2.5 pr-4">Synthesized opinion — posture, tiers, action signals, risk flags, leading indicators</td>
+                <td className="py-2.5 text-[#888]">The analyst note</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Section-by-section breakdown */}
+      <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-5">
+        <h2 className="text-lg font-bold text-white mb-4">Section-by-Section Guide</h2>
+        <div className="space-y-5">
+
+          {/* Market Posture */}
+          <GuideSection
+            title="Market Posture"
+            color="text-green-400"
+            description="A single-word classification of overall market positioning. Combines regime, VIX, active rotation conviction, and sector dispersion."
+            details={[
+              { label: "AGGRESSIVE", desc: "Risk-on regime + 2+ high-conviction rotations + elevated dispersion. Lean into strongest sectors with full sizing." },
+              { label: "SELECTIVE", desc: "Risk-on/mixed regime with some rotation activity. Opportunities exist but be disciplined — focus on highest-conviction setups only." },
+              { label: "DEFENSIVE", desc: "Risk-off regime OR VIX rising with majority sectors weakening. Favor defensive sectors, reduce equity exposure." },
+              { label: "CASH", desc: "Risk-off + VIX above 30 + zero positive-conviction rotations. Capital preservation is the priority." },
+            ]}
+            unique="This classification doesn't exist on any other page. The dashboard shows regime but doesn't translate it into a positioning recommendation."
+          />
+
+          {/* Upcoming Events */}
+          <GuideSection
+            title="Upcoming Events"
+            color="text-cyan-400"
+            description="Macro catalysts (FOMC, CPI, Jobs, GDP, etc.) in the next 7 days. Events within 1-2 days are highlighted in red/amber."
+            details={[
+              { label: "Why it matters", desc: "Major macro events cause regime shifts. Knowing FOMC is in 2 days helps you avoid opening new positions into volatility." },
+              { label: "Data source", desc: "Pulled from the catalyst calendar API — same data that feeds the earnings calendar, filtered to macro-only events." },
+            ]}
+            unique="Not available on any other page in the sector rotation suite."
+          />
+
+          {/* Regime Overview */}
+          <GuideSection
+            title="Regime Overview"
+            color="text-cyan-400"
+            description="The current macro regime (RISK_ON / RISK_OFF / MIXED) plus cross-sector ratio pairs and dispersion metrics."
+            details={[
+              { label: "XLY/XLP ratio", desc: "Consumer Discretionary vs Staples. Rising = risk appetite. Falling = defensive rotation." },
+              { label: "XLK/XLU ratio", desc: "Tech vs Utilities. Rising = growth favored. Falling = safety bid." },
+              { label: "Dispersion Index", desc: "How spread apart sectors are. High dispersion = rotational opportunity. Low = correlated market." },
+              { label: "Sector Spread", desc: "Difference between best and worst sector composite scores." },
+            ]}
+            unique="Same regime banner is on the dashboard, but the Brief adds cross-sector pairs and dispersion context in a compact layout."
+          />
+
+          {/* Sector Tiers */}
+          <GuideSection
+            title="Sector Tiers"
+            color="text-green-400"
+            description="All 14 sectors classified into three actionability tiers based on composite score, quadrant, and acceleration."
+            details={[
+              { label: "Actionable", desc: "TRADE or BUILD action + composite >= 60 + LEADING quadrant (or IMPROVING with positive acceleration). These are your go-to sectors." },
+              { label: "Watch", desc: "Meets some criteria but not all — either lower composite, WATCH action, or IMPROVING without positive acceleration. Monitor for promotion." },
+              { label: "Avoid", desc: "TRIM or AVOID action. Weakening or lagging with poor metrics. Do not initiate new positions." },
+            ]}
+            unique="The dashboard shows all 14 sectors equally. The Brief pre-classifies them so you don't have to mentally filter."
+          />
+
+          {/* Active Rotations */}
+          <GuideSection
+            title="Active Rotations"
+            color="text-cyan-400"
+            description="Each active sector rotation with lifecycle, conviction, and an explicit action signal."
+            details={[
+              { label: "Lifecycle", desc: "EARLY (< 5 days, building), MATURING (5-15 days, established), LATE (15-30 days, may be peaking), EXHAUSTING (30+ days, likely near end)." },
+              { label: "Conviction", desc: "HIGH (strong signals + volume), MODERATE (good signals), LOW (weak or mixed), EXIT (signals declining)." },
+              { label: "Action Signal", desc: "ENTER (new position), ADD ON PULLBACK (existing position, wait for dip), HOLD-TIGHTEN (raise stops), EXIT (close position)." },
+              { label: "Top Stocks", desc: "The 3 best-performing stocks within that rotating sector — candidates for individual stock positions." },
+            ]}
+            unique="The Rotation Tracker shows lifecycle/conviction separately. The Brief combines them with regime alignment to produce a specific action instruction."
+          />
+
+          {/* Leading Indicators */}
+          <GuideSection
+            title="Leading Indicators"
+            color="text-purple-400"
+            description="Sectors showing early signs of future rotation — before it shows up in the Rotation Tracker."
+            details={[
+              { label: "Stealth Accumulation", desc: "Smart money entering (volume + flow signals) while price hasn't broken out yet." },
+              { label: "Flow-Price Divergence", desc: "Money flowing into the ETF (positive CMF) while price remains flat. Precedes breakout." },
+              { label: "Acceleration Inflection", desc: "Acceleration (rate of change of momentum) is about to flip from negative to positive." },
+              { label: "Breadth Divergence", desc: "Individual stocks within the sector are improving before the sector ETF itself. Internal strength building." },
+              { label: "Lagging + Positive Accel", desc: "Sector is in LAGGING quadrant but momentum is turning positive. Classic early rotation signal." },
+            ]}
+            unique="Entirely unique to the Brief. The dashboard doesn't surface these predictive signals, and the Rotation Tracker only detects rotations after they've started."
+          />
+
+          {/* Stock Picks */}
+          <GuideSection
+            title="Stock Picks"
+            color="text-green-400"
+            description="Enriched stocks that passed the scanner's multi-factor filter, grouped by conviction level."
+            details={[
+              { label: "HIGH Conviction", desc: "Stocks with strong relative strength acceleration, favorable phase (P2/P3), volume confirmation, and sector alignment." },
+              { label: "MEDIUM Conviction", desc: "Pass the filter but with fewer confirming factors. Good candidates on pullbacks." },
+              { label: "Pullback Watch", desc: "Stocks in NEAR_ENTRY tier — they were strong, pulled back, and are approaching buy zones near their moving averages." },
+              { label: "Key columns", desc: "Phase (basing/turnaround/trending/exhausting), RS Accel (relative strength acceleration vs SPY), Vol Ratio (current vs average volume)." },
+            ]}
+            unique="Same data as the dashboard's stock scanner, but pre-filtered and grouped by conviction instead of requiring you to sort/filter manually."
+          />
+
+          {/* Risk Flags */}
+          <GuideSection
+            title="Risk Flags"
+            color="text-red-400"
+            description="Automated detection of 7 different risk conditions that require attention."
+            details={[
+              { label: "Leading + Negative Accel", desc: "A sector in LEADING quadrant is losing momentum. May soon transition to WEAKENING — tighten stops." },
+              { label: "Declining Signals", desc: "An active rotation's signal count is dropping over the last 3 data points. Conviction is fading." },
+              { label: "VIX Rising", desc: "Implied volatility is increasing. Market uncertainty growing — reduce position sizes." },
+              { label: "Low Data Quality", desc: "A sector has < 50% of its composite factors backed by real data. Signals may be unreliable." },
+              { label: "False Start", desc: "A recently ended rotation lasted < 5 days. Likely wasn't a real rotation — be cautious of the next signal from that sector." },
+              { label: "Correlation Breakdown", desc: "Cross-sector correlations have broken down. Unusual stress or regime change in progress." },
+              { label: "Panic Rotation", desc: "High dispersion + risk-off regime. Sector divergence suggests panic selling in cyclicals." },
+            ]}
+            unique="Nowhere else surfaces these as alerts. You'd have to manually cross-reference regime, acceleration, signal history, and data quality across multiple panels."
+          />
+
+          {/* Recently Ended */}
+          <GuideSection
+            title="Recently Ended Rotations"
+            color="text-[#888]"
+            description="Rotations that recently concluded, with their duration and total ETF performance."
+            details={[
+              { label: "False starts", desc: "Rotations lasting < 5 days are flagged in red. These weren't real — factor this into how you weight future signals from the same sector." },
+              { label: "Performance review", desc: "See how much the ETF moved during the rotation period. Helps calibrate expectations for future rotations." },
+            ]}
+            unique="Also shown on the Rotation Tracker, but the Brief highlights false starts more prominently as a risk consideration."
+          />
+        </div>
+      </div>
+
+      {/* Data flow */}
+      <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-5">
+        <h2 className="text-lg font-bold text-white mb-3">Data Flow</h2>
+        <div className="text-sm text-[#ccc] space-y-2">
+          <p><span className="text-white font-medium">Source:</span> Same real-time data as the Sectors Dashboard — fetched via <code className="text-xs bg-[#1a1a1a] px-1.5 py-0.5 rounded text-cyan-400">useSectorData()</code> hook with 10-minute auto-refresh.</p>
+          <p><span className="text-white font-medium">Analysis layer:</span> Pure deterministic functions in <code className="text-xs bg-[#1a1a1a] px-1.5 py-0.5 rounded text-cyan-400">brief.ts</code> — no AI, no randomness. Same inputs always produce same outputs.</p>
+          <p><span className="text-white font-medium">Macro events:</span> Fetched from <code className="text-xs bg-[#1a1a1a] px-1.5 py-0.5 rounded text-cyan-400">/api/macro-events</code> endpoint (1-hour cache).</p>
+          <p><span className="text-white font-medium">Refresh:</span> Click the refresh button to force a new scan. Data age badge shows how fresh the current data is.</p>
+        </div>
+      </div>
+
+      {/* How to use */}
+      <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-5">
+        <h2 className="text-lg font-bold text-white mb-3">How to Use This Page</h2>
+        <ol className="text-sm text-[#ccc] space-y-2 list-decimal list-inside">
+          <li><strong className="text-white">Check posture first.</strong> If DEFENSIVE or CASH, reduce exposure regardless of individual sector strength.</li>
+          <li><strong className="text-white">Scan risk flags.</strong> Red flags override green signals. Address risks before adding positions.</li>
+          <li><strong className="text-white">Review upcoming events.</strong> Avoid opening new positions into FOMC/CPI within 1-2 days.</li>
+          <li><strong className="text-white">Check actionable tiers.</strong> These are your sector candidates — look at their trading action (TRADE/BUILD).</li>
+          <li><strong className="text-white">Review active rotations.</strong> Follow the action signals (ENTER/ADD/HOLD/EXIT) — they account for lifecycle, conviction, and regime alignment.</li>
+          <li><strong className="text-white">Watch leading indicators.</strong> These are your next-week candidates. Start building watchlists for sectors showing multiple signals.</li>
+          <li><strong className="text-white">Pick stocks.</strong> Use the HIGH conviction picks as primary candidates, MEDIUM conviction for secondary, and pullback watch for limit orders.</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
+function GuideSection({ title, color, description, details, unique }: {
+  title: string;
+  color: string;
+  description: string;
+  details: { label: string; desc: string }[];
+  unique: string;
+}) {
+  return (
+    <div className="border-l-2 border-[#333] pl-4">
+      <h3 className={`text-sm font-bold ${color}`}>{title}</h3>
+      <p className="mt-1 text-xs text-[#ccc] leading-relaxed">{description}</p>
+      <div className="mt-2 space-y-1.5">
+        {details.map((d) => (
+          <div key={d.label} className="text-xs">
+            <span className="text-white font-medium">{d.label}:</span>{" "}
+            <span className="text-[#999]">{d.desc}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[10px] text-[#666] italic">Unique to Brief: {unique}</p>
     </div>
   );
 }
