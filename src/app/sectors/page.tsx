@@ -90,6 +90,9 @@ export default function SectorRotationPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
+            <Link href="/sectors/brief" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
+              Daily Brief <ExternalLink className="h-3 w-3 inline ml-0.5" />
+            </Link>
             <Link href="/rotation" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
               Rotation Tracker <ExternalLink className="h-3 w-3 inline ml-0.5" />
             </Link>
