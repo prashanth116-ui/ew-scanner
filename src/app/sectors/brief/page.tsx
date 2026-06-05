@@ -75,8 +75,8 @@ export default function DailyBriefPage() {
   );
 
   const tiers = useMemo<SectorTiers | null>(
-    () => (data ? computeSectorTiers(data.sectors) : null),
-    [data]
+    () => (data ? computeSectorTiers(data.sectors, rotationData) : null),
+    [data, rotationData]
   );
 
   const riskFlags = useMemo<RiskFlag[]>(
@@ -611,23 +611,58 @@ function StockPicksSection({ stocks, pullbacks }: { stocks: EnrichedStock[]; pul
   );
 }
 
+type StockSortKey = "symbol" | "sector" | "price" | "phase" | "category" | "rsAccel" | "volRatio";
+
 function StockTable({ stocks }: { stocks: EnrichedStock[] }) {
+  const [sortKey, setSortKey] = useState<StockSortKey>("rsAccel");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const handleSort = (key: StockSortKey) => {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(key);
+      setSortAsc(key === "symbol" || key === "sector" || key === "category");
+    }
+  };
+
+  const sorted = useMemo(() => {
+    const copy = [...stocks];
+    const dir = sortAsc ? 1 : -1;
+    copy.sort((a, b) => {
+      switch (sortKey) {
+        case "symbol": return dir * a.symbol.localeCompare(b.symbol);
+        case "sector": return dir * a.sector.localeCompare(b.sector);
+        case "price": return dir * (a.price - b.price);
+        case "phase": return dir * a.phase.localeCompare(b.phase);
+        case "category": return dir * a.category.localeCompare(b.category);
+        case "rsAccel": return dir * ((a.rsAccel ?? 0) - (b.rsAccel ?? 0));
+        case "volRatio": return dir * (a.volRatio - b.volRatio);
+        default: return 0;
+      }
+    });
+    return copy;
+  }, [stocks, sortKey, sortAsc]);
+
+  const arrow = (key: StockSortKey) =>
+    sortKey === key ? (sortAsc ? " \u25B2" : " \u25BC") : "";
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-xs">
         <thead>
           <tr className="text-[#666]">
-            <th className="pb-1.5 pr-3">Symbol</th>
-            <th className="pb-1.5 pr-3">Sector</th>
-            <th className="pb-1.5 pr-3 text-right">Price</th>
-            <th className="pb-1.5 pr-3">Phase</th>
-            <th className="pb-1.5 pr-3">Category</th>
-            <th className="pb-1.5 pr-3 text-right">RS Accel</th>
-            <th className="pb-1.5 text-right">Vol Ratio</th>
+            <th className="pb-1.5 pr-3 cursor-pointer hover:text-white select-none" onClick={() => handleSort("symbol")}>Symbol{arrow("symbol")}</th>
+            <th className="pb-1.5 pr-3 cursor-pointer hover:text-white select-none" onClick={() => handleSort("sector")}>Sector{arrow("sector")}</th>
+            <th className="pb-1.5 pr-3 text-right cursor-pointer hover:text-white select-none" onClick={() => handleSort("price")}>Price{arrow("price")}</th>
+            <th className="pb-1.5 pr-3 cursor-pointer hover:text-white select-none" onClick={() => handleSort("phase")}>Phase{arrow("phase")}</th>
+            <th className="pb-1.5 pr-3 cursor-pointer hover:text-white select-none" onClick={() => handleSort("category")}>Category{arrow("category")}</th>
+            <th className="pb-1.5 pr-3 text-right cursor-pointer hover:text-white select-none" onClick={() => handleSort("rsAccel")}>RS Accel{arrow("rsAccel")}</th>
+            <th className="pb-1.5 text-right cursor-pointer hover:text-white select-none" onClick={() => handleSort("volRatio")}>Vol Ratio{arrow("volRatio")}</th>
           </tr>
         </thead>
         <tbody>
-          {stocks.map((s) => {
+          {sorted.map((s) => {
             const phase = phaseBadge(
               s.phase === "P1_BASING" ? "basing" :
               s.phase === "P2_TURNAROUND" ? "turnaround" :
@@ -762,7 +797,7 @@ function BriefGuide() {
             color="text-green-400"
             description="All 14 sectors classified into three actionability tiers based on composite score, quadrant, and acceleration."
             details={[
-              { label: "Actionable", desc: "TRADE or BUILD action + composite >= 60 + LEADING quadrant (or IMPROVING with positive acceleration). These are your go-to sectors." },
+              { label: "Actionable", desc: "TRADE/BUILD action + composite >= 60 + LEADING/IMPROVING quadrant. OR: active rotation with HIGH/MODERATE conviction + favorable quadrant (composite threshold waived)." },
               { label: "Watch", desc: "Meets some criteria but not all — either lower composite, WATCH action, or IMPROVING without positive acceleration. Monitor for promotion." },
               { label: "Avoid", desc: "TRIM or AVOID action. Weakening or lagging with poor metrics. Do not initiate new positions." },
             ]}

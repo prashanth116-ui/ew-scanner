@@ -150,25 +150,48 @@ export function computeMarketPosture(
 
 // ── Sector Tiers ──
 
-export function computeSectorTiers(sectors: SectorRotationScore[]): SectorTiers {
+export function computeSectorTiers(
+  sectors: SectorRotationScore[],
+  rotationData: RotationTrackerResult | null
+): SectorTiers {
   const actionable: SectorRotationScore[] = [];
   const watch: SectorRotationScore[] = [];
   const avoid: SectorRotationScore[] = [];
 
+  // Build a set of ETF tickers with HIGH or MODERATE conviction from active rotations
+  const highConvictionETFs = new Set<string>();
+  if (rotationData) {
+    for (const r of rotationData.activeRotations) {
+      const conviction = computeConviction(r.event);
+      if (conviction.level === "HIGH" || conviction.level === "MODERATE") {
+        highConvictionETFs.add(r.event.etf);
+      }
+    }
+  }
+
   for (const s of sectors) {
     const action = getTradingAction(s);
+    const inFavorableQuadrant =
+      s.quadrant === "LEADING" || (s.quadrant === "IMPROVING" && s.acceleration > 0);
+
     if (action === "TRADE" || action === "BUILD") {
-      // Must also meet: compositeScore >= 60 AND (LEADING or IMPROVING with positive acceleration)
+      // Path 1: Original strict criteria (composite >= 60 + favorable quadrant)
+      // Path 2: Active rotation with HIGH/MODERATE conviction + favorable quadrant (composite waived)
       if (
-        s.compositeScore >= 60 &&
-        (s.quadrant === "LEADING" || (s.quadrant === "IMPROVING" && s.acceleration > 0))
+        inFavorableQuadrant &&
+        (s.compositeScore >= 60 || highConvictionETFs.has(s.etf))
       ) {
         actionable.push(s);
       } else {
         watch.push(s);
       }
     } else if (action === "WATCH") {
-      watch.push(s);
+      // Promote WATCH sectors to actionable if they have HIGH/MODERATE conviction + favorable quadrant
+      if (inFavorableQuadrant && highConvictionETFs.has(s.etf)) {
+        actionable.push(s);
+      } else {
+        watch.push(s);
+      }
     } else {
       avoid.push(s);
     }
