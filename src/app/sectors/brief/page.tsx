@@ -1,35 +1,31 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { RefreshCw, ArrowLeft, AlertTriangle, TrendingUp, Shield, Banknote, Crosshair, BookOpen } from "lucide-react";
+import { RefreshCw, ArrowLeft, AlertTriangle, TrendingUp, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import Link from "next/link";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { useSectorData } from "../_use-sector-data";
 import {
   CollapsiblePanel,
   useCollapsedPanels,
-  RegimeBanner,
   TradingActionBadge,
   quadrantColor,
-  CONVICTION_STYLE,
-  CATEGORY_STYLE,
 } from "../_components";
-import { phaseBadge } from "@/lib/phase-utils";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
-import type { SectorRotationScore, EnrichedStock } from "@/lib/sector-rotation/types";
-import type { LifecycleStage } from "@/lib/sector-rotation/rotation-types";
+import type { SectorRotationScore } from "@/lib/sector-rotation/types";
+import { loadHistory } from "@/lib/sector-rotation/history";
 import {
   computeMarketPosture,
   computeSectorTiers,
   computeRiskFlags,
-  computeLeadingIndicators,
-  computeRotationSummaries,
+  computeWhatChanged,
+  savePosture,
+  loadPreviousPosture,
   type MarketPosture,
   type PostureResult,
   type RiskFlag,
-  type LeadingIndicator,
-  type RotationSummary,
   type SectorTiers,
+  type WhatChangedResult,
 } from "@/lib/sector-rotation/brief";
 
 // ── Posture color mapping ──
@@ -39,15 +35,6 @@ const POSTURE_STYLES: Record<MarketPosture, { bg: string; border: string; text: 
   SELECTIVE: { bg: "bg-cyan-500/10", border: "border-cyan-500/40", text: "text-cyan-400", icon: Crosshair },
   DEFENSIVE: { bg: "bg-amber-500/10", border: "border-amber-500/40", text: "text-amber-400", icon: Shield },
   CASH: { bg: "bg-red-500/10", border: "border-red-500/40", text: "text-red-400", icon: Banknote },
-};
-
-// ── Lifecycle badge styling ──
-
-const LIFECYCLE_STYLE: Record<LifecycleStage, { bg: string; text: string }> = {
-  EARLY: { bg: "bg-green-500/15", text: "text-green-400" },
-  MATURING: { bg: "bg-cyan-500/15", text: "text-cyan-400" },
-  LATE: { bg: "bg-amber-500/15", text: "text-amber-400" },
-  EXHAUSTING: { bg: "bg-red-500/15", text: "text-red-400" },
 };
 
 type TabView = "brief" | "guide";
@@ -84,15 +71,30 @@ export default function DailyBriefPage() {
     [data, rotationData]
   );
 
-  const leadingIndicators = useMemo<LeadingIndicator[]>(
-    () => (data ? computeLeadingIndicators(data.sectors) : []),
-    [data]
+  // Load yesterday's snapshot from localStorage
+  const previousSnapshot = useMemo(() => {
+    const history = loadHistory();
+    const today = new Date().toISOString().slice(0, 10);
+    // Find most recent snapshot that ISN'T today
+    return history.find((s) => s.date !== today) ?? null;
+  }, []);
+
+  // Load yesterday's posture from localStorage
+  const previousPosture = useMemo(() => loadPreviousPosture(), []);
+
+  // Compute what changed
+  const whatChanged = useMemo<WhatChangedResult | null>(
+    () =>
+      data && posture
+        ? computeWhatChanged(data, posture.posture, previousSnapshot, previousPosture)
+        : null,
+    [data, posture, previousSnapshot, previousPosture]
   );
 
-  const rotationSummaries = useMemo<RotationSummary[]>(
-    () => computeRotationSummaries(rotationData, data?.regime),
-    [rotationData, data?.regime]
-  );
+  // Persist today's posture (side effect)
+  useEffect(() => {
+    if (posture) savePosture(posture.posture);
+  }, [posture]);
 
   // Loading state
   if (loading && !data) {
@@ -123,6 +125,14 @@ export default function DailyBriefPage() {
   if (!data) return null;
 
   const upcomingEvents = macroEvents.filter((e) => e.daysAway <= 7);
+  const totalChanges = whatChanged
+    ? (whatChanged.postureChange ? 1 : 0) +
+      whatChanged.quadrantTransitions.length +
+      whatChanged.tierChanges.length +
+      whatChanged.scoreMovers.length +
+      whatChanged.trendFlips.length +
+      (whatChanged.dispersionChange ? 1 : 0)
+    : 0;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
@@ -134,7 +144,7 @@ export default function DailyBriefPage() {
           </Link>
           <div>
             <h1 className="text-xl font-bold text-white">Daily Market Brief</h1>
-            <p className="text-xs text-[#666]">Rule-based synthesis of sector rotation data</p>
+            <p className="text-xs text-[#666]">60-second morning check — zero overlap with other pages</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -175,10 +185,92 @@ export default function DailyBriefPage() {
       {/* Brief Content */}
       {activeTab === "brief" && <>
 
-      {/* Market Posture Banner */}
+      {/* 1. Market Posture Banner */}
       {posture && <PostureBanner posture={posture} />}
 
-      {/* Upcoming Events */}
+      {/* 2. What Changed Today */}
+      {whatChanged && (
+        <CollapsiblePanel
+          id="changes"
+          title="What Changed Today"
+          collapsed={collapsed.has("changes")}
+          onToggle={toggle}
+          badge={
+            whatChanged.noHistory ? (
+              <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">First visit</span>
+            ) : totalChanges === 0 ? (
+              <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">No changes</span>
+            ) : (
+              <span className="rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 text-[10px] text-cyan-400">
+                {totalChanges} change{totalChanges > 1 ? "s" : ""}
+              </span>
+            )
+          }
+        >
+          <WhatChangedPanel whatChanged={whatChanged} />
+        </CollapsiblePanel>
+      )}
+
+      {/* 3. Risk Flags */}
+      <CollapsiblePanel
+        id="risks"
+        title="Risk Flags"
+        collapsed={collapsed.has("risks")}
+        onToggle={toggle}
+        badge={
+          riskFlags.length > 0 ? (
+            <span className="rounded-full bg-red-500/10 border border-red-500/30 px-2 py-0.5 text-[10px] text-red-400">
+              {riskFlags.length} flag{riskFlags.length > 1 ? "s" : ""}
+            </span>
+          ) : (
+            <span className="rounded-full bg-green-500/10 border border-green-500/30 px-2 py-0.5 text-[10px] text-green-400">
+              Clear
+            </span>
+          )
+        }
+      >
+        {riskFlags.length === 0 ? (
+          <p className="text-sm text-green-400">No risk flags detected.</p>
+        ) : (
+          <div className="space-y-2">
+            {riskFlags.map((f, i) => (
+              <div
+                key={i}
+                className={`rounded-lg border p-3 ${f.severity === "high" ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5"}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`inline-block h-2 w-2 rounded-full ${f.severity === "high" ? "bg-red-400" : "bg-amber-400"}`} />
+                  <span className={`text-sm font-medium ${f.severity === "high" ? "text-red-400" : "text-amber-400"}`}>{f.message}</span>
+                </div>
+                <p className="mt-1 text-xs text-[#999]">{f.detail}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </CollapsiblePanel>
+
+      {/* 4. Sector Tiers */}
+      {tiers && (
+        <CollapsiblePanel
+          id="tiers"
+          title="Sector Tiers"
+          collapsed={collapsed.has("tiers")}
+          onToggle={toggle}
+          badge={
+            <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">
+              {tiers.actionable.length} actionable
+            </span>
+          }
+        >
+          <div className="space-y-4">
+            <TierTable label="Actionable" sectors={tiers.actionable} labelColor="text-green-400" />
+            <TierTable label="Watch" sectors={tiers.watch} labelColor="text-amber-400" />
+            <TierTable label="Avoid" sectors={tiers.avoid} labelColor="text-red-400" />
+          </div>
+        </CollapsiblePanel>
+      )}
+
+      {/* 5. Upcoming Events */}
       <CollapsiblePanel
         id="events"
         title="Upcoming Events"
@@ -220,214 +312,31 @@ export default function DailyBriefPage() {
         )}
       </CollapsiblePanel>
 
-      {/* Regime Overview */}
-      <CollapsiblePanel
-        id="regime"
-        title="Regime Overview"
-        collapsed={collapsed.has("regime")}
-        onToggle={toggle}
-      >
-        <div className="space-y-3">
-          <RegimeBanner regime={data.regime} />
-          {data.crossSectorPairs && (
-            <div className="flex flex-wrap gap-4 pt-2">
-              <div className="text-sm">
-                <span className="text-xs text-[#888]">XLY/XLP</span>
-                <div className="text-[#ccc]">{data.crossSectorPairs.xlyXlp.ratio.toFixed(3)} <span className="text-[10px] text-[#666]">{data.crossSectorPairs.xlyXlp.trend}</span></div>
-              </div>
-              <div className="text-sm">
-                <span className="text-xs text-[#888]">XLK/XLU</span>
-                <div className="text-[#ccc]">{data.crossSectorPairs.xlkXlu.ratio.toFixed(3)} <span className="text-[10px] text-[#666]">{data.crossSectorPairs.xlkXlu.trend}</span></div>
-              </div>
-              <div className="text-sm">
-                <span className="text-xs text-[#888]">Dispersion</span>
-                <div className="text-[#ccc]">{data.dispersionIndex.toFixed(1)}</div>
-              </div>
-              <div className="text-sm">
-                <span className="text-xs text-[#888]">Sector Spread</span>
-                <div className="text-[#ccc]">{data.sectorSpread.toFixed(1)}%</div>
-              </div>
-            </div>
-          )}
-        </div>
-      </CollapsiblePanel>
-
-      {/* Sector Tiers */}
-      {tiers && (
-        <CollapsiblePanel
-          id="tiers"
-          title="Sector Tiers"
-          collapsed={collapsed.has("tiers")}
-          onToggle={toggle}
-          badge={
-            <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">
-              {tiers.actionable.length} actionable
-            </span>
-          }
-        >
-          <div className="space-y-4">
-            <TierTable label="Actionable" sectors={tiers.actionable} labelColor="text-green-400" />
-            <TierTable label="Watch" sectors={tiers.watch} labelColor="text-amber-400" />
-            <TierTable label="Avoid" sectors={tiers.avoid} labelColor="text-red-400" />
-          </div>
-        </CollapsiblePanel>
-      )}
-
-      {/* Active Rotations */}
-      <CollapsiblePanel
-        id="rotations"
-        title="Active Rotations"
-        collapsed={collapsed.has("rotations")}
-        onToggle={toggle}
-        badge={
-          <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">
-            {rotationSummaries.length} active
-          </span>
-        }
-      >
-        {rotationSummaries.length === 0 ? (
-          <p className="text-sm text-[#666]">No active rotations detected.</p>
-        ) : (
-          <div className="space-y-3">
-            {rotationSummaries.map((r) => (
-              <RotationCard key={r.event.sectorId} summary={r} />
-            ))}
-          </div>
-        )}
-      </CollapsiblePanel>
-
-      {/* Leading Indicators */}
-      <CollapsiblePanel
-        id="leading"
-        title="Leading Indicators"
-        collapsed={collapsed.has("leading")}
-        onToggle={toggle}
-        badge={
-          <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">
-            {leadingIndicators.length} sectors
-          </span>
-        }
-      >
-        {leadingIndicators.length === 0 ? (
-          <p className="text-sm text-[#666]">No early rotation signals detected.</p>
-        ) : (
-          <div className="space-y-2">
-            {leadingIndicators.map((li) => (
-              <div key={li.etf} className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-white">{li.sector}</span>
-                  <span className="text-xs text-[#666]">{li.etf}</span>
-                  <span className="rounded-full bg-purple-500/10 border border-purple-500/30 px-2 py-0.5 text-[10px] text-purple-400">
-                    {li.signals.length} signal{li.signals.length > 1 ? "s" : ""}
-                  </span>
-                </div>
-                <ul className="mt-1.5 space-y-0.5">
-                  {li.signals.map((s, i) => (
-                    <li key={i} className="text-xs text-[#999]">• {s}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
-      </CollapsiblePanel>
-
-      {/* Stock Picks */}
-      {data.enrichedStocks && (
-        <CollapsiblePanel
-          id="picks"
+      {/* Navigation Cards */}
+      <div className="flex flex-col sm:flex-row gap-3 pt-2">
+        <NavCard
+          href="/sectors"
+          title="Sector Dashboard"
+          description="Full 14-sector scores, RRG chart, regime, correlations"
+          stat={`${data.sectors.length} sectors scored`}
+        />
+        <NavCard
+          href="/sectors/picks"
           title="Stock Picks"
-          collapsed={collapsed.has("picks")}
-          onToggle={toggle}
-          badge={
-            <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">
-              {data.enrichedStocks.passed.length} stocks
-            </span>
+          description="Multi-factor stock scanner with 8 filters"
+          stat={
+            data.enrichedStocks
+              ? `${data.enrichedStocks.passed.length} stocks passed`
+              : "View picks"
           }
-        >
-          <StockPicksSection stocks={data.enrichedStocks.passed} pullbacks={data.enrichedStocks.pullbackWatch} />
-        </CollapsiblePanel>
-      )}
-
-      {/* Risk Flags */}
-      <CollapsiblePanel
-        id="risks"
-        title="Risk Flags"
-        collapsed={collapsed.has("risks")}
-        onToggle={toggle}
-        badge={
-          riskFlags.length > 0 ? (
-            <span className="rounded-full bg-red-500/10 border border-red-500/30 px-2 py-0.5 text-[10px] text-red-400">
-              {riskFlags.length} flag{riskFlags.length > 1 ? "s" : ""}
-            </span>
-          ) : (
-            <span className="rounded-full bg-green-500/10 border border-green-500/30 px-2 py-0.5 text-[10px] text-green-400">
-              Clear
-            </span>
-          )
-        }
-      >
-        {riskFlags.length === 0 ? (
-          <p className="text-sm text-green-400">No risk flags detected.</p>
-        ) : (
-          <div className="space-y-2">
-            {riskFlags.map((f, i) => (
-              <div
-                key={i}
-                className={`rounded-lg border p-3 ${f.severity === "high" ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5"}`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2 w-2 rounded-full ${f.severity === "high" ? "bg-red-400" : "bg-amber-400"}`} />
-                  <span className={`text-sm font-medium ${f.severity === "high" ? "text-red-400" : "text-amber-400"}`}>{f.message}</span>
-                </div>
-                <p className="mt-1 text-xs text-[#999]">{f.detail}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </CollapsiblePanel>
-
-      {/* Recently Ended Rotations */}
-      {rotationData && rotationData.recentlyEndedRotations.length > 0 && (
-        <CollapsiblePanel
-          id="ended"
-          title="Recently Ended Rotations"
-          collapsed={collapsed.has("ended")}
-          onToggle={toggle}
-          badge={
-            <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">
-              {rotationData.recentlyEndedRotations.length}
-            </span>
-          }
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-xs text-[#666]">
-                  <th className="pb-2 pr-4">Sector</th>
-                  <th className="pb-2 pr-4">Duration</th>
-                  <th className="pb-2 pr-4">Performance</th>
-                  <th className="pb-2">End Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rotationData.recentlyEndedRotations.map((e) => (
-                  <tr key={`${e.sectorId}-${e.startDate}`} className="border-t border-[#222]">
-                    <td className="py-1.5 pr-4 text-white">{e.sectorName}</td>
-                    <td className={`py-1.5 pr-4 ${e.daysActive < 5 ? "text-red-400" : "text-[#ccc]"}`}>
-                      {e.daysActive}d{e.daysActive < 5 ? " (false start)" : ""}
-                    </td>
-                    <td className={`py-1.5 pr-4 font-medium ${e.etfPerformancePct >= 0 ? "text-green-400" : "text-red-400"}`}>
-                      {e.etfPerformancePct >= 0 ? "+" : ""}{e.etfPerformancePct.toFixed(1)}%
-                    </td>
-                    <td className="py-1.5 text-[#999]">{e.endDate}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CollapsiblePanel>
-      )}
+        />
+        <NavCard
+          href="/rotation"
+          title="Rotation Tracker"
+          description="Event timeline, sparklines, projections"
+          stat={`${rotationData?.activeRotations.length ?? 0} active rotations`}
+        />
+      </div>
 
       </>}
     </div>
@@ -494,7 +403,7 @@ function TierTable({ label, sectors, labelColor }: { label: string; sectors: Sec
                   {s.cmf20.toFixed(3)}
                 </td>
                 <td className="py-1.5 pr-3 text-right text-[#ccc]">
-                  {s.breadthPct != null ? `${s.breadthPct.toFixed(0)}%` : "—"}
+                  {s.breadthPct != null ? `${s.breadthPct.toFixed(0)}%` : "\u2014"}
                 </td>
                 <td className="py-1.5">
                   <TradingActionBadge sector={s} />
@@ -508,188 +417,190 @@ function TierTable({ label, sectors, labelColor }: { label: string; sectors: Sec
   );
 }
 
-function RotationCard({ summary }: { summary: RotationSummary }) {
-  const { event, lifecycle, conviction, actionSignal, topStocks } = summary;
-  const lcStyle = LIFECYCLE_STYLE[lifecycle];
+// ── What Changed Panel ──
+
+const TRANSITION_LABELS: Record<string, { label: string; color: string }> = {
+  rotation_starting: { label: "Rotation Starting", color: "text-green-400" },
+  breakout_confirmed: { label: "Breakout Confirmed", color: "text-green-400" },
+  momentum_fading: { label: "Momentum Fading", color: "text-amber-400" },
+  rotation_out: { label: "Rotation Out", color: "text-red-400" },
+  other: { label: "Quadrant Shift", color: "text-[#ccc]" },
+};
+
+function WhatChangedPanel({ whatChanged }: { whatChanged: WhatChangedResult }) {
+  if (whatChanged.noHistory) {
+    return (
+      <p className="text-sm text-[#666]">
+        History builds automatically. Check back tomorrow for daily changes.
+      </p>
+    );
+  }
+
+  const totalChanges =
+    (whatChanged.postureChange ? 1 : 0) +
+    whatChanged.quadrantTransitions.length +
+    whatChanged.tierChanges.length +
+    whatChanged.scoreMovers.length +
+    whatChanged.trendFlips.length +
+    (whatChanged.dispersionChange ? 1 : 0);
+
+  if (totalChanges === 0) {
+    return (
+      <p className="text-sm text-[#666]">No meaningful changes since last snapshot.</p>
+    );
+  }
+
+  // Group quadrant transitions by category
+  const transitionsByCategory = new Map<string, WhatChangedResult["quadrantTransitions"]>();
+  for (const t of whatChanged.quadrantTransitions) {
+    const list = transitionsByCategory.get(t.category) ?? [];
+    list.push(t);
+    transitionsByCategory.set(t.category, list);
+  }
 
   return (
-    <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-white">{event.sectorName}</span>
-        <span className="text-xs text-[#666]">{event.etf}</span>
-        <span className="text-xs text-[#888]">{event.daysActive}d active</span>
-        <span className={`text-xs font-medium ${event.etfPerformancePct >= 0 ? "text-green-400" : "text-red-400"}`}>
-          {event.etfPerformancePct >= 0 ? "+" : ""}{event.etfPerformancePct.toFixed(1)}%
-        </span>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <span className={`inline-flex rounded-full border border-[#333] px-2 py-0.5 text-[10px] font-semibold ${lcStyle.bg} ${lcStyle.text}`}>
-          {lifecycle}
-        </span>
-        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-          conviction.level === "HIGH" ? "bg-green-500/10 border-green-500/30 text-green-400" :
-          conviction.level === "MODERATE" ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400" :
-          conviction.level === "LOW" ? "bg-amber-500/10 border-amber-500/30 text-amber-400" :
-          "bg-red-500/10 border-red-500/30 text-red-400"
-        }`}>
-          {conviction.level}
-        </span>
-        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${actionSignal.bgColor} ${actionSignal.borderColor} ${actionSignal.color}`}>
-          {actionSignal.action}
-        </span>
-      </div>
-      {topStocks.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-3">
-          {topStocks.map((s) => (
-            <span key={s.symbol} className="text-xs">
-              <span className="text-[#ccc]">{s.symbol}</span>
-              <span className={`ml-1 ${s.performancePct >= 0 ? "text-green-400" : "text-red-400"}`}>
-                {s.performancePct >= 0 ? "+" : ""}{s.performancePct.toFixed(1)}%
-              </span>
+    <div className="space-y-3">
+      {/* Posture shift */}
+      {whatChanged.postureChange && (
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-3">
+          <div className="text-xs text-[#888] mb-1">Market Posture</div>
+          <div className="flex items-center gap-2 text-sm">
+            <span className={POSTURE_STYLES[whatChanged.postureChange.from].text + " font-medium"}>
+              {whatChanged.postureChange.from}
             </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StockPicksSection({ stocks, pullbacks }: { stocks: EnrichedStock[]; pullbacks: import("@/lib/sector-rotation/types").PullbackWatchStock[] }) {
-  const highConviction = stocks.filter((s) => s.conviction === "HIGH");
-  const medConviction = stocks.filter((s) => s.conviction === "MEDIUM");
-  const nearEntry = pullbacks.filter((p) => p.tier === "NEAR_ENTRY");
-
-  return (
-    <div className="space-y-4">
-      {highConviction.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-green-400 mb-2">HIGH Conviction ({highConviction.length})</h3>
-          <StockTable stocks={highConviction} />
-        </div>
-      )}
-      {medConviction.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-amber-400 mb-2">MEDIUM Conviction ({medConviction.length})</h3>
-          <StockTable stocks={medConviction} />
-        </div>
-      )}
-      {nearEntry.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-cyan-400 mb-2">Pullback Watch — Near Entry ({nearEntry.length})</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="text-[#666]">
-                  <th className="pb-1.5 pr-3">Symbol</th>
-                  <th className="pb-1.5 pr-3">Sector</th>
-                  <th className="pb-1.5 pr-3 text-right">Price</th>
-                  <th className="pb-1.5 pr-3 text-right">% from 200MA</th>
-                  <th className="pb-1.5 pr-3 text-right">% from 50MA</th>
-                  <th className="pb-1.5 text-right">Vol Ratio</th>
-                </tr>
-              </thead>
-              <tbody>
-                {nearEntry.map((s) => (
-                  <tr key={s.symbol} className="border-t border-[#1a1a1a]">
-                    <td className="py-1.5 pr-3 text-white font-medium">{s.symbol}</td>
-                    <td className="py-1.5 pr-3 text-[#888]">{s.sector}</td>
-                    <td className="py-1.5 pr-3 text-right text-[#ccc]">${s.price.toFixed(2)}</td>
-                    <td className="py-1.5 pr-3 text-right text-[#ccc]">{s.pctFrom200ma.toFixed(1)}%</td>
-                    <td className="py-1.5 pr-3 text-right text-[#ccc]">{s.pctFrom50ma.toFixed(1)}%</td>
-                    <td className={`py-1.5 text-right ${s.volRatio >= 1.5 ? "text-green-400" : "text-[#ccc]"}`}>{s.volRatio.toFixed(2)}x</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ArrowRight className="h-3.5 w-3.5 text-[#666]" />
+            <span className={POSTURE_STYLES[whatChanged.postureChange.to].text + " font-medium"}>
+              {whatChanged.postureChange.to}
+            </span>
           </div>
         </div>
       )}
-      {highConviction.length === 0 && medConviction.length === 0 && nearEntry.length === 0 && (
-        <p className="text-sm text-[#666]">No enriched stock data available.</p>
+
+      {/* Quadrant transitions */}
+      {whatChanged.quadrantTransitions.length > 0 && (
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-3">
+          <div className="text-xs text-[#888] mb-2">Quadrant Transitions</div>
+          <div className="space-y-1.5">
+            {Array.from(transitionsByCategory.entries()).map(([category, transitions]) => {
+              const style = TRANSITION_LABELS[category];
+              return transitions.map((t) => (
+                <div key={t.etf} className="flex items-center gap-2 text-xs">
+                  <span className={`font-medium ${style.color}`}>{style.label}</span>
+                  <span className="text-[#666]">&mdash;</span>
+                  <span className="text-white">{t.sector}</span>
+                  <span className="text-[#666]">({t.etf})</span>
+                  <span className={quadrantColor(t.from) + " rounded-full border px-1.5 py-0 text-[9px]"}>{t.from}</span>
+                  <ArrowRight className="h-3 w-3 text-[#555]" />
+                  <span className={quadrantColor(t.to) + " rounded-full border px-1.5 py-0 text-[9px]"}>{t.to}</span>
+                </div>
+              ));
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Tier changes */}
+      {whatChanged.tierChanges.length > 0 && (
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-3">
+          <div className="text-xs text-[#888] mb-2">Tier Changes</div>
+          <div className="space-y-1">
+            {whatChanged.tierChanges.map((tc) => {
+              const promoted = TIER_RANK[tc.to] < TIER_RANK[tc.from];
+              return (
+                <div key={tc.etf} className="flex items-center gap-2 text-xs">
+                  {promoted ? (
+                    <ArrowUpRight className="h-3.5 w-3.5 text-green-400" />
+                  ) : (
+                    <ArrowDownRight className="h-3.5 w-3.5 text-red-400" />
+                  )}
+                  <span className="text-white">{tc.sector}</span>
+                  <span className={promoted ? "text-green-400" : "text-red-400"}>
+                    {promoted ? "promoted to" : "demoted to"} {tc.to}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Score movers (top 3) */}
+      {whatChanged.scoreMovers.length > 0 && (
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-3">
+          <div className="text-xs text-[#888] mb-2">Biggest Score Movers</div>
+          <div className="flex flex-wrap gap-3">
+            {whatChanged.scoreMovers.slice(0, 3).map((sm) => (
+              <div key={sm.etf} className="text-xs">
+                <span className="text-white">{sm.sector}</span>{" "}
+                <span className={sm.delta > 0 ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
+                  {sm.delta > 0 ? "+" : ""}{sm.delta}
+                </span>
+                <span className="text-[#666]"> ({sm.from}&rarr;{sm.to})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Trend flips */}
+      {whatChanged.trendFlips.length > 0 && (
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-3">
+          <div className="text-xs text-[#888] mb-2">Trend Flips</div>
+          <div className="space-y-1">
+            {whatChanged.trendFlips.map((tf) => (
+              <div key={tf.etf} className="flex items-center gap-2 text-xs">
+                <span className="text-white">{tf.sector}</span>
+                <TrendArrow trend={tf.from} />
+                <ArrowRight className="h-3 w-3 text-[#555]" />
+                <TrendArrow trend={tf.to} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Dispersion change */}
+      {whatChanged.dispersionChange && (
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-3">
+          <div className="text-xs text-[#888] mb-1">Dispersion Index</div>
+          <div className="text-xs">
+            <span className="text-[#ccc]">{whatChanged.dispersionChange.from.toFixed(1)}</span>
+            <span className="text-[#666]"> &rarr; </span>
+            <span className="text-white font-medium">{whatChanged.dispersionChange.to.toFixed(1)}</span>
+            <span className={`ml-1 ${whatChanged.dispersionChange.to > whatChanged.dispersionChange.from ? "text-green-400" : "text-red-400"}`}>
+              ({whatChanged.dispersionChange.to > whatChanged.dispersionChange.from ? "+" : ""}
+              {(whatChanged.dispersionChange.to - whatChanged.dispersionChange.from).toFixed(1)})
+            </span>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-type StockSortKey = "symbol" | "sector" | "price" | "phase" | "category" | "rsAccel" | "volRatio";
+const TIER_RANK: Record<string, number> = { actionable: 0, watch: 1, avoid: 2 };
 
-function StockTable({ stocks }: { stocks: EnrichedStock[] }) {
-  const [sortKey, setSortKey] = useState<StockSortKey>("rsAccel");
-  const [sortAsc, setSortAsc] = useState(false);
+function TrendArrow({ trend }: { trend: "UP" | "DOWN" | "FLAT" }) {
+  if (trend === "UP") return <span className="text-green-400 font-medium">UP</span>;
+  if (trend === "DOWN") return <span className="text-red-400 font-medium">DOWN</span>;
+  return <span className="text-[#888] font-medium">FLAT</span>;
+}
 
-  const handleSort = (key: StockSortKey) => {
-    if (sortKey === key) {
-      setSortAsc(!sortAsc);
-    } else {
-      setSortKey(key);
-      setSortAsc(key === "symbol" || key === "sector" || key === "category");
-    }
-  };
+// ── Navigation Card ──
 
-  const sorted = useMemo(() => {
-    const copy = [...stocks];
-    const dir = sortAsc ? 1 : -1;
-    copy.sort((a, b) => {
-      switch (sortKey) {
-        case "symbol": return dir * a.symbol.localeCompare(b.symbol);
-        case "sector": return dir * a.sector.localeCompare(b.sector);
-        case "price": return dir * (a.price - b.price);
-        case "phase": return dir * a.phase.localeCompare(b.phase);
-        case "category": return dir * a.category.localeCompare(b.category);
-        case "rsAccel": return dir * ((a.rsAccel ?? 0) - (b.rsAccel ?? 0));
-        case "volRatio": return dir * (a.volRatio - b.volRatio);
-        default: return 0;
-      }
-    });
-    return copy;
-  }, [stocks, sortKey, sortAsc]);
-
-  const arrow = (key: StockSortKey) =>
-    sortKey === key ? (sortAsc ? " \u25B2" : " \u25BC") : "";
-
+function NavCard({ href, title, description, stat }: { href: string; title: string; description: string; stat: string }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-xs">
-        <thead>
-          <tr className="text-[#666]">
-            <th className="pb-1.5 pr-3 cursor-pointer hover:text-white select-none" onClick={() => handleSort("symbol")}>Symbol{arrow("symbol")}</th>
-            <th className="pb-1.5 pr-3 cursor-pointer hover:text-white select-none" onClick={() => handleSort("sector")}>Sector{arrow("sector")}</th>
-            <th className="pb-1.5 pr-3 text-right cursor-pointer hover:text-white select-none" onClick={() => handleSort("price")}>Price{arrow("price")}</th>
-            <th className="pb-1.5 pr-3 cursor-pointer hover:text-white select-none" onClick={() => handleSort("phase")}>Phase{arrow("phase")}</th>
-            <th className="pb-1.5 pr-3 cursor-pointer hover:text-white select-none" onClick={() => handleSort("category")}>Category{arrow("category")}</th>
-            <th className="pb-1.5 pr-3 text-right cursor-pointer hover:text-white select-none" onClick={() => handleSort("rsAccel")}>RS Accel{arrow("rsAccel")}</th>
-            <th className="pb-1.5 text-right cursor-pointer hover:text-white select-none" onClick={() => handleSort("volRatio")}>Vol Ratio{arrow("volRatio")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((s) => {
-            const phase = phaseBadge(
-              s.phase === "P1_BASING" ? "basing" :
-              s.phase === "P2_TURNAROUND" ? "turnaround" :
-              s.phase === "P3_TRENDING" ? "trending" :
-              s.phase === "P4_EXHAUSTING" ? "exhausting" : "neutral"
-            );
-            return (
-              <tr key={s.symbol} className="border-t border-[#1a1a1a]">
-                <td className="py-1.5 pr-3 text-white font-medium">{s.symbol}</td>
-                <td className="py-1.5 pr-3 text-[#888]">{s.sector}</td>
-                <td className="py-1.5 pr-3 text-right text-[#ccc]">${s.price.toFixed(2)}</td>
-                <td className="py-1.5 pr-3">
-                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] ${phase.className}`}>{phase.label}</span>
-                </td>
-                <td className="py-1.5 pr-3">
-                  <span className={`text-[10px] font-semibold ${CATEGORY_STYLE[s.category] ?? "text-[#666]"}`}>{s.category.replace("_", " ")}</span>
-                </td>
-                <td className={`py-1.5 pr-3 text-right ${(s.rsAccel ?? 0) > 0 ? "text-green-400" : (s.rsAccel ?? 0) < 0 ? "text-red-400" : "text-[#666]"}`}>
-                  {s.rsAccel != null ? (s.rsAccel > 0 ? "+" : "") + s.rsAccel.toFixed(2) : "—"}
-                </td>
-                <td className={`py-1.5 text-right ${s.volRatio >= 1.5 ? "text-green-400" : "text-[#ccc]"}`}>{s.volRatio.toFixed(2)}x</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <Link
+      href={href}
+      className="flex-1 rounded-xl border border-[#2a2a2a] bg-[#141414] p-4 hover:border-[#444] hover:bg-[#1a1a1a] transition-colors group"
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <ArrowRight className="h-4 w-4 text-[#666] group-hover:text-white transition-colors" />
+      </div>
+      <p className="mt-1 text-[11px] text-[#666]">{description}</p>
+      <p className="mt-2 text-xs text-cyan-400 font-medium">{stat}</p>
+    </Link>
   );
 }
 
@@ -702,14 +613,13 @@ function BriefGuide() {
       <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-5">
         <h2 className="text-lg font-bold text-white mb-3">What is the Daily Brief?</h2>
         <p className="text-sm text-[#ccc] leading-relaxed">
-          The Daily Brief synthesizes raw sector rotation data into an opinionated, actionable summary. While the
-          Sectors Dashboard shows you <em>all</em> the data and the Rotation Tracker shows <em>event history</em>,
-          the Brief answers one question: <strong className="text-white">&quot;What should I do today?&quot;</strong>
+          The Daily Brief is a <strong className="text-white">60-second morning check</strong> that synthesizes
+          sector rotation data into five focused panels with zero overlap. Other pages have the raw data and deep
+          dives &mdash; the Brief answers one question: <strong className="text-white">&quot;What changed and what should I do today?&quot;</strong>
         </p>
         <p className="mt-3 text-sm text-[#ccc] leading-relaxed">
-          All analysis is <strong className="text-cyan-400">100% rule-based</strong> — deterministic formulas with
-          no AI interpretation. The same inputs always produce the same outputs. You can trace every recommendation
-          back to specific data points.
+          All analysis is <strong className="text-cyan-400">100% rule-based</strong> &mdash; deterministic formulas with
+          no AI interpretation. The same inputs always produce the same outputs.
         </p>
       </div>
 
@@ -728,17 +638,22 @@ function BriefGuide() {
             <tbody className="text-[#ccc]">
               <tr className="border-b border-[#1a1a1a]">
                 <td className="py-2.5 pr-4 text-white font-medium">Sectors Dashboard</td>
-                <td className="py-2.5 pr-4">Raw data — 14 sector scores, quadrants, RRG chart, correlations, all enriched stocks</td>
+                <td className="py-2.5 pr-4">Raw data &mdash; 14 sector scores, quadrants, RRG chart, regime, correlations</td>
                 <td className="py-2.5 text-[#888]">The spreadsheet</td>
               </tr>
               <tr className="border-b border-[#1a1a1a]">
+                <td className="py-2.5 pr-4 text-white font-medium">Stock Picks</td>
+                <td className="py-2.5 pr-4">Multi-factor stock scanner with 8 filters, sector grouping, entry signals, pullback watch</td>
+                <td className="py-2.5 text-[#888]">The stock screener</td>
+              </tr>
+              <tr className="border-b border-[#1a1a1a]">
                 <td className="py-2.5 pr-4 text-white font-medium">Rotation Tracker</td>
-                <td className="py-2.5 pr-4">Event timeline — when rotations started/ended, signal count history, duration, performance</td>
+                <td className="py-2.5 pr-4">Event timeline &mdash; when rotations started/ended, sparklines, projections, exit warnings</td>
                 <td className="py-2.5 text-[#888]">The activity log</td>
               </tr>
               <tr>
                 <td className="py-2.5 pr-4 text-white font-medium">Daily Brief</td>
-                <td className="py-2.5 pr-4">Synthesized opinion — posture, tiers, action signals, risk flags, leading indicators</td>
+                <td className="py-2.5 pr-4">Synthesized opinion &mdash; posture, daily changes, risk flags, sector tiers, macro calendar</td>
                 <td className="py-2.5 text-[#888]">The analyst note</td>
               </tr>
             </tbody>
@@ -758,93 +673,27 @@ function BriefGuide() {
             description="A single-word classification of overall market positioning. Combines regime, VIX, active rotation conviction, and sector dispersion."
             details={[
               { label: "AGGRESSIVE", desc: "Risk-on regime + 2+ high-conviction rotations + elevated dispersion. Lean into strongest sectors with full sizing." },
-              { label: "SELECTIVE", desc: "Risk-on/mixed regime with some rotation activity. Opportunities exist but be disciplined — focus on highest-conviction setups only." },
-              { label: "DEFENSIVE", desc: "Risk-off regime OR VIX rising with majority sectors weakening. Favor defensive sectors, reduce equity exposure." },
+              { label: "SELECTIVE", desc: "Risk-on/mixed regime with some rotation activity. Opportunities exist but be disciplined." },
+              { label: "DEFENSIVE", desc: "Risk-off regime OR VIX rising with majority sectors weakening. Reduce equity exposure." },
               { label: "CASH", desc: "Risk-off + VIX above 30 + zero positive-conviction rotations. Capital preservation is the priority." },
             ]}
             unique="This classification doesn't exist on any other page. The dashboard shows regime but doesn't translate it into a positioning recommendation."
           />
 
-          {/* Upcoming Events */}
+          {/* What Changed Today */}
           <GuideSection
-            title="Upcoming Events"
+            title="What Changed Today"
             color="text-cyan-400"
-            description="Macro catalysts (FOMC, CPI, Jobs, GDP, etc.) in the next 7 days. Events within 1-2 days are highlighted in red/amber."
+            description="Compares today's data against the most recent previous snapshot stored in your browser. Surfaces the most important daily changes."
             details={[
-              { label: "Why it matters", desc: "Major macro events cause regime shifts. Knowing FOMC is in 2 days helps you avoid opening new positions into volatility." },
-              { label: "Data source", desc: "Pulled from the catalyst calendar API — same data that feeds the earnings calendar, filtered to macro-only events." },
+              { label: "Posture shifts", desc: "If the overall market posture changed (e.g., SELECTIVE to DEFENSIVE), this is the first thing you see." },
+              { label: "Quadrant transitions", desc: "Sectors that moved between RRG quadrants, categorized: Rotation Starting, Breakout Confirmed, Momentum Fading, Rotation Out." },
+              { label: "Tier changes", desc: "Sectors promoted or demoted between Actionable, Watch, and Avoid tiers." },
+              { label: "Score movers", desc: "Sectors with composite score changes > 3 points. Shows the biggest movers first." },
+              { label: "Trend flips", desc: "Sectors whose trend direction changed (UP/DOWN/FLAT)." },
+              { label: "Dispersion", desc: "Flagged when the dispersion index changes by more than 2 points." },
             ]}
-            unique="Not available on any other page in the sector rotation suite."
-          />
-
-          {/* Regime Overview */}
-          <GuideSection
-            title="Regime Overview"
-            color="text-cyan-400"
-            description="The current macro regime (RISK_ON / RISK_OFF / MIXED) plus cross-sector ratio pairs and dispersion metrics."
-            details={[
-              { label: "XLY/XLP ratio", desc: "Consumer Discretionary vs Staples. Rising = risk appetite. Falling = defensive rotation." },
-              { label: "XLK/XLU ratio", desc: "Tech vs Utilities. Rising = growth favored. Falling = safety bid." },
-              { label: "Dispersion Index", desc: "How spread apart sectors are. High dispersion = rotational opportunity. Low = correlated market." },
-              { label: "Sector Spread", desc: "Difference between best and worst sector composite scores." },
-            ]}
-            unique="Same regime banner is on the dashboard, but the Brief adds cross-sector pairs and dispersion context in a compact layout."
-          />
-
-          {/* Sector Tiers */}
-          <GuideSection
-            title="Sector Tiers"
-            color="text-green-400"
-            description="All 14 sectors classified into three actionability tiers based on composite score, quadrant, and acceleration."
-            details={[
-              { label: "Actionable", desc: "TRADE/BUILD action + composite >= 60 + LEADING/IMPROVING quadrant. OR: active rotation with HIGH/MODERATE conviction + favorable quadrant (composite threshold waived)." },
-              { label: "Watch", desc: "Meets some criteria but not all — either lower composite, WATCH action, or IMPROVING without positive acceleration. Monitor for promotion." },
-              { label: "Avoid", desc: "TRIM or AVOID action. Weakening or lagging with poor metrics. Do not initiate new positions." },
-            ]}
-            unique="The dashboard shows all 14 sectors equally. The Brief pre-classifies them so you don't have to mentally filter."
-          />
-
-          {/* Active Rotations */}
-          <GuideSection
-            title="Active Rotations"
-            color="text-cyan-400"
-            description="Each active sector rotation with lifecycle, conviction, and an explicit action signal."
-            details={[
-              { label: "Lifecycle", desc: "EARLY (< 5 days, building), MATURING (5-15 days, established), LATE (15-30 days, may be peaking), EXHAUSTING (30+ days, likely near end)." },
-              { label: "Conviction", desc: "HIGH (strong signals + volume), MODERATE (good signals), LOW (weak or mixed), EXIT (signals declining)." },
-              { label: "Action Signal", desc: "ENTER (new position), ADD ON PULLBACK (existing position, wait for dip), HOLD-TIGHTEN (raise stops), EXIT (close position)." },
-              { label: "Top Stocks", desc: "The 3 best-performing stocks within that rotating sector — candidates for individual stock positions." },
-            ]}
-            unique="The Rotation Tracker shows lifecycle/conviction separately. The Brief combines them with regime alignment to produce a specific action instruction."
-          />
-
-          {/* Leading Indicators */}
-          <GuideSection
-            title="Leading Indicators"
-            color="text-purple-400"
-            description="Sectors showing early signs of future rotation — before it shows up in the Rotation Tracker."
-            details={[
-              { label: "Stealth Accumulation", desc: "Smart money entering (volume + flow signals) while price hasn't broken out yet." },
-              { label: "Flow-Price Divergence", desc: "Money flowing into the ETF (positive CMF) while price remains flat. Precedes breakout." },
-              { label: "Acceleration Inflection", desc: "Acceleration (rate of change of momentum) is about to flip from negative to positive." },
-              { label: "Breadth Divergence", desc: "Individual stocks within the sector are improving before the sector ETF itself. Internal strength building." },
-              { label: "Lagging + Positive Accel", desc: "Sector is in LAGGING quadrant but momentum is turning positive. Classic early rotation signal." },
-            ]}
-            unique="Entirely unique to the Brief. The dashboard doesn't surface these predictive signals, and the Rotation Tracker only detects rotations after they've started."
-          />
-
-          {/* Stock Picks */}
-          <GuideSection
-            title="Stock Picks"
-            color="text-green-400"
-            description="Enriched stocks that passed the scanner's multi-factor filter, grouped by conviction level."
-            details={[
-              { label: "HIGH Conviction", desc: "Stocks with strong relative strength acceleration, favorable phase (P2/P3), volume confirmation, and sector alignment." },
-              { label: "MEDIUM Conviction", desc: "Pass the filter but with fewer confirming factors. Good candidates on pullbacks." },
-              { label: "Pullback Watch", desc: "Stocks in NEAR_ENTRY tier — they were strong, pulled back, and are approaching buy zones near their moving averages." },
-              { label: "Key columns", desc: "Phase (basing/turnaround/trending/exhausting), RS Accel (relative strength acceleration vs SPY), Vol Ratio (current vs average volume)." },
-            ]}
-            unique="Same data as the dashboard's stock scanner, but pre-filtered and grouped by conviction instead of requiring you to sort/filter manually."
+            unique="Entirely unique to the Brief. No other page compares today vs. yesterday. History builds automatically from daily visits."
           />
 
           {/* Risk Flags */}
@@ -853,27 +702,40 @@ function BriefGuide() {
             color="text-red-400"
             description="Automated detection of 7 different risk conditions that require attention."
             details={[
-              { label: "Leading + Negative Accel", desc: "A sector in LEADING quadrant is losing momentum. May soon transition to WEAKENING — tighten stops." },
-              { label: "Declining Signals", desc: "An active rotation's signal count is dropping over the last 3 data points. Conviction is fading." },
-              { label: "VIX Rising", desc: "Implied volatility is increasing. Market uncertainty growing — reduce position sizes." },
-              { label: "Low Data Quality", desc: "A sector has < 50% of its composite factors backed by real data. Signals may be unreliable." },
-              { label: "False Start", desc: "A recently ended rotation lasted < 5 days. Likely wasn't a real rotation — be cautious of the next signal from that sector." },
-              { label: "Correlation Breakdown", desc: "Cross-sector correlations have broken down. Unusual stress or regime change in progress." },
-              { label: "Panic Rotation", desc: "High dispersion + risk-off regime. Sector divergence suggests panic selling in cyclicals." },
+              { label: "Leading + Negative Accel", desc: "A sector in LEADING quadrant is losing momentum. May soon transition to WEAKENING." },
+              { label: "Declining Signals", desc: "An active rotation's signal count is dropping. Conviction is fading." },
+              { label: "VIX Rising", desc: "Implied volatility is increasing. Market uncertainty growing." },
+              { label: "Low Data Quality", desc: "A sector has < 50% of its composite factors backed by real data." },
+              { label: "False Start", desc: "A recently ended rotation lasted < 5 days. Likely not a real rotation." },
+              { label: "Correlation Breakdown", desc: "Cross-sector correlations have broken down. Unusual stress or regime change." },
+              { label: "Panic Rotation", desc: "High dispersion + risk-off regime. Panic selling in cyclicals." },
             ]}
-            unique="Nowhere else surfaces these as alerts. You'd have to manually cross-reference regime, acceleration, signal history, and data quality across multiple panels."
+            unique="Nowhere else surfaces these as alerts. You'd have to manually cross-reference multiple panels on the dashboard."
           />
 
-          {/* Recently Ended */}
+          {/* Sector Tiers */}
           <GuideSection
-            title="Recently Ended Rotations"
-            color="text-[#888]"
-            description="Rotations that recently concluded, with their duration and total ETF performance."
+            title="Sector Tiers"
+            color="text-green-400"
+            description="All 14 sectors classified into three actionability tiers based on composite score, quadrant, and acceleration."
             details={[
-              { label: "False starts", desc: "Rotations lasting < 5 days are flagged in red. These weren't real — factor this into how you weight future signals from the same sector." },
-              { label: "Performance review", desc: "See how much the ETF moved during the rotation period. Helps calibrate expectations for future rotations." },
+              { label: "Actionable", desc: "TRADE/BUILD action + composite >= 60 + LEADING/IMPROVING quadrant. OR: active rotation with HIGH/MODERATE conviction + favorable quadrant." },
+              { label: "Watch", desc: "Meets some criteria but not all. Monitor for promotion." },
+              { label: "Avoid", desc: "TRIM or AVOID action. Weakening or lagging with poor metrics." },
             ]}
-            unique="Also shown on the Rotation Tracker, but the Brief highlights false starts more prominently as a risk consideration."
+            unique="The dashboard shows all 14 sectors equally. The Brief pre-classifies them so you don't have to mentally filter."
+          />
+
+          {/* Upcoming Events */}
+          <GuideSection
+            title="Upcoming Events"
+            color="text-cyan-400"
+            description="Macro catalysts (FOMC, CPI, Jobs, GDP, etc.) in the next 7 days."
+            details={[
+              { label: "Why it matters", desc: "Major macro events cause regime shifts. Knowing FOMC is in 2 days helps you avoid opening new positions into volatility." },
+              { label: "Data source", desc: "Pulled from the catalyst calendar API, filtered to macro-only events." },
+            ]}
+            unique="Not available on any other page in the sector rotation suite."
           />
         </div>
       </div>
@@ -882,10 +744,10 @@ function BriefGuide() {
       <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-5">
         <h2 className="text-lg font-bold text-white mb-3">Data Flow</h2>
         <div className="text-sm text-[#ccc] space-y-2">
-          <p><span className="text-white font-medium">Source:</span> Same real-time data as the Sectors Dashboard — fetched via <code className="text-xs bg-[#1a1a1a] px-1.5 py-0.5 rounded text-cyan-400">useSectorData()</code> hook with 10-minute auto-refresh.</p>
-          <p><span className="text-white font-medium">Analysis layer:</span> Pure deterministic functions in <code className="text-xs bg-[#1a1a1a] px-1.5 py-0.5 rounded text-cyan-400">brief.ts</code> — no AI, no randomness. Same inputs always produce same outputs.</p>
+          <p><span className="text-white font-medium">Source:</span> Same real-time data as the Sectors Dashboard &mdash; fetched via <code className="text-xs bg-[#1a1a1a] px-1.5 py-0.5 rounded text-cyan-400">useSectorData()</code> hook with 10-minute auto-refresh.</p>
+          <p><span className="text-white font-medium">Analysis layer:</span> Pure deterministic functions in <code className="text-xs bg-[#1a1a1a] px-1.5 py-0.5 rounded text-cyan-400">brief.ts</code> &mdash; no AI, no randomness.</p>
+          <p><span className="text-white font-medium">What Changed:</span> Compares live data against the most recent previous snapshot in <code className="text-xs bg-[#1a1a1a] px-1.5 py-0.5 rounded text-cyan-400">localStorage</code>. History accumulates automatically from daily dashboard visits.</p>
           <p><span className="text-white font-medium">Macro events:</span> Fetched from <code className="text-xs bg-[#1a1a1a] px-1.5 py-0.5 rounded text-cyan-400">/api/macro-events</code> endpoint (1-hour cache).</p>
-          <p><span className="text-white font-medium">Refresh:</span> Click the refresh button to force a new scan. Data age badge shows how fresh the current data is.</p>
         </div>
       </div>
 
@@ -894,12 +756,10 @@ function BriefGuide() {
         <h2 className="text-lg font-bold text-white mb-3">How to Use This Page</h2>
         <ol className="text-sm text-[#ccc] space-y-2 list-decimal list-inside">
           <li><strong className="text-white">Check posture first.</strong> If DEFENSIVE or CASH, reduce exposure regardless of individual sector strength.</li>
+          <li><strong className="text-white">Review what changed.</strong> Posture shifts and quadrant transitions are the highest-signal changes. Act on these first.</li>
           <li><strong className="text-white">Scan risk flags.</strong> Red flags override green signals. Address risks before adding positions.</li>
+          <li><strong className="text-white">Check sector tiers.</strong> Actionable sectors are your candidates. Then drill into the full dashboard or picks page.</li>
           <li><strong className="text-white">Review upcoming events.</strong> Avoid opening new positions into FOMC/CPI within 1-2 days.</li>
-          <li><strong className="text-white">Check actionable tiers.</strong> These are your sector candidates — look at their trading action (TRADE/BUILD).</li>
-          <li><strong className="text-white">Review active rotations.</strong> Follow the action signals (ENTER/ADD/HOLD/EXIT) — they account for lifecycle, conviction, and regime alignment.</li>
-          <li><strong className="text-white">Watch leading indicators.</strong> These are your next-week candidates. Start building watchlists for sectors showing multiple signals.</li>
-          <li><strong className="text-white">Pick stocks.</strong> Use the HIGH conviction picks as primary candidates, MEDIUM conviction for secondary, and pullback watch for limit orders.</li>
         </ol>
       </div>
     </div>

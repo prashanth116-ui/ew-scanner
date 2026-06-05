@@ -6,22 +6,12 @@
 import type {
   SectorRotationResult,
   SectorRotationScore,
-  EnrichedStock,
+  RRGQuadrant,
 } from "./types";
-import type {
-  RotationTrackerResult,
-  RotationEvent,
-  LifecycleStage,
-  ConvictionResult,
-} from "./rotation-types";
-import {
-  computeLifecycleStage,
-  computeConviction,
-  computeActionSignal,
-  isRegimeAligned,
-  type ActionSignal,
-} from "./rotation-helpers";
-import { getTradingAction, type TradingAction } from "@/app/sectors/_components";
+import type { RotationTrackerResult } from "./rotation-types";
+import { computeConviction } from "./rotation-helpers";
+import { getTradingAction } from "@/app/sectors/_components";
+import type { DailySnapshot, SectorSnapshot } from "./history";
 
 // ── Types ──
 
@@ -39,24 +29,49 @@ export interface RiskFlag {
   detail: string;
 }
 
-export interface LeadingIndicator {
-  sector: string;
-  etf: string;
-  signals: string[];
-}
-
-export interface RotationSummary {
-  event: RotationEvent;
-  lifecycle: LifecycleStage;
-  conviction: ConvictionResult;
-  actionSignal: ActionSignal;
-  topStocks: { symbol: string; name: string; performancePct: number }[];
-}
-
 export interface SectorTiers {
   actionable: SectorRotationScore[];
   watch: SectorRotationScore[];
   avoid: SectorRotationScore[];
+}
+
+type TransitionCategory =
+  | "rotation_starting"
+  | "breakout_confirmed"
+  | "momentum_fading"
+  | "rotation_out"
+  | "other";
+
+export interface WhatChangedResult {
+  postureChange: { from: MarketPosture; to: MarketPosture } | null;
+  quadrantTransitions: {
+    sector: string;
+    etf: string;
+    from: RRGQuadrant;
+    to: RRGQuadrant;
+    category: TransitionCategory;
+  }[];
+  tierChanges: {
+    sector: string;
+    etf: string;
+    from: "actionable" | "watch" | "avoid";
+    to: "actionable" | "watch" | "avoid";
+  }[];
+  scoreMovers: {
+    sector: string;
+    etf: string;
+    from: number;
+    to: number;
+    delta: number;
+  }[];
+  trendFlips: {
+    sector: string;
+    etf: string;
+    from: "UP" | "DOWN" | "FLAT";
+    to: "UP" | "DOWN" | "FLAT";
+  }[];
+  dispersionChange: { from: number; to: number } | null;
+  noHistory: boolean;
 }
 
 // ── Market Posture ──
@@ -296,89 +311,187 @@ export function computeRiskFlags(
   return flags;
 }
 
-// ── Leading Indicators ──
+// ── What Changed ──
 
-export function computeLeadingIndicators(
-  sectors: SectorRotationScore[]
-): LeadingIndicator[] {
-  const results: LeadingIndicator[] = [];
+const POSTURE_KEY = "ew-brief-posture";
 
-  for (const s of sectors) {
-    const signals: string[] = [];
+interface PostureStore {
+  date: string;
+  posture: MarketPosture;
+}
 
-    // LAGGING quadrant + positive acceleration (momentum turning)
-    if (s.quadrant === "LAGGING" && s.acceleration > 0) {
-      signals.push("Momentum turning positive in lagging quadrant");
-    }
+export function savePosture(posture: MarketPosture): void {
+  if (typeof window === "undefined") return;
+  const date = new Date().toISOString().slice(0, 10);
+  try {
+    localStorage.setItem(POSTURE_KEY, JSON.stringify({ date, posture }));
+  } catch { /* ignore */ }
+}
 
-    // Stealth accumulation
-    if (s.stealthAccumulation) {
-      signals.push("Stealth accumulation (smart money before breakout)");
-    }
+export function loadPreviousPosture(): MarketPosture | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(POSTURE_KEY);
+    if (!raw) return null;
+    const store = JSON.parse(raw) as PostureStore;
+    const today = new Date().toISOString().slice(0, 10);
+    // Return stored posture only if it's from a previous day
+    if (store.date === today) return null;
+    return store.posture;
+  } catch {
+    return null;
+  }
+}
 
-    // Flow-price divergence
-    if (s.flowPriceDivergence) {
-      signals.push("Money flowing in while price flat");
-    }
+function classifyTransition(from: RRGQuadrant, to: RRGQuadrant): TransitionCategory {
+  if (from === "LAGGING" && to === "IMPROVING") return "rotation_starting";
+  if (from === "IMPROVING" && to === "LEADING") return "breakout_confirmed";
+  if (from === "LEADING" && to === "WEAKENING") return "momentum_fading";
+  if (from === "WEAKENING" && to === "LAGGING") return "rotation_out";
+  return "other";
+}
 
-    // Acceleration inflection
-    if (s.accelerationInflection) {
-      signals.push("Acceleration about to flip positive");
-    }
+function snapshotTier(s: SectorSnapshot): "actionable" | "watch" | "avoid" {
+  const action = getTradingAction({
+    quadrant: s.quadrant,
+    compositeScore: s.compositeScore,
+    acceleration: s.acceleration,
+  });
+  const inFavorableQuadrant =
+    s.quadrant === "LEADING" || (s.quadrant === "IMPROVING" && s.acceleration > 0);
 
-    // Breadth divergence
-    if (s.breadthDivergence) {
-      signals.push("Internal stocks improving before ETF");
-    }
+  if (action === "TRADE" || action === "BUILD") {
+    return inFavorableQuadrant && s.compositeScore >= 60 ? "actionable" : "watch";
+  }
+  if (action === "WATCH") return "watch";
+  return "avoid";
+}
 
-    if (signals.length > 0) {
-      results.push({ sector: s.sector, etf: s.etf, signals });
+export function computeWhatChanged(
+  data: SectorRotationResult,
+  currentPosture: MarketPosture,
+  previousSnapshot: DailySnapshot | null,
+  previousPosture: MarketPosture | null
+): WhatChangedResult {
+  if (!previousSnapshot) {
+    return {
+      postureChange: null,
+      quadrantTransitions: [],
+      tierChanges: [],
+      scoreMovers: [],
+      trendFlips: [],
+      dispersionChange: null,
+      noHistory: true,
+    };
+  }
+
+  // Build lookup from previous snapshot by sector name
+  const prevMap = new Map<string, SectorSnapshot>();
+  for (const s of previousSnapshot.sectors) {
+    prevMap.set(s.sector, s);
+  }
+
+  // Build ETF lookup from current data
+  const etfLookup = new Map<string, string>();
+  for (const s of data.sectors) {
+    etfLookup.set(s.sector, s.etf);
+  }
+
+  // Posture change
+  const postureChange =
+    previousPosture && previousPosture !== currentPosture
+      ? { from: previousPosture, to: currentPosture }
+      : null;
+
+  // Quadrant transitions
+  const quadrantTransitions: WhatChangedResult["quadrantTransitions"] = [];
+  for (const curr of data.sectors) {
+    const prev = prevMap.get(curr.sector);
+    if (prev && prev.quadrant !== curr.quadrant) {
+      quadrantTransitions.push({
+        sector: curr.sector,
+        etf: curr.etf,
+        from: prev.quadrant,
+        to: curr.quadrant,
+        category: classifyTransition(prev.quadrant, curr.quadrant),
+      });
     }
   }
 
-  // Sort by signal count descending
-  results.sort((a, b) => b.signals.length - a.signals.length);
-  return results;
-}
+  // Tier changes
+  const tierChanges: WhatChangedResult["tierChanges"] = [];
+  for (const curr of data.sectors) {
+    const prev = prevMap.get(curr.sector);
+    if (!prev) continue;
+    const prevTier = snapshotTier(prev);
+    const currAction = getTradingAction(curr);
+    const currFavorable =
+      curr.quadrant === "LEADING" || (curr.quadrant === "IMPROVING" && curr.acceleration > 0);
+    let currTier: "actionable" | "watch" | "avoid";
+    if (currAction === "TRADE" || currAction === "BUILD") {
+      currTier = currFavorable && curr.compositeScore >= 60 ? "actionable" : "watch";
+    } else if (currAction === "WATCH") {
+      currTier = "watch";
+    } else {
+      currTier = "avoid";
+    }
+    if (prevTier !== currTier) {
+      tierChanges.push({
+        sector: curr.sector,
+        etf: curr.etf,
+        from: prevTier,
+        to: currTier,
+      });
+    }
+  }
 
-// ── Rotation Summaries ──
+  // Score movers (|delta| > 3)
+  const scoreMovers: WhatChangedResult["scoreMovers"] = [];
+  for (const curr of data.sectors) {
+    const prev = prevMap.get(curr.sector);
+    if (!prev) continue;
+    const delta = curr.compositeScore - prev.compositeScore;
+    if (Math.abs(delta) > 3) {
+      scoreMovers.push({
+        sector: curr.sector,
+        etf: curr.etf,
+        from: prev.compositeScore,
+        to: curr.compositeScore,
+        delta,
+      });
+    }
+  }
+  // Sort by absolute delta descending
+  scoreMovers.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 
-export function computeRotationSummaries(
-  rotationData: RotationTrackerResult | null,
-  regime: SectorRotationResult["regime"]
-): RotationSummary[] {
-  if (!rotationData) return [];
+  // Trend flips
+  const trendFlips: WhatChangedResult["trendFlips"] = [];
+  for (const curr of data.sectors) {
+    const prev = prevMap.get(curr.sector);
+    if (prev && prev.trend !== curr.trend) {
+      trendFlips.push({
+        sector: curr.sector,
+        etf: curr.etf,
+        from: prev.trend,
+        to: curr.trend,
+      });
+    }
+  }
 
-  const regimeData = regime
-    ? {
-        regime: regime.regime,
-        vix: regime.vix,
-        vixSlope: regime.vixSlope,
-        yield10y: regime.yield10y,
-        dxy: regime.dxy,
-        dxyTrend: regime.dxyTrend,
-        favoredSectors: regime.favoredSectors,
-        avoidSectors: regime.avoidSectors,
-      }
-    : null;
+  // Dispersion change (flag if delta > 2)
+  const dispDelta = Math.abs(data.dispersionIndex - previousSnapshot.dispersionIndex);
+  const dispersionChange =
+    dispDelta > 2
+      ? { from: previousSnapshot.dispersionIndex, to: data.dispersionIndex }
+      : null;
 
-  return rotationData.activeRotations.map((r) => {
-    const lifecycle = computeLifecycleStage(r.event);
-    const conviction = computeConviction(r.event);
-    const alignment = regimeData
-      ? isRegimeAligned(r.event.sectorName, regimeData)
-      : "neutral";
-    const actionSignal = computeActionSignal(lifecycle, conviction, alignment);
-
-    // Top 3 stocks by performance
-    const topStocks = r.stocks
-      .slice(0, 3)
-      .map((s) => ({
-        symbol: s.symbol,
-        name: s.name,
-        performancePct: s.performancePct,
-      }));
-
-    return { event: r.event, lifecycle, conviction, actionSignal, topStocks };
-  });
+  return {
+    postureChange,
+    quadrantTransitions,
+    tierChanges,
+    scoreMovers,
+    trendFlips,
+    dispersionChange,
+    noHistory: false,
+  };
 }
