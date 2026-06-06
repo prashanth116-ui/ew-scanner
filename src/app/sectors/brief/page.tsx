@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { RefreshCw, ArrowLeft, AlertTriangle, TrendingUp, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+import { RefreshCw, ArrowLeft, AlertTriangle, TrendingUp, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import Link from "next/link";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { useSectorData } from "../_use-sector-data";
@@ -643,7 +643,7 @@ function BriefGuide() {
               </tr>
               <tr className="border-b border-[#1a1a1a]">
                 <td className="py-2.5 pr-4 text-white font-medium">Stock Picks</td>
-                <td className="py-2.5 pr-4">Multi-factor stock scanner with 8 filters, sector grouping, entry signals, pullback watch</td>
+                <td className="py-2.5 pr-4">Multi-factor stock scanner with filters, sector grouping, entry signals, pullback watch</td>
                 <td className="py-2.5 text-[#888]">The stock screener</td>
               </tr>
               <tr className="border-b border-[#1a1a1a]">
@@ -672,7 +672,7 @@ function BriefGuide() {
             color="text-green-400"
             description="A single-word classification of overall market positioning. Combines regime, VIX, active rotation conviction, and sector dispersion."
             details={[
-              { label: "AGGRESSIVE", desc: "Risk-on regime + 2+ high-conviction rotations + elevated dispersion. Lean into strongest sectors with full sizing." },
+              { label: "AGGRESSIVE", desc: "Risk-on regime + 2+ high/moderate-conviction rotations + elevated dispersion. Lean into strongest sectors with full sizing." },
               { label: "SELECTIVE", desc: "Risk-on/mixed regime with some rotation activity. Opportunities exist but be disciplined." },
               { label: "DEFENSIVE", desc: "Risk-off regime OR VIX rising with majority sectors weakening. Reduce equity exposure." },
               { label: "CASH", desc: "Risk-off + VIX above 30 + zero positive-conviction rotations. Capital preservation is the priority." },
@@ -719,7 +719,7 @@ function BriefGuide() {
             color="text-green-400"
             description="All 14 sectors classified into three actionability tiers based on composite score, quadrant, and acceleration."
             details={[
-              { label: "Actionable", desc: "TRADE/BUILD action + composite >= 60 + LEADING/IMPROVING quadrant. OR: active rotation with HIGH/MODERATE conviction + favorable quadrant." },
+              { label: "Actionable", desc: "TRADE/BUILD/WATCH action + composite >= 60 + LEADING or IMPROVING (with positive acceleration) quadrant. OR: active rotation with HIGH/MODERATE conviction + favorable quadrant." },
               { label: "Watch", desc: "Meets some criteria but not all. Monitor for promotion." },
               { label: "Avoid", desc: "TRIM or AVOID action. Weakening or lagging with poor metrics." },
             ]}
@@ -730,7 +730,7 @@ function BriefGuide() {
           <GuideSection
             title="Upcoming Events"
             color="text-cyan-400"
-            description="Macro catalysts (FOMC, CPI, Jobs, GDP, etc.) in the next 7 days."
+            description="Macro catalysts (FOMC, CPI, Jobs, OPEX, rebalances) in the next 7 days."
             details={[
               { label: "Why it matters", desc: "Major macro events cause regime shifts. Knowing FOMC is in 2 days helps you avoid opening new positions into volatility." },
               { label: "Data source", desc: "Pulled from the catalyst calendar API, filtered to macro-only events." },

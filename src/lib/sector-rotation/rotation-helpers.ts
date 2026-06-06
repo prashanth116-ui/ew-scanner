@@ -94,7 +94,7 @@ export function computeConviction(event: RotationEvent): ConvictionResult {
 // ── Macro Regime alignment ──
 
 export const REGIME_SECTOR_DISPLAY_MAP: Record<string, string[]> = {
-  "Technology": ["Semiconductors", "Software & Cloud"],
+  "Technology": ["Technology", "Semiconductors", "Software & Cloud"],
   "Health Care": ["Health Care", "Biotech"],
   "Consumer Discretionary": ["Consumer Discretionary"],
   "Consumer Staples": ["Consumer Staples"],

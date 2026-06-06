@@ -20,7 +20,6 @@ export type MarketPosture = "AGGRESSIVE" | "SELECTIVE" | "DEFENSIVE" | "CASH";
 export interface PostureResult {
   posture: MarketPosture;
   reasoning: string;
-  color: string;
 }
 
 export interface RiskFlag {
@@ -108,7 +107,6 @@ export function computeMarketPosture(
       posture: "CASH",
       reasoning:
         "Risk-off regime with elevated VIX and no active rotations showing positive conviction. Capital preservation is priority.",
-      color: "red",
     };
   }
 
@@ -122,7 +120,6 @@ export function computeMarketPosture(
       reasoning: isRiskOff
         ? "Risk-off macro regime. Favor defensive sectors, reduce equity exposure."
         : "VIX rising with majority of sectors weakening or lagging. Reduce risk.",
-      color: "amber",
     };
   }
 
@@ -135,7 +132,6 @@ export function computeMarketPosture(
     return {
       posture: "AGGRESSIVE",
       reasoning: `Risk-on regime with ${highModerate.length} high-conviction rotations and elevated sector dispersion (${data.dispersionIndex.toFixed(1)}). Lean into strongest sectors.`,
-      color: "green",
     };
   }
 
@@ -150,7 +146,6 @@ export function computeMarketPosture(
         highModerate.length >= 1
           ? `${highModerate.length} rotation(s) with moderate+ conviction. Be selective — focus on highest-conviction sectors.`
           : `${leadingImproving.length} sectors in leading/improving quadrant. Opportunities exist but be disciplined.`,
-      color: "cyan",
     };
   }
 
@@ -159,7 +154,6 @@ export function computeMarketPosture(
     posture: "SELECTIVE",
     reasoning:
       "Mixed market conditions. Focus on individual sector strength rather than broad exposure.",
-    color: "cyan",
   };
 }
 
@@ -389,12 +383,6 @@ export function computeWhatChanged(
   const prevMap = new Map<string, SectorSnapshot>();
   for (const s of previousSnapshot.sectors) {
     prevMap.set(s.sector, s);
-  }
-
-  // Build ETF lookup from current data
-  const etfLookup = new Map<string, string>();
-  for (const s of data.sectors) {
-    etfLookup.set(s.sector, s.etf);
   }
 
   // Posture change

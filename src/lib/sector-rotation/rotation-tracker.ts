@@ -611,11 +611,11 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     );
   }
 
-  // 4. Identify active rotations (still ongoing) — pick top 4 by signal strength
+  // 4. Identify active rotations (still ongoing) — pick top 8 by signal strength
   const activeEvents = allEvents
     .filter((e) => e.endDate === null)
     .sort((a, b) => b.signals.signalCount - a.signals.signalCount || b.etfPerformancePct - a.etfPerformancePct)
-    .slice(0, 4);
+    .slice(0, 8);
 
   // 5. Fetch stock-level performance for active rotations
   // First, collect all stock symbols we need quotes for
@@ -662,14 +662,6 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
   }
 
   // 6. Recently ended rotations (ended within last 10 trading days)
-  const lastSignalDate = allEvents.length > 0
-    ? allEvents
-        .filter((e) => e.endDate !== null)
-        .map((e) => e.endDate!)
-        .sort()
-        .pop()
-    : null;
-
   const tenDaysAgo = new Date();
   tenDaysAgo.setDate(tenDaysAgo.getDate() - 14); // ~10 trading days
   const cutoff = tenDaysAgo.toISOString().slice(0, 10);

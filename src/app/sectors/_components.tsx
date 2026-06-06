@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, FileDown, Search, X, ExternalLink, Bell, BellOff, Zap, ArrowUpCircle, Plus, CheckCircle2 } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertTriangle, FileDown, Search, X, ExternalLink, Bell, BellOff, Zap, ArrowUpCircle, Plus, CheckCircle2 } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
-import { DataAgeBadge } from "@/components/data-age-badge";
 import { type StockPhase, phaseBadge, PHASE_RANK } from "@/lib/phase-utils";
 import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
 import Link from "next/link";
@@ -18,7 +17,6 @@ import type {
   PullbackWatchStock,
   PullbackTier,
 } from "@/lib/sector-rotation/types";
-import type { PreRunResult } from "@/lib/prerun/types";
 import type { RotationTrackerResult, ActiveRotationDetail, RotationPatternStats, LifecycleStage, ConvictionResult } from "@/lib/sector-rotation/rotation-types";
 import {
   getHealth,
@@ -29,8 +27,6 @@ import {
   type ActionSignal,
 } from "@/lib/sector-rotation/rotation-helpers";
 import type { DailySnapshot, SectorSnapshot } from "@/lib/sector-rotation/history";
-import { SECTOR_UNIVERSE } from "@/data/sector-universe";
-import { ScannerCTA } from "@/components/scanner-cta";
 import { compositeColor, compositeTextColor } from "@/lib/color-utils";
 import { useDebounce } from "@/lib/use-debounce";
 
@@ -435,7 +431,7 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
     { label: "Breadth %", key: "breadthPct", format: (s) => s.breadthPct !== null ? `${s.breadthPct}%` : "N/A" },
     { label: "OBV Trend", key: "obvTrend", format: (s) => s.obvTrend === 1 ? "Accum" : s.obvTrend === -1 ? "Distrib" : "Flat" },
     { label: "RS-Ratio", key: "rsRatio", format: (s) => s.rsRatio.toFixed(2) },
-    { label: "RS-Momentum", key: "rsMomentum", format: (s) => s.rsMomentum.toFixed(4) },
+    { label: "RS-Momentum", key: "rsMomentum", format: (s) => s.rsMomentum.toFixed(2) },
   ];
 
   return (
@@ -663,7 +659,7 @@ export function AlertPanel({ sectors, data }: { sectors: SectorRotationScore[]; 
             <div className="border-t border-[#2a2a2a] pt-3">
               <p className="text-xs text-[#888] mb-2">Add alert</p>
               <div className="space-y-2">
-                {sectors.slice(0, 6).map((s) => (
+                {sectors.slice(0, 14).map((s) => (
                   <div key={s.etf} className="flex items-center gap-2">
                     <span className="text-xs text-white w-16 truncate">{s.etf}</span>
                     <button onClick={() => addAlert(s.etf, "enters_quadrant", "IMPROVING")} className="rounded border border-[#333] px-2 py-0.5 text-[10px] text-[#888] hover:text-cyan-400 hover:border-cyan-500/30">IMPROVING</button>
@@ -1180,7 +1176,7 @@ export function FilterRecipes() {
           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
             <h3 className="text-sm font-semibold text-amber-400 mb-2">The SNOW Pattern: Catch-Up Catalyst</h3>
             <p className="text-xs text-[#a0a0a0] leading-relaxed">
-              Before earnings, SNOW had Trend Accel <span className="text-green-400 font-mono">+27.98</span> (powerful own momentum) but Sector RS <span className="text-red-400 font-mono">&minus;11.3</span> (lagging sector ETF recently).
+              In Feb 2025 earnings, SNOW had Trend Accel <span className="text-green-400 font-mono">+27.98</span> (powerful own momentum) but Sector RS <span className="text-red-400 font-mono">&minus;11.3</span> (lagging sector ETF recently).
               The negative Sector RS looked bearish in isolation, but the strong Trend Accel correctly showed the stock had direction.
               SNOW jumped 75 points after earnings &mdash; the catalyst unlocked the gap between individual strength and sector-relative weakness.
             </p>
@@ -1236,9 +1232,9 @@ export function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRota
         <div className="border-t border-[#2a2a2a] px-4 py-3 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <div className="flex justify-between"><span className="text-[#888]">Momentum Composite</span><span className="text-white">{sector.momentumComposite} <span className="text-[#666]">({sector.momentumPercentile}th %ile)</span></span></div>
-            <div className="flex justify-between"><span className="text-[#888]">Acceleration</span><span className={sector.acceleration > 0 ? "text-green-400" : sector.acceleration < 0 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.acceleration > 0 ? "+" : ""}{sector.acceleration}</span></div>
-            <div className="flex justify-between"><span className="text-[#888]">Mansfield RS</span><span className={sector.mansfieldRS > 0 ? "text-green-400" : sector.mansfieldRS < 0 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.mansfieldRS > 0 ? "+" : ""}{sector.mansfieldRS}</span></div>
-            <div className="flex justify-between"><span className="text-[#888]">CMF (20d)</span><span className={sector.cmf20 > 0 ? "text-green-400" : sector.cmf20 < 0 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.cmf20 > 0 ? "+" : ""}{sector.cmf20}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Acceleration</span><span className={sector.acceleration > 0 ? "text-green-400" : sector.acceleration < 0 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.acceleration > 0 ? "+" : ""}{sector.acceleration.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Mansfield RS</span><span className={sector.mansfieldRS > 0 ? "text-green-400" : sector.mansfieldRS < 0 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.mansfieldRS > 0 ? "+" : ""}{sector.mansfieldRS.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">CMF (20d)</span><span className={sector.cmf20 > 0 ? "text-green-400" : sector.cmf20 < 0 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.cmf20 > 0 ? "+" : ""}{sector.cmf20.toFixed(3)}</span></div>
             <div className="flex justify-between"><span className="text-[#888]">OBV Trend</span><span className={sector.obvTrend === 1 ? "text-green-400" : sector.obvTrend === -1 ? "text-red-400" : "text-[#a0a0a0]"}>{sector.obvTrend === 1 ? "Accumulation" : sector.obvTrend === -1 ? "Distribution" : "Flat"}</span></div>
             <div className="flex justify-between"><span className="text-[#888]">Breadth (% &gt; 50d SMA)</span><span className="text-white">{sector.breadthPct !== null ? `${sector.breadthPct}%` : "N/A"}</span></div>
             <div className="flex justify-between"><span className="text-[#888]">Unusual Volume</span><span className={sector.unusualVolume ? "text-amber-400" : "text-[#a0a0a0]"}>{sector.unusualVolume ? "Yes" : "No"}</span></div>
@@ -1246,7 +1242,7 @@ export function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRota
             <div className="flex justify-between"><span className="text-[#888]">Avg P/C Ratio</span><span className="text-white">{sector.aggregatePCR !== null ? sector.aggregatePCR : "N/A"}</span></div>
             <div className="flex justify-between"><span className="text-[#888]">Earnings Beat %</span><span className="text-white">{sector.earningsBeatPct}%</span></div>
             <div className="flex justify-between"><span className="text-[#888]">Smart Money Score</span><span className={sector.dataQualityBreakdown?.smartMoney === false ? "text-[#555]" : compositeTextColor(sector.smartMoneyScore)}>{sector.dataQualityBreakdown?.smartMoney === false ? "No data" : `${sector.smartMoneyScore}/100`}</span></div>
-            <div className="flex justify-between"><span className="text-[#888]">RS-Ratio / Momentum</span><span className="text-white">{sector.rsRatio} / {sector.rsMomentum}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">RS-Ratio / Momentum</span><span className="text-white">{sector.rsRatio.toFixed(2)} / {sector.rsMomentum.toFixed(2)}</span></div>
           </div>
           {stocks.length > 0 && (
             <div className="border-t border-[#2a2a2a] pt-3">
@@ -1699,7 +1695,7 @@ export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: Pu
                     </span>
                   </td>
                   <td className={`py-1.5 pr-3 text-right ${s.pctFrom50ma <= 5 ? "text-green-400" : s.pctFrom50ma <= 15 ? "text-amber-400" : "text-[#555]"}`}>
-                    +{s.pctFrom50ma.toFixed(1)}%
+                    {s.pctFrom50ma >= 0 ? "+" : ""}{s.pctFrom50ma.toFixed(1)}%
                   </td>
                   <td className={`py-1.5 text-right ${s.volRatio >= 1.2 ? "text-cyan-400" : "text-[#888]"}`}>
                     {s.volRatio.toFixed(1)}x
@@ -1827,7 +1823,7 @@ export function RotationEntrySignals({
                   const blocks: string[] = [];
                   if (sig.action !== "ENTER" && sig.action !== "ADD ON PULLBACK") blocks.push(`action=${sig.action ?? "none"}`);
                   if (h.cmf20 <= 0) blocks.push(`CMF ${h.cmf20.toFixed(3)}`);
-                  if (h.acceleration <= 0) blocks.push(`accel ${h.acceleration.toFixed(1)}`);
+                  if (h.acceleration <= 0) blocks.push(`accel ${h.acceleration.toFixed(2)}`);
                   const sectorStocks = enrichedStocks.filter((s) => s.sectorEtf === ev.etf);
                   const hasQuality = sectorStocks.some(
                     (s) => (s.conviction === "HIGH" || s.conviction === "MEDIUM") && (s.category === "LEADER" || s.category === "TURNAROUND")
@@ -1872,7 +1868,7 @@ export function RotationEntrySignals({
               <div className="mb-2 flex flex-wrap gap-3 text-xs">
                 <span className="text-[#666]">Stage: <span className="text-white">{lifecycle}</span></span>
                 <span className="text-[#666]">Day {event.daysActive}{patternStats ? ` / avg ${Math.round(patternStats.avgDurationDays)}d` : ""}</span>
-                <span className="text-[#666]">Accel: <span className={health.acceleration > 0 ? "text-green-400" : "text-red-400"}>{health.acceleration > 0 ? "+" : ""}{health.acceleration.toFixed(1)}</span></span>
+                <span className="text-[#666]">Accel: <span className={health.acceleration > 0 ? "text-green-400" : "text-red-400"}>{health.acceleration > 0 ? "+" : ""}{health.acceleration.toFixed(2)}</span></span>
                 <span className="text-[#666]">CMF: <span className={health.cmf20 > 0 ? "text-green-400" : "text-red-400"}>{health.cmf20 > 0 ? "+" : ""}{health.cmf20.toFixed(2)}</span></span>
                 <span className="text-[#666]">Conviction: <span className={conviction.level === "HIGH" ? "text-green-400" : conviction.level === "MODERATE" ? "text-cyan-400" : "text-amber-400"}>{conviction.level}</span> ({conviction.score})</span>
               </div>
@@ -1880,7 +1876,7 @@ export function RotationEntrySignals({
               <div className="mb-2 flex flex-wrap gap-2 text-[10px]">
                 {[
                   { label: `CMF ${health.cmf20 > 0 ? "+" : ""}${health.cmf20.toFixed(2)}`, strong: health.cmf20 > 0.1 },
-                  { label: `Accel ${health.acceleration > 0 ? "+" : ""}${health.acceleration.toFixed(1)}`, strong: health.acceleration > 1 },
+                  { label: `Accel ${health.acceleration > 0 ? "+" : ""}${health.acceleration.toFixed(2)}`, strong: health.acceleration > 1 },
                   { label: `${conviction.level} Conviction`, strong: conviction.level === "HIGH" },
                   { label: regimeAlignment === "aligned" ? "Regime Aligned" : "Regime Neutral", strong: regimeAlignment === "aligned" },
                 ].map((indicator) => (

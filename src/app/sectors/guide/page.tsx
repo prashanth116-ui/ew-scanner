@@ -219,7 +219,7 @@ export default function SectorGuidePage() {
             </p>
           </SubSection>
 
-          <SubSection title="Tracked Sectors (13 GICS-Based)">
+          <SubSection title="Tracked Sectors (14)">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -242,12 +242,13 @@ export default function SectorGuidePage() {
                   <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Energy</td><td className="py-1.5 pr-3">XLE</td><td className="py-1.5">Oil, gas, pipelines, oilfield services</td></tr>
                   <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Utilities</td><td className="py-1.5 pr-3">XLU</td><td className="py-1.5">Electric, gas, water, nuclear power</td></tr>
                   <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Real Estate</td><td className="py-1.5 pr-3">XLRE</td><td className="py-1.5">REITs, real estate services</td></tr>
-                  <tr><td className="py-1.5 pr-3 font-medium text-white">Materials</td><td className="py-1.5 pr-3">XLB</td><td className="py-1.5">Chemicals, metals, mining, packaging</td></tr>
+                  <tr className="border-b border-[#2a2a2a]/50"><td className="py-1.5 pr-3 font-medium text-white">Materials</td><td className="py-1.5 pr-3">XLB</td><td className="py-1.5">Chemicals, metals, mining, packaging</td></tr>
+                  <tr><td className="py-1.5 pr-3 font-medium text-white">Technology</td><td className="py-1.5 pr-3 text-[#5ba3e6]">XLK</td><td className="py-1.5">Broad tech: hardware, IT services, conglomerates</td></tr>
                 </tbody>
               </table>
             </div>
             <p className="mt-2 text-[10px] text-[#555]">
-              ~1,378 stocks classified across 13 GICS-based sectors. Each sector has a 1:1 ETF proxy.
+              ~1,400 stocks classified across 14 sectors. Each sector has a 1:1 ETF proxy.
               Semiconductors and Biotech are split from Technology and Health Care respectively for finer granularity.
             </p>
           </SubSection>
@@ -265,7 +266,7 @@ export default function SectorGuidePage() {
             <p>
               Shows the current macro environment regime derived from cross-sector pair ratios and market breadth.
               Regimes include <span className="text-green-400">RISK ON</span>, <span className="text-red-400">RISK OFF</span>,{" "}
-              <span className="text-amber-400">INFLATIONARY</span>, and <span className="text-[#888]">NEUTRAL</span>.
+              <span className="text-amber-400">INFLATIONARY</span>, and <span className="text-[#888]">MIXED</span>.
               This context frames every other panel &mdash; a sector can be technically strong but fighting a macro headwind.
             </p>
           </SubSection>
@@ -364,16 +365,17 @@ export default function SectorGuidePage() {
 
           <SubSection title="X-Axis: RS-Ratio">
             <p>
-              Measures the <em>level</em> of relative strength. Calculated as SMA(10) of the sector/SPY ratio divided by
-              SMA(30) of the same ratio, multiplied by 100. A value above 100 means the sector is outperforming SPY
-              on a trend basis.
+              Measures the <em>level</em> of relative strength. Calculated using the JdK methodology: the raw sector/SPY ratio
+              is smoothed with an EMA(10), then normalized to a rolling Z-score, and centered at 100. A value above 100
+              means the sector is outperforming SPY on a trend basis.
             </p>
           </SubSection>
 
           <SubSection title="Y-Axis: RS-Momentum">
             <p>
-              Measures the <em>direction</em> of relative strength. It&apos;s the daily change in RS-Ratio. Positive means
-              relative strength is improving (sector gaining ground vs SPY). Negative means it&apos;s deteriorating.
+              Measures the <em>direction</em> of relative strength. It&apos;s the 10-period rate of change (ROC)
+              of the RS-Ratio, normalized to a rolling Z-score and centered at 100. Values above 100 mean relative
+              strength is accelerating; below 100 means it&apos;s decelerating.
             </p>
           </SubSection>
 
@@ -382,14 +384,14 @@ export default function SectorGuidePage() {
               <div className="flex items-start gap-2">
                 <span className="mt-0.5 h-3 w-3 shrink-0 rounded-full bg-green-500" />
                 <div>
-                  <strong className="text-green-400">Leading</strong> (top-right) &mdash; RS-Ratio &ge; 100, Momentum &ge; 0.
+                  <strong className="text-green-400">Leading</strong> (top-right) &mdash; RS-Ratio &ge; 100, RS-Momentum &ge; 100.
                   Sector is outperforming and gaining momentum. This is the strongest position. Hold winners here.
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <span className="mt-0.5 h-3 w-3 shrink-0 rounded-full bg-amber-500" />
                 <div>
-                  <strong className="text-amber-400">Weakening</strong> (bottom-right) &mdash; RS-Ratio &ge; 100, Momentum &lt; 0.
+                  <strong className="text-amber-400">Weakening</strong> (bottom-right) &mdash; RS-Ratio &ge; 100, RS-Momentum &lt; 100.
                   Still outperforming but losing steam. Early warning to tighten stops or start trimming. The sector is
                   rolling over.
                 </div>
@@ -397,14 +399,14 @@ export default function SectorGuidePage() {
               <div className="flex items-start gap-2">
                 <span className="mt-0.5 h-3 w-3 shrink-0 rounded-full bg-red-500" />
                 <div>
-                  <strong className="text-red-400">Lagging</strong> (bottom-left) &mdash; RS-Ratio &lt; 100, Momentum &lt; 0.
+                  <strong className="text-red-400">Lagging</strong> (bottom-left) &mdash; RS-Ratio &lt; 100, RS-Momentum &lt; 100.
                   Underperforming and getting worse. Avoid new positions. Watch for inflection signals.
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <span className="mt-0.5 h-3 w-3 shrink-0 rounded-full bg-cyan-500" />
                 <div>
-                  <strong className="text-cyan-400">Improving</strong> (top-left) &mdash; RS-Ratio &lt; 100, Momentum &ge; 0.
+                  <strong className="text-cyan-400">Improving</strong> (top-left) &mdash; RS-Ratio &lt; 100, RS-Momentum &ge; 100.
                   Still underperforming but momentum has turned positive. <strong className="text-white">This is the best
                   entry zone</strong> &mdash; the sector is recovering before the crowd notices.
                 </div>
@@ -469,7 +471,7 @@ export default function SectorGuidePage() {
                   <td className="py-2 pr-3 font-medium text-white">Breadth</td>
                   <td className="py-2 pr-3">15%</td>
                   <td className="py-2 pr-3">% of sector stocks above their 50-day SMA (batch quotes) or 20-day SMA (pre-run)</td>
-                  <td className="py-2">Shows internal health. High breadth + declining ETF = bullish divergence. Uses batch Yahoo quotes for all ~1,378 stocks. Falls back to pre-run data or ETF proxy if quotes unavailable.</td>
+                  <td className="py-2">Shows internal health. High breadth + declining ETF = bullish divergence. Uses batch Yahoo quotes for all ~1,400 stocks. Falls back to pre-run data or ETF proxy if quotes unavailable.</td>
                 </tr>
                 <tr>
                   <td className="py-2 pr-3 font-medium text-white">Smart Money</td>
@@ -532,7 +534,7 @@ export default function SectorGuidePage() {
 
           <SubSection title="3. Acceleration Inflection">
             <p>
-              <strong className="text-white">Signal:</strong> Acceleration (2nd derivative of price) is positive AND 20-day return is still negative.
+              <strong className="text-white">Signal:</strong> Acceleration (2nd derivative of price) is positive AND 20-day return is below +2%.
             </p>
             <p>
               <strong className="text-white">What it means:</strong> The rate of decline is slowing &mdash; the sector is
@@ -1822,7 +1824,7 @@ export default function SectorGuidePage() {
             <ul className="list-disc pl-4 space-y-1">
               <li><strong className="text-white">Below 50MA</strong> &mdash; not yet in uptrend (early)</li>
               <li><strong className="text-white">Positive Sector RS</strong> &mdash; relative strength improving vs sector</li>
-              <li><strong className="text-white">Volume &ge; 1.2x average</strong> &mdash; institutional interest confirmed</li>
+              <li><strong className="text-white">Volume &ge; 1.2x average</strong> &mdash; confirms institutional participation (Rotation Tracker uses a lower 0.8x gate for initial detection)</li>
             </ul>
           </SubSection>
 
@@ -2177,7 +2179,7 @@ export default function SectorGuidePage() {
               </li>
               <li>
                 <strong className="text-white">Breadth data sources</strong> &mdash; Breadth uses a 3-tier cascade:
-                (1) batch quotes from Yahoo Finance (price vs 50d SMA for all ~1,378 stocks &mdash; best quality),
+                (1) batch quotes from Yahoo Finance (price vs 50d SMA for all ~1,400 stocks &mdash; best quality),
                 (2) Pre-Run scan data (price vs 20d SMA &mdash; good quality, limited to scanned stocks),
                 (3) ETF proxy (ETF close vs its own 20d SMA &mdash; rough estimate). Tier 1 is used by default
                 when the API returns stock quote data.

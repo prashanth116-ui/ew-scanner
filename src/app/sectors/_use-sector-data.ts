@@ -29,6 +29,8 @@ import {
   LOADING_PHASE_INTERVAL_MS,
 } from "./_components";
 
+const COMPARISON_CHANGE_THRESHOLD = 2;
+
 export function useSectorData() {
   const [data, setData] = useState<SectorRotationResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,7 +87,6 @@ export function useSectorData() {
       const prev = comparisonMap.get(s.sector);
       if (!prev) { unchanged++; continue; }
       const delta = s.compositeScore - prev.compositeScore;
-      const COMPARISON_CHANGE_THRESHOLD = 2;
       if (delta > COMPARISON_CHANGE_THRESHOLD) improved++;
       else if (delta < -COMPARISON_CHANGE_THRESHOLD) declined++;
       else unchanged++;

@@ -539,7 +539,7 @@ export default function CryptoRotationPage() {
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">Loading crypto rotation data...</p>
-        <p className="mt-1 text-xs text-[#555]">10 sector proxies + ~80 token quotes via BTC benchmark</p>
+        <p className="mt-1 text-xs text-[#555]">10 sector proxies + ~70 token quotes via BTC benchmark</p>
       </div>
     );
   }
@@ -567,7 +567,7 @@ export default function CryptoRotationPage() {
         <div>
           <h1 className="text-xl font-bold text-white">Crypto Sector Rotation</h1>
           <p className="text-xs text-[#666]">
-            10 sectors / ~80 tokens / benchmark: BTC-USD
+            10 sectors / ~70 tokens / benchmark: BTC-USD
             {data.calculatedAt && <> &middot; <DataAgeBadge calculatedAt={data.calculatedAt} /></>}
           </p>
         </div>

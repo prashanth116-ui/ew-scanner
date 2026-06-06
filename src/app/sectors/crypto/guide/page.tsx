@@ -211,13 +211,13 @@ export default function CryptoGuidePage() {
               </thead>
               <tbody className="divide-y divide-[#2a2a2a]">
                 <tr><td className="py-2 pr-3 font-medium text-white">Layer 1</td><td className="py-2 pr-3 text-[#5ba3e6]">ETH</td><td className="py-2 pr-3">Base layer blockchains &mdash; settlement &amp; consensus</td><td className="py-2">ETH, SOL, ADA, AVAX, DOT, NEAR, APT, SUI</td></tr>
-                <tr><td className="py-2 pr-3 font-medium text-white">Layer 2</td><td className="py-2 pr-3 text-[#5ba3e6]">POL</td><td className="py-2 pr-3">Scaling solutions and rollups</td><td className="py-2">POL, ARB, OP, MNT, IMX, STRK</td></tr>
-                <tr><td className="py-2 pr-3 font-medium text-white">DeFi</td><td className="py-2 pr-3 text-[#5ba3e6]">UNI</td><td className="py-2 pr-3">Decentralized finance &mdash; lending, DEX, derivatives</td><td className="py-2">UNI, AAVE, MKR, CRV, LDO, COMP, PENDLE</td></tr>
+                <tr><td className="py-2 pr-3 font-medium text-white">Layer 2 &amp; Scaling</td><td className="py-2 pr-3 text-[#5ba3e6]">POL28321</td><td className="py-2 pr-3">Scaling solutions and rollups</td><td className="py-2">POL, ARB, OP, MNT, IMX, STRK</td></tr>
+                <tr><td className="py-2 pr-3 font-medium text-white">DeFi</td><td className="py-2 pr-3 text-[#5ba3e6]">UNI7083</td><td className="py-2 pr-3">Decentralized finance &mdash; lending, DEX, derivatives</td><td className="py-2">UNI, AAVE, MKR, CRV, LDO, COMP, PENDLE</td></tr>
                 <tr><td className="py-2 pr-3 font-medium text-white">AI &amp; Compute</td><td className="py-2 pr-3 text-[#5ba3e6]">RENDER</td><td className="py-2 pr-3">AI, GPU compute, decentralized intelligence</td><td className="py-2">RENDER, FET, TAO, AKT, AR, THETA, GRT</td></tr>
                 <tr><td className="py-2 pr-3 font-medium text-white">Real-World Assets</td><td className="py-2 pr-3 text-[#5ba3e6]">ONDO</td><td className="py-2 pr-3">Tokenized real-world assets and yield</td><td className="py-2">ONDO, MKR, LINK, PENDLE, CFG</td></tr>
                 <tr><td className="py-2 pr-3 font-medium text-white">DePin</td><td className="py-2 pr-3 text-[#5ba3e6]">FIL</td><td className="py-2 pr-3">Decentralized physical infrastructure networks</td><td className="py-2">FIL, RENDER, HNT, AKT, AR, IOTX</td></tr>
                 <tr><td className="py-2 pr-3 font-medium text-white">Memecoins</td><td className="py-2 pr-3 text-[#5ba3e6]">DOGE</td><td className="py-2 pr-3">Community-driven meme tokens</td><td className="py-2">DOGE, SHIB, PEPE, WIF, BONK, FLOKI</td></tr>
-                <tr><td className="py-2 pr-3 font-medium text-white">Gaming</td><td className="py-2 pr-3 text-[#5ba3e6]">IMX</td><td className="py-2 pr-3">Blockchain gaming, metaverse, and NFT platforms</td><td className="py-2">IMX, AXS, SAND, MANA, GALA, ILV, RON</td></tr>
+                <tr><td className="py-2 pr-3 font-medium text-white">Gaming &amp; Metaverse</td><td className="py-2 pr-3 text-[#5ba3e6]">IMX</td><td className="py-2 pr-3">Blockchain gaming, metaverse, and NFT platforms</td><td className="py-2">IMX, AXS, SAND, MANA, GALA, ILV, RON</td></tr>
                 <tr><td className="py-2 pr-3 font-medium text-white">Exchange Tokens</td><td className="py-2 pr-3 text-[#5ba3e6]">BNB</td><td className="py-2 pr-3">Centralized exchange native tokens</td><td className="py-2">BNB, CRO, OKB, LEO, KCS</td></tr>
                 <tr><td className="py-2 pr-3 font-medium text-white">Infrastructure</td><td className="py-2 pr-3 text-[#5ba3e6]">LINK</td><td className="py-2 pr-3">Oracles, indexing, storage, and middleware</td><td className="py-2">LINK, GRT, FIL, PYTH, ENS</td></tr>
               </tbody>
@@ -385,7 +385,7 @@ export default function CryptoGuidePage() {
                     <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400">RISK ON</span>
                   </td>
                   <td className="py-2 pr-3">BTC volatility &lt; 60%, median return &gt; 3%</td>
-                  <td className="py-2 pr-3 text-green-400">AI, Memes, Gaming, DeFi</td>
+                  <td className="py-2 pr-3 text-green-400">AI &amp; Compute, Memecoins, Gaming &amp; Metaverse, DeFi</td>
                   <td className="py-2 text-[#666]">&mdash;</td>
                 </tr>
                 <tr>
@@ -498,6 +498,7 @@ export default function CryptoGuidePage() {
               <li>Relative strength acceleration &ge; 3.0 pts</li>
               <li>Sector showing stealth accumulation</li>
               <li>Volume ratio &ge; 1.2&times;</li>
+              <li>Institutional ownership &gt; 50% (equity only; N/A for crypto)</li>
             </ul>
           </SubSection>
 
@@ -568,8 +569,8 @@ export default function CryptoGuidePage() {
 
           <SubSection title="Alt-Season Signal">
             <p>
-              The dashboard uses a proxy for alt-season: when <strong className="text-white">dispersion
-              &gt; 8%</strong> across the 10 sectors AND the median 20-day return is positive. High
+              The dashboard uses a proxy for alt-season: when the <strong className="text-white">standard deviation
+              of 20-day returns exceeds 8 points</strong> across the 10 sectors AND the median 20-day return is positive. High
               dispersion means altcoins are spreading out in performance (some big winners) rather than
               moving in lockstep &mdash; a sign that narrative-specific money is flowing.
             </p>
@@ -661,7 +662,7 @@ export default function CryptoGuidePage() {
               </thead>
               <tbody className="divide-y divide-[#2a2a2a]">
                 <tr><td className="py-2 pr-3 text-white">Benchmark</td><td className="py-2 pr-3">SPY (S&amp;P 500)</td><td className="py-2">BTC</td></tr>
-                <tr><td className="py-2 pr-3 text-white">Sector count</td><td className="py-2 pr-3">11 GICS sectors</td><td className="py-2">10 narrative sectors</td></tr>
+                <tr><td className="py-2 pr-3 text-white">Sector count</td><td className="py-2 pr-3">14 sectors</td><td className="py-2">10 narrative sectors</td></tr>
                 <tr><td className="py-2 pr-3 text-white">Score factors</td><td className="py-2 pr-3">6 (includes breadth, smart money)</td><td className="py-2">4 (momentum, accel, Mansfield, CMF)</td></tr>
                 <tr><td className="py-2 pr-3 text-white">Market cap gate</td><td className="py-2 pr-3">&ge; $2B</td><td className="py-2">&ge; $50M</td></tr>
                 <tr><td className="py-2 pr-3 text-white">Extension filter</td><td className="py-2 pr-3">&le; 80% above 200-SMA</td><td className="py-2">&le; 150% above 200-SMA</td></tr>

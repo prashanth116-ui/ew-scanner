@@ -281,8 +281,8 @@ function computeExitWarnings(event: RotationEvent): string[] {
   if (hist.length >= 5) {
     const recent = hist.slice(-3);
     const prior = hist.slice(-5, -2);
-    const recentAvg = recent.reduce((s, h) => s + h.signalCount, 0) / recent.length;
-    const priorAvg = prior.reduce((s, h) => s + h.signalCount, 0) / prior.length;
+    const recentAvg = recent.reduce((s, entry) => s + entry.signalCount, 0) / recent.length;
+    const priorAvg = prior.reduce((s, entry) => s + entry.signalCount, 0) / prior.length;
     if (recentAvg < priorAvg - EXIT_SIGNAL_DECLINE_THRESHOLD) {
       warnings.push("Signal strength declining");
     }
@@ -553,6 +553,9 @@ function HistoricalProjection({
       ? Math.round((event.etfPerformancePct / stats.avgPerformancePct) * 100)
       : 0;
   const isPastAvgDuration = event.daysActive > stats.avgDurationDays;
+  const isBeatingAvg = stats.avgPerformancePct >= 0
+    ? pctThroughReturn > 100
+    : pctThroughReturn < 100;
 
   return (
     <div className="mt-2 rounded-md bg-[#151515] px-3 py-2 text-[11px] text-[#999]">
@@ -564,7 +567,7 @@ function HistoricalProjection({
       ), avg return{" "}
       {stats.avgPerformancePct > 0 ? "+" : ""}{stats.avgPerformancePct.toFixed(1)}% (you&apos;re at{" "}
       {event.etfPerformancePct > 0 ? "+" : ""}{event.etfPerformancePct.toFixed(1)}% —{" "}
-      <span className={pctThroughReturn > 100 ? "text-green-400" : "text-[#999]"}>
+      <span className={isBeatingAvg ? "text-green-400" : "text-[#999]"}>
         {pctThroughReturn}% of historical
       </span>
       )
@@ -957,7 +960,7 @@ function StockPerformanceTable({
         <button onClick={() => setPhaseFilter(phaseFilter === "trending" ? "all" : "trending")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "trending" ? "bg-green-500/20 text-green-400 border-green-500/40" : "bg-green-500/5 text-green-400/70 border-green-500/20 hover:bg-green-500/10"}`} title="Phase 3: Above 50MA, accelerating — hold or add on dips">
           P3: {phaseCounts.trending}
         </button>
-        <button onClick={() => setPhaseFilter(phaseFilter === "exhausting" ? "all" : "exhausting")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "exhausting" ? "bg-red-500/20 text-red-400 border-red-500/40" : "bg-red-500/5 text-red-400/70 border-red-500/20 hover:bg-red-500/10"}`} title="Phase 4: Momentum fading (Sector RS < -2) — take profit">
+        <button onClick={() => setPhaseFilter(phaseFilter === "exhausting" ? "all" : "exhausting")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "exhausting" ? "bg-red-500/20 text-red-400 border-red-500/40" : "bg-red-500/5 text-red-400/70 border-red-500/20 hover:bg-red-500/10"}`} title="Phase 4: Momentum fading (Trend Accel < -2) — take profit">
           P4: {phaseCounts.exhausting}
         </button>
         <span className="text-[10px] text-[#555]" title="Neutral: Mixed or insufficient signals">—: {phaseCounts.neutral}</span>
@@ -1687,7 +1690,7 @@ function RecentlyEndedList({ events }: { events: RotationEvent[] }) {
   );
 }
 
-// ── Sector Heatmap Strip (all 13 sectors at a glance) ──
+// ── Sector Heatmap Strip (all sectors at a glance) ──
 
 function heatmapQuadrantBg(q: RRGQuadrant): string {
   switch (q) {
@@ -1909,7 +1912,7 @@ function FilterRecipes() {
           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
             <h3 className="text-sm font-semibold text-amber-400 mb-2">The SNOW Pattern: Catch-Up Catalyst</h3>
             <p className="text-xs text-[#a0a0a0] leading-relaxed">
-              Before earnings, SNOW had Trend Accel <span className="text-green-400 font-mono">+27.98</span> (powerful own momentum) but Sector RS <span className="text-red-400 font-mono">&minus;11.3</span> (lagging sector ETF recently).
+              In Feb 2025 earnings, SNOW had Trend Accel <span className="text-green-400 font-mono">+27.98</span> (powerful own momentum) but Sector RS <span className="text-red-400 font-mono">&minus;11.3</span> (lagging sector ETF recently).
               The negative Sector RS looked bearish in isolation, but the strong Trend Accel correctly showed the stock had direction.
               SNOW jumped 75 points after earnings &mdash; the catalyst unlocked the gap between individual strength and sector-relative weakness.
             </p>
@@ -2124,7 +2127,7 @@ export default function RotationTrackerPage() {
             </section>
           )}
 
-          {/* Sector Heatmap Strip (all 13 sectors at a glance) */}
+          {/* Sector Heatmap Strip (all sectors at a glance) */}
           {heatmapSectors && (
             <section>
               <SectorHeatmapStrip sectors={heatmapSectors} />

@@ -54,7 +54,7 @@ export default function SectorRotationPage() {
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">{LOADING_PHASES[loadingPhase]}...</p>
-        <p className="mt-1 text-xs text-[#555]">13 ETFs + ~1,378 stock quotes</p>
+        <p className="mt-1 text-xs text-[#555]">14 ETFs + ~1,400 stock quotes</p>
         <div className="mt-2 flex justify-center gap-1.5">
           {LOADING_PHASES.map((_, i) => (
             <div key={i} className={`h-1.5 w-1.5 rounded-full transition-colors ${i <= loadingPhase ? "bg-[#5ba3e6]" : "bg-[#333]"}`} />
@@ -173,7 +173,8 @@ export default function SectorRotationPage() {
                 const d = new Date(snap.date + "T12:00:00Z");
                 const daysAgo = Math.round((Date.now() - d.getTime()) / 86_400_000);
                 let label: string;
-                if (daysAgo <= 1) label = "Yesterday";
+                if (daysAgo === 0) label = "Today";
+                else if (daysAgo === 1) label = "Yesterday";
                 else if (daysAgo <= 8) label = "1w ago";
                 else if (daysAgo <= 15) label = "2w ago";
                 else if (daysAgo <= 22) label = "3w ago";
