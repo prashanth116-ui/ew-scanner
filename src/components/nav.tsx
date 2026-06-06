@@ -37,6 +37,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/prerun/history", label: "History" },
   ],
   sectors: [
+    { href: "/sectors/brief", label: "Brief" },
     { href: "/sectors", label: "Dashboard" },
     { href: "/sectors/picks", label: "Picks" },
     { href: "/rotation", label: "Rotation Tracker" },

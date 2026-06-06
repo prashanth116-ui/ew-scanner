@@ -11,8 +11,6 @@ import {
   CollapsiblePanel,
   quadrantColor,
   RegimeBanner,
-  BreadthThrustBanner,
-  PreRotationWatchlist,
   CorrelationMatrix,
   SectorComparison,
   RRGChart,
@@ -93,6 +91,9 @@ export default function SectorRotationPage() {
             <Link href="/sectors/brief" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
               Daily Brief <ExternalLink className="h-3 w-3 inline ml-0.5" />
             </Link>
+            <Link href="/sectors/picks" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
+              Stock Picks <ExternalLink className="h-3 w-3 inline ml-0.5" />
+            </Link>
             <Link href="/rotation" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
               Rotation Tracker <ExternalLink className="h-3 w-3 inline ml-0.5" />
             </Link>
@@ -150,16 +151,6 @@ export default function SectorRotationPage() {
             </div>
           </div>
         </div>
-      </CollapsiblePanel>
-
-      {/* Breadth Thrust */}
-      <CollapsiblePanel id="breadth-thrust" title="Breadth Thrust Signal" collapsed={collapsedPanels.has("breadth-thrust")} onToggle={togglePanel}>
-        <BreadthThrustBanner sectors={data.sectors} />
-      </CollapsiblePanel>
-
-      {/* Rotation Watchlist */}
-      <CollapsiblePanel id="rotation-watchlist" title="Rotation Watchlist" collapsed={collapsedPanels.has("rotation-watchlist")} onToggle={togglePanel}>
-        <PreRotationWatchlist sectors={data.sectors} />
       </CollapsiblePanel>
 
       {/* Sector Heatmap Grid */}

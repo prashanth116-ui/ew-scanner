@@ -259,11 +259,20 @@ export default function SectorGuidePage() {
           title="How The Dashboard Works"
           icon={<Layers className="h-5 w-5 text-[#5ba3e6]" />}
         >
-          <p>The dashboard has 6 panels, each serving a different purpose:</p>
+          <p>The dashboard has 7 panels, each serving a different purpose:</p>
 
-          <SubSection title="Panel 1: Rotation Status Banner">
+          <SubSection title="Panel 1: Macro Regime">
             <p>
-              The top banner tells you at a glance whether rotation is active. Two metrics determine this:
+              Shows the current macro environment regime derived from cross-sector pair ratios and market breadth.
+              Regimes include <span className="text-green-400">RISK ON</span>, <span className="text-red-400">RISK OFF</span>,{" "}
+              <span className="text-amber-400">INFLATIONARY</span>, and <span className="text-[#888]">NEUTRAL</span>.
+              This context frames every other panel &mdash; a sector can be technically strong but fighting a macro headwind.
+            </p>
+          </SubSection>
+
+          <SubSection title="Panel 2: Rotation Status">
+            <p>
+              Tells you at a glance whether rotation is active. Two metrics determine this:
             </p>
             <ul className="list-disc pl-4 space-y-1">
               <li>
@@ -281,7 +290,7 @@ export default function SectorGuidePage() {
             </p>
           </SubSection>
 
-          <SubSection title="Panel 2: Sector Heatmap">
+          <SubSection title="Panel 3: Sector Scores">
             <p>
               A grid of cards showing each sector&apos;s composite score (0&ndash;100), trend arrow, and RRG quadrant.
               Cards with a <span className="text-cyan-400">cyan border glow</span> have stealth accumulation signals.
@@ -301,38 +310,43 @@ export default function SectorGuidePage() {
               <strong className="text-white">Unusual Volume</strong> is flagged when a sector ETF&apos;s latest volume exceeds 1.5&times;
               its 20-day average &mdash; often an early signal of institutional rotation into or out of the sector.
             </p>
+            <p className="mt-2">
+              Sort modes let you rank by composite score, momentum, acceleration, or CMF. A historical comparison
+              toolbar lets you compare scores to previous snapshots to spot improving or declining sectors.
+            </p>
           </SubSection>
 
-          <SubSection title="Panel 3: RRG Chart">
+          <SubSection title="Panel 4: RRG &amp; Leading Indicators">
             <p>
-              An interactive scatter plot showing all sectors relative to SPY (see next section for details). Hover any
+              A two-column layout combining the interactive Relative Rotation Graph (see next section for details) with
+              leading indicator signals. The RRG scatter plot shows all sectors relative to SPY &mdash; hover any
               dot to see the sector name and composite score.
             </p>
-          </SubSection>
-
-          <SubSection title="Panel 4: Leading Indicators + Stocks to Watch">
-            <p>
+            <p className="mt-2">
               <strong className="text-white">Leading Indicators</strong> lists sectors with divergence signals that
-              may predict upcoming rotation (see Leading Indicators section below).
-            </p>
-            <p>
-              <strong className="text-white">Stocks to Watch</strong> shows the top 5 stocks within up to 3 sectors that
-              are improving or showing stealth accumulation. Stocks are ranked by a weighted score: 40% pre-run score,
-              24% each for earnings and institutional quality, and 12% combined for insider buys and options flow.
-              This panel requires a Pre-Run scan to have been run first.
+              may predict upcoming rotation: flow/price divergence, breadth divergence, momentum inflection, and
+              stealth accumulation (see Leading Indicators section below).
             </p>
           </SubSection>
 
-          <SubSection title="Panel 5: Sector Details">
+          <SubSection title="Panel 5: Correlation Matrix">
             <p>
-              Expandable accordion for each sector showing all raw indicator values: momentum, acceleration, Mansfield RS,
-              CMF, OBV, breadth, volume, insider buys, P/C ratio, earnings beats, smart money score, and RS-Ratio/Momentum.
-              Also shows leading and lagging stocks within the sector ranked by 20-day relative strength.
+              A heatmap showing 20-day return correlations between all sector ETFs. High correlation clusters reveal
+              sectors moving in lockstep (often macro-driven), while low or negative correlation pairs offer
+              diversification opportunities. Useful for building balanced sector allocations.
             </p>
           </SubSection>
 
           <SubSection title="Panel 6: Cross-Sector Pairs">
             <p>Two ratio pairs that reveal the market&apos;s risk appetite (see Cross-Sector Pairs section below).</p>
+          </SubSection>
+
+          <SubSection title="Panel 7: Compare Sectors">
+            <p>
+              A side-by-side comparison tool that lets you select two sectors and compare their raw indicator values
+              across all dimensions: momentum, acceleration, RS, CMF, breadth, smart money, and more.
+              Useful for deciding between two sectors competing for portfolio allocation.
+            </p>
           </SubSection>
         </Section>
 
@@ -1898,8 +1912,8 @@ export default function SectorGuidePage() {
         >
           <p>
             Use these checklists to validate entries before committing capital.
-            The <Link href="/sectors" className="text-[#5ba3e6] hover:underline">Entry Signals panel</Link> on
-            the Sectors Dashboard already applies the sector-level gates automatically &mdash; this guide explains
+            The <Link href="/sectors/picks" className="text-[#5ba3e6] hover:underline">Entry Signals panel</Link> on
+            the Stock Picks page already applies the sector-level gates automatically &mdash; this guide explains
             the reasoning behind each check.
           </p>
 
@@ -2002,8 +2016,8 @@ export default function SectorGuidePage() {
           </Warning>
 
           <Tip>
-            The <Link href="/sectors" className="text-[#5ba3e6] hover:underline">Entry Signals panel</Link> on
-            the Sectors Dashboard already applies all sector-level gates (CMF+, Accel+, conviction, regime).
+            The <Link href="/sectors/picks" className="text-[#5ba3e6] hover:underline">Entry Signals panel</Link> on
+            the Stock Picks page already applies all sector-level gates (CMF+, Accel+, conviction, regime).
             If a sector appears there, it has passed the checklist. Use this guide to understand <em>why</em> a
             sector qualifies and to apply stock-level checks before placing trades.
           </Tip>
@@ -2108,7 +2122,7 @@ export default function SectorGuidePage() {
 
           <SubSection title="Cross-Page Confirmation">
             <p>
-              The same three metrics appear on both the <Link href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</Link> and the <Link href="/sectors" className="text-[#5ba3e6] hover:underline">Sectors Dashboard</Link>.
+              The same three metrics appear on both the <Link href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</Link> and the <Link href="/sectors/picks" className="text-[#5ba3e6] hover:underline">Stock Picks</Link> page.
               A stock that appears as a strong pick on <strong className="text-white">both pages</strong> &mdash; positive on all 3 metrics,
               in an active rotation, within a leading or improving sector &mdash; is the highest-conviction setup.
             </p>
