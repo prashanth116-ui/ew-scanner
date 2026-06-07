@@ -1493,7 +1493,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
     setRsAccelFilter("all"); setVolFilter("all"); setAboveSmaFilter("all");
   };
 
-  const COL_COUNT = 8;
+  const COL_COUNT = 9;
   const selectClass = "rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]";
 
   return (
@@ -1560,6 +1560,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("rsAccel")} aria-sort={picksAriaSort("rsAccel")}>RS Accel <SortArrow col="rsAccel" /></th>
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")} aria-sort={picksAriaSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" /></th>
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")} aria-sort={picksAriaSort("price")}>Price <SortArrow col="price" /></th>
+              <th className="pb-2 pr-3 font-medium text-right" title="Institutional ownership %">Inst %</th>
               <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")} aria-sort={picksAriaSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" /></th>
             </tr>
           </thead>
@@ -1609,6 +1610,9 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
                           {s.volRatio.toFixed(1)}x
                         </td>
                         <td className="py-1.5 pr-3 text-right text-white">${s.price.toFixed(2)}</td>
+                        <td className={`py-1.5 pr-3 text-right ${s.institutionalPct != null && s.institutionalPct >= 70 ? "text-green-400" : s.institutionalPct != null ? "text-[#a0a0a0]" : "text-[#444]"}`}>
+                          {s.institutionalPct != null ? `${s.institutionalPct.toFixed(0)}%` : "\u2014"}
+                        </td>
                         <td className={`py-1.5 text-right ${s.pctFrom50ma != null && s.pctFrom50ma > 0 ? "text-green-400" : s.pctFrom50ma != null && s.pctFrom50ma < 0 ? "text-red-400" : "text-[#888]"}`}>
                           {s.pctFrom50ma != null ? `${s.pctFrom50ma > 0 ? "+" : ""}${s.pctFrom50ma.toFixed(1)}%` : "\u2014"}
                         </td>
