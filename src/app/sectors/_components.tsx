@@ -42,7 +42,7 @@ export type VolFilter = "all" | "above" | "below";
 export type VerdictFilter = "all" | "priority" | "keep" | "watch";
 export type RsAccelFilter = "all" | "positive" | "negative";
 export type PhaseFilter = "all" | "basing" | "turnaround" | "trending" | "exhausting";
-export type PicksSortKey = "conviction" | "symbol" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "pctFrom50ma";
+export type PicksSortKey = "conviction" | "symbol" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "institutionalPct" | "pctFrom50ma";
 export type PullbackSortKey = "tier" | "symbol" | "sector" | "price" | "pctFrom200ma" | "distanceTo80Pct" | "pctFrom50ma" | "volRatio";
 
 export interface StockInSector {
@@ -1430,6 +1430,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
         case "rsAccel": cmp = (a.rsAccel ?? -999) - (b.rsAccel ?? -999); break;
         case "volRatio": cmp = a.volRatio - b.volRatio; break;
         case "price": cmp = a.price - b.price; break;
+        case "institutionalPct": cmp = (a.institutionalPct ?? -1) - (b.institutionalPct ?? -1); break;
         case "pctFrom50ma": cmp = (a.pctFrom50ma ?? -999) - (b.pctFrom50ma ?? -999); break;
       }
       return sortDir === "desc" ? -cmp : cmp;
@@ -1560,7 +1561,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("rsAccel")} aria-sort={picksAriaSort("rsAccel")}>RS Accel <SortArrow col="rsAccel" /></th>
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")} aria-sort={picksAriaSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" /></th>
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")} aria-sort={picksAriaSort("price")}>Price <SortArrow col="price" /></th>
-              <th className="pb-2 pr-3 font-medium text-right" title="Institutional ownership %">Inst %</th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("institutionalPct")} aria-sort={picksAriaSort("institutionalPct")} title="Institutional ownership %">Inst % <SortArrow col="institutionalPct" /></th>
               <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")} aria-sort={picksAriaSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" /></th>
             </tr>
           </thead>
