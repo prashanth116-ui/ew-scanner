@@ -105,6 +105,14 @@ export function useSectorData() {
     const scanByTicker = new Map<string, (typeof scanResults)[number]>();
     for (const r of scanResults) scanByTicker.set(r.data.ticker, r);
 
+    // Build institutional % lookup from enriched stocks
+    const instMap = new Map<string, number | null>();
+    if (data?.enrichedStocks?.passed) {
+      for (const es of data.enrichedStocks.passed) {
+        instMap.set(es.symbol, es.institutionalPct);
+      }
+    }
+
     const quotes = data?.stockQuotes ?? {};
     const map = new Map<string, StockInSector[]>();
     for (const sectorDef of getSectorsWithStocks()) {
@@ -136,6 +144,7 @@ export function useSectorData() {
           rsImproving: rotData?.rsImproving ?? false,
           rsDelta: rotData?.rsDelta ?? 0,
           volumeConsistency: rotData?.volConsistency ?? 0,
+          institutionalPct: instMap.get(stock.symbol) ?? null,
         };
       });
       map.set(sectorDef.displayName, stocks);

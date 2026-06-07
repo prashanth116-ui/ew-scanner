@@ -63,6 +63,7 @@ export interface StockInSector {
   rsImproving: boolean;
   rsDelta: number;
   volumeConsistency: number;
+  institutionalPct: number | null;
 }
 
 export interface SectorAlert {
@@ -1006,6 +1007,7 @@ export function SectorStockTable({ stocks, sectorName, hasRotationData = false, 
               <th className="text-center py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("aboveSma50")} aria-sort={ariaSort("aboveSma50")}>&gt;50MA{sortArrow("aboveSma50")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("volumeVsAvg")} aria-sort={ariaSort("volumeVsAvg")}>Vol vs Avg{sortArrow("volumeVsAvg")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("finalScore")} aria-sort={ariaSort("finalScore")}>Score{sortArrow("finalScore")}</th>
+              <th className="text-right py-1.5 px-2 font-medium hidden lg:table-cell" title="Institutional ownership %">Inst %</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("earnings")} aria-sort={ariaSort("earnings")}>Earnings{sortArrow("earnings")}</th>
               <th className="text-left py-1.5 pl-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("verdict")} aria-sort={ariaSort("verdict")}>Verdict{sortArrow("verdict")}</th>
             </tr>
@@ -1066,6 +1068,9 @@ export function SectorStockTable({ stocks, sectorName, hasRotationData = false, 
                     </span>
                   </td>
                   <td className="py-1.5 px-2 text-right text-[#666]">{s.finalScore > 0 ? s.finalScore : "-"}</td>
+                  <td className={`py-1.5 px-2 text-right hidden lg:table-cell ${s.institutionalPct != null && s.institutionalPct >= 70 ? "text-green-400" : s.institutionalPct != null ? "text-[#a0a0a0]" : "text-[#444]"}`}>
+                    {s.institutionalPct != null ? `${s.institutionalPct.toFixed(0)}%` : "-"}
+                  </td>
                   <td className={`py-1.5 px-2 text-right ${s.daysToEarnings === null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}`} title={s.nextEarningsDate ?? undefined}>
                     {s.daysToEarnings !== null ? `${s.daysToEarnings}d` : "-"}
                   </td>
@@ -1296,6 +1301,7 @@ export function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRota
             <div className="flex justify-between"><span className="text-[#888]">Avg P/C Ratio</span><span className="text-white">{sector.aggregatePCR !== null ? sector.aggregatePCR : "N/A"}</span></div>
             <div className="flex justify-between"><span className="text-[#888]">Earnings Beat %</span><span className="text-white">{sector.earningsBeatPct}%</span></div>
             <div className="flex justify-between"><span className="text-[#888]">Smart Money Score</span><span className={sector.dataQualityBreakdown?.smartMoney === false ? "text-[#555]" : compositeTextColor(sector.smartMoneyScore)}>{sector.dataQualityBreakdown?.smartMoney === false ? "No data" : `${sector.smartMoneyScore}/100`}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Avg Institutional %</span><span className={(() => { const instStocks = stocks.filter((s) => s.institutionalPct != null); if (instStocks.length === 0) return "text-[#555]"; const avg = instStocks.reduce((sum, s) => sum + s.institutionalPct!, 0) / instStocks.length; return avg >= 70 ? "text-green-400" : "text-[#a0a0a0]"; })()}>{(() => { const instStocks = stocks.filter((s) => s.institutionalPct != null); if (instStocks.length === 0) return "No data"; const avg = instStocks.reduce((sum, s) => sum + s.institutionalPct!, 0) / instStocks.length; return `${avg.toFixed(0)}% (${instStocks.length} stocks)`; })()}</span></div>
             <div className="flex justify-between"><span className="text-[#888]">RS-Ratio / Momentum</span><span className="text-white">{sector.rsRatio.toFixed(2)} / {sector.rsMomentum.toFixed(2)}</span></div>
           </div>
           {stocks.length > 0 && (
