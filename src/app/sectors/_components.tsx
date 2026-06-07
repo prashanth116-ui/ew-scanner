@@ -42,7 +42,7 @@ export type VolFilter = "all" | "above" | "below";
 export type VerdictFilter = "all" | "priority" | "keep" | "watch";
 export type RsAccelFilter = "all" | "positive" | "negative";
 export type PhaseFilter = "all" | "basing" | "turnaround" | "trending" | "exhausting";
-export type PicksSortKey = "conviction" | "symbol" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "institutionalPct" | "pctFrom50ma";
+export type PicksSortKey = "conviction" | "symbol" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "pctFrom50ma";
 export type PullbackSortKey = "tier" | "symbol" | "sector" | "price" | "pctFrom200ma" | "distanceTo80Pct" | "pctFrom50ma" | "volRatio";
 
 export interface StockInSector {
@@ -1007,7 +1007,6 @@ export function SectorStockTable({ stocks, sectorName, hasRotationData = false, 
               <th className="text-center py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("aboveSma50")} aria-sort={ariaSort("aboveSma50")}>&gt;50MA{sortArrow("aboveSma50")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("volumeVsAvg")} aria-sort={ariaSort("volumeVsAvg")}>Vol vs Avg{sortArrow("volumeVsAvg")}</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("finalScore")} aria-sort={ariaSort("finalScore")}>Score{sortArrow("finalScore")}</th>
-              <th className="text-right py-1.5 px-2 font-medium hidden lg:table-cell" title="Institutional ownership %">Inst %</th>
               <th className="text-right py-1.5 px-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("earnings")} aria-sort={ariaSort("earnings")}>Earnings{sortArrow("earnings")}</th>
               <th className="text-left py-1.5 pl-2 font-medium cursor-pointer hover:text-[#a0a0a0]" onClick={() => handleSort("verdict")} aria-sort={ariaSort("verdict")}>Verdict{sortArrow("verdict")}</th>
             </tr>
@@ -1021,7 +1020,7 @@ export function SectorStockTable({ stocks, sectorName, hasRotationData = false, 
               return (
                 <tr key={s.ticker} className={`border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors ${isActionable ? "border-l-2 border-l-amber-400 bg-amber-500/5" : ""}`}>
                   <td className="py-1.5 pr-2">
-                    <a href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`} target="_blank" rel="noopener noreferrer" className="font-medium text-white hover:text-[#5ba3e6] transition-colors">{s.ticker}</a>
+                    <a href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`} target="_blank" rel="noopener noreferrer" className="font-medium text-white hover:text-[#5ba3e6] transition-colors" title={s.institutionalPct != null ? `Inst. ownership: ${s.institutionalPct.toFixed(0)}% (quarterly)` : undefined}>{s.ticker}</a>
                   </td>
                   <td className="py-1.5 pr-2">
                     <div className="flex items-center gap-1">
@@ -1068,9 +1067,6 @@ export function SectorStockTable({ stocks, sectorName, hasRotationData = false, 
                     </span>
                   </td>
                   <td className="py-1.5 px-2 text-right text-[#666]">{s.finalScore > 0 ? s.finalScore : "-"}</td>
-                  <td className={`py-1.5 px-2 text-right hidden lg:table-cell ${s.institutionalPct != null && s.institutionalPct >= 70 ? "text-green-400" : s.institutionalPct != null ? "text-[#a0a0a0]" : "text-[#444]"}`}>
-                    {s.institutionalPct != null ? `${s.institutionalPct.toFixed(0)}%` : "-"}
-                  </td>
                   <td className={`py-1.5 px-2 text-right ${s.daysToEarnings === null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}`} title={s.nextEarningsDate ?? undefined}>
                     {s.daysToEarnings !== null ? `${s.daysToEarnings}d` : "-"}
                   </td>
@@ -1430,7 +1426,6 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
         case "rsAccel": cmp = (a.rsAccel ?? -999) - (b.rsAccel ?? -999); break;
         case "volRatio": cmp = a.volRatio - b.volRatio; break;
         case "price": cmp = a.price - b.price; break;
-        case "institutionalPct": cmp = (a.institutionalPct ?? -1) - (b.institutionalPct ?? -1); break;
         case "pctFrom50ma": cmp = (a.pctFrom50ma ?? -999) - (b.pctFrom50ma ?? -999); break;
       }
       return sortDir === "desc" ? -cmp : cmp;
@@ -1494,7 +1489,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
     setRsAccelFilter("all"); setVolFilter("all"); setAboveSmaFilter("all");
   };
 
-  const COL_COUNT = 9;
+  const COL_COUNT = 8;
   const selectClass = "rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]";
 
   return (
@@ -1561,7 +1556,6 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("rsAccel")} aria-sort={picksAriaSort("rsAccel")}>RS Accel <SortArrow col="rsAccel" /></th>
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")} aria-sort={picksAriaSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" /></th>
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")} aria-sort={picksAriaSort("price")}>Price <SortArrow col="price" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("institutionalPct")} aria-sort={picksAriaSort("institutionalPct")} title="Institutional ownership %">Inst % <SortArrow col="institutionalPct" /></th>
               <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")} aria-sort={picksAriaSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" /></th>
             </tr>
           </thead>
@@ -1596,7 +1590,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
                           </span>
                         </td>
                         <td className="py-1.5 pr-3">
-                          <a href={`https://finance.yahoo.com/quote/${s.symbol}`} target="_blank" rel="noopener noreferrer" className="font-mono font-semibold text-[#5ba3e6] hover:underline">{s.symbol}</a>
+                          <a href={`https://finance.yahoo.com/quote/${s.symbol}`} target="_blank" rel="noopener noreferrer" className="font-mono font-semibold text-[#5ba3e6] hover:underline" title={s.institutionalPct != null ? `Inst. ownership: ${s.institutionalPct.toFixed(0)}% (quarterly filing data)` : undefined}>{s.symbol}</a>
                           <span className="ml-1.5 text-[10px] text-[#666]" title={s.shortName}>{s.shortName.length > 18 ? s.shortName.slice(0, 16) + "\u2026" : s.shortName}</span>
                         </td>
                         <td className={`py-1.5 pr-3 font-medium ${CATEGORY_STYLE[s.category] ?? "text-[#888]"}`}>{s.category}</td>
@@ -1611,9 +1605,6 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
                           {s.volRatio.toFixed(1)}x
                         </td>
                         <td className="py-1.5 pr-3 text-right text-white">${s.price.toFixed(2)}</td>
-                        <td className={`py-1.5 pr-3 text-right ${s.institutionalPct != null && s.institutionalPct >= 70 ? "text-green-400" : s.institutionalPct != null ? "text-[#a0a0a0]" : "text-[#444]"}`}>
-                          {s.institutionalPct != null ? `${s.institutionalPct.toFixed(0)}%` : "\u2014"}
-                        </td>
                         <td className={`py-1.5 text-right ${s.pctFrom50ma != null && s.pctFrom50ma > 0 ? "text-green-400" : s.pctFrom50ma != null && s.pctFrom50ma < 0 ? "text-red-400" : "text-[#888]"}`}>
                           {s.pctFrom50ma != null ? `${s.pctFrom50ma > 0 ? "+" : ""}${s.pctFrom50ma.toFixed(1)}%` : "\u2014"}
                         </td>
