@@ -323,7 +323,7 @@ export default function DailyBriefPage() {
         <NavCard
           href="/sectors/picks"
           title="Stock Picks"
-          description="Multi-factor stock scanner with 8 filters"
+          description="Multi-factor stock scanner with filters"
           stat={
             data.enrichedStocks
               ? `${data.enrichedStocks.passed.length} stocks passed`
