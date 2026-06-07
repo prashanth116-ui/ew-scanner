@@ -5,7 +5,7 @@
 
 import "server-only";
 
-import { createClient } from "./server";
+import { createClient, createAdminClient } from "./server";
 
 // ── Types ──
 
@@ -315,14 +315,21 @@ export async function upsertInstitutionalCache(records: InstitutionalCacheRecord
   if (records.length === 0) return 0;
 
   try {
-    const supabase = await createClient();
-    if (!supabase) return 0;
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertInstitutionalCache: no admin client (missing SUPABASE_SERVICE_ROLE_KEY)");
+      return 0;
+    }
 
-    const rows = records.map((r) => ({
-      symbol: r.symbol,
-      institutional_pct: r.institutional_pct,
-      last_updated: new Date().toISOString(),
-    }));
+    const rows = records
+      .filter((r) => r.institutional_pct != null)
+      .map((r) => ({
+        symbol: r.symbol,
+        institutional_pct: r.institutional_pct,
+        last_updated: new Date().toISOString(),
+      }));
+
+    if (rows.length === 0) return 0;
 
     const { data, error } = await supabase
       .from("stock_institutional_cache")
@@ -346,7 +353,7 @@ export async function loadInstitutionalCache(symbols: string[]): Promise<Map<str
   if (symbols.length === 0) return result;
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     if (!supabase) return result;
 
     const { data, error } = await supabase

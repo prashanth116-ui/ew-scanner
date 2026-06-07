@@ -1,8 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 /** Returns a Supabase server client, or null if env vars are missing. */
 export async function createClient() {
@@ -26,4 +28,10 @@ export async function createClient() {
       },
     },
   });
+}
+
+/** Returns a Supabase admin client (service role, bypasses RLS). For server-only use. */
+export function createAdminClient() {
+  if (!url || !serviceRoleKey) return null;
+  return createSupabaseClient(url, serviceRoleKey);
 }
