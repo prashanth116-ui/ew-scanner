@@ -26,7 +26,6 @@ import type {
   SectorRotationResult,
   RRGQuadrant,
 } from "./types";
-import { loadInstitutionalCache } from "@/lib/supabase/persistence";
 import { enrichStocks } from "./stock-enrichment";
 import type { StockInput } from "./stock-enrichment";
 import type { PreRunResult } from "@/lib/prerun/types";
@@ -137,11 +136,10 @@ export async function calculateSectorRotation(
   const allETFs = [...new Set(["SPY", ...sectorETFs, ...crossETFs])];
   const allStockSymbols = getAllSectorSymbols();
 
-  // Fetch ETF charts, batch stock quotes, and institutional cache in parallel
-  const [chartResults, batchQuotes, institutionalCache] = await Promise.all([
+  // Fetch ETF charts and batch stock quotes in parallel
+  const [chartResults, batchQuotes] = await Promise.all([
     Promise.allSettled(allETFs.map((etf) => fetchYahooChart(etf, "1y", "1d"))),
     fetchBatchQuotes(allStockSymbols),
-    loadInstitutionalCache(allStockSymbols).catch(() => new Map<string, number | null>()),
   ]);
 
   const quotesAsOf = new Date().toISOString();
@@ -620,10 +618,7 @@ export async function calculateSectorRotation(
       if (!q || q.price <= 0) continue;
 
       const preRun = preRunByTicker.get(stock.symbol);
-      // Institutional ownership: pre-run → Supabase cache → null
-      const institutionalPct = preRun?.data.institutionalPct
-        ?? institutionalCache.get(stock.symbol)
-        ?? null;
+      const institutionalPct = preRun?.data.institutionalPct ?? null;
 
       // ret20d: prefer fiftyDayAvgChangePercent (actual Yahoo data), fallback to
       // distance from 50-SMA as proxy. Without this, LEADER classification is unreachable.

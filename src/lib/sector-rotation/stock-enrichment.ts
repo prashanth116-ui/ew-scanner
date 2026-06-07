@@ -95,10 +95,7 @@ export function applyQualityGates(
       otherReasons.push("below_50MA_no_turnaround");
     }
 
-    // Gate 6: Institutional ownership > 30% (skip if unavailable)
-    if (s.institutionalPct != null && s.institutionalPct < 30) {
-      otherReasons.push(`institutional=${s.institutionalPct.toFixed(0)}% (<30%)`);
-    }
+    // Gate 6: (removed — institutional data is quarterly/stale, not actionable)
 
     // Gate 7: Sector correlation — stock 20d return within 30% of ETF
     if (s.ret20d != null) {
@@ -258,7 +255,7 @@ export function scoreConviction(
   category: StockCategory,
   rsAccel: number | null,
   volRatio: number,
-  institutionalPct: number | null,
+  _institutionalPct: number | null,
   sectorQuadrant: RRGQuadrant,
   sectorComposite: number,
   sectorStealth: boolean
@@ -271,7 +268,6 @@ export function scoreConviction(
   if (rsAccel != null && rsAccel >= 3.0) signals++;
   if (sectorStealth) signals++;
   if (volRatio >= 1.2) signals++;
-  if (institutionalPct != null && institutionalPct > 50) signals++;
 
   let conviction: ConvictionLevel;
   if (signals >= 3) conviction = "HIGH";
