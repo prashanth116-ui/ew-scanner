@@ -394,7 +394,7 @@ export default function CryptoGuidePage() {
                   </td>
                   <td className="py-2 pr-3">BTC volatility &gt; 80%, median return &lt; &minus;3%</td>
                   <td className="py-2 pr-3 text-amber-400">Exchange, Infrastructure</td>
-                  <td className="py-2 text-red-400">Memes, Gaming</td>
+                  <td className="py-2 text-red-400">Memecoins, Gaming &amp; Metaverse</td>
                 </tr>
                 <tr>
                   <td className="py-2 pr-3">
