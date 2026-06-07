@@ -25,13 +25,6 @@ export async function POST(request: NextRequest) {
 }
 
 async function runRefresh(request: NextRequest) {
-  // Simple auth check — require a secret header for cron jobs
-  const authHeader = request.headers.get("x-cron-secret");
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== cronSecret) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
     const symbols = getAllSectorSymbols().slice(0, 200); // Top 200 stocks
     const records: { symbol: string; institutional_pct: number | null }[] = [];
