@@ -7,7 +7,7 @@ import { upsertInstitutionalCache } from "@/lib/supabase/persistence";
 import { getYahooCrumb, invalidateCrumbCache } from "@/lib/squeeze-fetch";
 import { fetchWithRetry } from "@/lib/yahoo-utils";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -36,12 +36,12 @@ async function runRefresh(_request: NextRequest) {
       );
     }
 
-    const symbols = getAllSectorSymbols().slice(0, 200);
+    const symbols = getAllSectorSymbols(); // All ~1400 stocks
     const records: { symbol: string; institutional_pct: number | null }[] = [];
     let authFailures = 0;
 
-    // Batch fetch in groups of 5 to avoid rate limiting
-    const batchSize = 5;
+    // Batch fetch in groups of 10 with 200ms delay
+    const batchSize = 10;
     for (let i = 0; i < symbols.length; i += batchSize) {
       const batch = symbols.slice(i, i + batchSize);
       const results = await Promise.allSettled(
@@ -72,9 +72,9 @@ async function runRefresh(_request: NextRequest) {
         }
       }
 
-      // Rate limit: 300ms between batches
+      // Rate limit: 200ms between batches
       if (i + batchSize < symbols.length) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
     }
 
