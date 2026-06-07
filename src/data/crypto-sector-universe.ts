@@ -14,6 +14,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
     displayName: "Layer 1",
     etf: "ETH-USD",
     description: "Base layer blockchains — settlement and consensus",
+    category: "gics_sector",
     stocks: [
       { symbol: "ETH-USD", name: "Ethereum" },
       { symbol: "SOL-USD", name: "Solana" },
@@ -37,6 +38,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
     displayName: "Layer 2 & Scaling",
     etf: "POL28321-USD",
     description: "Scaling solutions and rollups",
+    category: "gics_sector",
     stocks: [
       { symbol: "POL28321-USD", name: "Polygon" },
       { symbol: "ARB11841-USD", name: "Arbitrum" },
@@ -52,6 +54,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
     displayName: "DeFi",
     etf: "UNI7083-USD",
     description: "Decentralized finance — lending, DEX, derivatives",
+    category: "gics_sector",
     stocks: [
       { symbol: "UNI7083-USD", name: "Uniswap" },
       { symbol: "AAVE-USD", name: "Aave" },
@@ -74,6 +77,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
     displayName: "AI & Compute",
     etf: "RENDER-USD",
     description: "AI, GPU compute, decentralized intelligence",
+    category: "gics_sector",
     stocks: [
       { symbol: "RENDER-USD", name: "Render" },
       { symbol: "FET-USD", name: "Fetch.ai" },
@@ -89,6 +93,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
     displayName: "Real-World Assets",
     etf: "ONDO-USD",
     description: "Tokenized real-world assets and yield",
+    category: "gics_sector",
     stocks: [
       { symbol: "ONDO-USD", name: "Ondo Finance" },
       { symbol: "MKR-USD", name: "Maker" },
@@ -102,6 +107,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
     displayName: "DePin",
     etf: "FIL-USD",
     description: "Decentralized physical infrastructure networks",
+    category: "gics_sector",
     stocks: [
       { symbol: "FIL-USD", name: "Filecoin" },
       { symbol: "RENDER-USD", name: "Render" },
@@ -116,6 +122,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
     displayName: "Memecoins",
     etf: "DOGE-USD",
     description: "Community-driven meme tokens",
+    category: "gics_sector",
     stocks: [
       { symbol: "DOGE-USD", name: "Dogecoin" },
       { symbol: "SHIB-USD", name: "Shiba Inu" },
@@ -130,6 +137,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
     displayName: "Gaming & Metaverse",
     etf: "IMX-USD",
     description: "Blockchain gaming, metaverse, and NFT platforms",
+    category: "gics_sector",
     stocks: [
       { symbol: "IMX-USD", name: "Immutable" },
       { symbol: "AXS-USD", name: "Axie Infinity" },
@@ -146,6 +154,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
     displayName: "Exchange Tokens",
     etf: "BNB-USD",
     description: "Centralized exchange native tokens",
+    category: "gics_sector",
     stocks: [
       { symbol: "BNB-USD", name: "BNB" },
       { symbol: "CRO-USD", name: "Cronos" },
@@ -159,6 +168,7 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
     displayName: "Infrastructure",
     etf: "LINK-USD",
     description: "Oracles, indexing, storage, and middleware",
+    category: "gics_sector",
     stocks: [
       { symbol: "LINK-USD", name: "Chainlink" },
       { symbol: "GRT6719-USD", name: "The Graph" },

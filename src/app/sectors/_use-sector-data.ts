@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import type { SectorRotationResult, SectorRotationScore } from "@/lib/sector-rotation/types";
+import type { SectorRotationResult, SectorRotationScore, ExtensionTier } from "@/lib/sector-rotation/types";
 import type { PreRunResult } from "@/lib/prerun/types";
 import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
 import type { DailySnapshot, SectorSnapshot } from "@/lib/sector-rotation/history";
@@ -15,7 +15,7 @@ import {
   getSnapshot,
 } from "@/lib/sector-rotation/history";
 import { loadScanResultsWithDate } from "@/lib/prerun/storage";
-import { SECTOR_UNIVERSE } from "@/data/sector-universe";
+import { SECTOR_UNIVERSE, getSectorsWithStocks } from "@/data/sector-universe";
 import { exportSectorsToExcel } from "@/lib/sector-rotation/export";
 import {
   type StockInSector,
@@ -100,14 +100,14 @@ export function useSectorData() {
     setScanResultsDate(date);
   }, []);
 
-  // Build stock list per sector with RS Accel
+  // Build stock list per sector with RS Accel (only sectors with stocks)
   const stocksBySector = useMemo(() => {
     const scanByTicker = new Map<string, (typeof scanResults)[number]>();
     for (const r of scanResults) scanByTicker.set(r.data.ticker, r);
 
     const quotes = data?.stockQuotes ?? {};
     const map = new Map<string, StockInSector[]>();
-    for (const sectorDef of SECTOR_UNIVERSE) {
+    for (const sectorDef of getSectorsWithStocks()) {
       const stocks: StockInSector[] = sectorDef.stocks.map((stock) => {
         const preRun = scanByTicker.get(stock.symbol);
         const quote = quotes[stock.symbol];
@@ -215,6 +215,9 @@ export function useSectorData() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, data]);
 
+  const subSectorScores = data?.subSectorScores ?? [];
+  const crossAssetScores = data?.crossAssetScores ?? [];
+
   return {
     data,
     loading,
@@ -236,6 +239,8 @@ export function useSectorData() {
     stocksBySector,
     allStocks,
     sortedSectors,
+    subSectorScores,
+    crossAssetScores,
     comparisonMap,
     comparisonSummary,
     handleExport,

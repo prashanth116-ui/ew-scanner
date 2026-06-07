@@ -19,6 +19,9 @@ import {
   TradingActionBadge,
   ComparisonDelta,
   EtfSparkline,
+  SubSectorPanel,
+  CrossAssetPanel,
+  DataStalenessWarning,
   SORT_MODE_OPTIONS,
   LOADING_PHASES,
   type SortMode,
@@ -40,6 +43,8 @@ export default function SectorRotationPage() {
     loadingTimeout,
     setLoadingTimeout,
     sortedSectors,
+    subSectorScores,
+    crossAssetScores,
     comparisonMap,
     comparisonSummary,
     allStocks,
@@ -54,7 +59,7 @@ export default function SectorRotationPage() {
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">{LOADING_PHASES[loadingPhase]}...</p>
-        <p className="mt-1 text-xs text-[#555]">14 ETFs + ~1,400 stock quotes</p>
+        <p className="mt-1 text-xs text-[#555]">23 ETFs + ~1,600 stock quotes</p>
         <div className="mt-2 flex justify-center gap-1.5">
           {LOADING_PHASES.map((_, i) => (
             <div key={i} className={`h-1.5 w-1.5 rounded-full transition-colors ${i <= loadingPhase ? "bg-[#5ba3e6]" : "bg-[#333]"}`} />
@@ -99,7 +104,7 @@ export default function SectorRotationPage() {
             </Link>
           </div>
           <div className="mt-1 flex items-center gap-3">
-            <DataAgeBadge calculatedAt={data.calculatedAt} />
+            <DataAgeBadge calculatedAt={data.calculatedAt} warnAfterMin={20} />
             <span className="text-xs text-[#555]">{new Date(data.calculatedAt).toLocaleString()}</span>
             {data.stockQuotes && <span className="text-xs text-[#555]">{Object.keys(data.stockQuotes).length} quotes{data.quotesAsOf ? ` as of ${new Date(data.quotesAsOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}</span>}
           </div>
@@ -237,7 +242,7 @@ export default function SectorRotationPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <h3 className="mb-3 text-sm font-semibold text-[#888]">Relative Rotation Graph</h3>
-            <div className="mx-auto max-w-[500px]"><RRGChart sectors={data.sectors} /></div>
+            <div className="mx-auto max-w-[500px]"><RRGChart sectors={data.sectors} subSectorScores={subSectorScores} crossAssetScores={crossAssetScores} /></div>
           </div>
           <div className="space-y-4 rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <h3 className="mb-2 text-sm font-semibold text-[#888]">Leading Indicators</h3>
@@ -268,6 +273,19 @@ export default function SectorRotationPage() {
           </div>
         </div>
       </CollapsiblePanel>
+
+      {/* Sub-Sector Leading Indicators */}
+      {subSectorScores.length > 0 && (
+        <SubSectorPanel scores={subSectorScores} collapsed={collapsedPanels.has("sub-sectors")} onToggle={togglePanel} />
+      )}
+
+      {/* Cross-Asset Money Flow */}
+      {crossAssetScores.length > 0 && (
+        <CrossAssetPanel scores={crossAssetScores} collapsed={collapsedPanels.has("cross-asset")} onToggle={togglePanel} />
+      )}
+
+      {/* Data Staleness Warning */}
+      <DataStalenessWarning calculatedAt={data.calculatedAt} />
 
       {/* Correlation Matrix */}
       <CorrelationMatrix correlationMatrix={data.correlationMatrix} sectors={data.sectors} collapsed={collapsedPanels.has("correlation")} onToggle={togglePanel} />

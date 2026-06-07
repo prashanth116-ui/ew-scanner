@@ -22,7 +22,7 @@ export function timeAgo(isoDate: string): {
   return { text, stale: hours >= 6, veryStale: hours >= 24 };
 }
 
-export function DataAgeBadge({ calculatedAt }: { calculatedAt: string }) {
+export function DataAgeBadge({ calculatedAt, warnAfterMin }: { calculatedAt: string; warnAfterMin?: number }) {
   const [age, setAge] = useState(() => timeAgo(calculatedAt));
 
   useEffect(() => {
@@ -30,6 +30,11 @@ export function DataAgeBadge({ calculatedAt }: { calculatedAt: string }) {
     const interval = setInterval(() => setAge(timeAgo(calculatedAt)), 60_000);
     return () => clearInterval(interval);
   }, [calculatedAt]);
+
+  // Custom warn threshold (e.g., 20 minutes for sector rotation)
+  const customWarn = warnAfterMin != null && !age.stale && !age.veryStale;
+  const ageMinutes = Math.round((Date.now() - new Date(calculatedAt).getTime()) / 60000);
+  const isCustomStale = customWarn && ageMinutes > warnAfterMin;
 
   if (age.veryStale) {
     return (
@@ -39,7 +44,7 @@ export function DataAgeBadge({ calculatedAt }: { calculatedAt: string }) {
       </span>
     );
   }
-  if (age.stale) {
+  if (age.stale || isCustomStale) {
     return (
       <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
         <Clock className="h-3 w-3" />

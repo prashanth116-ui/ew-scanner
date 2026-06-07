@@ -3,11 +3,14 @@ export interface SectorStock {
   name: string;
 }
 
+export type SectorCategory = "gics_sector" | "sub_sector" | "cross_asset";
+
 export interface SectorDefinition {
   id: string;
   displayName: string;
   etf: string;
   description: string;
+  category: SectorCategory;
   stocks: SectorStock[];
 }
 
@@ -17,6 +20,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Semiconductors",
     etf: "SMH",
     description: "Chips, foundries, equipment, EDA",
+    category: "gics_sector",
     stocks: [
       { symbol: "ACLS", name: "Axcelis Technologies" },
       { symbol: "ACMR", name: "ACM Research" },
@@ -100,6 +104,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Software & Cloud",
     etf: "IGV",
     description: "Enterprise SaaS, cybersecurity, dev tools, IT services",
+    category: "gics_sector",
     stocks: [
       { symbol: "AAPL", name: "Apple" },
       { symbol: "ACIW", name: "ACI Worldwide" },
@@ -271,6 +276,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Biotech",
     etf: "XBI",
     description: "Drug discovery, genomics, mRNA, clinical-stage",
+    category: "gics_sector",
     stocks: [
       { symbol: "ABCL", name: "AbCellera Biologics" },
       { symbol: "ACAD", name: "ACADIA Pharmaceuticals" },
@@ -354,6 +360,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Health Care",
     etf: "XLV",
     description: "Pharma, devices, managed care, diagnostics, hospitals",
+    category: "gics_sector",
     stocks: [
       { symbol: "A", name: "Agilent Technologies" },
       { symbol: "ABBV", name: "AbbVie" },
@@ -476,6 +483,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Financials",
     etf: "XLF",
     description: "Banks, insurance, asset management, payments, exchanges",
+    category: "gics_sector",
     stocks: [
       { symbol: "ABCB", name: "Ameris Bancorp" },
       { symbol: "ACGL", name: "Arch Capital" },
@@ -657,6 +665,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Consumer Discretionary",
     etf: "XLY",
     description: "Retail, autos, homebuilders, restaurants, travel, e-commerce",
+    category: "gics_sector",
     stocks: [
       { symbol: "ABNB", name: "Airbnb" },
       { symbol: "ADNT", name: "Adient" },
@@ -836,6 +845,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Communication Services",
     etf: "XLC",
     description: "Media, telecom, social, gaming, streaming",
+    category: "gics_sector",
     stocks: [
       { symbol: "APP", name: "AppLovin" },
       { symbol: "BIDU", name: "Baidu" },
@@ -903,6 +913,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Industrials",
     etf: "XLI",
     description: "Aerospace, defense, logistics, machinery, construction, waste",
+    category: "gics_sector",
     stocks: [
       { symbol: "AAL", name: "American Airlines" },
       { symbol: "AAON", name: "AAON" },
@@ -1115,6 +1126,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Consumer Staples",
     etf: "XLP",
     description: "Food, beverages, household, tobacco, retail staples",
+    category: "gics_sector",
     stocks: [
       { symbol: "ADM", name: "Archer-Daniels-Midland" },
       { symbol: "BF.B", name: "Brown-Forman" },
@@ -1185,6 +1197,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Energy",
     etf: "XLE",
     description: "Oil, gas, pipelines, oilfield services, refiners, solar, clean energy",
+    category: "gics_sector",
     stocks: [
       { symbol: "APA", name: "APA" },
       { symbol: "AR", name: "Antero Resources" },
@@ -1259,6 +1272,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Utilities",
     etf: "XLU",
     description: "Electric, gas, water, nuclear power, independent power",
+    category: "gics_sector",
     stocks: [
       { symbol: "AEE", name: "Ameren" },
       { symbol: "AEP", name: "American Electric Power" },
@@ -1312,6 +1326,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Real Estate",
     etf: "XLRE",
     description: "REITs, real estate services",
+    category: "gics_sector",
     stocks: [
       { symbol: "ADC", name: "Agree Realty" },
       { symbol: "AGNC", name: "AGNC Investment" },
@@ -1396,6 +1411,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Materials",
     etf: "XLB",
     description: "Chemicals, metals, mining, construction materials, packaging",
+    category: "gics_sector",
     stocks: [
       { symbol: "AA", name: "Alcoa" },
       { symbol: "AEM", name: "Agnico Eagle Mines" },
@@ -1474,6 +1490,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     displayName: "Technology",
     etf: "XLK",
     description: "Broad technology: hardware, software, IT services",
+    category: "gics_sector",
     stocks: [
       { symbol: "AAPL", name: "Apple" },
       { symbol: "ACN", name: "Accenture" },
@@ -1496,6 +1513,203 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "QCOM", name: "Qualcomm" },
       { symbol: "TXN", name: "Texas Instruments" },
     ],
+  },
+
+  // ── Sub-Sector Leading Indicators ──
+
+  {
+    id: "regional-banks",
+    displayName: "Regional Banks",
+    etf: "KRE",
+    description: "Regional banking institutions — credit cycle leading indicator",
+    category: "sub_sector",
+    stocks: [
+      { symbol: "ZION", name: "Zions Bancorporation" },
+      { symbol: "KEY", name: "KeyCorp" },
+      { symbol: "RF", name: "Regions Financial" },
+      { symbol: "CFG", name: "Citizens Financial" },
+      { symbol: "HBAN", name: "Huntington Bancshares" },
+      { symbol: "MTB", name: "M&T Bank" },
+      { symbol: "FHN", name: "First Horizon" },
+      { symbol: "CMA", name: "Comerica" },
+      { symbol: "FITB", name: "Fifth Third Bancorp" },
+      { symbol: "EWBC", name: "East West Bancorp" },
+      { symbol: "WAL", name: "Western Alliance" },
+      { symbol: "SNV", name: "Synovus Financial" },
+      { symbol: "FNB", name: "F.N.B. Corp" },
+      { symbol: "PNFP", name: "Pinnacle Financial" },
+      { symbol: "OZK", name: "Bank OZK" },
+      { symbol: "PACW", name: "PacWest Bancorp" },
+      { symbol: "COLB", name: "Columbia Banking" },
+      { symbol: "UBSI", name: "United Bankshares" },
+      { symbol: "ABCB", name: "Ameris Bancorp" },
+      { symbol: "VLY", name: "Valley National" },
+      { symbol: "FFIN", name: "First Financial Bankshares" },
+      { symbol: "BOKF", name: "BOK Financial" },
+      { symbol: "ONB", name: "Old National Bancorp" },
+      { symbol: "HWC", name: "Hancock Whitney" },
+      { symbol: "WTFC", name: "Wintrust Financial" },
+      { symbol: "CBSH", name: "Commerce Bancshares" },
+      { symbol: "UMBF", name: "UMB Financial" },
+      { symbol: "SFBS", name: "ServisFirst Bancshares" },
+      { symbol: "TCBI", name: "Texas Capital" },
+      { symbol: "GBCI", name: "Glacier Bancorp" },
+      { symbol: "SBCF", name: "Seacoast Banking" },
+      { symbol: "PPBI", name: "Pacific Premier" },
+      { symbol: "CADE", name: "Cadence Bank" },
+      { symbol: "IBOC", name: "International Bancshares" },
+      { symbol: "BHLB", name: "Berkshire Hills Bancorp" },
+    ],
+  },
+  {
+    id: "homebuilders",
+    displayName: "Homebuilders",
+    etf: "XHB",
+    description: "Homebuilders and housing supply chain — housing cycle leading indicator",
+    category: "sub_sector",
+    stocks: [
+      { symbol: "DHI", name: "D.R. Horton" },
+      { symbol: "LEN", name: "Lennar" },
+      { symbol: "NVR", name: "NVR" },
+      { symbol: "PHM", name: "PulteGroup" },
+      { symbol: "TOL", name: "Toll Brothers" },
+      { symbol: "KBH", name: "KB Home" },
+      { symbol: "MDC", name: "MDC Holdings" },
+      { symbol: "TMHC", name: "Taylor Morrison" },
+      { symbol: "MHO", name: "M/I Homes" },
+      { symbol: "GRBK", name: "Green Brick Partners" },
+      { symbol: "CCS", name: "Century Communities" },
+      { symbol: "MTH", name: "Meritage Homes" },
+      { symbol: "SKY", name: "Skyline Champion" },
+      { symbol: "LGIH", name: "LGI Homes" },
+      { symbol: "DFH", name: "Dream Finders Homes" },
+      { symbol: "CVCO", name: "Cavco Industries" },
+      { symbol: "MAS", name: "Masco" },
+      { symbol: "BLDR", name: "Builders FirstSource" },
+      { symbol: "FBIN", name: "Fortune Brands" },
+      { symbol: "ALLE", name: "Allegion" },
+      { symbol: "DOOR", name: "Masonite" },
+      { symbol: "AZEK", name: "AZEK Company" },
+      { symbol: "IBP", name: "Installed Building Products" },
+      { symbol: "TREX", name: "Trex" },
+      { symbol: "FND", name: "Floor & Decor" },
+    ],
+  },
+  {
+    id: "retail",
+    displayName: "Retail",
+    etf: "XRT",
+    description: "Retail sector — consumer spending and sentiment leading indicator",
+    category: "sub_sector",
+    stocks: [
+      { symbol: "TGT", name: "Target" },
+      { symbol: "TJX", name: "TJX Companies" },
+      { symbol: "ROST", name: "Ross Stores" },
+      { symbol: "DG", name: "Dollar General" },
+      { symbol: "DLTR", name: "Dollar Tree" },
+      { symbol: "BBY", name: "Best Buy" },
+      { symbol: "ULTA", name: "Ulta Beauty" },
+      { symbol: "GPS", name: "Gap" },
+      { symbol: "ANF", name: "Abercrombie & Fitch" },
+      { symbol: "AEO", name: "American Eagle" },
+      { symbol: "FIVE", name: "Five Below" },
+      { symbol: "OLLI", name: "Ollie's Bargain" },
+      { symbol: "BURL", name: "Burlington Stores" },
+      { symbol: "M", name: "Macy's" },
+      { symbol: "BOOT", name: "Boot Barn" },
+      { symbol: "DKS", name: "Dick's Sporting Goods" },
+      { symbol: "FL", name: "Foot Locker" },
+      { symbol: "LULU", name: "Lululemon" },
+      { symbol: "DECK", name: "Deckers Outdoor" },
+      { symbol: "W", name: "Wayfair" },
+      { symbol: "ETSY", name: "Etsy" },
+      { symbol: "CASY", name: "Casey's General Stores" },
+      { symbol: "MUSA", name: "Murphy USA" },
+      { symbol: "TSCO", name: "Tractor Supply" },
+      { symbol: "WSM", name: "Williams-Sonoma" },
+      { symbol: "RH", name: "RH" },
+      { symbol: "ORLY", name: "O'Reilly Auto" },
+      { symbol: "AZO", name: "AutoZone" },
+      { symbol: "KMX", name: "CarMax" },
+      { symbol: "GPC", name: "Genuine Parts" },
+    ],
+  },
+  {
+    id: "transports",
+    displayName: "Transports",
+    etf: "IYT",
+    description: "Transportation sector — economic activity leading indicator",
+    category: "sub_sector",
+    stocks: [
+      { symbol: "UNP", name: "Union Pacific" },
+      { symbol: "CSX", name: "CSX" },
+      { symbol: "NSC", name: "Norfolk Southern" },
+      { symbol: "FDX", name: "FedEx" },
+      { symbol: "UPS", name: "UPS" },
+      { symbol: "JBHT", name: "J.B. Hunt" },
+      { symbol: "ODFL", name: "Old Dominion Freight" },
+      { symbol: "XPO", name: "XPO" },
+      { symbol: "DAL", name: "Delta Air Lines" },
+      { symbol: "UAL", name: "United Airlines" },
+      { symbol: "AAL", name: "American Airlines" },
+      { symbol: "LUV", name: "Southwest Airlines" },
+      { symbol: "SAIA", name: "Saia" },
+      { symbol: "CHRW", name: "C.H. Robinson" },
+      { symbol: "KNX", name: "Knight-Swift" },
+      { symbol: "SNDR", name: "Schneider National" },
+      { symbol: "LSTR", name: "Landstar System" },
+      { symbol: "MATX", name: "Matson" },
+      { symbol: "KEX", name: "Kirby" },
+      { symbol: "GXO", name: "GXO Logistics" },
+      { symbol: "EXPD", name: "Expeditors International" },
+      { symbol: "HUBG", name: "Hub Group" },
+      { symbol: "ARCB", name: "ArcBest" },
+      { symbol: "WERN", name: "Werner Enterprises" },
+      { symbol: "R", name: "Ryder System" },
+    ],
+  },
+
+  // ── Cross-Asset Money Flow ETFs ──
+
+  {
+    id: "gold",
+    displayName: "Gold",
+    etf: "GLD",
+    description: "Gold — risk-off and inflation hedge",
+    category: "cross_asset",
+    stocks: [],
+  },
+  {
+    id: "treasuries-20y",
+    displayName: "Treasuries 20Y+",
+    etf: "TLT",
+    description: "Long-duration US treasuries — risk-off and rate sensitivity",
+    category: "cross_asset",
+    stocks: [],
+  },
+  {
+    id: "high-yield-corp",
+    displayName: "High Yield Corp",
+    etf: "HYG",
+    description: "High yield corporate bonds — credit risk appetite",
+    category: "cross_asset",
+    stocks: [],
+  },
+  {
+    id: "emerging-markets",
+    displayName: "Emerging Markets",
+    etf: "EEM",
+    description: "Emerging market equities — global risk appetite",
+    category: "cross_asset",
+    stocks: [],
+  },
+  {
+    id: "us-dollar",
+    displayName: "US Dollar",
+    etf: "UUP",
+    description: "US Dollar index — inverse risk correlation",
+    category: "cross_asset",
+    stocks: [],
   },
 ];
 
@@ -1526,4 +1740,24 @@ export function getAllSectorSymbols(): string[] {
 
 export function getSectorDefinitions(): SectorDefinition[] {
   return SECTOR_UNIVERSE;
+}
+
+/** Get the 14 original GICS equity sectors. */
+export function getEquitySectors(): SectorDefinition[] {
+  return SECTOR_UNIVERSE.filter((s) => s.category === "gics_sector");
+}
+
+/** Get sub-sector leading indicators (KRE, XHB, XRT, IYT). */
+export function getSubSectors(): SectorDefinition[] {
+  return SECTOR_UNIVERSE.filter((s) => s.category === "sub_sector");
+}
+
+/** Get cross-asset ETFs (GLD, TLT, HYG, EEM, UUP). */
+export function getCrossAssetETFs(): SectorDefinition[] {
+  return SECTOR_UNIVERSE.filter((s) => s.category === "cross_asset");
+}
+
+/** Get all sectors that have stocks for enrichment (excludes cross-asset ETFs). */
+export function getSectorsWithStocks(): SectorDefinition[] {
+  return SECTOR_UNIVERSE.filter((s) => s.stocks.length > 0);
 }

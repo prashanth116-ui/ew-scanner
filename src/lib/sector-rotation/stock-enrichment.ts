@@ -8,7 +8,7 @@ import type {
   EnrichedStock,
   RejectedStock,
   PullbackWatchStock,
-  PullbackTier,
+  ExtensionTier,
   StockCategory,
   StockPhase,
   ConvictionLevel,
@@ -127,9 +127,9 @@ export function applyQualityGates(
   return { passed, rejected, extensionOnly };
 }
 
-// ── Pullback Watch ──
+// ── Extended Stocks Watch ──
 
-export function buildPullbackWatch(extensionOnly: StockInput[]): PullbackWatchStock[] {
+export function buildExtendedWatch(extensionOnly: StockInput[]): PullbackWatchStock[] {
   return extensionOnly
     .map((s) => {
       const pctFrom200ma = calcPctFrom(s.price, s.sma200)!;
@@ -137,13 +137,13 @@ export function buildPullbackWatch(extensionOnly: StockInput[]): PullbackWatchSt
       const volRatio = calcVolRatio(s.volume, s.avgVolume10d);
       const distanceTo80Pct = Math.round((pctFrom200ma - 80) * 10) / 10;
 
-      let tier: PullbackTier;
+      let tier: ExtensionTier;
       if (pctFrom200ma <= 100) {
-        tier = "NEAR_ENTRY";
+        tier = "MODERATE_EXTENSION";
       } else if (pctFrom200ma <= 150 && pctFrom50ma <= 15) {
-        tier = "PULLING_BACK";
+        tier = "HIGH_EXTENSION";
       } else {
-        tier = "WATCHING";
+        tier = "EXTREME_EXTENSION";
       }
 
       return {
@@ -165,12 +165,15 @@ export function buildPullbackWatch(extensionOnly: StockInput[]): PullbackWatchSt
       };
     })
     .sort((a, b) => {
-      const tierOrder: Record<PullbackTier, number> = { NEAR_ENTRY: 0, PULLING_BACK: 1, WATCHING: 2 };
+      const tierOrder: Record<ExtensionTier, number> = { MODERATE_EXTENSION: 0, HIGH_EXTENSION: 1, EXTREME_EXTENSION: 2 };
       const tierCmp = tierOrder[a.tier] - tierOrder[b.tier];
       if (tierCmp !== 0) return tierCmp;
       return a.pctFrom200ma - b.pctFrom200ma;
     });
 }
+
+/** @deprecated Use buildExtendedWatch */
+export const buildPullbackWatch = buildExtendedWatch;
 
 // ── Step 6: Classification ──
 

@@ -302,6 +302,28 @@ export function computeRiskFlags(
     });
   }
 
+  // 8. Cross-asset risk-off signals (GLD/TLT rising = money leaving equities)
+  if (data.crossAssetScores) {
+    const gld = data.crossAssetScores.find((s) => s.etf === "GLD");
+    const tlt = data.crossAssetScores.find((s) => s.etf === "TLT");
+    const gldRising = gld && gld.acceleration > 2;
+    const tltRising = tlt && tlt.acceleration > 2;
+    if (gldRising && tltRising) {
+      flags.push({
+        severity: "high",
+        message: "Cross-asset risk-off: GLD + TLT rising",
+        detail: "Both gold and treasuries showing positive acceleration — money may be leaving equities for safe havens.",
+      });
+    } else if (gldRising || tltRising) {
+      const rising = gldRising ? "Gold (GLD)" : "Treasuries (TLT)";
+      flags.push({
+        severity: "medium",
+        message: `${rising} accelerating`,
+        detail: `${rising} showing positive acceleration — potential risk-off signal.`,
+      });
+    }
+  }
+
   return flags;
 }
 

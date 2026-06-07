@@ -302,3 +302,94 @@ export async function upsertHitRates(
     return false;
   }
 }
+
+// ── Institutional Ownership Cache ──
+
+export interface InstitutionalCacheRecord {
+  symbol: string;
+  institutional_pct: number | null;
+}
+
+/** Upsert institutional ownership cache records. */
+export async function upsertInstitutionalCache(records: InstitutionalCacheRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
+  try {
+    const supabase = await createClient();
+    if (!supabase) return 0;
+
+    const rows = records.map((r) => ({
+      symbol: r.symbol,
+      institutional_pct: r.institutional_pct,
+      last_updated: new Date().toISOString(),
+    }));
+
+    const { data, error } = await supabase
+      .from("stock_institutional_cache")
+      .upsert(rows, { onConflict: "symbol" })
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] upsertInstitutionalCache error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] upsertInstitutionalCache exception:", err);
+    return 0;
+  }
+}
+
+/** Load institutional ownership from cache for given symbols. */
+export async function loadInstitutionalCache(symbols: string[]): Promise<Map<string, number | null>> {
+  const result = new Map<string, number | null>();
+  if (symbols.length === 0) return result;
+
+  try {
+    const supabase = await createClient();
+    if (!supabase) return result;
+
+    const { data, error } = await supabase
+      .from("stock_institutional_cache")
+      .select("symbol, institutional_pct")
+      .in("symbol", symbols);
+
+    if (error) {
+      console.error("[persistence] loadInstitutionalCache error:", error.message);
+      return result;
+    }
+
+    for (const row of data ?? []) {
+      result.set(row.symbol, row.institutional_pct);
+    }
+    return result;
+  } catch (err) {
+    console.error("[persistence] loadInstitutionalCache exception:", err);
+    return result;
+  }
+}
+
+/** Get symbols where institutional data is stale (older than maxAgeDays). */
+export async function getStaleInstitutionalSymbols(maxAgeDays: number): Promise<string[]> {
+  try {
+    const supabase = await createClient();
+    if (!supabase) return [];
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - maxAgeDays);
+
+    const { data, error } = await supabase
+      .from("stock_institutional_cache")
+      .select("symbol")
+      .lt("last_updated", cutoff.toISOString());
+
+    if (error) {
+      console.error("[persistence] getStaleInstitutionalSymbols error:", error.message);
+      return [];
+    }
+    return (data ?? []).map((r) => r.symbol);
+  } catch (err) {
+    console.error("[persistence] getStaleInstitutionalSymbols exception:", err);
+    return [];
+  }
+}

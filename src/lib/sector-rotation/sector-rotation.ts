@@ -2,7 +2,7 @@
  * Sector Rotation Tracker engine.
  * SERVER-ONLY: Used by /api/sector-rotation route + nightly cron.
  *
- * 14 sectors with 1:1 ETF proxy mapping.
+ * 23 ETFs: 14 GICS sectors + 4 sub-sectors + 5 cross-asset.
  * Composite scoring: momentum, acceleration, Mansfield RS, CMF, breadth, smart money.
  * Dynamic weight redistribution when pre-run data is missing.
  */
@@ -11,12 +11,22 @@ import "server-only";
 
 import { fetchYahooChart, calcSMA, calc20dReturn, fetchBatchQuotes } from "@/lib/prerun/data";
 import type { BatchQuote } from "@/lib/prerun/data";
-import { SECTOR_UNIVERSE, getSectorForSymbol, getAllSectorSymbols } from "@/data/sector-universe";
+import {
+  SECTOR_UNIVERSE,
+  getSectorForSymbol,
+  getAllSectorSymbols,
+  getEquitySectors,
+  getSubSectors,
+  getCrossAssetETFs,
+  getSectorsWithStocks,
+} from "@/data/sector-universe";
+import type { SectorCategory } from "@/data/sector-universe";
 import type {
   SectorRotationScore,
   SectorRotationResult,
   RRGQuadrant,
 } from "./types";
+import { loadInstitutionalCache } from "@/lib/supabase/persistence";
 import { enrichStocks } from "./stock-enrichment";
 import type { StockInput } from "./stock-enrichment";
 import type { PreRunResult } from "@/lib/prerun/types";
@@ -95,7 +105,13 @@ function computeComposite(
 // ── Cache ──
 
 let cachedResult: { data: SectorRotationResult; ts: number } | null = null;
-const CACHE_TTL = 15 * 60 * 1000;
+const CACHE_TTL = 10 * 60 * 1000;
+
+// ── Sigmoid breadth proxy (Tier 3 fallback) ──
+
+function sigmoidBreadth(pctFromSma: number): number {
+  return Math.round(100 / (1 + Math.exp(-0.4 * pctFromSma)));
+}
 
 // ── Main calculation ──
 
@@ -106,11 +122,13 @@ export async function calculateSectorRotation(
     return cachedResult.data;
   }
 
-  // Build sector groups from centralized sector-universe (1:1 sector→ETF)
-  const sectorGroups = SECTOR_UNIVERSE.map((s) => ({
+  // Build sector groups from centralized sector-universe (all categories)
+  const allSectorDefs = SECTOR_UNIVERSE;
+  const sectorGroups = allSectorDefs.map((s) => ({
     id: s.id,
     displayName: s.displayName,
     etf: s.etf,
+    category: s.category,
   }));
 
   // Fetch all ETFs + SPY + cross-sector pairs + batch stock quotes (in parallel)
@@ -119,10 +137,11 @@ export async function calculateSectorRotation(
   const allETFs = [...new Set(["SPY", ...sectorETFs, ...crossETFs])];
   const allStockSymbols = getAllSectorSymbols();
 
-  // Fetch ETF charts and batch stock quotes in parallel
-  const [chartResults, batchQuotes] = await Promise.all([
+  // Fetch ETF charts, batch stock quotes, and institutional cache in parallel
+  const [chartResults, batchQuotes, institutionalCache] = await Promise.all([
     Promise.allSettled(allETFs.map((etf) => fetchYahooChart(etf, "1y", "1d"))),
     fetchBatchQuotes(allStockSymbols),
+    loadInstitutionalCache(allStockSymbols).catch(() => new Map<string, number | null>()),
   ]);
 
   const quotesAsOf = new Date().toISOString();
@@ -157,6 +176,7 @@ export async function calculateSectorRotation(
     displayName: string;
     etf: string;
     sectorId: string;
+    category: SectorCategory;
     momentumComposite: number;
     acceleration: number;
     mansfieldRS: number;
@@ -167,6 +187,7 @@ export async function calculateSectorRotation(
     quadrant: RRGQuadrant;
     rrgTrail: { rsRatio: number; rsMomentum: number }[];
     breadthPct: number | null;
+    breadthEstimated: boolean;
     roc20d: number;
     flowPriceDivergence: boolean;
     breadthDivergence: boolean;
@@ -196,8 +217,9 @@ export async function calculateSectorRotation(
     const rrg = calcRRG(chart.closes, spyChart.closes);
     const roc20d = calcROC(chart.closes, 20);
 
-    // Breadth: 3-tier cascade — batch quotes (best), pre-run (good), ETF proxy (fallback)
+    // Breadth: 3-tier cascade — batch quotes (best), pre-run (good), ETF sigmoid (fallback)
     let breadthPct: number | null = null;
+    let breadthEstimated = false;
 
     // Tier 1: Batch quote data (price vs 50d SMA for all sector stocks)
     const sectorDef = SECTOR_UNIVERSE.find((s) => s.id === group.id);
@@ -209,6 +231,17 @@ export async function calculateSectorRotation(
     if (quotesInSector.length >= 5) {
       const aboveSma = quotesInSector.filter((q) => q.price > q.sma50!).length;
       breadthPct = Math.round((aboveSma / quotesInSector.length) * 100);
+    } else if (sectorSymbols.length === 0) {
+      // Cross-asset ETFs have no stocks — use sigmoid directly
+      if (chart.closes.length >= 20) {
+        const sma20 = calcSMA(chart.closes, 20);
+        const lastClose = chart.closes[chart.closes.length - 1];
+        if (sma20 !== null && sma20 > 0) {
+          const pctFromSma = ((lastClose - sma20) / sma20) * 100;
+          breadthPct = sigmoidBreadth(pctFromSma);
+          breadthEstimated = true;
+        }
+      }
     } else {
       // Tier 2: Pre-run stock-level data (uses SMA-20 — only SMA available in PreRunStockData;
       // Tier 1 uses SMA-50 from batch quotes for better consistency with standard breadth metrics)
@@ -221,12 +254,13 @@ export async function calculateSectorRotation(
         ).length;
         breadthPct = Math.round((aboveSma / stocksWithPrice.length) * 100);
       } else if (chart.closes.length >= 20) {
-        // Tier 3: ETF-level breadth proxy
+        // Tier 3: ETF-level breadth proxy (sigmoid)
         const sma20 = calcSMA(chart.closes, 20);
         const lastClose = chart.closes[chart.closes.length - 1];
         if (sma20 !== null && sma20 > 0) {
           const pctFromSma = ((lastClose - sma20) / sma20) * 100;
-          breadthPct = Math.round(Math.max(0, Math.min(100, 50 + pctFromSma * 7)));
+          breadthPct = sigmoidBreadth(pctFromSma);
+          breadthEstimated = true;
         }
       }
     }
@@ -289,6 +323,7 @@ export async function calculateSectorRotation(
       displayName: group.displayName,
       etf: group.etf,
       sectorId: group.id,
+      category: group.category,
       momentumComposite: mc,
       acceleration: accel,
       mansfieldRS: mrs,
@@ -299,6 +334,7 @@ export async function calculateSectorRotation(
       quadrant: rrg.quadrant,
       rrgTrail: rrg.trail,
       breadthPct,
+      breadthEstimated,
       roc20d,
       flowPriceDivergence,
       breadthDivergence,
@@ -361,6 +397,8 @@ export async function calculateSectorRotation(
       sector: raw.displayName,
       etf: raw.etf,
       subsectors: [raw.sectorId],
+      category: raw.category,
+      breadthEstimated: raw.breadthEstimated || undefined,
       momentumComposite: Math.round(raw.momentumComposite * 100) / 100,
       momentumPercentile: Math.round(momentumPercentile),
       acceleration: Math.round(raw.acceleration * 100) / 100,
@@ -400,8 +438,13 @@ export async function calculateSectorRotation(
 
   scoredSectors.sort((a, b) => b.compositeScore - a.compositeScore);
 
-  // Multi-signal rotation detection
-  const all20dReturns = rawScores.map((r) => r.roc20d);
+  // Separate by category
+  const gicsSectors = scoredSectors.filter((s) => s.category === "gics_sector");
+  const subSectorScores = scoredSectors.filter((s) => s.category === "sub_sector");
+  const crossAssetScores = scoredSectors.filter((s) => s.category === "cross_asset");
+
+  // Multi-signal rotation detection (GICS sectors only for rotation logic)
+  const all20dReturns = rawScores.filter((r) => r.category === "gics_sector").map((r) => r.roc20d);
   const dispersionIndex = Math.round(stddev(all20dReturns) * 100) / 100;
   const sectorSpread = all20dReturns.length > 0
     ? Math.round((Math.max(...all20dReturns) - Math.min(...all20dReturns)) * 100) / 100
@@ -415,10 +458,10 @@ export async function calculateSectorRotation(
   // Rotation summary — prefer WEAKENING (active outflow) over LAGGING (already rotated)
   // Sort by acceleration to pick the most actively deteriorating/improving sectors
   let rotationSummary = "No clear rotation detected";
-  if (rotationActive && scoredSectors.length >= 2) {
-    const improving = scoredSectors.filter((s) => s.quadrant === "IMPROVING" || s.stealthAccumulation);
-    const activelyWeakening = scoredSectors.filter((s) => s.quadrant === "WEAKENING");
-    const lagging = scoredSectors.filter((s) => s.quadrant === "LAGGING");
+  if (rotationActive && gicsSectors.length >= 2) {
+    const improving = gicsSectors.filter((s) => s.quadrant === "IMPROVING" || s.stealthAccumulation);
+    const activelyWeakening = gicsSectors.filter((s) => s.quadrant === "WEAKENING");
+    const lagging = gicsSectors.filter((s) => s.quadrant === "LAGGING");
     // FROM: prefer WEAKENING (money actively leaving) over LAGGING (already left)
     const fromPool = activelyWeakening.length > 0 ? activelyWeakening : lagging;
     if (improving.length > 0 && fromPool.length > 0) {
@@ -482,9 +525,9 @@ export async function calculateSectorRotation(
   const correlationBreak =
     (xlyXlpRiskOn && xlkXluRiskOff) || (xlyXlpRiskOff && xlkXluRiskOn);
 
-  // Top stocks to watch
+  // Top stocks to watch (GICS sectors only)
   const topStocksToWatch: SectorRotationResult["topStocksToWatch"] = [];
-  const watchSectors = scoredSectors.filter(
+  const watchSectors = gicsSectors.filter(
     (s) => s.stealthAccumulation || s.quadrant === "IMPROVING"
   );
 
@@ -550,7 +593,7 @@ export async function calculateSectorRotation(
 
   // Build stock-level enrichment inputs from batch quotes + sector metadata
   const stockInputs: StockInput[] = [];
-  // Build lookup: sector display name → scored sector
+  // Build lookup: sector display name → scored sector (all categories)
   const sectorLookup = new Map(scoredSectors.map((s) => [s.sector, s]));
   // Build lookup: sector display name → raw acceleration
   const rawAccelLookup = new Map(rawScores.map((r) => [r.displayName, r.acceleration]));
@@ -560,8 +603,9 @@ export async function calculateSectorRotation(
   // Stocks in multiple sectors (e.g. NVDA in Semiconductors + Technology) are intentionally
   // enriched under EACH sector so they appear in per-sector stock tables filtered by sectorEtf.
   // Each instance is scored against its respective sector's metrics (quadrant, composite, etc.).
+  // Only iterate sectors with stocks (skip cross-asset ETFs).
 
-  for (const sectorDef of SECTOR_UNIVERSE) {
+  for (const sectorDef of getSectorsWithStocks()) {
     const scored = sectorLookup.get(sectorDef.displayName);
     if (!scored) continue;
     const etfRoc20d = rawRoc20dLookup.get(sectorDef.displayName) ?? 0;
@@ -576,14 +620,18 @@ export async function calculateSectorRotation(
       if (!q || q.price <= 0) continue;
 
       const preRun = preRunByTicker.get(stock.symbol);
-      const institutionalPct = preRun?.data.institutionalPct ?? null;
+      // Institutional ownership: pre-run → Supabase cache → null
+      const institutionalPct = preRun?.data.institutionalPct
+        ?? institutionalCache.get(stock.symbol)
+        ?? null;
 
-      // Approximate ret20d from pctFrom50SMA — batch quotes don't provide
-      // historical closes, but distance from 50-SMA captures similar recent
-      // outperformance signal. Without this, LEADER classification is unreachable.
-      const ret20d = q.sma50 != null && q.sma50 > 0
-        ? ((q.price - q.sma50) / q.sma50) * 100
-        : null;
+      // ret20d: prefer fiftyDayAvgChangePercent (actual Yahoo data), fallback to
+      // distance from 50-SMA as proxy. Without this, LEADER classification is unreachable.
+      const ret20d = q.fiftyDayAvgChangePct != null
+        ? q.fiftyDayAvgChangePct
+        : q.sma50 != null && q.sma50 > 0
+          ? ((q.price - q.sma50) / q.sma50) * 100
+          : null;
 
       stockInputs.push({
         symbol: stock.symbol,
@@ -610,7 +658,7 @@ export async function calculateSectorRotation(
   const enrichedStocks = enrichStocks(stockInputs);
   console.log(`[sectorRotation] Enriched ${enrichedStocks.passed.length} stocks (${enrichedStocks.rejected.length} rejected, ${enrichedStocks.pullbackWatch.length} pullback watch)`);
 
-  // Compute 20d daily returns per sector ETF for sparklines
+  // Compute 20d daily returns per ETF for sparklines (all categories)
   const etfReturns20d: Record<string, number[]> = {};
   for (const group of sectorGroups) {
     const chart = charts.get(group.etf);
@@ -623,9 +671,10 @@ export async function calculateSectorRotation(
     etfReturns20d[group.etf] = returns;
   }
 
-  // Compute 20d return correlation matrix between sector ETFs
+  // Compute 20d return correlation matrix between GICS sector ETFs only
   const correlationMatrix: Record<string, number> = {};
-  const etfReturnArrays = sectorGroups
+  const gicsGroups = sectorGroups.filter((g) => g.category === "gics_sector");
+  const etfReturnArrays = gicsGroups
     .map((g) => ({ etf: g.etf, returns: etfReturns20d[g.etf] }))
     .filter((e) => e.returns && e.returns.length >= 10);
 
@@ -655,7 +704,9 @@ export async function calculateSectorRotation(
 
   const result: SectorRotationResult = {
     calculatedAt: new Date().toISOString(),
-    sectors: scoredSectors,
+    sectors: gicsSectors,
+    subSectorScores,
+    crossAssetScores,
     rotationActive,
     rotationSummary,
     dispersionIndex,

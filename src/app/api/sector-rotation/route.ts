@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
-import { fetchMacroRegime } from "@/lib/sector-rotation/regime";
+import { fetchMacroRegime, enhanceRegimeWithCrossAsset } from "@/lib/sector-rotation/regime";
 import { recordSectorSnapshotBatch } from "@/lib/supabase/persistence";
+import type { SectorSnapshotRecord } from "@/lib/supabase/persistence";
 
 export const maxDuration = 60;
 
@@ -22,9 +23,22 @@ export async function GET(request: NextRequest) {
       fetchMacroRegime().catch(() => null),
     ]);
 
-    // Persist sector snapshots (await to ensure completion before Vercel kills function)
+    // Enhance regime confidence with cross-asset data if available
+    const enhancedRegime = regime && result.crossAssetScores
+      ? enhanceRegimeWithCrossAsset(regime, {
+          gld: result.crossAssetScores.find((s) => s.etf === "GLD")?.acceleration,
+          tlt: result.crossAssetScores.find((s) => s.etf === "TLT")?.acceleration,
+        })
+      : regime;
+
+    // Persist all sector snapshots (GICS + sub-sectors + cross-asset with category)
     const today = new Date().toISOString().slice(0, 10);
-    const snapshots = result.sectors.map((s) => ({
+    const allScores = [
+      ...result.sectors,
+      ...(result.subSectorScores ?? []),
+      ...(result.crossAssetScores ?? []),
+    ];
+    const snapshots: SectorSnapshotRecord[] = allScores.map((s) => ({
       snapshot_date: today,
       sector: s.sector,
       etf_symbol: s.etf,
@@ -39,20 +53,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ...result,
-        regime: regime
+        regime: enhancedRegime
           ? {
-              regime: regime.regime,
-              vix: regime.vix,
-              vixSlope: regime.vixSlope,
-              yield10y: regime.yield10y,
-              dxy: regime.dxy,
-              dxyTrend: regime.dxyTrend,
-              favoredSectors: regime.favoredSectors,
-              avoidSectors: regime.avoidSectors,
+              regime: enhancedRegime.regime,
+              regimeConfidence: enhancedRegime.regimeConfidence,
+              vix: enhancedRegime.vix,
+              vixSlope: enhancedRegime.vixSlope,
+              yield10y: enhancedRegime.yield10y,
+              dxy: enhancedRegime.dxy,
+              dxyTrend: enhancedRegime.dxyTrend,
+              favoredSectors: enhancedRegime.favoredSectors,
+              avoidSectors: enhancedRegime.avoidSectors,
             }
           : undefined,
       },
-      { headers: { "Cache-Control": "s-maxage=900, stale-while-revalidate=60" } }
+      { headers: { "Cache-Control": "s-maxage=300, stale-while-revalidate=120" } }
     );
   } catch (err) {
     logError("api/sector-rotation", err);

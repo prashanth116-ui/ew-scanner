@@ -223,6 +223,7 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
       sector: raw.displayName,
       etf: raw.etf,
       subsectors: [raw.sectorId],
+      category: "gics_sector" as const,
       momentumComposite: Math.round(raw.momentumComposite * 100) / 100,
       momentumPercentile: Math.round(momentumPercentile),
       acceleration: Math.round(raw.acceleration * 100) / 100,

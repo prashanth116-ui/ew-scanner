@@ -27,7 +27,7 @@ import type {
   PairSignalData,
 } from "./rotation-types";
 import { fetchYahooChart, calcSMA, fetchBatchQuotes } from "@/lib/prerun/data";
-import { SECTOR_UNIVERSE } from "@/data/sector-universe";
+import { SECTOR_UNIVERSE, getSectorsWithStocks } from "@/data/sector-universe";
 import { fetchMacroRegime } from "./regime";
 import { computePairZScore } from "./pairs";
 import { calcAcceleration, calcCMF, calcRRG } from "./math";
@@ -558,8 +558,9 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     throw new Error("Failed to fetch SPY benchmark data");
   }
 
-  // 2. Fetch all 14 ETF charts in parallel
-  const etfChartPromises = SECTOR_UNIVERSE.map((sector) =>
+  // 2. Fetch ETF charts for all sectors with stocks (skip cross-asset ETFs with no stocks)
+  const sectorsForTracking = getSectorsWithStocks();
+  const etfChartPromises = sectorsForTracking.map((sector) =>
     fetchYahooChart(sector.etf, "1y", "1d")
       .then((chart) => ({ sectorId: sector.id, chart }))
       .catch(() => ({ sectorId: sector.id, chart: null }))
@@ -570,7 +571,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
   const allEvents: RotationEvent[] = [];
   const patternStats: RotationPatternStats[] = [];
 
-  for (const sector of SECTOR_UNIVERSE) {
+  for (const sector of sectorsForTracking) {
     const chartEntry = etfCharts.find((c) => c.sectorId === sector.id);
     if (!chartEntry?.chart) continue;
 
@@ -618,12 +619,12 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     .slice(0, 8);
 
   // 5. Fetch stock-level performance for active rotations
-  // First, collect all stock symbols we need quotes for
+  // First, collect all stock symbols we need quotes for (skip sectors with no stocks)
   const allStockSymbols: string[] = [];
   const allStockNames = new Map<string, string>();
   for (const event of activeEvents) {
     const sector = SECTOR_UNIVERSE.find((s) => s.id === event.sectorId);
-    if (!sector) continue;
+    if (!sector || sector.stocks.length === 0) continue;
     for (const stock of sector.stocks) {
       if (!allStockSymbols.includes(stock.symbol)) {
         allStockSymbols.push(stock.symbol);

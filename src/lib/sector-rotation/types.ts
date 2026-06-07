@@ -1,11 +1,15 @@
 /** Sector Rotation Tracker types. */
 
+import type { SectorCategory } from "@/data/sector-universe";
+
 export type RRGQuadrant = "LEADING" | "WEAKENING" | "LAGGING" | "IMPROVING";
 
 export interface SectorRotationScore {
   sector: string;
   etf: string;
   subsectors: string[];       // Sector ID (1:1 with ETF proxy)
+  category: SectorCategory;
+  breadthEstimated?: boolean;
 
   // Tier 1: Core Rotation (0-100 normalized)
   momentumComposite: number;
@@ -92,7 +96,9 @@ export interface RejectedStock {
   reasons: string[];
 }
 
-export type PullbackTier = "NEAR_ENTRY" | "PULLING_BACK" | "WATCHING";
+export type ExtensionTier = "MODERATE_EXTENSION" | "HIGH_EXTENSION" | "EXTREME_EXTENSION";
+/** @deprecated Use ExtensionTier */
+export type PullbackTier = ExtensionTier;
 
 export interface PullbackWatchStock {
   symbol: string;
@@ -109,12 +115,14 @@ export interface PullbackWatchStock {
   marketCap: number | null;
   institutionalPct: number | null;
   sectorQuadrant: RRGQuadrant;
-  tier: PullbackTier;
+  tier: ExtensionTier;
 }
 
 export interface SectorRotationResult {
   calculatedAt: string;
   sectors: SectorRotationScore[];
+  subSectorScores?: SectorRotationScore[];
+  crossAssetScores?: SectorRotationScore[];
   rotationActive: boolean;
   rotationSummary: string;
   dispersionIndex: number;

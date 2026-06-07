@@ -15,8 +15,11 @@ import type {
   StockCategory,
   StockPhase as RotationStockPhase,
   PullbackWatchStock,
-  PullbackTier,
+  ExtensionTier,
 } from "@/lib/sector-rotation/types";
+
+// Backward compat alias
+type PullbackTier = ExtensionTier;
 import type { RotationTrackerResult, ActiveRotationDetail, RotationPatternStats, LifecycleStage, ConvictionResult } from "@/lib/sector-rotation/rotation-types";
 import {
   getHealth,
@@ -98,11 +101,11 @@ export const CATEGORY_STYLE: Record<string, string> = {
 export const CONV_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
 export const CAT_ORDER: Record<string, number> = { LEADER: 0, CATCH_UP: 1, TURNAROUND: 2, AVOID: 3 };
 export const PHASE_ORDER: Record<string, number> = { P1_BASING: 0, P2_TURNAROUND: 1, P3_TRENDING: 2, P4_EXHAUSTING: 3 };
-export const TIER_ORDER: Record<PullbackTier, number> = { NEAR_ENTRY: 0, PULLING_BACK: 1, WATCHING: 2 };
+export const TIER_ORDER: Record<PullbackTier, number> = { MODERATE_EXTENSION: 0, HIGH_EXTENSION: 1, EXTREME_EXTENSION: 2 };
 export const TIER_STYLE: Record<PullbackTier, { bg: string; border: string; text: string; label: string }> = {
-  NEAR_ENTRY: { bg: "bg-green-500/10", border: "border-green-500/40", text: "text-green-400", label: "Near Entry" },
-  PULLING_BACK: { bg: "bg-amber-500/10", border: "border-amber-500/40", text: "text-amber-400", label: "Pulling Back" },
-  WATCHING: { bg: "bg-[#1a1a1a]", border: "border-[#333]", text: "text-[#555]", label: "Watching" },
+  MODERATE_EXTENSION: { bg: "bg-green-500/10", border: "border-green-500/40", text: "text-green-400", label: "Moderate Extension" },
+  HIGH_EXTENSION: { bg: "bg-amber-500/10", border: "border-amber-500/40", text: "text-amber-400", label: "High Extension" },
+  EXTREME_EXTENSION: { bg: "bg-[#1a1a1a]", border: "border-[#333]", text: "text-[#555]", label: "Extreme Extension" },
 };
 const VERDICT_RANK: Record<string, number> = { "PRIORITY BUY": 0, KEEP: 1, WATCH: 2, DISCARD: 3, "": 4 };
 
@@ -474,14 +477,15 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
 
 // ── RRG Chart ──
 
-export function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
+export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [] }: { sectors: SectorRotationScore[]; subSectorScores?: SectorRotationScore[]; crossAssetScores?: SectorRotationScore[] }) {
   const W = 500;
   const H = 400;
   const PAD = 50;
 
+  const allScores = [...sectors, ...subSectorScores, ...crossAssetScores];
   const allRatios: number[] = [];
   const allMoms: number[] = [];
-  for (const s of sectors) {
+  for (const s of allScores) {
     if (isFinite(s.rsRatio)) allRatios.push(s.rsRatio);
     if (isFinite(s.rsMomentum)) allMoms.push(s.rsMomentum);
     for (const pt of s.rrgTrail ?? []) {
@@ -550,6 +554,55 @@ export function RRGChart({ sectors }: { sectors: SectorRotationScore[] }) {
           </g>
         );
       })}
+      {/* Sub-sector markers (triangles) */}
+      {subSectorScores.map((s) => {
+        const x = scaleX(s.rsRatio);
+        const y = scaleY(s.rsMomentum);
+        const color = quadrantDotColor(s.quadrant);
+        const isHov = hovered === s.sector;
+        const size = isHov ? 8 : 6;
+        const tri = `${x},${y - size} ${x - size},${y + size} ${x + size},${y + size}`;
+        return (
+          <g key={`sub-${s.etf}`} onMouseEnter={() => setHovered(s.sector)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
+            <polygon points={tri} fill={color} stroke={isHov ? "#fff" : "none"} strokeWidth={1} opacity={isHov ? 1 : 0.7} />
+            {isHov && <text x={x} y={y - size - 4} textAnchor="middle" fill={color} fontSize={10} fontWeight="bold">{s.etf}</text>}
+          </g>
+        );
+      })}
+      {/* Cross-asset markers (diamonds) */}
+      {crossAssetScores.map((s) => {
+        const x = scaleX(s.rsRatio);
+        const y = scaleY(s.rsMomentum);
+        const color = quadrantDotColor(s.quadrant);
+        const isHov = hovered === s.sector;
+        const size = isHov ? 7 : 5;
+        const diamond = `${x},${y - size} ${x + size},${y} ${x},${y + size} ${x - size},${y}`;
+        return (
+          <g key={`cross-${s.etf}`} onMouseEnter={() => setHovered(s.sector)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
+            <polygon points={diamond} fill={color} stroke={isHov ? "#fff" : "none"} strokeWidth={1} opacity={isHov ? 1 : 0.7} />
+            {isHov && <text x={x} y={y - size - 4} textAnchor="middle" fill={color} fontSize={10} fontWeight="bold">{s.etf}</text>}
+          </g>
+        );
+      })}
+      {/* Legend */}
+      {(subSectorScores.length > 0 || crossAssetScores.length > 0) && (
+        <g>
+          <circle cx={PAD + 10} cy={H - 18} r={4} fill="#888" />
+          <text x={PAD + 20} y={H - 14} fill="#666" fontSize={9}>Sector</text>
+          {subSectorScores.length > 0 && (
+            <>
+              <polygon points={`${PAD + 70},${H - 22} ${PAD + 64},${H - 14} ${PAD + 76},${H - 14}`} fill="#888" />
+              <text x={PAD + 82} y={H - 14} fill="#666" fontSize={9}>Sub-sector</text>
+            </>
+          )}
+          {crossAssetScores.length > 0 && (
+            <>
+              <polygon points={`${PAD + 145},${H - 22} ${PAD + 150},${H - 18} ${PAD + 145},${H - 14} ${PAD + 140},${H - 18}`} fill="#888" />
+              <text x={PAD + 156} y={H - 14} fill="#666" fontSize={9}>Cross-asset</text>
+            </>
+          )}
+        </g>
+      )}
     </svg>
   );
 }
@@ -1566,7 +1619,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
   );
 }
 
-// ── Pullback Watch Panel ──
+// ── Extended Stocks Watch Panel ──
 
 export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: PullbackWatchStock[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
   const [sectorFilter, setSectorFilter] = usePersistedFilter<string>("ew-filter:pullback:sector", "ALL");
@@ -1614,15 +1667,15 @@ export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: Pu
   const ariaSort = (col: PullbackSortKey): "ascending" | "descending" | "none" =>
     sortKey === col ? (sortDir === "asc" ? "ascending" : "descending") : "none";
 
-  const nearCount = stocks.filter((s) => s.tier === "NEAR_ENTRY").length;
-  const pullCount = stocks.filter((s) => s.tier === "PULLING_BACK").length;
-  const watchCount = stocks.filter((s) => s.tier === "WATCHING").length;
+  const moderateCount = stocks.filter((s) => s.tier === "MODERATE_EXTENSION").length;
+  const highCount = stocks.filter((s) => s.tier === "HIGH_EXTENSION").length;
+  const extremeCount = stocks.filter((s) => s.tier === "EXTREME_EXTENSION").length;
 
   const badge = (
     <div className="flex items-center gap-2">
-      {nearCount > 0 && <span className="rounded-full bg-green-500/10 border border-green-500/30 px-2 py-0.5 text-[10px] text-green-400">{nearCount} Near Entry</span>}
-      {pullCount > 0 && <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] text-amber-400">{pullCount} Pulling Back</span>}
-      {watchCount > 0 && <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-2 py-0.5 text-[10px] text-[#555]">{watchCount} Watching</span>}
+      {moderateCount > 0 && <span className="rounded-full bg-green-500/10 border border-green-500/30 px-2 py-0.5 text-[10px] text-green-400">{moderateCount} Moderate</span>}
+      {highCount > 0 && <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] text-amber-400">{highCount} High</span>}
+      {extremeCount > 0 && <span className="rounded-full bg-[#1a1a1a] border border-[#333] px-2 py-0.5 text-[10px] text-[#555]">{extremeCount} Extreme</span>}
     </div>
   );
 
@@ -1636,18 +1689,18 @@ export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: Pu
   const selectClass = "rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]";
 
   return (
-    <CollapsiblePanel id="pullback-watch" title="Pullback Watch" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})} badge={badge}>
+    <CollapsiblePanel id="pullback-watch" title="Extended Stocks Watch" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})} badge={badge}>
       <div className="px-1 pb-2">
-        <p className="text-[10px] text-[#555] mb-2">Strong stocks rejected only for being &gt;80% above 200-SMA. Tracking for pullback re-entry.</p>
+        <p className="text-[10px] text-[#555] mb-2">Strong stocks rejected only for being &gt;80% above 200-SMA. Tracking by extension severity.</p>
         <div className="flex flex-wrap items-center gap-2 pb-2">
           <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)} className={selectClass}>
             {sectorNames.map((s) => <option key={s} value={s}>{s === "ALL" ? "All Sectors" : s}</option>)}
           </select>
           <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value as PullbackTier | "ALL")} className={selectClass}>
             <option value="ALL">All Tiers</option>
-            <option value="NEAR_ENTRY">Near Entry</option>
-            <option value="PULLING_BACK">Pulling Back</option>
-            <option value="WATCHING">Watching</option>
+            <option value="MODERATE_EXTENSION">Moderate Extension</option>
+            <option value="HIGH_EXTENSION">High Extension</option>
+            <option value="EXTREME_EXTENSION">Extreme Extension</option>
           </select>
           <span className="text-[10px] text-[#666]">{filtered.length} / {stocks.length}</span>
           {hasFilters && (
@@ -1708,6 +1761,112 @@ export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: Pu
         </table>
       </div>
     </CollapsiblePanel>
+  );
+}
+
+// ── Sub-Sector Leading Indicators Panel ──
+
+export function SubSectorPanel({ scores, collapsed, onToggle }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
+  if (scores.length === 0) return null;
+
+  return (
+    <CollapsiblePanel id="sub-sectors" title="Leading Indicators (Sub-Sectors)" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
+      <p className="text-[10px] text-[#555] mb-3 px-1">KRE (credit cycle), XHB (housing), XRT (consumer), IYT (transport) — early signals before GICS sectors move.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 px-1">
+        {scores.map((s) => (
+          <div key={s.etf} className="rounded-lg border border-[#2a2a2a] bg-[#111] p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-semibold text-white text-sm">{s.etf}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${quadrantColor(s.quadrant)}`}>
+                {s.quadrant}
+              </span>
+            </div>
+            <p className="text-[10px] text-[#888] mb-2">{s.sector}</p>
+            <div className="grid grid-cols-2 gap-y-1 text-[11px]">
+              <span className="text-[#666]">Score</span>
+              <span className="text-right text-white font-mono">{s.compositeScore}</span>
+              <span className="text-[#666]">Momentum</span>
+              <span className="text-right text-white font-mono">{s.momentumPercentile}%</span>
+              <span className="text-[#666]">Accel</span>
+              <span className={`text-right font-mono ${s.acceleration > 0 ? "text-green-400" : s.acceleration < 0 ? "text-red-400" : "text-[#888]"}`}>
+                {s.acceleration > 0 ? "+" : ""}{s.acceleration.toFixed(2)}
+              </span>
+              <span className="text-[#666]">RS</span>
+              <span className="text-right text-white font-mono">{s.mansfieldRS.toFixed(2)}</span>
+            </div>
+            {s.stealthAccumulation && (
+              <div className="mt-2 rounded border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-400">
+                Stealth Accumulation
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </CollapsiblePanel>
+  );
+}
+
+// ── Cross-Asset Money Flow Panel ──
+
+export function CrossAssetPanel({ scores, collapsed, onToggle }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
+  if (scores.length === 0) return null;
+
+  return (
+    <CollapsiblePanel id="cross-asset" title="Cross-Asset Money Flow" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
+      <p className="text-[10px] text-[#555] mb-3 px-1">GLD, TLT, HYG, EEM, UUP — detect money leaving/entering equities entirely.</p>
+      <div className="overflow-x-auto px-1">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-[#2a2a2a] text-left text-[#666]">
+              <th className="pb-2 pr-4 font-medium">ETF</th>
+              <th className="pb-2 pr-4 font-medium">Name</th>
+              <th className="pb-2 pr-4 font-medium text-right">Score</th>
+              <th className="pb-2 pr-4 font-medium">Quadrant</th>
+              <th className="pb-2 pr-4 font-medium text-right">Momentum</th>
+              <th className="pb-2 pr-4 font-medium text-right">Accel</th>
+              <th className="pb-2 pr-4 font-medium text-right">RS vs SPY</th>
+              <th className="pb-2 font-medium">Trend</th>
+            </tr>
+          </thead>
+          <tbody>
+            {scores.map((s) => (
+              <tr key={s.etf} className="border-b border-[#1a1a1a] hover:bg-[#1a1a1a]/50">
+                <td className="py-2 pr-4 font-mono font-semibold text-[#5ba3e6]">{s.etf}</td>
+                <td className="py-2 pr-4 text-[#a0a0a0]">{s.sector}</td>
+                <td className="py-2 pr-4 text-right font-mono text-white">{s.compositeScore}</td>
+                <td className="py-2 pr-4">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${quadrantColor(s.quadrant)}`}>
+                    {s.quadrant}
+                  </span>
+                </td>
+                <td className="py-2 pr-4 text-right font-mono text-white">{s.momentumPercentile}%</td>
+                <td className={`py-2 pr-4 text-right font-mono ${s.acceleration > 0 ? "text-green-400" : s.acceleration < 0 ? "text-red-400" : "text-[#888]"}`}>
+                  {s.acceleration > 0 ? "+" : ""}{s.acceleration.toFixed(2)}
+                </td>
+                <td className={`py-2 pr-4 text-right font-mono ${s.mansfieldRS > 0 ? "text-green-400" : s.mansfieldRS < 0 ? "text-red-400" : "text-[#888]"}`}>
+                  {s.mansfieldRS > 0 ? "+" : ""}{s.mansfieldRS.toFixed(2)}
+                </td>
+                <td className="py-2 text-lg">{s.trendArrow}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </CollapsiblePanel>
+  );
+}
+
+// ── Data Staleness Warning ──
+
+export function DataStalenessWarning({ calculatedAt }: { calculatedAt: string }) {
+  const ageMinutes = Math.round((Date.now() - new Date(calculatedAt).getTime()) / 60000);
+  if (ageMinutes <= 20) return null;
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-400">
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      <span>Data is {ageMinutes}min old. Refresh for latest signals.</span>
+    </div>
   );
 }
 
