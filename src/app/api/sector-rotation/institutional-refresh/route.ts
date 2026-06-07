@@ -14,9 +14,17 @@ const UA =
 /**
  * Weekly cron endpoint to refresh institutional ownership cache.
  * Fetches quoteSummary for top stocks and upserts into Supabase.
- * Trigger: Vercel cron or manual POST.
+ * Trigger: Vercel cron (GET) or manual POST.
  */
+export async function GET(request: NextRequest) {
+  return runRefresh(request);
+}
+
 export async function POST(request: NextRequest) {
+  return runRefresh(request);
+}
+
+async function runRefresh(request: NextRequest) {
   // Simple auth check — require a secret header for cron jobs
   const authHeader = request.headers.get("x-cron-secret");
   const cronSecret = process.env.CRON_SECRET;
