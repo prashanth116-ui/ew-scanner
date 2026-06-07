@@ -129,7 +129,7 @@ export default function DailyBriefPage() {
     ? (whatChanged.postureChange ? 1 : 0) +
       whatChanged.quadrantTransitions.length +
       whatChanged.tierChanges.length +
-      whatChanged.scoreMovers.length +
+      Math.min(whatChanged.scoreMovers.length, 3) +
       whatChanged.trendFlips.length +
       (whatChanged.dispersionChange ? 1 : 0)
     : 0;

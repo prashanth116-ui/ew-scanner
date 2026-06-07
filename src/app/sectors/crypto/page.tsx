@@ -34,6 +34,11 @@ import {
   quadrantDotColor,
 } from "../_components";
 
+/** Strip quote currency suffix (e.g., "-USD", "-USDT") from crypto symbols. */
+function baseSymbol(sym: string): string {
+  return sym.replace(/-USD[T]?$/, "");
+}
+
 // ── Sparkline ──
 
 function Sparkline({ returns }: { returns?: number[] }) {
@@ -130,11 +135,11 @@ function RRGChart({ sectors: rawSectors }: { sectors: SectorRotationScore[] }) {
             <circle cx={x} cy={y} r={isHov ? 7 : 5} fill={color} stroke={isHov ? "#fff" : "none"} strokeWidth={1.5} opacity={isHov ? 1 : 0.85} />
             {isHov ? (
               <>
-                <text x={x} y={y - 12} textAnchor="middle" fill={color} fontSize={11} fontWeight="bold">{s.etf.replace("-USD", "")}</text>
+                <text x={x} y={y - 12} textAnchor="middle" fill={color} fontSize={11} fontWeight="bold">{baseSymbol(s.etf)}</text>
                 <text x={x} y={y + 20} textAnchor="middle" fill="#a0a0a0" fontSize={10}>{s.sector} ({s.compositeScore}/100)</text>
               </>
             ) : (
-              <text x={x} y={y - 8} textAnchor="middle" fill={color} fontSize={8} opacity={0.7}>{s.etf.replace("-USD", "")}</text>
+              <text x={x} y={y - 8} textAnchor="middle" fill={color} fontSize={8} opacity={0.7}>{baseSymbol(s.etf)}</text>
             )}
           </g>
         );
@@ -178,7 +183,7 @@ function SectorCard({
         </span>
       </div>
       <div className="mt-1.5 flex items-center justify-between">
-        <span className="text-[10px] text-[#666]">{sector.etf.replace("-USD", "")}</span>
+        <span className="text-[10px] text-[#666]">{baseSymbol(sector.etf)}</span>
         <Sparkline returns={etfReturns} />
       </div>
       {sector.stealthAccumulation && (
@@ -223,7 +228,7 @@ function SectorDetail({ sector, tokens }: { sector: SectorRotationScore; tokens:
                   <tr key={t.symbol} className="border-t border-[#1a1a1a] hover:bg-[#1a1a1a]">
                     <td className="py-1.5 pr-2">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-white">{t.symbol.replace("-USD", "")}</span>
+                        <span className="font-medium text-white">{baseSymbol(t.symbol)}</span>
                         <span className="text-[#555]">{t.shortName}</span>
                       </div>
                     </td>
@@ -300,7 +305,7 @@ function EntrySignalsPanel({ trackerData, regime }: {
               <div className="flex items-center gap-2">
                 <span className={`text-sm font-semibold ${action.color}`}>{action.action}</span>
                 <span className="text-sm text-white">{event.sectorName}</span>
-                <span className="text-xs text-[#666]">{event.etf.replace("-USD", "")}</span>
+                <span className="text-xs text-[#666]">{baseSymbol(event.etf)}</span>
               </div>
               <div className="flex items-center gap-2 text-xs text-[#888]">
                 <span>{event.daysActive}d active</span>
@@ -349,7 +354,7 @@ function TokenPicksTable({ tokens }: { tokens: EnrichedStock[] }) {
             <div key={t.symbol} className="flex items-center justify-between rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-3 py-2">
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-medium text-white">{t.symbol.replace("-USD", "")}</span>
+                  <span className="text-sm font-medium text-white">{baseSymbol(t.symbol)}</span>
                   <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] ${quadrantColor(t.sectorQuadrant)}`}>{t.sectorQuadrant}</span>
                 </div>
                 <div className="text-[10px] text-[#666]">{t.sector} / {t.category} / {t.phase.replace("P", "").replace("_", " ")}</div>
@@ -670,7 +675,7 @@ function SectorAccordion({ sector, tokens }: { sector: SectorRotationScore; toke
         <div className="flex items-center gap-2">
           <span className="text-lg">{sector.trendArrow}</span>
           <span className="font-medium text-white text-sm">{sector.sector}</span>
-          <span className="text-xs text-[#666]">{sector.etf.replace("-USD", "")}</span>
+          <span className="text-xs text-[#666]">{baseSymbol(sector.etf)}</span>
           <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] ${quadrantColor(sector.quadrant)}`}>{sector.quadrant}</span>
         </div>
         <div className="flex items-center gap-2 text-xs">
@@ -699,7 +704,7 @@ function SectorAccordion({ sector, tokens }: { sector: SectorRotationScore; toke
                 {tokens.map((t) => (
                   <tr key={t.symbol} className="border-t border-[#1a1a1a] hover:bg-[#1a1a1a]">
                     <td className="py-1.5 pr-2">
-                      <span className="font-medium text-white">{t.symbol.replace("-USD", "")}</span>
+                      <span className="font-medium text-white">{baseSymbol(t.symbol)}</span>
                       <span className="ml-1 text-[#555]">{t.shortName}</span>
                     </td>
                     <td className="text-right py-1.5 px-2 text-white">${t.price < 1 ? t.price.toPrecision(4) : t.price.toFixed(2)}</td>

@@ -97,6 +97,11 @@ export default function PicksPage() {
           onToggle={togglePanel}
         />
       )}
+      {!rotationData && rotationFetchFailed && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2 text-xs text-red-400">
+          Rotation tracker unavailable — entry signals could not be loaded. Will retry automatically.
+        </div>
+      )}
 
       {/* Top Picks by Sector */}
       <CollapsiblePanel
@@ -112,7 +117,7 @@ export default function PicksPage() {
               Scan data is {Math.floor(ageHours / 24)}d old
             </span>
           );
-          return null;
+          return <span className="text-[10px] font-normal text-[#555]">Scan: {Math.floor(ageHours)}h ago</span>;
         })() : <span className="text-[10px] font-normal text-[#555]">No scan data</span>}
       >
         <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} scanResultsDate={scanResultsDate} />
@@ -128,13 +133,20 @@ export default function PicksPage() {
         <PullbackWatchPanel stocks={data.enrichedStocks.pullbackWatch} collapsed={collapsedPanels.has("pullback-watch")} onToggle={togglePanel} />
       )}
 
+      {/* No scan data hint */}
+      {scanResults.length === 0 && (
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-2.5 text-xs text-[#888]">
+          No Pre-Run scan data loaded. Run a <a href="/prerun" className="text-[#5ba3e6] hover:underline">Pre-Run scan</a> to see stock-level scores, verdicts, and earnings data in sector details below.
+        </div>
+      )}
+
       {/* Sector Details */}
       <CollapsiblePanel
         id="sector-details"
         title="Sector Details"
         collapsed={collapsedPanels.has("sector-details")}
         onToggle={togglePanel}
-        badge={<span className="text-[10px] text-[#555]" title="Data quality % shows how many of the 6 scoring factors have real data. Missing factors have their weights redistributed.">% = missing data</span>}
+        badge={<span className="text-[10px] text-[#555]" title="6 factors: momentum, acceleration, Mansfield RS, CMF, breadth, smart money. Missing factors have weights redistributed.">% = missing data</span>}
         actions={
           <div className="flex items-center gap-2">
             {scanResultsDate && (() => {
@@ -146,9 +158,8 @@ export default function PicksPage() {
                   PreRun scan data is {Math.floor(ageHours / 24)}d old
                 </span>
               );
-              return null;
+              return <span className="text-[10px] text-[#555]">Scan: {Math.floor(ageHours)}h ago</span>;
             })()}
-            {scanResults.length === 0 && <span className="text-xs text-[#555]">Run a Pre-Run scan to see stock-level data</span>}
           </div>
         }
       >

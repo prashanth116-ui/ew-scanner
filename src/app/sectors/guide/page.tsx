@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -90,11 +90,8 @@ function Warning({ children }: { children: React.ReactNode }) {
 }
 
 export default function SectorGuidePage() {
-  const [, setTick] = useState(0);
-
   const scrollTo = useCallback((id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    setTick((t) => t + 1);
   }, []);
 
   return (
