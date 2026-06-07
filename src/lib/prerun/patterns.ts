@@ -164,7 +164,3 @@ export function matchBestPattern(data: PreRunStockData): PatternMatchResult | nu
   return best;
 }
 
-/** Get all pattern template names. */
-export function getPatternTemplates(): PatternTemplate[] {
-  return TEMPLATES;
-}

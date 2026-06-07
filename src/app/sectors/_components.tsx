@@ -26,7 +26,7 @@ import {
   isRegimeAligned,
   type ActionSignal,
 } from "@/lib/sector-rotation/rotation-helpers";
-import type { DailySnapshot, SectorSnapshot } from "@/lib/sector-rotation/history";
+import type { SectorSnapshot } from "@/lib/sector-rotation/history";
 import { compositeColor, compositeTextColor } from "@/lib/color-utils";
 import { useDebounce } from "@/lib/use-debounce";
 
@@ -152,6 +152,7 @@ export function CollapsiblePanel({
     <div className={`rounded-xl border border-[#2a2a2a] bg-[#141414] ${className}`}>
       <button
         onClick={() => onToggle(id)}
+        aria-expanded={!collapsed}
         className="flex w-full items-center justify-between px-4 py-3 text-left"
       >
         <div className="flex items-center gap-2">

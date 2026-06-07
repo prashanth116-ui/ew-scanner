@@ -139,30 +139,6 @@ function persistAlerts(alerts: PreRunAlert[]): void {
   localStorage.setItem(ALERTS_KEY, JSON.stringify(alerts));
 }
 
-export function addPreRunAlert(
-  ticker: string,
-  alertType: string,
-  message: string,
-  price?: number,
-  stopLoss?: number
-): PreRunAlert {
-  const alert: PreRunAlert = {
-    id: genId("pra"),
-    ticker,
-    alertType,
-    message,
-    price: price ?? null,
-    stopLoss: stopLoss ?? null,
-    isRead: false,
-    createdAt: new Date().toISOString(),
-  };
-
-  const alerts = loadPreRunAlerts();
-  alerts.unshift(alert);
-  persistAlerts(alerts.slice(0, MAX_ALERTS));
-  return alert;
-}
-
 export function markAlertRead(id: string): void {
   if (!isClient()) return;
   const alerts = loadPreRunAlerts();
@@ -171,10 +147,6 @@ export function markAlertRead(id: string): void {
     alert.isRead = true;
     persistAlerts(alerts);
   }
-}
-
-export function getUnreadAlertCount(): number {
-  return loadPreRunAlerts().filter((a) => !a.isRead).length;
 }
 
 // ── History ──

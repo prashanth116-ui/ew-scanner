@@ -27,89 +27,12 @@ import { CRYPTO_UNIVERSE } from "@/data/crypto-sector-universe";
 import { compositeTextColor } from "@/lib/color-utils";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { ScannerCTA } from "@/components/scanner-cta";
-
-// ── Collapsible Panel ──
-
-const COLLAPSED_KEY = "ew-crypto-collapsed-v1";
-
-function useCollapsedPanels(): [Set<string>, (id: string) => void] {
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set<string>();
-    try {
-      const raw = localStorage.getItem(COLLAPSED_KEY);
-      return raw ? new Set(JSON.parse(raw) as string[]) : new Set<string>();
-    } catch { return new Set<string>(); }
-  });
-
-  const toggle = useCallback((id: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
-      return next;
-    });
-  }, []);
-
-  return [collapsed, toggle];
-}
-
-function CollapsiblePanel({
-  id,
-  title,
-  collapsed,
-  onToggle,
-  badge,
-  actions,
-  children,
-  className = "",
-}: {
-  id: string;
-  title: string;
-  collapsed: boolean;
-  onToggle: (id: string) => void;
-  badge?: React.ReactNode;
-  actions?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`rounded-xl border border-[#2a2a2a] bg-[#141414] ${className}`}>
-      <button
-        onClick={() => onToggle(id)}
-        aria-expanded={!collapsed}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
-      >
-        <div className="flex items-center gap-2">
-          {collapsed ? <ChevronDown className="h-4 w-4 text-[#666]" /> : <ChevronUp className="h-4 w-4 text-[#666]" />}
-          <h2 className="text-base font-semibold text-white">{title}</h2>
-          {badge}
-        </div>
-        {actions && <div onClick={(e) => e.stopPropagation()}>{actions}</div>}
-      </button>
-      {!collapsed && <div className="px-4 pb-4">{children}</div>}
-    </div>
-  );
-}
-
-// ── Color helpers ──
-
-function quadrantColor(q: RRGQuadrant): string {
-  switch (q) {
-    case "LEADING": return "bg-green-500/20 text-green-400 border-green-500/30";
-    case "WEAKENING": return "bg-amber-500/20 text-amber-400 border-amber-500/30";
-    case "LAGGING": return "bg-red-500/20 text-red-400 border-red-500/30";
-    case "IMPROVING": return "bg-cyan-500/20 text-cyan-400 border-cyan-500/30";
-  }
-}
-
-function quadrantDotColor(q: RRGQuadrant): string {
-  switch (q) {
-    case "LEADING": return "#4ade80";
-    case "WEAKENING": return "#fbbf24";
-    case "LAGGING": return "#f87171";
-    case "IMPROVING": return "#22d3ee";
-  }
-}
+import {
+  useCollapsedPanels,
+  CollapsiblePanel,
+  quadrantColor,
+  quadrantDotColor,
+} from "../_components";
 
 // ── Sparkline ──
 
@@ -474,7 +397,7 @@ export default function CryptoRotationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [trackerData, setTrackerData] = useState<RotationTrackerResult | null>(null);
-  const [collapsedPanels, togglePanel] = useCollapsedPanels();
+  const [collapsedPanels, togglePanel] = useCollapsedPanels("ew-crypto-collapsed-v1");
   const [expandedSector, setExpandedSector] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 

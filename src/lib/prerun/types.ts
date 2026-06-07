@@ -148,25 +148,6 @@ export interface PreRunWatchlistItem {
   latestGates?: PreRunGates;
 }
 
-export interface PreRunScanResult {
-  id: string;
-  scanDate: string;
-  ticker: string;
-  companyName: string;
-  currentPrice: number | null;
-  pctFromAth: number | null;
-  shortFloat: number | null;
-  daysToEarnings: number | null;
-  autoScore: number;
-  verdict: PreRunVerdict;
-  gate1Pass: boolean;
-  gate3Pass: boolean;
-  reasonFlagged: string;
-  sectorBucket: string;
-  actioned: boolean;
-  addedToWatchlist: boolean;
-}
-
 export interface PreRunAlert {
   id: string;
   ticker: string;
