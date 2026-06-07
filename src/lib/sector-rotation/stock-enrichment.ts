@@ -95,7 +95,13 @@ export function applyQualityGates(
       otherReasons.push("below_50MA_no_turnaround");
     }
 
-    // Gate 6: (removed — institutional data is quarterly/stale, not actionable)
+    // Gate 6: Institutional ownership > 30% (structural filter, not timing signal)
+    // This is a liquidity/quality characteristic — stocks with <30% institutional
+    // ownership are structurally more prone to manipulation and liquidity gaps.
+    // Based on quarterly 13F filings; ownership levels rarely shift dramatically.
+    if (s.institutionalPct != null && s.institutionalPct < 30) {
+      otherReasons.push(`institutional=${s.institutionalPct.toFixed(0)}% (<30%)`);
+    }
 
     // Gate 7: Sector correlation — stock 20d return within 30% of ETF
     if (s.ret20d != null) {
