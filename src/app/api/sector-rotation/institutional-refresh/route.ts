@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { getAllSectorSymbols } from "@/data/sector-universe";
 import { upsertInstitutionalCache } from "@/lib/supabase/persistence";
+import { getYahooCrumb, invalidateCrumbCache } from "@/lib/squeeze-fetch";
 import { fetchWithRetry } from "@/lib/yahoo-utils";
 
 export const maxDuration = 120;
@@ -24,40 +25,67 @@ export async function POST(request: NextRequest) {
   return runRefresh(request);
 }
 
-async function runRefresh(request: NextRequest) {
+async function runRefresh(_request: NextRequest) {
   try {
-    const symbols = getAllSectorSymbols().slice(0, 200); // Top 200 stocks
-    const records: { symbol: string; institutional_pct: number | null }[] = [];
+    // Get Yahoo crumb + cookie for authenticated requests
+    let auth = await getYahooCrumb();
+    if (!auth) {
+      return NextResponse.json(
+        { error: "Failed to obtain Yahoo session" },
+        { status: 502 }
+      );
+    }
 
-    // Batch fetch in groups of 10 to avoid rate limiting
-    const batchSize = 10;
+    const symbols = getAllSectorSymbols().slice(0, 200);
+    const records: { symbol: string; institutional_pct: number | null }[] = [];
+    let authFailures = 0;
+
+    // Batch fetch in groups of 5 to avoid rate limiting
+    const batchSize = 5;
     for (let i = 0; i < symbols.length; i += batchSize) {
       const batch = symbols.slice(i, i + batchSize);
       const results = await Promise.allSettled(
-        batch.map((sym) => fetchInstitutionalPct(sym))
+        batch.map((sym) => fetchInstitutionalPct(sym, auth!.crumb, auth!.cookie))
       );
 
       for (let j = 0; j < batch.length; j++) {
         const r = results[j];
-        records.push({
-          symbol: batch[j],
-          institutional_pct: r.status === "fulfilled" ? r.value : null,
-        });
+        if (r.status === "fulfilled") {
+          if (r.value === "AUTH_FAIL") {
+            authFailures++;
+            records.push({ symbol: batch[j], institutional_pct: null });
+          } else {
+            records.push({ symbol: batch[j], institutional_pct: r.value });
+          }
+        } else {
+          records.push({ symbol: batch[j], institutional_pct: null });
+        }
       }
 
-      // Rate limit: 200ms between batches
+      // If too many auth failures, refresh crumb and retry
+      if (authFailures >= 3 && i < symbols.length / 2) {
+        invalidateCrumbCache();
+        const freshAuth = await getYahooCrumb();
+        if (freshAuth) {
+          auth = freshAuth;
+          authFailures = 0;
+        }
+      }
+
+      // Rate limit: 300ms between batches
       if (i + batchSize < symbols.length) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 300));
       }
     }
 
-    const upserted = await upsertInstitutionalCache(records);
+    const withData = records.filter((r) => r.institutional_pct != null);
+    const upserted = withData.length > 0 ? await upsertInstitutionalCache(records) : 0;
 
     return NextResponse.json({
       success: true,
       processed: records.length,
       upserted,
-      withData: records.filter((r) => r.institutional_pct != null).length,
+      withData: withData.length,
     });
   } catch (err) {
     logError("api/sector-rotation/institutional-refresh", err);
@@ -68,14 +96,22 @@ async function runRefresh(request: NextRequest) {
   }
 }
 
-async function fetchInstitutionalPct(symbol: string): Promise<number | null> {
-  const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=majorHoldersBreakdown`;
+async function fetchInstitutionalPct(
+  symbol: string,
+  crumb: string,
+  cookie: string
+): Promise<number | null | "AUTH_FAIL"> {
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=majorHoldersBreakdown&crumb=${encodeURIComponent(crumb)}`;
   try {
-    const res = await fetchWithRetry(url, {
-      headers: { "User-Agent": UA },
-    }, { timeout: 8000, retries: 1 });
+    const res = await fetchWithRetry(
+      url,
+      { headers: { "User-Agent": UA, Cookie: cookie } },
+      { timeout: 8000, retries: 1 }
+    );
 
+    if (res.status === 401) return "AUTH_FAIL";
     if (!res.ok) return null;
+
     const data = await res.json();
     const breakdown =
       data?.quoteSummary?.result?.[0]?.majorHoldersBreakdown;
