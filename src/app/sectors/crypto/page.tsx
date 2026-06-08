@@ -505,7 +505,7 @@ export default function CryptoRotationPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-white">Crypto Sector Rotation</h1>
             <Link href="/sectors" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Sectors <ChevronRight className="h-3 w-3 inline ml-0.5" />
+              Stock Sectors <ChevronRight className="h-3 w-3 inline ml-0.5" />
             </Link>
             <Link href="/sectors/crypto/guide" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
               Guide <ChevronRight className="h-3 w-3 inline ml-0.5" />
