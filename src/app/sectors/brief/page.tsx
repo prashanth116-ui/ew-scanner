@@ -113,7 +113,7 @@ export default function DailyBriefPage() {
       <div className="mx-auto max-w-5xl px-4 py-12">
         <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-6 text-center">
           <AlertTriangle className="mx-auto h-8 w-8 text-red-400" />
-          <p className="mt-2 text-red-400">{error}</p>
+          <p className="mt-2 text-red-400">Error: {error}</p>
           <button onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#222] px-4 py-2 text-sm text-white hover:bg-[#333]">
             Retry
           </button>
@@ -299,7 +299,7 @@ export default function DailyBriefPage() {
                     <td className="py-1.5 pr-4 text-[#ccc]">{e.date}</td>
                     <td className="py-1.5 pr-4 text-white font-medium">{e.label}</td>
                     <td className="py-1.5 pr-4">
-                      <span className="rounded-full bg-[#222] border border-[#333] px-2 py-0.5 text-[10px] text-[#888] uppercase">{e.type.replace("_", " ")}</span>
+                      <span className="rounded-full bg-[#222] border border-[#333] px-2 py-0.5 text-[10px] text-[#888] uppercase">{e.type.replaceAll("_", " ")}</span>
                     </td>
                     <td className={`py-1.5 text-right font-medium ${e.daysAway <= 1 ? "text-red-400" : e.daysAway <= 2 ? "text-amber-400" : "text-[#ccc]"}`}>
                       {e.daysAway === 0 ? "Today" : e.daysAway === 1 ? "Tomorrow" : `${e.daysAway}d`}
@@ -317,7 +317,7 @@ export default function DailyBriefPage() {
         <NavCard
           href="/sectors"
           title="Sector Dashboard"
-          description="Full 14-sector scores, RRG chart, regime, correlations"
+          description="Full 23-ETF scores, RRG chart, regime, correlations"
           stat={`${data.sectors.length} sectors scored`}
         />
         <NavCard
@@ -440,7 +440,7 @@ function WhatChangedPanel({ whatChanged }: { whatChanged: WhatChangedResult }) {
     (whatChanged.postureChange ? 1 : 0) +
     whatChanged.quadrantTransitions.length +
     whatChanged.tierChanges.length +
-    whatChanged.scoreMovers.length +
+    Math.min(whatChanged.scoreMovers.length, 3) +
     whatChanged.trendFlips.length +
     (whatChanged.dispersionChange ? 1 : 0);
 
@@ -638,7 +638,7 @@ function BriefGuide() {
             <tbody className="text-[#ccc]">
               <tr className="border-b border-[#1a1a1a]">
                 <td className="py-2.5 pr-4 text-white font-medium">Sectors Dashboard</td>
-                <td className="py-2.5 pr-4">Raw data &mdash; 14 sector scores, quadrants, RRG chart, regime, correlations</td>
+                <td className="py-2.5 pr-4">Raw data &mdash; 23 ETF scores (14 sectors + 4 sub-sectors + 5 cross-asset), quadrants, RRG chart, regime, correlations</td>
                 <td className="py-2.5 text-[#888]">The spreadsheet</td>
               </tr>
               <tr className="border-b border-[#1a1a1a]">
