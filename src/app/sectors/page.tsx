@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { Loader2, RefreshCw, FileDown, ChevronRight } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import Link from "next/link";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { compositeColor, compositeTextColor } from "@/lib/color-utils";
+import { getEquitySectors, getSubSectors, getCrossAssetETFs } from "@/data/sector-universe";
 import {
   useCollapsedPanels,
   CollapsiblePanel,
@@ -22,11 +24,14 @@ import {
   SubSectorPanel,
   CrossAssetPanel,
   DataStalenessWarning,
+  SectorNav,
   SORT_MODE_OPTIONS,
   LOADING_PHASES,
   type SortMode,
 } from "./_components";
 import { useSectorData } from "./_use-sector-data";
+
+const ETF_COUNT = getEquitySectors().length + getSubSectors().length + getCrossAssetETFs().length;
 
 export default function SectorRotationPage() {
   const {
@@ -59,7 +64,7 @@ export default function SectorRotationPage() {
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">{LOADING_PHASES[loadingPhase]}...</p>
-        <p className="mt-1 text-xs text-[#555]">23 ETFs + ~1,600 stock quotes</p>
+        <p className="mt-1 text-xs text-[#555]">{ETF_COUNT} ETFs + ~1,600 stock quotes</p>
         <div className="mt-2 flex justify-center gap-1.5">
           {LOADING_PHASES.map((_, i) => (
             <div key={i} className={`h-1.5 w-1.5 rounded-full transition-colors ${i <= loadingPhase ? "bg-[#5ba3e6]" : "bg-[#333]"}`} />
@@ -93,15 +98,7 @@ export default function SectorRotationPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
-            <Link href="/sectors/brief" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Daily Brief <ChevronRight className="h-3 w-3 inline ml-0.5" />
-            </Link>
-            <Link href="/sectors/picks" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Stock Picks <ChevronRight className="h-3 w-3 inline ml-0.5" />
-            </Link>
-            <Link href="/sectors/crypto" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Crypto <ChevronRight className="h-3 w-3 inline ml-0.5" />
-            </Link>
+            <SectorNav active="dashboard" />
             <Link href="/rotation" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
               Rotation Tracker <ChevronRight className="h-3 w-3 inline ml-0.5" />
             </Link>
@@ -124,6 +121,9 @@ export default function SectorRotationPage() {
           </button>
         </div>
       </div>
+
+      {/* Onboarding Banner */}
+      <OnboardingBanner />
 
       {/* Regime Banner */}
       <CollapsiblePanel id="regime" title="Macro Regime" collapsed={collapsedPanels.has("regime")} onToggle={togglePanel}
@@ -331,6 +331,33 @@ export default function SectorRotationPage() {
       </CollapsiblePanel>
 
       <ScannerCTA />
+    </div>
+  );
+}
+
+function OnboardingBanner() {
+  const [dismissed, setDismissed] = useState(() =>
+    typeof window !== "undefined" && localStorage.getItem("ew-sectors-onboarded") === "1"
+  );
+  if (dismissed) return null;
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-[#333] bg-[#141414] px-4 py-3">
+      <p className="text-sm text-[#ccc]">
+        New here? Check out the{" "}
+        <Link href="/sectors/guide" className="text-[#5ba3e6] hover:underline">
+          Guide
+        </Link>{" "}
+        to understand the dashboard.
+      </p>
+      <button
+        onClick={() => {
+          setDismissed(true);
+          localStorage.setItem("ew-sectors-onboarded", "1");
+        }}
+        className="shrink-0 rounded-md border border-[#333] px-2.5 py-1 text-xs text-[#888] hover:text-white hover:border-[#444] transition-colors"
+      >
+        Dismiss
+      </button>
     </div>
   );
 }

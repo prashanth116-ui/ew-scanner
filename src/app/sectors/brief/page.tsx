@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { RefreshCw, ArrowLeft, AlertTriangle, TrendingUp, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Loader2, RefreshCw, AlertTriangle, TrendingUp, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import Link from "next/link";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { useSectorData } from "../_use-sector-data";
@@ -10,6 +10,8 @@ import {
   useCollapsedPanels,
   TradingActionBadge,
   quadrantColor,
+  SectorNav,
+  LOADING_PHASES,
 } from "../_components";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
@@ -40,7 +42,7 @@ const POSTURE_STYLES: Record<MarketPosture, { bg: string; border: string; text: 
 type TabView = "brief" | "guide";
 
 export default function DailyBriefPage() {
-  const { data, loading, error, fetchData, rotationData } = useSectorData();
+  const { data, loading, error, fetchData, rotationData, loadingPhase, loadingTimeout, setLoadingTimeout } = useSectorData();
   const [collapsed, toggle] = useCollapsedPanels("ew-brief-collapsed-v1");
   const [macroEvents, setMacroEvents] = useState<CatalystCalendarEvent[]>([]);
   const [macroLoading, setMacroLoading] = useState(true);
@@ -99,11 +101,20 @@ export default function DailyBriefPage() {
   // Loading state
   if (loading && !data) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-12">
-        <div className="flex items-center justify-center gap-3 text-[#888]">
-          <RefreshCw className="h-5 w-5 animate-spin" />
-          <span>Loading sector data...</span>
+      <div className="mx-auto max-w-5xl px-4 py-12 text-center">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
+        <p className="mt-4 text-[#888]">{LOADING_PHASES[loadingPhase]}...</p>
+        <div className="mt-2 flex justify-center gap-1.5">
+          {LOADING_PHASES.map((_, i) => (
+            <div key={i} className={`h-1.5 w-1.5 rounded-full transition-colors ${i <= loadingPhase ? "bg-[#5ba3e6]" : "bg-[#333]"}`} />
+          ))}
         </div>
+        {loadingTimeout && (
+          <div className="mt-6">
+            <p className="text-xs text-amber-400">This is taking longer than expected.</p>
+            <button onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
+          </div>
+        )}
       </div>
     );
   }
@@ -138,17 +149,15 @@ export default function DailyBriefPage() {
     <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link href="/sectors" className="rounded-lg border border-[#333] p-2 text-[#888] hover:bg-[#1a1a1a] hover:text-white">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div>
+        <div>
+          <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-white">Daily Market Brief</h1>
-            <p className="text-xs text-[#666]">60-second morning check — zero overlap with other pages</p>
+            <SectorNav active="brief" />
           </div>
+          <p className="mt-1 text-xs text-[#666]">60-second morning check — zero overlap with other pages</p>
         </div>
         <div className="flex items-center gap-3">
-          <DataAgeBadge calculatedAt={data.calculatedAt} />
+          <DataAgeBadge calculatedAt={data.calculatedAt} warnAfterMin={20} />
           <button
             onClick={() => fetchData(true)}
             className="rounded-lg border border-[#333] p-2 text-[#888] hover:bg-[#1a1a1a] hover:text-white"
@@ -313,7 +322,7 @@ export default function DailyBriefPage() {
       </CollapsiblePanel>
 
       {/* Navigation Cards */}
-      <div className="flex flex-col sm:flex-row gap-3 pt-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
         <NavCard
           href="/sectors"
           title="Sector Dashboard"
@@ -329,6 +338,12 @@ export default function DailyBriefPage() {
               ? `${data.enrichedStocks.passed.length} stocks passed`
               : "View picks"
           }
+        />
+        <NavCard
+          href="/sectors/crypto"
+          title="Crypto Rotation"
+          description="BTC-relative sector rotation for crypto assets"
+          stat="10 crypto sectors"
         />
         <NavCard
           href="/rotation"
@@ -609,6 +624,15 @@ function NavCard({ href, title, description, stat }: { href: string; title: stri
 function BriefGuide() {
   return (
     <div className="space-y-6 pb-8">
+      {/* Link to full guide */}
+      <Link
+        href="/sectors/guide"
+        className="flex items-center justify-between rounded-lg border border-[#5ba3e6]/30 bg-[#5ba3e6]/5 px-4 py-3 text-sm text-[#5ba3e6] hover:bg-[#5ba3e6]/10 transition-colors"
+      >
+        <span>Looking for the full Sector Rotation guide? It covers all pages, not just the Brief.</span>
+        <ArrowRight className="h-4 w-4 shrink-0 ml-2" />
+      </Link>
+
       {/* Overview */}
       <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-5">
         <h2 className="text-lg font-bold text-white mb-3">What is the Daily Brief?</h2>

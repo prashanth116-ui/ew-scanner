@@ -3,6 +3,7 @@
 import { Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { ScannerCTA } from "@/components/scanner-cta";
+import { getEquitySectors, getSubSectors, getCrossAssetETFs } from "@/data/sector-universe";
 import {
   useCollapsedPanels,
   CollapsiblePanel,
@@ -12,9 +13,12 @@ import {
   SectorDetail,
   TopPicksBySector,
   FilterRecipes,
+  SectorNav,
   LOADING_PHASES,
 } from "../_components";
 import { useSectorData } from "../_use-sector-data";
+
+const ETF_COUNT = getEquitySectors().length + getSubSectors().length + getCrossAssetETFs().length;
 
 const PICKS_COLLAPSED_KEY = "ew-sectors-picks-collapsed-v1";
 
@@ -44,7 +48,7 @@ export default function PicksPage() {
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">{LOADING_PHASES[loadingPhase]}...</p>
-        <p className="mt-1 text-xs text-[#555]">23 ETFs + ~1,600 stock quotes</p>
+        <p className="mt-1 text-xs text-[#555]">{ETF_COUNT} ETFs + ~1,600 stock quotes</p>
         <div className="mt-2 flex justify-center gap-1.5">
           {LOADING_PHASES.map((_, i) => (
             <div key={i} className={`h-1.5 w-1.5 rounded-full transition-colors ${i <= loadingPhase ? "bg-[#5ba3e6]" : "bg-[#333]"}`} />
@@ -76,9 +80,12 @@ export default function PicksPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Stock Picks</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">Stock Picks</h1>
+            <SectorNav active="picks" />
+          </div>
           <div className="mt-1 flex items-center gap-3">
-            <DataAgeBadge calculatedAt={data.calculatedAt} />
+            <DataAgeBadge calculatedAt={data.calculatedAt} warnAfterMin={20} />
             <span className="text-xs text-[#555]">{new Date(data.calculatedAt).toLocaleString()}</span>
           </div>
         </div>

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronUp, FileDown, ChevronRight } from "lucide-react";
-import Link from "next/link";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, FileDown } from "lucide-react";
 import type {
   SectorRotationScore,
   EnrichedStock,
@@ -31,31 +30,14 @@ import {
   CollapsiblePanel,
   quadrantColor,
   quadrantDotColor,
+  SectorNav,
+  Sparkline,
+  DataStalenessWarning,
 } from "../_components";
 
 /** Strip quote currency suffix (e.g., "-USD", "-USDT") from crypto symbols. */
 function baseSymbol(sym: string): string {
   return sym.replace(/-USD[T]?$/, "");
-}
-
-// ── Sparkline ──
-
-function Sparkline({ returns }: { returns?: number[] }) {
-  if (!returns || returns.length < 3) return null;
-  const W = 60, H = 20;
-  const min = Math.min(...returns);
-  const max = Math.max(...returns);
-  const range = max - min || 1;
-  const points = returns
-    .map((v, i) => `${(i / (returns.length - 1)) * W},${H - ((v - min) / range) * H}`)
-    .join(" ");
-  const lastVal = returns[returns.length - 1];
-  const color = lastVal >= 0 ? "#4ade80" : "#f87171";
-  return (
-    <svg width={W} height={H} className="shrink-0">
-      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} />
-    </svg>
-  );
 }
 
 // ── RRG Chart ──
@@ -268,6 +250,23 @@ function SectorDetail({ sector, tokens }: { sector: SectorRotationScore; tokens:
   );
 }
 
+// ── Regime Mapping ──
+
+/** Map the equity-compat regime format back to crypto-native CryptoRegimeData.
+ *  The API inverts marketTrend→vixSlope for the equity UI, so we invert it back. */
+function mapCryptoRegime(regime: CryptoRotationResult["regime"]): CryptoRegimeData {
+  const rawRegime = regime?.regime ?? "MIXED";
+  const mappedRegime = rawRegime === "INFLATIONARY" ? "MIXED" as const : rawRegime as "RISK_ON" | "RISK_OFF" | "MIXED";
+  return {
+    regime: mappedRegime,
+    btcVolatility: regime?.vix ?? 0,
+    marketTrend: regime?.vixSlope === "falling" ? "rising" : regime?.vixSlope === "rising" ? "falling" : "flat",
+    altSeasonSignal: false,
+    favoredSectors: regime?.favoredSectors ?? [],
+    avoidSectors: regime?.avoidSectors ?? [],
+  };
+}
+
 // ── Entry Signals Panel ──
 
 function EntrySignalsPanel({ trackerData, regime }: {
@@ -278,17 +277,7 @@ function EntrySignalsPanel({ trackerData, regime }: {
     return <p className="text-sm text-[#555]">No active rotation signals detected.</p>;
   }
 
-  const rawRegime = regime?.regime ?? "MIXED";
-  const mappedRegime = rawRegime === "INFLATIONARY" ? "MIXED" as const : rawRegime as "RISK_ON" | "RISK_OFF" | "MIXED";
-  // Invert vixSlope back to marketTrend (server inverts marketTrend→vixSlope for equity UI compat)
-  const cryptoRegime: CryptoRegimeData = {
-    regime: mappedRegime,
-    btcVolatility: regime?.vix ?? 0,
-    marketTrend: regime?.vixSlope === "falling" ? "rising" : regime?.vixSlope === "rising" ? "falling" : "flat",
-    altSeasonSignal: false,
-    favoredSectors: regime?.favoredSectors ?? [],
-    avoidSectors: regime?.avoidSectors ?? [],
-  };
+  const cryptoRegime = mapCryptoRegime(regime);
 
   return (
     <div className="space-y-3">
@@ -396,6 +385,8 @@ function TokenPicksTable({ tokens }: { tokens: EnrichedStock[] }) {
 
 // ── Main Page ──
 
+const CRYPTO_LOADING_PHASES = ["Fetching BTC benchmark", "Fetching sector proxies", "Computing rotation scores", "Enriching token data"] as const;
+
 export default function CryptoRotationPage() {
   const [data, setData] = useState<CryptoRotationResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -475,6 +466,11 @@ export default function CryptoRotationPage() {
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">Loading crypto rotation data...</p>
         <p className="mt-1 text-xs text-[#555]">10 sector proxies + ~70 token quotes via BTC benchmark</p>
+        <div className="mt-2 flex justify-center gap-1.5">
+          {CRYPTO_LOADING_PHASES.map((_, i) => (
+            <div key={i} className={`h-1.5 w-1.5 rounded-full bg-[#5ba3e6] animate-pulse`} style={{ animationDelay: `${i * 200}ms` }} />
+          ))}
+        </div>
         {loadingTimeout && (
           <div className="mt-6">
             <p className="text-xs text-amber-400">This is taking longer than expected.</p>
@@ -508,16 +504,11 @@ export default function CryptoRotationPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-white">Crypto Sector Rotation</h1>
-            <Link href="/sectors" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Sectors <ChevronRight className="h-3 w-3 inline ml-0.5" />
-            </Link>
-            <Link href="/sectors/crypto/guide" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Guide <ChevronRight className="h-3 w-3 inline ml-0.5" />
-            </Link>
+            <SectorNav active="crypto" />
           </div>
           <p className="mt-1 text-xs text-[#666]">
             10 sectors / ~70 tokens / benchmark: BTC-USD
-            {data.calculatedAt && <> &middot; <DataAgeBadge calculatedAt={data.calculatedAt} /></>}
+            {data.calculatedAt && <> &middot; <DataAgeBadge calculatedAt={data.calculatedAt} warnAfterMin={20} /></>}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -676,6 +667,9 @@ export default function CryptoRotationPage() {
           })}
         </div>
       </CollapsiblePanel>
+
+      {/* Data Staleness Warning */}
+      {data.calculatedAt && <DataStalenessWarning calculatedAt={data.calculatedAt} />}
 
       <ScannerCTA />
     </div>

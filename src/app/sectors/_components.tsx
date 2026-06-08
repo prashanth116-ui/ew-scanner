@@ -18,8 +18,6 @@ import type {
   ExtensionTier,
 } from "@/lib/sector-rotation/types";
 
-// Backward compat alias
-type PullbackTier = ExtensionTier;
 import type { RotationTrackerResult, ActiveRotationDetail, RotationPatternStats, LifecycleStage, ConvictionResult } from "@/lib/sector-rotation/rotation-types";
 import {
   getHealth,
@@ -102,13 +100,62 @@ export const CATEGORY_STYLE: Record<string, string> = {
 export const CONV_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
 export const CAT_ORDER: Record<string, number> = { LEADER: 0, CATCH_UP: 1, TURNAROUND: 2, AVOID: 3 };
 export const PHASE_ORDER: Record<string, number> = { P1_BASING: 0, P2_TURNAROUND: 1, P3_TRENDING: 2, P4_EXHAUSTING: 3 };
-export const TIER_ORDER: Record<PullbackTier, number> = { MODERATE_EXTENSION: 0, HIGH_EXTENSION: 1, EXTREME_EXTENSION: 2 };
-export const TIER_STYLE: Record<PullbackTier, { bg: string; border: string; text: string; label: string }> = {
+export const TIER_ORDER: Record<ExtensionTier, number> = { MODERATE_EXTENSION: 0, HIGH_EXTENSION: 1, EXTREME_EXTENSION: 2 };
+export const TIER_STYLE: Record<ExtensionTier, { bg: string; border: string; text: string; label: string }> = {
   MODERATE_EXTENSION: { bg: "bg-green-500/10", border: "border-green-500/40", text: "text-green-400", label: "Moderate Extension" },
   HIGH_EXTENSION: { bg: "bg-amber-500/10", border: "border-amber-500/40", text: "text-amber-400", label: "High Extension" },
   EXTREME_EXTENSION: { bg: "bg-[#1a1a1a]", border: "border-[#333]", text: "text-[#555]", label: "Extreme Extension" },
 };
 const VERDICT_RANK: Record<string, number> = { "PRIORITY BUY": 0, KEEP: 1, WATCH: 2, DISCARD: 3, "": 4 };
+
+// ── Sector Nav ──
+
+const NAV_LINKS = [
+  { key: "dashboard", href: "/sectors", label: "Dashboard" },
+  { key: "picks", href: "/sectors/picks", label: "Picks" },
+  { key: "brief", href: "/sectors/brief", label: "Brief" },
+  { key: "crypto", href: "/sectors/crypto", label: "Crypto" },
+  { key: "guide", href: "/sectors/guide", label: "Guide" },
+] as const;
+
+export function SectorNav({ active }: { active: "dashboard" | "picks" | "brief" | "crypto" | "guide" }) {
+  return (
+    <nav className="flex items-center gap-1">
+      {NAV_LINKS.map((link) => (
+        <Link
+          key={link.key}
+          href={link.href}
+          className={`rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
+            active === link.key
+              ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border-[#5ba3e6]/30"
+              : "text-[#666] hover:text-[#a0a0a0] border-transparent hover:border-[#333]"
+          }`}
+        >
+          {link.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+// ── Shared Sparkline ──
+
+export function Sparkline({ returns, width = 60, height = 20 }: { returns?: number[]; width?: number; height?: number }) {
+  if (!returns || returns.length < 3) return null;
+  const min = Math.min(...returns);
+  const max = Math.max(...returns);
+  const range = max - min || 1;
+  const points = returns
+    .map((v, i) => `${(i / (returns.length - 1)) * width},${height - ((v - min) / range) * height}`)
+    .join(" ");
+  const lastVal = returns[returns.length - 1];
+  const color = lastVal >= 0 ? "#4ade80" : "#f87171";
+  return (
+    <svg width={width} height={height} className="shrink-0">
+      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} />
+    </svg>
+  );
+}
 
 // ── Collapsible Panel ──
 
@@ -450,6 +497,11 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
         ))}
         <span className="text-[10px] text-[#555] self-center ml-2">Select up to 3</span>
       </div>
+      {compared.length < 2 && (
+        <p className="text-xs text-[#555] py-4 text-center">
+          Select 2 or more sectors above to compare scores side-by-side.
+        </p>
+      )}
       {compared.length >= 2 && (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -723,6 +775,9 @@ export function AlertPanel({ sectors, data }: { sectors: SectorRotationScore[]; 
                   </div>
                 ))}
               </div>
+              <p className="text-[10px] text-[#555] mt-3">
+                Alerts check when you visit this page and are stored in your browser only.
+              </p>
             </div>
           </div>
         </div>
@@ -1624,7 +1679,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
 
 export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: PullbackWatchStock[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
   const [sectorFilter, setSectorFilter] = usePersistedFilter<string>("ew-filter:pullback:sector", "ALL");
-  const [tierFilter, setTierFilter] = usePersistedFilter<PullbackTier | "ALL">("ew-filter:pullback:tier", "ALL");
+  const [tierFilter, setTierFilter] = usePersistedFilter<ExtensionTier | "ALL">("ew-filter:pullback:tier", "ALL");
   const [sortKey, setSortKey] = useState<PullbackSortKey>("tier");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -1697,7 +1752,7 @@ export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: Pu
           <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)} className={selectClass}>
             {sectorNames.map((s) => <option key={s} value={s}>{s === "ALL" ? "All Sectors" : s}</option>)}
           </select>
-          <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value as PullbackTier | "ALL")} className={selectClass}>
+          <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value as ExtensionTier | "ALL")} className={selectClass}>
             <option value="ALL">All Tiers</option>
             <option value="MODERATE_EXTENSION">Moderate Extension</option>
             <option value="HIGH_EXTENSION">High Extension</option>
