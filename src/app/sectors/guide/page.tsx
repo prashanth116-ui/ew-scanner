@@ -245,7 +245,7 @@ export default function SectorGuidePage() {
               </table>
             </div>
             <p className="mt-2 text-[10px] text-[#555]">
-              ~1,400 stocks classified across 14 sectors. Each sector has a 1:1 ETF proxy.
+              ~1,400 stocks classified across 14 GICS sectors, plus 4 sub-sector ETFs (KRE, XHB, XRT, IYT) and 5 cross-asset ETFs (GLD, TLT, HYG, EEM, UUP) &mdash; 23 ETFs total.
               Semiconductors and Biotech are split from Technology and Health Care respectively for finer granularity.
             </p>
           </SubSection>
@@ -257,7 +257,7 @@ export default function SectorGuidePage() {
           title="How The Dashboard Works"
           icon={<Layers className="h-5 w-5 text-[#5ba3e6]" />}
         >
-          <p>The dashboard has 7 panels, each serving a different purpose:</p>
+          <p>The dashboard has 10 panels, each serving a different purpose:</p>
 
           <SubSection title="Panel 1: Macro Regime">
             <p>
@@ -327,7 +327,47 @@ export default function SectorGuidePage() {
             </p>
           </SubSection>
 
-          <SubSection title="Panel 5: Correlation Matrix">
+          <SubSection title="Panel 5: Sub-Sector Leading Indicators">
+            <p>
+              Four sub-sector ETFs that act as early warning signals for their parent GICS sectors:
+            </p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong className="text-white">KRE (Regional Banks)</strong> &mdash; Leads Financials (XLF). Regional banks are more rate-sensitive than large banks.</li>
+              <li><strong className="text-white">XHB (Homebuilders)</strong> &mdash; Leads Consumer Discretionary (XLY). Housing is one of the most rate-sensitive sectors.</li>
+              <li><strong className="text-white">XRT (Retail)</strong> &mdash; Leads Consumer Discretionary (XLY). Consumer spending trends show up here first.</li>
+              <li><strong className="text-white">IYT (Transports)</strong> &mdash; Leads Industrials (XLI). Transport stocks often signal economic acceleration or deceleration before broad industrials.</li>
+            </ul>
+            <p className="mt-2">
+              Each sub-sector shows the same composite score, quadrant, and trend arrow as the main sectors. When a sub-sector leads its parent
+              into a new quadrant, it&apos;s an early signal that the broader sector may follow.
+            </p>
+          </SubSection>
+
+          <SubSection title="Panel 6: Cross-Asset Money Flow">
+            <p>
+              Five non-equity ETFs that reveal whether money is leaving equities entirely &mdash; something the 14 equity sectors alone cannot detect:
+            </p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong className="text-white">GLD (Gold)</strong> &mdash; Rising = flight to safety or inflation hedge. Especially significant when rising alongside falling equities.</li>
+              <li><strong className="text-white">TLT (Treasuries 20Y+)</strong> &mdash; Rising = risk-off bid for safe haven bonds. Falling = rising yields / risk appetite.</li>
+              <li><strong className="text-white">HYG (High Yield Corp Bonds)</strong> &mdash; Rising = credit markets healthy, risk appetite strong. Falling = credit stress, risk-off.</li>
+              <li><strong className="text-white">EEM (Emerging Markets)</strong> &mdash; Rising = global risk-on, dollar weakening. Falling = capital fleeing to US safe havens.</li>
+              <li><strong className="text-white">UUP (US Dollar)</strong> &mdash; Rising = dollar strengthening (headwind for commodities, EM, multinationals). Falling = weaker dollar supports risk assets.</li>
+            </ul>
+            <p className="mt-2">
+              Cross-asset ETFs have no individual stocks &mdash; only ETF-level scoring is shown. Use them to confirm or contradict the regime signal
+              and equity sector rotation.
+            </p>
+          </SubSection>
+
+          <SubSection title="Panel 7: Data Staleness Warning">
+            <p>
+              An amber warning banner that appears when data is more than 20 minutes old. This panel is hidden when data is fresh.
+              Stale data can lead to acting on outdated signals, especially during volatile sessions.
+            </p>
+          </SubSection>
+
+          <SubSection title="Panel 8: Correlation Matrix">
             <p>
               A heatmap showing 20-day return correlations between all sector ETFs. High correlation clusters reveal
               sectors moving in lockstep (often macro-driven), while low or negative correlation pairs offer
@@ -335,11 +375,11 @@ export default function SectorGuidePage() {
             </p>
           </SubSection>
 
-          <SubSection title="Panel 6: Cross-Sector Pairs">
+          <SubSection title="Panel 9: Cross-Sector Pairs">
             <p>Two ratio pairs that reveal the market&apos;s risk appetite (see Cross-Sector Pairs section below).</p>
           </SubSection>
 
-          <SubSection title="Panel 7: Compare Sectors">
+          <SubSection title="Panel 10: Compare Sectors">
             <p>
               A side-by-side comparison tool that lets you select two sectors and compare their raw indicator values
               across all dimensions: momentum, acceleration, RS, CMF, breadth, smart money, and more.
@@ -1942,7 +1982,7 @@ export default function SectorGuidePage() {
               <li>Price above 50-day SMA (confirmed uptrend)</li>
               <li>RS Acceleration positive (gaining vs sector ETF)</li>
               <li>Volume ratio &ge; 1.0x (institutional participation)</li>
-              <li>Institutional ownership &gt; 50% (smart money present)</li>
+              <li>Institutional ownership &gt; 30% (structural quality gate &mdash; stocks below 30% are filtered out as low-liquidity)</li>
             </ul>
 
             <div className="mt-3 overflow-x-auto">
@@ -2162,7 +2202,7 @@ export default function SectorGuidePage() {
               </li>
               <li>
                 <strong className="text-white">Data freshness</strong> is shown in the header badge. Green = fresh
-                (&lt;6 hours), amber = aging (6&ndash;24 hours), red = stale (&gt;24 hours).
+                (&lt;20 min), amber = aging (20&ndash;60 min), red = stale (&gt;60 min). An inline staleness warning also appears when data exceeds 20 minutes.
               </li>
             </ul>
           </SubSection>
@@ -2241,7 +2281,7 @@ export default function SectorGuidePage() {
             <ul className="list-disc pl-4 space-y-1">
               <li>Rotation detection uses a 3-signal composite on daily data. Intraday rotations are not captured.</li>
               <li>Stock data comes from Yahoo Finance (6-month daily bars). Occasional data gaps or delays may occur.</li>
-              <li>Data is cached for up to 4 hours on the client and 15 minutes on the server. Check the freshness badge in the header.</li>
+              <li>Data is cached for up to 4 hours on the client and 10 minutes on the server (with 5-minute CDN cache + stale-while-revalidate). Check the freshness badge in the header.</li>
               <li>The tracker shows the top 4 active rotations. Less prominent rotations may not appear.</li>
             </ul>
           </SubSection>
