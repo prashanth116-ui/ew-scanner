@@ -114,11 +114,10 @@ const NAV_LINKS = [
   { key: "dashboard", href: "/sectors", label: "Dashboard" },
   { key: "picks", href: "/sectors/picks", label: "Picks" },
   { key: "brief", href: "/sectors/brief", label: "Brief" },
-  { key: "crypto", href: "/sectors/crypto", label: "Crypto" },
   { key: "guide", href: "/sectors/guide", label: "Guide" },
 ] as const;
 
-export function SectorNav({ active }: { active: "dashboard" | "picks" | "brief" | "crypto" | "guide" }) {
+export function SectorNav({ active }: { active: "dashboard" | "picks" | "brief" | "guide" }) {
   return (
     <nav className="flex items-center gap-1">
       {NAV_LINKS.map((link) => (

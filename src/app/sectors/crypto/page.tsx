@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronUp, FileDown } from "lucide-react";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, FileDown, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import type {
   SectorRotationScore,
   EnrichedStock,
@@ -30,7 +31,6 @@ import {
   CollapsiblePanel,
   quadrantColor,
   quadrantDotColor,
-  SectorNav,
   Sparkline,
   DataStalenessWarning,
 } from "../_components";
@@ -504,7 +504,12 @@ export default function CryptoRotationPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-white">Crypto Sector Rotation</h1>
-            <SectorNav active="crypto" />
+            <Link href="/sectors" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
+              Sectors <ChevronRight className="h-3 w-3 inline ml-0.5" />
+            </Link>
+            <Link href="/sectors/crypto/guide" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
+              Guide <ChevronRight className="h-3 w-3 inline ml-0.5" />
+            </Link>
           </div>
           <p className="mt-1 text-xs text-[#666]">
             10 sectors / ~70 tokens / benchmark: BTC-USD
