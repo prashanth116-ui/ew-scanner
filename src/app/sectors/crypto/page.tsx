@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronUp, FileDown } from "lucide-react";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, FileDown, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import type {
   SectorRotationScore,
-  RRGQuadrant,
   EnrichedStock,
-  ConvictionLevel,
 } from "@/lib/sector-rotation/types";
 import type { CryptoRotationResult } from "@/lib/crypto-rotation/types";
 import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
@@ -404,6 +403,7 @@ export default function CryptoRotationPage() {
   const [trackerData, setTrackerData] = useState<RotationTrackerResult | null>(null);
   const [collapsedPanels, togglePanel] = useCollapsedPanels("ew-crypto-collapsed-v1");
   const [expandedSector, setExpandedSector] = useState<string | null>(null);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // Fetch rotation tracker
@@ -448,6 +448,13 @@ export default function CryptoRotationPage() {
   useEffect(() => { fetchData(); return () => { abortRef.current?.abort(); }; }, [fetchData]);
   useEffect(() => { const id = setInterval(() => { fetchData(true); fetchTracker(); }, 10 * 60 * 1000); return () => clearInterval(id); }, [fetchData, fetchTracker]);
 
+  // Loading timeout — show retry after 30s
+  useEffect(() => {
+    if (!loading || data) { setLoadingTimeout(false); return; }
+    const timer = setTimeout(() => setLoadingTimeout(true), 30_000);
+    return () => clearTimeout(timer);
+  }, [loading, data]);
+
   const handleExport = useCallback(() => { if (data) exportCryptoRotationToExcel(data); }, [data]);
 
   // Token picks grouped by sector
@@ -468,6 +475,12 @@ export default function CryptoRotationPage() {
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5ba3e6]" />
         <p className="mt-4 text-[#888]">Loading crypto rotation data...</p>
         <p className="mt-1 text-xs text-[#555]">10 sector proxies + ~70 token quotes via BTC benchmark</p>
+        {loadingTimeout && (
+          <div className="mt-6">
+            <p className="text-xs text-amber-400">This is taking longer than expected.</p>
+            <button onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
+          </div>
+        )}
       </div>
     );
   }
@@ -475,7 +488,7 @@ export default function CryptoRotationPage() {
   if (error && !data) {
     return (
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
-        <p className="text-red-400">{error}</p>
+        <p className="text-red-400">Error: {error}</p>
         <button onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">
           Retry
         </button>
@@ -493,8 +506,16 @@ export default function CryptoRotationPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-white">Crypto Sector Rotation</h1>
-          <p className="text-xs text-[#666]">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-white">Crypto Sector Rotation</h1>
+            <Link href="/sectors" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
+              Sectors <ChevronRight className="h-3 w-3 inline ml-0.5" />
+            </Link>
+            <Link href="/sectors/crypto/guide" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
+              Guide <ChevronRight className="h-3 w-3 inline ml-0.5" />
+            </Link>
+          </div>
+          <p className="mt-1 text-xs text-[#666]">
             10 sectors / ~70 tokens / benchmark: BTC-USD
             {data.calculatedAt && <> &middot; <DataAgeBadge calculatedAt={data.calculatedAt} /></>}
           </p>
@@ -559,8 +580,8 @@ export default function CryptoRotationPage() {
             </span>
           </div>
           <div className="flex items-center gap-3 text-xs text-[#888]">
-            <span>Dispersion: {data.dispersionIndex}</span>
-            <span>Spread: {data.sectorSpread}%</span>
+            <span>Dispersion: {data.dispersionIndex.toFixed(1)}</span>
+            <span>Spread: {data.sectorSpread.toFixed(1)}%</span>
           </div>
         </div>
         <p className="mt-1 text-xs text-[#888]">{data.rotationSummary}</p>
