@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, RefreshCw, FileDown, ExternalLink } from "lucide-react";
+import { Loader2, RefreshCw, FileDown, ChevronRight } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import Link from "next/link";
@@ -94,13 +94,16 @@ export default function SectorRotationPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
             <Link href="/sectors/brief" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Daily Brief <ExternalLink className="h-3 w-3 inline ml-0.5" />
+              Daily Brief <ChevronRight className="h-3 w-3 inline ml-0.5" />
             </Link>
             <Link href="/sectors/picks" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Stock Picks <ExternalLink className="h-3 w-3 inline ml-0.5" />
+              Stock Picks <ChevronRight className="h-3 w-3 inline ml-0.5" />
+            </Link>
+            <Link href="/sectors/crypto" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
+              Crypto <ChevronRight className="h-3 w-3 inline ml-0.5" />
             </Link>
             <Link href="/rotation" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Rotation Tracker <ExternalLink className="h-3 w-3 inline ml-0.5" />
+              Rotation Tracker <ChevronRight className="h-3 w-3 inline ml-0.5" />
             </Link>
           </div>
           <div className="mt-1 flex items-center gap-3">
@@ -145,12 +148,12 @@ export default function SectorRotationPage() {
             <div className="flex items-center gap-6">
               <div className="text-right">
                 <div className="text-xs text-[#666]">Dispersion</div>
-                <div className={`text-lg font-bold ${data.dispersionIndex > 4 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{data.dispersionIndex}</div>
+                <div className={`text-lg font-bold ${data.dispersionIndex > 4 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{data.dispersionIndex.toFixed(1)}</div>
                 <div className="text-xs text-[#555]">{data.dispersionIndex > 4 ? "High" : data.dispersionIndex > 2 ? "Moderate" : "Low"}</div>
               </div>
               <div className="text-right">
                 <div className="text-xs text-[#666]">Sector Spread</div>
-                <div className={`text-lg font-bold ${(data.sectorSpread ?? 0) > 8 ? "text-green-400" : (data.sectorSpread ?? 0) > 4 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{data.sectorSpread ?? 0}%</div>
+                <div className={`text-lg font-bold ${(data.sectorSpread ?? 0) > 8 ? "text-green-400" : (data.sectorSpread ?? 0) > 4 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{(data.sectorSpread ?? 0).toFixed(1)}%</div>
                 <div className="text-xs text-[#555]">{(data.sectorSpread ?? 0) > 8 ? "Wide" : (data.sectorSpread ?? 0) > 4 ? "Moderate" : "Narrow"}</div>
               </div>
             </div>
@@ -174,20 +177,30 @@ export default function SectorRotationPage() {
             <div className="flex items-center gap-1 overflow-x-auto">
               <span className="text-xs text-[#555] shrink-0 mr-1">Compare:</span>
               <button onClick={() => setCompareDate(null)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${compareDate === null ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>None</button>
-              {history.map((snap) => {
-                const d = new Date(snap.date + "T12:00:00Z");
-                const daysAgo = Math.round((Date.now() - d.getTime()) / 86_400_000);
-                let label: string;
-                if (daysAgo === 0) label = "Today";
-                else if (daysAgo === 1) label = "Yesterday";
-                else if (daysAgo <= 8) label = "1w ago";
-                else if (daysAgo <= 15) label = "2w ago";
-                else if (daysAgo <= 22) label = "3w ago";
-                else label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                return (
-                  <button key={snap.date} onClick={() => setCompareDate(snap.date)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${compareDate === snap.date ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`} title={snap.date}>{label}</button>
-                );
-              })}
+              {(() => {
+                const labelCount = new Map<string, number>();
+                const items = history.map((snap) => {
+                  const d = new Date(snap.date + "T12:00:00Z");
+                  const daysAgo = Math.round((Date.now() - d.getTime()) / 86_400_000);
+                  let label: string;
+                  if (daysAgo === 0) label = "Today";
+                  else if (daysAgo === 1) label = "Yesterday";
+                  else if (daysAgo <= 8) label = "1w ago";
+                  else if (daysAgo <= 15) label = "2w ago";
+                  else if (daysAgo <= 22) label = "3w ago";
+                  else label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                  labelCount.set(label, (labelCount.get(label) ?? 0) + 1);
+                  return { snap, d, label };
+                });
+                return items.map(({ snap, d, label }) => {
+                  const displayLabel = (labelCount.get(label) ?? 0) > 1
+                    ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                    : label;
+                  return (
+                    <button key={snap.date} onClick={() => setCompareDate(snap.date)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${compareDate === snap.date ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`} title={snap.date}>{displayLabel}</button>
+                  );
+                });
+              })()}
             </div>
           )}
           {compareDate && comparisonSummary && (
@@ -253,6 +266,7 @@ export default function SectorRotationPage() {
                 <div className="space-y-2">
                   {withSignals.map((s) => {
                     const signals: string[] = [];
+                    if (s.stealthAccumulation) signals.push("Stealth accumulation");
                     if (s.flowPriceDivergence) signals.push("Flow/price divergence");
                     if (s.breadthDivergence) signals.push("Breadth divergence");
                     if (s.accelerationInflection) signals.push("Momentum inflection");
@@ -261,7 +275,6 @@ export default function SectorRotationPage() {
                         <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${s.stealthAccumulation ? "bg-cyan-400" : "bg-amber-400"}`} />
                         <div>
                           <span className="font-medium text-white">{s.sector}</span>
-                          {s.stealthAccumulation && <span className="ml-2 text-xs text-cyan-400">(Stealth)</span>}
                           <div className="text-xs text-[#888]">{signals.join(", ")}</div>
                         </div>
                       </div>
