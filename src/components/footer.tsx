@@ -11,7 +11,6 @@ const scannerLinks = [
   { href: "/strat", label: "The Strat" },
   { href: "/earnings", label: "Earnings" },
   { href: "/catalyst", label: "AI Radar" },
-  { href: "/trading-copilot", label: "Trading Copilot" },
 ];
 
 const resourceLinks = [
@@ -23,9 +22,7 @@ const resourceLinks = [
   { href: "/confluence/guide", label: "Confluence Guide" },
   { href: "/strat/guide", label: "The Strat Guide" },
   { href: "/catalyst/guide", label: "AI Radar Guide" },
-  { href: "/trading-copilot/guide", label: "Copilot Guide" },
   { href: "/learn", label: "Learn EW" },
-  { href: "/price-action-mastery", label: "Price Action Mastery" },
   { href: "/pricing", label: "Pricing" },
 ];
 

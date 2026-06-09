@@ -15,7 +15,6 @@ const scannerTabs = [
   { id: "strat", label: "The Strat", href: "/strat" },
   { id: "earnings", label: "Earnings", href: "/earnings" },
   { id: "catalyst", label: "AI Radar", href: "/catalyst" },
-  { id: "copilot", label: "Copilot", href: "/trading-copilot" },
 ] as const;
 
 const subPages: Record<string, { href: string; label: string }[]> = {
@@ -23,7 +22,6 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/", label: "Scanner" },
     { href: "/guide", label: "Guide" },
     { href: "/learn", label: "Learn" },
-    { href: "/price-action-mastery", label: "Price Action" },
     { href: "/history", label: "History" },
     { href: "/watchlist", label: "Watchlist" },
   ],
@@ -64,15 +62,9 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/catalyst", label: "Scanner" },
     { href: "/catalyst/guide", label: "Guide" },
   ],
-  copilot: [
-    { href: "/trading-copilot", label: "Dashboard" },
-    { href: "/trading-copilot/guide", label: "Guide" },
-  ],
 };
 
-function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" | "strat" | "earnings" | "catalyst" | "copilot" {
-  if (pathname.startsWith("/price-action-mastery")) return "ew";
-  if (pathname.startsWith("/trading-copilot")) return "copilot";
+function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" | "strat" | "earnings" | "catalyst" {
   if (pathname.startsWith("/catalyst")) return "catalyst";
   if (pathname.startsWith("/earnings")) return "earnings";
   if (pathname.startsWith("/strat")) return "strat";
@@ -100,7 +92,6 @@ export function Nav() {
     if (href === "/strat") return pathname === "/strat";
     if (href === "/earnings") return pathname === "/earnings";
     if (href === "/catalyst") return pathname === "/catalyst";
-    if (href === "/trading-copilot") return pathname === "/trading-copilot";
     return pathname.startsWith(href);
   };
 
@@ -255,7 +246,7 @@ export function Nav() {
                   {item.label}
                 </Link>
               ))}
-              {tab.id !== "copilot" && (
+              {tab.id !== "catalyst" && (
                 <div className="mx-3 my-2 h-px bg-[#2a2a2a]" aria-hidden="true" />
               )}
             </div>
