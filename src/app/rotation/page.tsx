@@ -766,7 +766,7 @@ function actionChipColors(label: string): { bg: string; text: string; border: st
   }
 }
 
-type StockSortKey = "symbol" | "name" | "action" | "phase" | "sector" | "priceAtRotationStart" | "priceNow" | "dailyChangePct" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rs20d" | "trendAccel" | "rsAcceleration" | "earnings";
+type StockSortKey = "symbol" | "name" | "action" | "phase" | "sector" | "priceAtRotationStart" | "priceNow" | "dailyChangePct" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rs20d" | "trendAccel" | "rsAcceleration" | "earnings" | "verdict" | "finalScore";
 
 function StockPerformanceTable({
   detail,
@@ -789,6 +789,7 @@ function StockPerformanceTable({
   const [trendAccelFilter, setTrendAccelFilter] = useState<"all" | "positive" | "negative">("all");
   const [rs20dFilter, setRs20dFilter] = useState<"all" | "positive" | "negative">("all");
   const [qualityFilter, setQualityFilter] = useState<"all" | "improving" | "high" | "fading">("all");
+  const [verdictFilter, setVerdictFilter] = useState<"all" | "priority" | "keep" | "watch">("all");
 
   const sectorAvgPct =
     detail.stocks.length > 0
@@ -809,7 +810,7 @@ function StockPerformanceTable({
     return ORDER.filter(a => actions.has(a));
   }, [detail.stocks, sectorAvgPct, lifecycle, lifecycleMap]);
 
-  const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all" || phaseFilter !== "all" || trendAccelFilter !== "all" || rs20dFilter !== "all" || qualityFilter !== "all";
+  const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all" || phaseFilter !== "all" || trendAccelFilter !== "all" || rs20dFilter !== "all" || qualityFilter !== "all" || verdictFilter !== "all";
 
   const earlyStrengthActive = phaseFilter === "turnaround" && qualityFilter === "high" && trendAccelFilter === "positive";
 
@@ -843,6 +844,7 @@ function StockPerformanceTable({
     setTrendAccelFilter("all");
     setRs20dFilter("all");
     setQualityFilter("all");
+    setVerdictFilter("all");
   }
 
   const sorted = useMemo(() => {
@@ -876,6 +878,9 @@ function StockPerformanceTable({
     else if (qualityFilter === "fading") copy = copy.filter(item =>
       !item.stock.rsImproving && (item.stock.rsAcceleration ?? 0) < 0
     );
+    if (verdictFilter === "priority") copy = copy.filter(item => item.stock.verdict === "PRIORITY" || item.stock.verdict === "PRIORITY BUY");
+    else if (verdictFilter === "keep") copy = copy.filter(item => item.stock.verdict === "KEEP");
+    else if (verdictFilter === "watch") copy = copy.filter(item => item.stock.verdict === "WATCH");
     // Sort
     copy.sort((a, b) => {
       let av: string | number;
@@ -904,6 +909,13 @@ function StockPerformanceTable({
       } else if (sortKey === "aboveSma50") {
         av = a.stock.aboveSma50 ? 1 : 0;
         bv = b.stock.aboveSma50 ? 1 : 0;
+      } else if (sortKey === "verdict") {
+        const VERDICT_RANK: Record<string, number> = { "PRIORITY": 0, "PRIORITY BUY": 0, "KEEP": 1, "WATCH": 2 };
+        av = VERDICT_RANK[a.stock.verdict ?? ""] ?? 3;
+        bv = VERDICT_RANK[b.stock.verdict ?? ""] ?? 3;
+      } else if (sortKey === "finalScore") {
+        av = a.stock.finalScore ?? -1;
+        bv = b.stock.finalScore ?? -1;
       } else {
         av = a.stock[sortKey] ?? 0;
         bv = b.stock[sortKey] ?? 0;
@@ -914,7 +926,7 @@ function StockPerformanceTable({
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return copy;
-  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, lifecycleMap, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter, qualityFilter, sectorMap]);
+  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, lifecycleMap, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter, qualityFilter, verdictFilter, sectorMap]);
 
   if (detail.stocks.length === 0) {
     return (
@@ -1073,6 +1085,17 @@ function StockPerformanceTable({
           <option value="trending">P3 Trending</option>
           <option value="exhausting">P4 Exhausting</option>
         </select>
+        <select
+          value={verdictFilter}
+          onChange={e => setVerdictFilter(e.target.value as "all" | "priority" | "keep" | "watch")}
+          aria-label="Filter by verdict"
+          className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#ccc] outline-none focus:border-[#5ba3e6]"
+        >
+          <option value="all">Verdict: All</option>
+          <option value="priority">Priority</option>
+          <option value="keep">Keep</option>
+          <option value="watch">Watch</option>
+        </select>
         {hasActiveFilter && (
           <button
             onClick={resetFilters}
@@ -1153,6 +1176,12 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("earnings")} aria-sort={stockAriaSort("earnings")}>
               Earnings<SortArrow col="earnings" />
             </th>
+            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("verdict")} aria-sort={stockAriaSort("verdict")} title="Pre-run scan verdict">
+              Verdict<SortArrow col="verdict" />
+            </th>
+            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("finalScore")} aria-sort={stockAriaSort("finalScore")} title="Pre-run scan score (0-41)">
+              Score<SortArrow col="finalScore" />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -1228,6 +1257,17 @@ function StockPerformanceTable({
                 <td className={`px-3 py-2 text-right text-xs ${s.daysToEarnings == null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}`} title={s.nextEarningsDate ?? undefined}>
                   {s.daysToEarnings != null ? `${s.daysToEarnings}d` : "-"}
                 </td>
+                <td className="px-3 py-2 text-center">
+                  {s.verdict ? (
+                    <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
+                      s.verdict === "PRIORITY" || s.verdict === "PRIORITY BUY" ? "bg-green-500/15 text-green-400 border-green-500/30" :
+                      s.verdict === "KEEP" ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" :
+                      s.verdict === "WATCH" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
+                      "bg-red-500/15 text-red-400 border-red-500/30"
+                    }`}>{s.verdict}</span>
+                  ) : <span className="text-[#444]">-</span>}
+                </td>
+                <td className="px-3 py-2 text-right text-[#666]">{s.finalScore != null && s.finalScore > 0 ? s.finalScore : "-"}</td>
               </tr>
             );
           })}
@@ -1766,7 +1806,7 @@ function CopyExportBar({
   }
 
   function exportCsv() {
-    const headers = ["Symbol", "Phase", "Name", "Start Price", "Current", "% Change", "Above 50MA", "Vol vs Avg", "RS 20d", "Trend Accel", "Sector RS", "RS Delta", "RS Improving", "Vol Consistency", "Earnings (days)", "Earnings Date", "Turnaround"];
+    const headers = ["Symbol", "Phase", "Name", "Start Price", "Current", "% Change", "Above 50MA", "Vol vs Avg", "RS 20d", "Trend Accel", "Sector RS", "RS Delta", "RS Improving", "Vol Consistency", "Earnings (days)", "Earnings Date", "Turnaround", "Verdict", "Score"];
     const rows = stocks.map((s) => [
       s.symbol,
       phaseBadge(getRotationStockPhase(s)).label,
@@ -1785,6 +1825,8 @@ function CopyExportBar({
       s.daysToEarnings != null ? String(s.daysToEarnings) : "",
       s.nextEarningsDate ?? "",
       s.isTurnaroundCandidate ? "Yes" : "No",
+      s.verdict ?? "",
+      s.finalScore != null && s.finalScore > 0 ? String(s.finalScore) : "",
     ]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -1937,6 +1979,22 @@ export default function RotationTrackerPage() {
   const [expandedSector, setExpandedSector] = useState<string | null>(null);
   const [showAllSectors, setShowAllSectors] = useState(false);
   const [heatmapSectors, setHeatmapSectors] = useState<SectorRotationScore[] | null>(null);
+  const [prerunServerMap, setPrerunServerMap] = useState<Map<string, { verdict: string; score: number }>>(new Map());
+
+  // Fetch prerun data from server when localStorage is empty
+  useEffect(() => {
+    const local = loadScanResults();
+    if (local.length > 0) return; // localStorage has data, no need for server fallback
+    fetch("/api/prerun/latest")
+      .then((res) => res.ok ? res.json() : null)
+      .then((result: { date: string | null; signals: { ticker: string; verdict: string; score: number }[] } | null) => {
+        if (!result?.signals?.length) return;
+        const map = new Map<string, { verdict: string; score: number }>();
+        for (const s of result.signals) map.set(s.ticker, { verdict: s.verdict, score: s.score });
+        setPrerunServerMap(map);
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchData = useCallback(async (skipCache = false) => {
     setLoading(true);
@@ -1994,14 +2052,17 @@ export default function RotationTrackerPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Enrich stocks with earnings data from prerun scan
+  // Enrich stocks with earnings + verdict + score data from prerun scan
   const enrichedData = useMemo(() => {
     if (!data) return null;
     const scanResults = loadScanResults();
-    if (scanResults.length === 0) return data;
 
     const scanByTicker = new Map<string, (typeof scanResults)[number]>();
     for (const r of scanResults) { if (r.data?.ticker) scanByTicker.set(r.data.ticker, r); }
+
+    const hasLocalData = scanByTicker.size > 0;
+    const hasServerData = prerunServerMap.size > 0;
+    if (!hasLocalData && !hasServerData) return data;
 
     return {
       ...data,
@@ -2009,17 +2070,20 @@ export default function RotationTrackerPage() {
         ...rotation,
         stocks: rotation.stocks.map((s) => {
           const preRun = scanByTicker.get(s.symbol);
-          if (!preRun) return s;
+          const serverData = prerunServerMap.get(s.symbol);
+          if (!preRun && !serverData) return s;
           return {
             ...s,
-            daysToEarnings: preRun.data.daysToEarnings ?? null,
-            nextEarningsDate: preRun.data.nextEarningsDate ?? null,
-            rs20d: s.rs20d ?? preRun.data.relativeStrength20d ?? null,
+            daysToEarnings: preRun?.data.daysToEarnings ?? s.daysToEarnings,
+            nextEarningsDate: preRun?.data.nextEarningsDate ?? s.nextEarningsDate,
+            rs20d: s.rs20d ?? preRun?.data.relativeStrength20d ?? null,
+            verdict: preRun?.verdict ?? serverData?.verdict ?? null,
+            finalScore: preRun?.scores.finalScore ?? serverData?.score ?? null,
           };
         }),
       })),
     };
-  }, [data]);
+  }, [data, prerunServerMap]);
 
   // Find expanded rotation detail
   const expandedDetail = useMemo(() => {

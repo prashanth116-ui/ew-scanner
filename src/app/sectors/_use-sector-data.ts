@@ -41,7 +41,7 @@ export function useSectorData() {
   const [compareDate, setCompareDate] = useState<string | null>(null);
   const [history, setHistory] = useState<DailySnapshot[]>([]);
   const [loadingPhase, setLoadingPhase] = useState(0);
-  const [rotationSectorRS, setRotationSectorRS] = useState<Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>>(new Map());
+  const [rotationSectorRS, setRotationSectorRS] = useState<Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number; perfPct: number }>>(new Map());
   const [rotationFetchFailed, setRotationFetchFailed] = useState(false);
   const [rotationData, setRotationData] = useState<RotationTrackerResult | null>(null);
 
@@ -51,10 +51,10 @@ export function useSectorData() {
       if (!result?.activeRotations) return;
       setRotationData(result);
       setRotationFetchFailed(false);
-      const map = new Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number }>();
+      const map = new Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number; perfPct: number }>();
       for (const rotation of result.activeRotations) {
         for (const s of rotation.stocks) {
-          map.set(s.symbol, { rsAccel: s.rsAcceleration, rsImproving: s.rsImproving, rsDelta: s.rsDelta, volConsistency: s.volumeConsistency });
+          map.set(s.symbol, { rsAccel: s.rsAcceleration, rsImproving: s.rsImproving, rsDelta: s.rsDelta, volConsistency: s.volumeConsistency, perfPct: s.performancePct });
         }
       }
       setRotationSectorRS(map);
@@ -172,6 +172,8 @@ export function useSectorData() {
           rsDelta: rotData?.rsDelta ?? 0,
           volumeConsistency: rotData?.volConsistency ?? 0,
           institutionalPct: instMap.get(stock.symbol) ?? null,
+          inActiveRotation: !!rotData,
+          rotationPerfPct: rotData?.perfPct ?? null,
         };
       });
       map.set(sectorDef.displayName, stocks);

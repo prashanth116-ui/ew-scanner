@@ -62,6 +62,8 @@ export interface StockInSector {
   rsDelta: number;
   volumeConsistency: number;
   institutionalPct: number | null;
+  inActiveRotation: boolean;
+  rotationPerfPct: number | null;
 }
 
 export interface SectorAlert {
@@ -1075,6 +1077,15 @@ export function SectorStockTable({ stocks, sectorName, hasRotationData = false, 
                 <tr key={s.ticker} className={`border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors ${isActionable ? "border-l-2 border-l-amber-400 bg-amber-500/5" : ""}`}>
                   <td className="py-1.5 pr-2">
                     <a href={`https://finance.yahoo.com/quote/${encodeURIComponent(s.ticker)}/`} target="_blank" rel="noopener noreferrer" className="font-medium text-white hover:text-[#5ba3e6] transition-colors" title={s.institutionalPct != null ? `Inst. ownership: ${s.institutionalPct.toFixed(0)}% (quarterly)` : undefined}>{s.ticker}</a>
+                    {s.inActiveRotation && s.rotationPerfPct != null && (
+                      <span className={`ml-1 inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${
+                        s.rotationPerfPct >= 0
+                          ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                          : "bg-red-500/15 text-red-400 border-red-500/30"
+                      }`} title="Active rotation performance since start">
+                        ROT {s.rotationPerfPct >= 0 ? "+" : ""}{s.rotationPerfPct.toFixed(1)}%
+                      </span>
+                    )}
                   </td>
                   <td className="py-1.5 pr-2">
                     <div className="flex items-center gap-1">
@@ -1166,6 +1177,13 @@ export function SectorStockTable({ stocks, sectorName, hasRotationData = false, 
                     s.verdict === "WATCH" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
                     "bg-red-500/15 text-red-400 border-red-500/30"
                   }`}>{s.verdict}</span>}
+                  {s.inActiveRotation && s.rotationPerfPct != null && (
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${
+                      s.rotationPerfPct >= 0
+                        ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                        : "bg-red-500/15 text-red-400 border-red-500/30"
+                    }`}>ROT {s.rotationPerfPct >= 0 ? "+" : ""}{s.rotationPerfPct.toFixed(1)}%</span>
+                  )}
                 </div>
                 {s.aboveSma50 === true ? <span className="h-2 w-2 rounded-full bg-green-400" /> : s.aboveSma50 === false ? <span className="h-2 w-2 rounded-full bg-red-400" /> : null}
               </div>
@@ -1437,7 +1455,7 @@ export function TopPicksBySector({ stocks, sectors, scanResultsDate }: { stocks:
 
 // ── Stock Picks Panel ──
 
-export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
+export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void; rotationPerfMap?: Map<string, number> }) {
   const [filter, setFilter] = usePersistedFilter<ConvictionLevel | "ALL">("ew-filter:picks:conviction", "ALL");
   const [sectorFilter, setSectorFilter] = usePersistedFilter<string>("ew-filter:picks:sector", "ALL");
   const [categoryFilter, setCategoryFilter] = usePersistedFilter<StockCategory | "ALL">("ew-filter:picks:category", "ALL");
@@ -1644,6 +1662,18 @@ export function StockPicksPanel({ stocks, collapsed, onToggle }: { stocks: Enric
                         </td>
                         <td className="py-1.5 pr-3">
                           <a href={`https://finance.yahoo.com/quote/${s.symbol}`} target="_blank" rel="noopener noreferrer" className="font-mono font-semibold text-[#5ba3e6] hover:underline" title={s.institutionalPct != null ? `Inst. ownership: ${s.institutionalPct.toFixed(0)}% (quarterly filing data)` : undefined}>{s.symbol}</a>
+                          {(() => {
+                            const rotPerf = rotationPerfMap?.get(s.symbol);
+                            return rotPerf != null ? (
+                              <span className={`ml-1 inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${
+                                rotPerf >= 0
+                                  ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                                  : "bg-red-500/15 text-red-400 border-red-500/30"
+                              }`} title="Active rotation performance since start">
+                                ROT {rotPerf >= 0 ? "+" : ""}{rotPerf.toFixed(1)}%
+                              </span>
+                            ) : null;
+                          })()}
                           <span className="ml-1.5 text-[10px] text-[#666]" title={s.shortName}>{s.shortName.length > 18 ? s.shortName.slice(0, 16) + "\u2026" : s.shortName}</span>
                         </td>
                         <td className={`py-1.5 pr-3 font-medium ${CATEGORY_STYLE[s.category] ?? "text-[#888]"}`}>{s.category}</td>

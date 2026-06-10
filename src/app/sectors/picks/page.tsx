@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { ScannerCTA } from "@/components/scanner-cta";
@@ -42,6 +43,15 @@ export default function PicksPage() {
   } = useSectorData();
 
   const [collapsedPanels, togglePanel] = useCollapsedPanels(PICKS_COLLAPSED_KEY);
+
+  const rotationPerfMap = useMemo(() => {
+    if (!rotationData?.activeRotations) return new Map<string, number>();
+    const map = new Map<string, number>();
+    for (const rot of rotationData.activeRotations) {
+      for (const s of rot.stocks) map.set(s.symbol, s.performancePct);
+    }
+    return map;
+  }, [rotationData]);
 
   if (loading && !data) {
     return (
@@ -132,7 +142,7 @@ export default function PicksPage() {
 
       {/* Stock Picks */}
       {data.enrichedStocks && data.enrichedStocks.passed.length > 0 && (
-        <StockPicksPanel stocks={data.enrichedStocks.passed} collapsed={collapsedPanels.has("stock-picks")} onToggle={togglePanel} />
+        <StockPicksPanel stocks={data.enrichedStocks.passed} collapsed={collapsedPanels.has("stock-picks")} onToggle={togglePanel} rotationPerfMap={rotationPerfMap} />
       )}
 
       {/* Pullback Watch */}

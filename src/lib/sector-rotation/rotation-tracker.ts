@@ -475,6 +475,8 @@ async function fetchStockPerformance(
         rsImproving: rsDelta > 0,
         rsDelta: Math.round(rsDelta * 100) / 100,
         volumeConsistency: volConsistency,
+        verdict: null, // enriched client-side from prerun scan
+        finalScore: null, // enriched client-side from prerun scan
       });
     }
 

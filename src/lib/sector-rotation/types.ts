@@ -88,6 +88,8 @@ export interface EnrichedStock {
   sectorQuadrant: RRGQuadrant;
   sectorComposite: number;
   sectorStealth: boolean;
+  inActiveRotation?: boolean;
+  rotationPerfPct?: number | null;
 }
 
 export interface RejectedStock {

@@ -53,6 +53,8 @@ export interface RotationStockPerformance {
   rsImproving: boolean; // rsDelta > 0 (RS direction is improving)
   rsDelta: number; // rsAcceleration - rsAccelPrior (positive = inflection)
   volumeConsistency: number; // days in last 5 with vol > 10d avg (0-5 scale)
+  verdict: string | null;       // prerun verdict: "PRIORITY" | "KEEP" | "WATCH" | null
+  finalScore: number | null;    // prerun final score (0-41)
 }
 
 export interface ActiveRotationDetail {
