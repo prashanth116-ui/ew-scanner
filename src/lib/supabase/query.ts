@@ -341,6 +341,59 @@ export async function fetchCompletedSignals(
   }
 }
 
+/** Fetch the most recent nightly prerun scan signals from signal_outcomes. */
+export async function fetchLatestPrerunSignals(): Promise<{
+  date: string | null;
+  signals: { ticker: string; verdict: string; score: number; price: number }[];
+}> {
+  try {
+    const supabase = await createClient();
+    if (!supabase) return { date: null, signals: [] };
+
+    // Get the most recent prerun scan date
+    const { data: latest, error: latestErr } = await supabase
+      .from("signal_outcomes")
+      .select("signal_date")
+      .eq("scanner", "prerun")
+      .order("signal_date", { ascending: false })
+      .limit(1);
+
+    if (latestErr) {
+      console.error("[query] fetchLatestPrerunSignals date error:", latestErr.message);
+      return { date: null, signals: [] };
+    }
+
+    const date = latest?.[0]?.signal_date ?? null;
+    if (!date) return { date: null, signals: [] };
+
+    // Fetch all signals for that date
+    const { data: rows, error: rowsErr } = await supabase
+      .from("signal_outcomes")
+      .select("ticker, signal_strength, score, price_at_signal")
+      .eq("scanner", "prerun")
+      .eq("signal_date", date)
+      .order("score", { ascending: false });
+
+    if (rowsErr) {
+      console.error("[query] fetchLatestPrerunSignals rows error:", rowsErr.message);
+      return { date: null, signals: [] };
+    }
+
+    return {
+      date,
+      signals: (rows ?? []).map((r) => ({
+        ticker: r.ticker,
+        verdict: r.signal_strength ?? "WATCH",
+        score: r.score ?? 0,
+        price: r.price_at_signal,
+      })),
+    };
+  } catch (err) {
+    console.error("[query] fetchLatestPrerunSignals exception:", err);
+    return { date: null, signals: [] };
+  }
+}
+
 /** Fetch last N sector history entries where sector entered a specific quadrant. */
 export async function fetchQuadrantEntries(
   sector: string,

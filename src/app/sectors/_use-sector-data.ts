@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { SectorRotationResult, SectorRotationScore, ExtensionTier } from "@/lib/sector-rotation/types";
-import type { PreRunResult } from "@/lib/prerun/types";
+import type { PreRunResult, PreRunStockData, PreRunScores, PreRunVerdict } from "@/lib/prerun/types";
 import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
 import type { DailySnapshot, SectorSnapshot } from "@/lib/sector-rotation/history";
 import {
@@ -98,6 +98,33 @@ export function useSectorData() {
     const { results, date } = loadScanResultsWithDate();
     setScanResults(results);
     setScanResultsDate(date);
+
+    // If localStorage data is >24h old or missing, fetch latest from server
+    const ageMs = date ? Date.now() - new Date(date).getTime() : Infinity;
+    if (ageMs > 24 * 60 * 60 * 1000) {
+      fetch("/api/prerun/latest")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((result: { date: string | null; signals: { ticker: string; verdict: string; score: number; price: number }[] } | null) => {
+          if (!result?.date || !result.signals?.length) return;
+          // Only use server data if it's newer than localStorage
+          const serverDate = new Date(result.date + "T21:30:00Z").toISOString();
+          if (date && new Date(date) >= new Date(serverDate)) return;
+          const shims: PreRunResult[] = result.signals.map((s) => ({
+            data: {
+              ticker: s.ticker, companyName: "", currentPrice: s.price,
+              pctFromAth: null, shortFloat: null, daysToEarnings: null,
+              nextEarningsDate: null, relativeStrength20d: null,
+            } as PreRunStockData,
+            gates: { gate1: true, gate2: true, gate3: true },
+            scores: { finalScore: s.score } as PreRunScores,
+            verdict: s.verdict as PreRunVerdict,
+            patternMatch: null,
+          }));
+          setScanResults(shims);
+          setScanResultsDate(serverDate);
+        })
+        .catch(() => {});
+    }
   }, []);
 
   // Build stock list per sector with RS Accel (only sectors with stocks)
