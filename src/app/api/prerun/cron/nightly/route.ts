@@ -211,6 +211,10 @@ export async function GET(request: NextRequest) {
       price_at_signal: r.data.currentPrice ?? 0,
       signal_strength: r.verdict,
       score: r.scores.finalScore,
+      days_to_earnings: r.data.daysToEarnings ?? null,
+      next_earnings_date: r.data.nextEarningsDate ?? null,
+      relative_strength_20d: r.data.relativeStrength20d != null
+        ? Math.round(r.data.relativeStrength20d * 100) / 100 : null,
     }));
     await recordSignalBatch(signalRecords).catch(() => {});
 

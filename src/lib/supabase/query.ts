@@ -344,7 +344,7 @@ export async function fetchCompletedSignals(
 /** Fetch the most recent nightly prerun scan signals from signal_outcomes. */
 export async function fetchLatestPrerunSignals(): Promise<{
   date: string | null;
-  signals: { ticker: string; verdict: string; score: number; price: number }[];
+  signals: { ticker: string; verdict: string; score: number; price: number; daysToEarnings: number | null; nextEarningsDate: string | null; rs20d: number | null }[];
 }> {
   try {
     const supabase = await createClient();
@@ -369,7 +369,7 @@ export async function fetchLatestPrerunSignals(): Promise<{
     // Fetch all signals for that date
     const { data: rows, error: rowsErr } = await supabase
       .from("signal_outcomes")
-      .select("ticker, signal_strength, score, price_at_signal")
+      .select("ticker, signal_strength, score, price_at_signal, days_to_earnings, next_earnings_date, relative_strength_20d")
       .eq("scanner", "prerun")
       .eq("signal_date", date)
       .order("score", { ascending: false });
@@ -386,6 +386,9 @@ export async function fetchLatestPrerunSignals(): Promise<{
         verdict: r.signal_strength ?? "WATCH",
         score: r.score ?? 0,
         price: r.price_at_signal,
+        daysToEarnings: r.days_to_earnings ?? null,
+        nextEarningsDate: r.next_earnings_date ?? null,
+        rs20d: r.relative_strength_20d ?? null,
       })),
     };
   } catch (err) {

@@ -1979,7 +1979,7 @@ export default function RotationTrackerPage() {
   const [expandedSector, setExpandedSector] = useState<string | null>(null);
   const [showAllSectors, setShowAllSectors] = useState(false);
   const [heatmapSectors, setHeatmapSectors] = useState<SectorRotationScore[] | null>(null);
-  const [prerunServerMap, setPrerunServerMap] = useState<Map<string, { verdict: string; score: number }>>(new Map());
+  const [prerunServerMap, setPrerunServerMap] = useState<Map<string, { verdict: string; score: number; daysToEarnings: number | null; nextEarningsDate: string | null; rs20d: number | null }>>(new Map());
 
   // Fetch prerun data from server when localStorage is empty
   useEffect(() => {
@@ -1987,10 +1987,10 @@ export default function RotationTrackerPage() {
     if (local.length > 0) return; // localStorage has data, no need for server fallback
     fetch("/api/prerun/latest")
       .then((res) => res.ok ? res.json() : null)
-      .then((result: { date: string | null; signals: { ticker: string; verdict: string; score: number }[] } | null) => {
+      .then((result: { date: string | null; signals: { ticker: string; verdict: string; score: number; daysToEarnings: number | null; nextEarningsDate: string | null; rs20d: number | null }[] } | null) => {
         if (!result?.signals?.length) return;
-        const map = new Map<string, { verdict: string; score: number }>();
-        for (const s of result.signals) map.set(s.ticker, { verdict: s.verdict, score: s.score });
+        const map = new Map<string, { verdict: string; score: number; daysToEarnings: number | null; nextEarningsDate: string | null; rs20d: number | null }>();
+        for (const s of result.signals) map.set(s.ticker, { verdict: s.verdict, score: s.score, daysToEarnings: s.daysToEarnings, nextEarningsDate: s.nextEarningsDate, rs20d: s.rs20d });
         setPrerunServerMap(map);
       })
       .catch(() => {});
@@ -2074,9 +2074,9 @@ export default function RotationTrackerPage() {
           if (!preRun && !serverData) return s;
           return {
             ...s,
-            daysToEarnings: preRun?.data.daysToEarnings ?? s.daysToEarnings,
-            nextEarningsDate: preRun?.data.nextEarningsDate ?? s.nextEarningsDate,
-            rs20d: s.rs20d ?? preRun?.data.relativeStrength20d ?? null,
+            daysToEarnings: preRun?.data.daysToEarnings ?? serverData?.daysToEarnings ?? s.daysToEarnings,
+            nextEarningsDate: preRun?.data.nextEarningsDate ?? serverData?.nextEarningsDate ?? s.nextEarningsDate,
+            rs20d: s.rs20d ?? preRun?.data.relativeStrength20d ?? serverData?.rs20d ?? null,
             verdict: preRun?.verdict ?? serverData?.verdict ?? null,
             finalScore: preRun?.scores.finalScore ?? serverData?.score ?? null,
           };

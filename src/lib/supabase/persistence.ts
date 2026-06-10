@@ -21,6 +21,9 @@ export interface SignalRecord {
   target2?: number;
   target3?: number;
   invalidation?: number;
+  days_to_earnings?: number | null;
+  next_earnings_date?: string | null; // YYYY-MM-DD
+  relative_strength_20d?: number | null;
 }
 
 export interface SIHistoryRecord {
