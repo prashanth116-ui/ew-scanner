@@ -1123,63 +1123,63 @@ function StockPerformanceTable({
         </div>
       ) : (
       <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-xs">
         <thead>
-          <tr className="border-b border-[#2a2a2a] text-left text-xs text-[#888]">
-            <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("symbol")} aria-sort={stockAriaSort("symbol")}>
+          <tr className="border-b border-[#2a2a2a] text-left text-[10px] text-[#888]">
+            <th className="cursor-pointer px-1.5 py-1.5 select-none hover:text-white" onClick={() => handleSort("symbol")} aria-sort={stockAriaSort("symbol")}>
               Symbol<SortArrow col="symbol" />
             </th>
             {sectorMap && (
-              <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("sector")} aria-sort={stockAriaSort("sector")}>
+              <th className="cursor-pointer px-1.5 py-1.5 select-none hover:text-white" onClick={() => handleSort("sector")} aria-sort={stockAriaSort("sector")}>
                 Sector<SortArrow col="sector" />
               </th>
             )}
-            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("phase")} aria-sort={stockAriaSort("phase")}>
+            <th className="cursor-pointer px-1.5 py-1.5 text-center select-none hover:text-white" onClick={() => handleSort("phase")} aria-sort={stockAriaSort("phase")}>
               Phase<SortArrow col="phase" />
             </th>
-            <th className="cursor-pointer px-3 py-2 select-none hover:text-white" onClick={() => handleSort("name")} aria-sort={stockAriaSort("name")}>
+            <th className="cursor-pointer px-1.5 py-1.5 select-none hover:text-white" onClick={() => handleSort("name")} aria-sort={stockAriaSort("name")}>
               Name<SortArrow col="name" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("action")} aria-sort={stockAriaSort("action")}>
+            <th className="cursor-pointer px-1.5 py-1.5 text-center select-none hover:text-white" onClick={() => handleSort("action")} aria-sort={stockAriaSort("action")}>
               Action<SortArrow col="action" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("priceAtRotationStart")} aria-sort={stockAriaSort("priceAtRotationStart")}>
-              Start Price<SortArrow col="priceAtRotationStart" />
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("priceAtRotationStart")} aria-sort={stockAriaSort("priceAtRotationStart")}>
+              Start<SortArrow col="priceAtRotationStart" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("priceNow")} aria-sort={stockAriaSort("priceNow")}>
-              Current<SortArrow col="priceNow" />
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("priceNow")} aria-sort={stockAriaSort("priceNow")}>
+              Now<SortArrow col="priceNow" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("dailyChangePct")} aria-sort={stockAriaSort("dailyChangePct")}>
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("dailyChangePct")} aria-sort={stockAriaSort("dailyChangePct")}>
               Today<SortArrow col="dailyChangePct" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("performancePct")} aria-sort={stockAriaSort("performancePct")}>
-              % Change<SortArrow col="performancePct" />
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("performancePct")} aria-sort={stockAriaSort("performancePct")}>
+              %Chg<SortArrow col="performancePct" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("vsEtf")} aria-sort={stockAriaSort("vsEtf")}>
-              vs ETF<SortArrow col="vsEtf" />
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("vsEtf")} aria-sort={stockAriaSort("vsEtf")}>
+              vsETF<SortArrow col="vsEtf" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("aboveSma50")} aria-sort={stockAriaSort("aboveSma50")}>
-              &gt;50MA<SortArrow col="aboveSma50" />
+            <th className="cursor-pointer px-1.5 py-1.5 text-center select-none hover:text-white" onClick={() => handleSort("aboveSma50")} aria-sort={stockAriaSort("aboveSma50")}>
+              50MA<SortArrow col="aboveSma50" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("volumeVsAvg")} aria-sort={stockAriaSort("volumeVsAvg")}>
-              Vol vs Avg<SortArrow col="volumeVsAvg" />
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("volumeVsAvg")} aria-sort={stockAriaSort("volumeVsAvg")}>
+              Vol<SortArrow col="volumeVsAvg" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("rs20d")} aria-sort={stockAriaSort("rs20d")} title="20-day relative strength vs market. Positive = outperforming over 20 days.">
-              RS 20d<SortArrow col="rs20d" />
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("rs20d")} aria-sort={stockAriaSort("rs20d")} title="20-day relative strength vs market. Positive = outperforming over 20 days.">
+              RS20<SortArrow col="rs20d" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("trendAccel")} aria-sort={stockAriaSort("trendAccel")} title="Short-term trend vs long-term trend (% from 50MA minus % from 200MA). Positive = accelerating uptrend.">
-              Trend Accel<SortArrow col="trendAccel" />
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("trendAccel")} aria-sort={stockAriaSort("trendAccel")} title="Short-term trend vs long-term trend (% from 50MA minus % from 200MA). Positive = accelerating uptrend.">
+              TrAcc<SortArrow col="trendAccel" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("rsAcceleration")} aria-sort={stockAriaSort("rsAcceleration")} title="Relative strength acceleration vs sector ETF (5d vs 20d). Positive = gaining ground vs sector recently.">
-              Sector RS<SortArrow col="rsAcceleration" />
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("rsAcceleration")} aria-sort={stockAriaSort("rsAcceleration")} title="Relative strength acceleration vs sector ETF (5d vs 20d). Positive = gaining ground vs sector recently.">
+              SecRS<SortArrow col="rsAcceleration" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("earnings")} aria-sort={stockAriaSort("earnings")}>
-              Earnings<SortArrow col="earnings" />
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("earnings")} aria-sort={stockAriaSort("earnings")}>
+              Earn<SortArrow col="earnings" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-center select-none hover:text-white" onClick={() => handleSort("verdict")} aria-sort={stockAriaSort("verdict")} title="Pre-run scan verdict">
+            <th className="cursor-pointer px-1.5 py-1.5 text-center select-none hover:text-white" onClick={() => handleSort("verdict")} aria-sort={stockAriaSort("verdict")} title="Pre-run scan verdict">
               Verdict<SortArrow col="verdict" />
             </th>
-            <th className="cursor-pointer px-3 py-2 text-right select-none hover:text-white" onClick={() => handleSort("finalScore")} aria-sort={stockAriaSort("finalScore")} title="Pre-run scan score (0-41)">
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("finalScore")} aria-sort={stockAriaSort("finalScore")} title="Pre-run scan score (0-41)">
               Score<SortArrow col="finalScore" />
             </th>
           </tr>
@@ -1193,44 +1193,44 @@ function StockPerformanceTable({
                   isTurnaroundSetup ? "border-l-2 border-l-amber-400 bg-amber-500/5" : stockAction.rowBg
                 }`}
               >
-                <td className="px-3 py-2 font-mono font-semibold text-white">
+                <td className="px-1.5 py-1.5 font-mono font-semibold text-white whitespace-nowrap">
                   <span>{s.symbol}</span>
                   {isTurnaroundSetup && (
-                    <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
-                      Turnaround
+                    <span className="ml-1 inline-flex items-center gap-0.5 rounded bg-amber-500/15 px-1 py-0.5 text-[9px] font-medium text-amber-400">
+                      TA
                     </span>
                   )}
                 </td>
                 {sectorMap && (
-                  <td className="px-3 py-2 text-xs text-[#a0a0a0]">{sectorMap.get(s.symbol) ?? ""}</td>
+                  <td className="px-1.5 py-1.5 text-[#a0a0a0] truncate max-w-[80px]">{sectorMap.get(s.symbol) ?? ""}</td>
                 )}
-                <td className="px-3 py-2 text-center">
+                <td className="px-1.5 py-1.5 text-center">
                   <RotationPhaseBadge stock={s} />
                 </td>
-                <td className="px-3 py-2 text-[#ccc]">{s.name}</td>
-                <td className="px-3 py-2 text-center">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${stockAction.badgeClass}`}>
+                <td className="px-1.5 py-1.5 text-[#ccc] truncate max-w-[100px]" title={s.name}>{s.name}</td>
+                <td className="px-1.5 py-1.5 text-center">
+                  <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${stockAction.badgeClass}`}>
                     {stockAction.label}
                   </span>
                 </td>
-                <td className="px-3 py-2 text-right text-[#888]">
+                <td className="px-1.5 py-1.5 text-right text-[#888]">
                   ${s.priceAtRotationStart.toFixed(2)}
                 </td>
-                <td className="px-3 py-2 text-right text-white">
+                <td className="px-1.5 py-1.5 text-right text-white">
                   ${s.priceNow.toFixed(2)}
                 </td>
-                <td className={`px-3 py-2 text-right font-semibold ${perfColor(s.dailyChangePct ?? 0)}`}>
+                <td className={`px-1.5 py-1.5 text-right font-semibold ${perfColor(s.dailyChangePct ?? 0)}`}>
                   {(s.dailyChangePct ?? 0) > 0 ? "+" : ""}
                   {(s.dailyChangePct ?? 0).toFixed(1)}%
                 </td>
-                <td className={`px-3 py-2 text-right font-semibold ${perfColor(s.performancePct)}`}>
+                <td className={`px-1.5 py-1.5 text-right font-semibold ${perfColor(s.performancePct)}`}>
                   {s.performancePct > 0 ? "+" : ""}
                   {s.performancePct.toFixed(1)}%
                 </td>
-                <td className={`px-3 py-2 text-right font-mono text-xs ${vsEtf >= 0 ? "text-green-400" : "text-red-400"}`}>
+                <td className={`px-1.5 py-1.5 text-right font-mono ${vsEtf >= 0 ? "text-green-400" : "text-red-400"}`}>
                   {vsEtf >= 0 ? "+" : ""}{vsEtf.toFixed(1)}%
                 </td>
-                <td className="px-3 py-2 text-center">
+                <td className="px-1.5 py-1.5 text-center">
                   <span
                     className={`inline-block h-2 w-2 rounded-full ${
                       s.aboveSma50 ? "bg-green-400" : "bg-red-400"
@@ -1239,27 +1239,27 @@ function StockPerformanceTable({
                     aria-label={s.aboveSma50 ? "Above 50d SMA" : "Below 50d SMA"}
                   />
                 </td>
-                <td className="px-3 py-2 text-right text-[#888]">
+                <td className="px-1.5 py-1.5 text-right text-[#888]">
                   {s.volumeVsAvg.toFixed(1)}x
                 </td>
-                <td className={`px-3 py-2 text-right font-mono text-xs ${s.rs20d == null ? "text-[#444]" : s.rs20d > 0 ? "text-green-400" : s.rs20d < 0 ? "text-red-400" : "text-[#666]"}`}>
+                <td className={`px-1.5 py-1.5 text-right font-mono ${s.rs20d == null ? "text-[#444]" : s.rs20d > 0 ? "text-green-400" : s.rs20d < 0 ? "text-red-400" : "text-[#666]"}`}>
                   {s.rs20d != null ? `${s.rs20d > 0 ? "+" : ""}${s.rs20d.toFixed(1)}%` : "-"}
                 </td>
-                <td className={`px-3 py-2 text-right font-mono text-xs ${s.trendAccel == null ? "text-[#444]" : s.trendAccel > 0 ? "text-green-400" : s.trendAccel < 0 ? "text-red-400" : "text-[#666]"}`}>
+                <td className={`px-1.5 py-1.5 text-right font-mono ${s.trendAccel == null ? "text-[#444]" : s.trendAccel > 0 ? "text-green-400" : s.trendAccel < 0 ? "text-red-400" : "text-[#666]"}`}>
                   {s.trendAccel != null ? `${s.trendAccel > 0 ? "+" : ""}${s.trendAccel.toFixed(2)}` : "-"}
                 </td>
-                <td className={`px-3 py-2 text-right font-mono text-xs ${(s.rsAcceleration ?? 0) > 0 ? "text-green-400" : (s.rsAcceleration ?? 0) < 0 ? "text-red-400" : "text-[#666]"}`}>
+                <td className={`px-1.5 py-1.5 text-right font-mono ${(s.rsAcceleration ?? 0) > 0 ? "text-green-400" : (s.rsAcceleration ?? 0) < 0 ? "text-red-400" : "text-[#666]"}`}>
                   {(s.rsAcceleration ?? 0) > 0 ? "+" : ""}{(s.rsAcceleration ?? 0).toFixed(2)}
-                  <span className={`ml-1 ${s.rsImproving ? "text-green-400" : "text-red-400"}`} title={`RS Delta: ${(s.rsDelta ?? 0) > 0 ? "+" : ""}${(s.rsDelta ?? 0).toFixed(2)}`}>
+                  <span className={`ml-0.5 ${s.rsImproving ? "text-green-400" : "text-red-400"}`} title={`RS Delta: ${(s.rsDelta ?? 0) > 0 ? "+" : ""}${(s.rsDelta ?? 0).toFixed(2)}`}>
                     {s.rsImproving ? "\u25B2" : "\u25BC"}
                   </span>
                 </td>
-                <td className={`px-3 py-2 text-right text-xs ${s.daysToEarnings == null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}`} title={s.nextEarningsDate ?? undefined}>
+                <td className={`px-1.5 py-1.5 text-right ${s.daysToEarnings == null ? "text-[#444]" : s.daysToEarnings <= 7 ? "text-red-400" : s.daysToEarnings <= 14 ? "text-amber-400" : s.daysToEarnings <= 30 ? "text-[#a0a0a0]" : "text-[#555]"}`} title={s.nextEarningsDate ?? undefined}>
                   {s.daysToEarnings != null ? `${s.daysToEarnings}d` : "-"}
                 </td>
-                <td className="px-3 py-2 text-center">
+                <td className="px-1.5 py-1.5 text-center">
                   {s.verdict ? (
-                    <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
+                    <span className={`inline-flex rounded-full border px-1 py-0.5 text-[9px] font-semibold ${
                       s.verdict === "PRIORITY" || s.verdict === "PRIORITY BUY" ? "bg-green-500/15 text-green-400 border-green-500/30" :
                       s.verdict === "KEEP" ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" :
                       s.verdict === "WATCH" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
@@ -1267,7 +1267,7 @@ function StockPerformanceTable({
                     }`}>{s.verdict}</span>
                   ) : <span className="text-[#444]">-</span>}
                 </td>
-                <td className="px-3 py-2 text-right text-[#666]">{s.finalScore != null && s.finalScore > 0 ? s.finalScore : "-"}</td>
+                <td className="px-1.5 py-1.5 text-right text-[#666]">{s.finalScore != null && s.finalScore > 0 ? s.finalScore : "-"}</td>
               </tr>
             );
           })}
