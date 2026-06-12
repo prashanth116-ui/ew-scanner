@@ -329,13 +329,16 @@ export default function SectorGuidePage() {
 
           <SubSection title="Panel 5: Sub-Sector Leading Indicators">
             <p>
-              Four sub-sector ETFs that act as early warning signals for their parent GICS sectors:
+              Seven sub-sector ETFs that act as early warning signals for their parent GICS sectors:
             </p>
             <ul className="list-disc pl-4 space-y-1">
               <li><strong className="text-white">KRE (Regional Banks)</strong> &mdash; Leads Financials (XLF). Regional banks are more rate-sensitive than large banks.</li>
               <li><strong className="text-white">XHB (Homebuilders)</strong> &mdash; Leads Consumer Discretionary (XLY). Housing is one of the most rate-sensitive sectors.</li>
               <li><strong className="text-white">XRT (Retail)</strong> &mdash; Leads Consumer Discretionary (XLY). Consumer spending trends show up here first.</li>
               <li><strong className="text-white">IYT (Transports)</strong> &mdash; Leads Industrials (XLI). Transport stocks often signal economic acceleration or deceleration before broad industrials.</li>
+              <li><strong className="text-white">ITA (Aerospace &amp; Defense)</strong> &mdash; Leads Industrials (XLI). Defense spending is counter-cyclical; tracks government contracts and geopolitical catalysts.</li>
+              <li><strong className="text-white">ARKX (Space &amp; Defense Innovation)</strong> &mdash; Thematic signal for emerging aerospace and space tech trends including launch, satellite, and orbital services.</li>
+              <li><strong className="text-white">UFO (Space)</strong> &mdash; Pure-play space industry signal covering launch providers, satellite operators, and orbital infrastructure.</li>
             </ul>
             <p className="mt-2">
               Each sub-sector shows the same composite score, quadrant, and trend arrow as the main sectors. When a sub-sector leads its parent

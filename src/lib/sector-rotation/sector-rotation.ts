@@ -2,7 +2,7 @@
  * Sector Rotation Tracker engine.
  * SERVER-ONLY: Used by /api/sector-rotation route + nightly cron.
  *
- * 23 ETFs: 14 GICS sectors + 4 sub-sectors + 5 cross-asset.
+ * 26 ETFs: 14 GICS sectors + 7 sub-sectors + 5 cross-asset.
  * Composite scoring: momentum, acceleration, Mansfield RS, CMF, breadth, smart money.
  * Dynamic weight redistribution when pre-run data is missing.
  */
