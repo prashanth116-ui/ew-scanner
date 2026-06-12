@@ -245,7 +245,7 @@ export default function SectorGuidePage() {
               </table>
             </div>
             <p className="mt-2 text-[10px] text-[#555]">
-              ~1,400 stocks classified across 14 GICS sectors, plus 4 sub-sector ETFs (KRE, XHB, XRT, IYT) and 5 cross-asset ETFs (GLD, TLT, HYG, EEM, UUP) &mdash; 23 ETFs total.
+              ~1,400 stocks classified across 14 GICS sectors, plus 7 sub-sector ETFs (KRE, XHB, XRT, IYT, ITA, ARKX, UFO) and 5 cross-asset ETFs (GLD, TLT, HYG, EEM, UUP) &mdash; 26 ETFs total.
               Semiconductors and Biotech are split from Technology and Health Care respectively for finer granularity.
             </p>
           </SubSection>

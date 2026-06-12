@@ -1658,6 +1658,86 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     ],
   },
 
+  // ── Space & Defense ──
+
+  {
+    id: "aerospace-defense",
+    displayName: "Aerospace & Defense",
+    etf: "ITA",
+    description: "Defense contractors, aerospace, military equipment",
+    category: "sub_sector",
+    stocks: [
+      { symbol: "RTX", name: "RTX Corporation" },
+      { symbol: "BA", name: "Boeing" },
+      { symbol: "LMT", name: "Lockheed Martin" },
+      { symbol: "GD", name: "General Dynamics" },
+      { symbol: "NOC", name: "Northrop Grumman" },
+      { symbol: "HWM", name: "Howmet Aerospace" },
+      { symbol: "TDG", name: "TransDigm Group" },
+      { symbol: "LHX", name: "L3Harris Technologies" },
+      { symbol: "HII", name: "Huntington Ingalls" },
+      { symbol: "AXON", name: "Axon Enterprise" },
+      { symbol: "TXT", name: "Textron" },
+      { symbol: "CW", name: "Curtiss-Wright" },
+      { symbol: "HEI", name: "HEICO" },
+      { symbol: "LDOS", name: "Leidos Holdings" },
+      { symbol: "BWXT", name: "BWX Technologies" },
+      { symbol: "KTOS", name: "Kratos Defense" },
+      { symbol: "AVAV", name: "AeroVironment" },
+      { symbol: "RKLB", name: "Rocket Lab USA" },
+      { symbol: "MRCY", name: "Mercury Systems" },
+      { symbol: "ACHR", name: "Archer Aviation" },
+    ],
+  },
+  {
+    id: "space-defense-innovation",
+    displayName: "Space & Defense Innovation",
+    etf: "ARKX",
+    description: "Space exploration, satellite tech, aerospace innovation",
+    category: "sub_sector",
+    stocks: [
+      { symbol: "RKLB", name: "Rocket Lab USA" },
+      { symbol: "KTOS", name: "Kratos Defense" },
+      { symbol: "IRDM", name: "Iridium Communications" },
+      { symbol: "AVAV", name: "AeroVironment" },
+      { symbol: "BWXT", name: "BWX Technologies" },
+      { symbol: "LHX", name: "L3Harris Technologies" },
+      { symbol: "LUNR", name: "Intuitive Machines" },
+      { symbol: "BA", name: "Boeing" },
+      { symbol: "LMT", name: "Lockheed Martin" },
+      { symbol: "RTX", name: "RTX Corporation" },
+      { symbol: "ASTS", name: "AST SpaceMobile" },
+      { symbol: "RDW", name: "Redwire" },
+      { symbol: "MNTS", name: "Momentus" },
+      { symbol: "SPCE", name: "Virgin Galactic" },
+      { symbol: "GILT", name: "Gilat Satellite" },
+    ],
+  },
+  {
+    id: "space",
+    displayName: "Space",
+    etf: "UFO",
+    description: "Pure-play space industry, satellites, orbital operations",
+    category: "sub_sector",
+    stocks: [
+      { symbol: "RKLB", name: "Rocket Lab USA" },
+      { symbol: "ASTS", name: "AST SpaceMobile" },
+      { symbol: "LUNR", name: "Intuitive Machines" },
+      { symbol: "IRDM", name: "Iridium Communications" },
+      { symbol: "BKSY", name: "BlackSky Technology" },
+      { symbol: "RDW", name: "Redwire" },
+      { symbol: "GSAT", name: "Globalstar" },
+      { symbol: "VSAT", name: "ViaSat" },
+      { symbol: "MNTS", name: "Momentus" },
+      { symbol: "SPCE", name: "Virgin Galactic" },
+      { symbol: "GILT", name: "Gilat Satellite" },
+      { symbol: "KTOS", name: "Kratos Defense" },
+      { symbol: "AVAV", name: "AeroVironment" },
+      { symbol: "SPIR", name: "Spire Global" },
+      { symbol: "PL", name: "Planet Labs" },
+    ],
+  },
+
   // ── Cross-Asset Money Flow ETFs ──
 
   {
@@ -1736,7 +1816,7 @@ export function getEquitySectors(): SectorDefinition[] {
   return SECTOR_UNIVERSE.filter((s) => s.category === "gics_sector");
 }
 
-/** Get sub-sector leading indicators (KRE, XHB, XRT, IYT). */
+/** Get sub-sector leading indicators (KRE, XHB, XRT, IYT, ITA, ARKX, UFO). */
 export function getSubSectors(): SectorDefinition[] {
   return SECTOR_UNIVERSE.filter((s) => s.category === "sub_sector");
 }
