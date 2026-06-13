@@ -1,6 +1,6 @@
 /** Shared API utilities: input validation, origin checks, ticker sanitization. */
 
-const TICKER_RE = /^[A-Z0-9.]{1,10}$/;
+const TICKER_RE = /^[A-Z0-9.=]{1,10}$/;
 
 /** Validate and sanitize a stock ticker symbol. Returns null if invalid. */
 export function validateTicker(raw: unknown): string | null {

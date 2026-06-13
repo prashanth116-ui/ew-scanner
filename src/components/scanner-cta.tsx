@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Zap, TrendingUp, BarChart3, Layers, Crosshair, Flame } from "lucide-react";
+import { Activity, Zap, TrendingUp, BarChart3, Layers, Crosshair, Flame, Waves } from "lucide-react";
 
 const scanners = [
   {
@@ -68,9 +68,19 @@ const scanners = [
     icon: Flame,
     color: "#ef4444",
   },
+  {
+    id: "wave",
+    href: "/wave-scanner",
+    title: "Wave Scanner",
+    description:
+      "Elliott Wave impulse detection with ABC corrections, Fibonacci retracement targets, and confidence scoring across futures and equities.",
+    icon: Waves,
+    color: "#8b5cf6",
+  },
 ];
 
 function getCurrentScannerId(pathname: string): string {
+  if (pathname.startsWith("/wave-scanner")) return "wave";
   if (pathname.startsWith("/catalyst")) return "catalyst";
   if (pathname.startsWith("/strat")) return "strat";
   if (pathname.startsWith("/confluence")) return "confluence";

@@ -15,6 +15,7 @@ const scannerTabs = [
   { id: "strat", label: "The Strat", href: "/strat" },
   { id: "earnings", label: "Earnings", href: "/earnings" },
   { id: "catalyst", label: "AI Radar", href: "/catalyst" },
+  { id: "wave", label: "Wave Scanner", href: "/wave-scanner" },
 ] as const;
 
 const subPages: Record<string, { href: string; label: string }[]> = {
@@ -62,9 +63,14 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/catalyst", label: "Scanner" },
     { href: "/catalyst/guide", label: "Guide" },
   ],
+  wave: [
+    { href: "/wave-scanner", label: "Scanner" },
+    { href: "/wave-scanner/guide", label: "Guide" },
+  ],
 };
 
-function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" | "strat" | "earnings" | "catalyst" {
+function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" | "strat" | "earnings" | "catalyst" | "wave" {
+  if (pathname.startsWith("/wave-scanner")) return "wave";
   if (pathname.startsWith("/catalyst")) return "catalyst";
   if (pathname.startsWith("/earnings")) return "earnings";
   if (pathname.startsWith("/strat")) return "strat";
@@ -92,6 +98,7 @@ export function Nav() {
     if (href === "/strat") return pathname === "/strat";
     if (href === "/earnings") return pathname === "/earnings";
     if (href === "/catalyst") return pathname === "/catalyst";
+    if (href === "/wave-scanner") return pathname === "/wave-scanner";
     return pathname.startsWith(href);
   };
 
@@ -246,7 +253,7 @@ export function Nav() {
                   {item.label}
                 </Link>
               ))}
-              {tab.id !== "catalyst" && (
+              {tab.id !== "wave" && (
                 <div className="mx-3 my-2 h-px bg-[#2a2a2a]" aria-hidden="true" />
               )}
             </div>
