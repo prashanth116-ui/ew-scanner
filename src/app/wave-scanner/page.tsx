@@ -1252,8 +1252,8 @@ function WaveScannerPage() {
 
         {/* Near-Miss Results Table */}
         {mode === "nearMiss" && filteredNearMisses.length > 0 ? (
-          <div className="rounded-lg border border-[#2a2a2a]">
-            <table className="w-full text-sm table-fixed">
+          <div className="rounded-lg border border-[#2a2a2a] overflow-x-auto">
+            <table className="text-sm table-fixed" style={{minWidth:"60rem"}}>
               <thead>
                 <tr className="border-b border-[#2a2a2a] bg-[#141414]">
                   <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-8">#</th>
@@ -1318,7 +1318,7 @@ function WaveScannerPage() {
               <thead>
                 <tr className="border-b border-[#2a2a2a] bg-[#141414]">
                   <th className="px-1.5 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"2.5rem"}}>#</th>
-                  <th className="px-1.5 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] cursor-pointer hover:text-white" onClick={() => toggleSort("ticker")}>
+                  <th className="px-1.5 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] cursor-pointer hover:text-white" style={{width:"5rem"}} onClick={() => toggleSort("ticker")}>
                     Symbol {sortKey === "ticker" && <span className="text-[#8b5cf6]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
                   </th>
                   <th className="px-1.5 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"3.5rem"}}>Dir</th>
