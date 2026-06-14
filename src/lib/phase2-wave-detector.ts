@@ -648,7 +648,8 @@ export function checkInvalidation(
   series: PriceSeries,
 ): void {
   const w1Price = pattern.waves.w1.price;
-  const start = pattern.waves.w0.barIndex;
+  // Only check the W4 region (W3→W5) where Rule 3 violations can occur
+  const start = pattern.waves.w3.barIndex;
   const end = pattern.waves.w5.barIndex;
 
   for (let i = start; i <= end; i++) {
