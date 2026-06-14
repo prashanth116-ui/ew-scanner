@@ -20,15 +20,18 @@ export function computeConfluenceScore(
   weights: ConfluenceWeights,
   thresholds: ConfluenceThresholds,
   trending?: boolean,
+  waveNorm?: number | null,
 ): ConfluenceScores {
   const ew = ewNorm ?? 0;
   const squeeze = squeezeNorm ?? 0;
   const prerun = prerunNorm ?? 0;
   const sector = sectorNorm ?? 0;
+  const wave = waveNorm ?? 0;
 
-  const totalWeight = weights.ew + weights.squeeze + weights.prerun + weights.sector;
+  const waveWeight = weights.wave ?? 0;
+  const totalWeight = weights.ew + weights.squeeze + weights.prerun + weights.sector + waveWeight;
   let confluenceScore = totalWeight > 0
-    ? (ew * weights.ew + squeeze * weights.squeeze + prerun * weights.prerun + sector * weights.sector) / totalWeight
+    ? (ew * weights.ew + squeeze * weights.squeeze + prerun * weights.prerun + sector * weights.sector + wave * waveWeight) / totalWeight
     : 0;
 
   // Trending bonus: 5% boost (capped at 1.0) for stocks improving vs previous scan
@@ -41,12 +44,15 @@ export function computeConfluenceScore(
   if (squeezeNorm !== null && squeeze >= thresholds.squeeze) passCount++;
   if (prerunNorm !== null && prerun >= thresholds.prerun) passCount++;
   if (sectorNorm !== null && sector >= thresholds.sector) passCount++;
+  const waveThreshold = thresholds.wave ?? 0.30;
+  if (waveNorm !== null && waveNorm !== undefined && wave >= waveThreshold) passCount++;
 
   return {
     ewNormalized: ew,
     squeezeNormalized: squeeze,
     prerunNormalized: prerun,
     sectorNormalized: sector,
+    waveNormalized: wave,
     confluenceScore: Math.round(confluenceScore * 1000) / 1000,
     passCount,
   };
@@ -61,6 +67,7 @@ export function classifySignal(scores: ConfluenceScores): ConfluenceSignal {
   if (scores.passCount >= 2) return "weak";
   return "none";
 }
+
 
 /**
  * Temporal alignment bonus.

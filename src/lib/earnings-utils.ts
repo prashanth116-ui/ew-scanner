@@ -337,6 +337,7 @@ export function enrichScanResults(
         trend: sectorInfo.trend,
       } : null,
       stratResult: r.stratResult ?? null,
+      waveResult: r.waveResult ?? null,
       stratBonus: stratBonus !== 0 ? stratBonus : undefined,
       momentumQuality,
     };

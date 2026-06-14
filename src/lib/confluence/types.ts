@@ -5,8 +5,9 @@ export interface ConfluenceScores {
   squeezeNormalized: number;  // 0-1 (squeezeScore / 100)
   prerunNormalized: number;   // 0-1 (finalScore / 24)
   sectorNormalized: number;   // 0-1 (compositeScore / 100)
+  waveNormalized: number;     // 0-1 (Phase 2 wave score / 100)
   confluenceScore: number;    // 0-1 weighted blend
-  passCount: number;          // 0-4 scanners above threshold
+  passCount: number;          // 0-5 scanners above threshold
 }
 
 export interface ConfluenceWeights {
@@ -14,6 +15,7 @@ export interface ConfluenceWeights {
   squeeze: number;  // 0-100
   prerun: number;   // 0-100
   sector: number;   // 0-100
+  wave: number;     // 0-100
 }
 
 export interface ConfluenceThresholds {
@@ -21,6 +23,7 @@ export interface ConfluenceThresholds {
   squeeze: number;  // 0-1
   prerun: number;   // 0-1
   sector: number;   // 0-1
+  wave: number;     // 0-1
 }
 
 export type ConfluenceSignal = "strong" | "moderate" | "weak" | "none";
@@ -74,6 +77,14 @@ export interface ConfluenceStratResult {
   shortTrigger: number | null;
 }
 
+export interface ConfluenceWaveResult {
+  score: number;        // 0-100
+  label: string;
+  direction: 1 | -1 | null;
+  confidence: number;
+  hasCorrection: boolean;
+}
+
 export interface ConfluenceResult {
   ticker: string;
   name: string;
@@ -86,6 +97,7 @@ export interface ConfluenceResult {
   prerunResult: ConfluencePreRunResult | null;
   sectorResult: ConfluenceSectorResult | null;
   stratResult: ConfluenceStratResult | null;
+  waveResult: ConfluenceWaveResult | null;
   stratBonus?: number;
   trending?: boolean;
   momentumQuality?: {
@@ -105,6 +117,7 @@ export interface ConfluenceScanResult {
   squeezeResult: ConfluenceSqueezeResult | null;
   prerunResult: ConfluencePreRunResult | null;
   stratResult: ConfluenceStratResult | null;
+  waveResult: ConfluenceWaveResult | null;
 }
 
 export interface ConfluencePreset {
@@ -117,10 +130,11 @@ export interface ConfluencePreset {
 }
 
 export const DEFAULT_WEIGHTS: ConfluenceWeights = {
-  ew: 30,
-  squeeze: 25,
-  prerun: 25,
+  ew: 25,
+  squeeze: 20,
+  prerun: 20,
   sector: 20,
+  wave: 15,
 };
 
 export const DEFAULT_THRESHOLDS: ConfluenceThresholds = {
@@ -128,43 +142,44 @@ export const DEFAULT_THRESHOLDS: ConfluenceThresholds = {
   squeeze: 0.30,
   prerun: 0.40,
   sector: 0.40,
+  wave: 0.30,
 };
 
 export const CONFLUENCE_PRESETS: ConfluencePreset[] = [
   {
     name: "Max Conviction",
     shortName: "Max Conviction",
-    description: "All 4 scanners must pass with high thresholds. Fewest results, highest quality.",
-    weights: { ew: 30, squeeze: 25, prerun: 25, sector: 20 },
-    thresholds: { ew: 0.50, squeeze: 0.40, prerun: 0.50, sector: 0.50 },
+    description: "All scanners must pass with high thresholds. Fewest results, highest quality.",
+    weights: { ew: 25, squeeze: 20, prerun: 20, sector: 20, wave: 15 },
+    thresholds: { ew: 0.50, squeeze: 0.40, prerun: 0.50, sector: 0.50, wave: 0.40 },
     recommended: true,
   },
   {
     name: "Value Squeeze",
     shortName: "Value Squeeze",
     description: "Emphasizes EW positioning and squeeze setup. Best for beaten-down stocks with short pressure.",
-    weights: { ew: 35, squeeze: 35, prerun: 20, sector: 10 },
-    thresholds: { ew: 0.45, squeeze: 0.35, prerun: 0.30, sector: 0.20 },
+    weights: { ew: 30, squeeze: 30, prerun: 15, sector: 10, wave: 15 },
+    thresholds: { ew: 0.45, squeeze: 0.35, prerun: 0.30, sector: 0.20, wave: 0.25 },
   },
   {
     name: "Catalyst Driven",
     shortName: "Catalyst",
     description: "Weights Pre-Run catalysts and sector momentum. Best for event-driven setups.",
-    weights: { ew: 20, squeeze: 15, prerun: 40, sector: 25 },
-    thresholds: { ew: 0.30, squeeze: 0.20, prerun: 0.45, sector: 0.40 },
+    weights: { ew: 15, squeeze: 15, prerun: 35, sector: 20, wave: 15 },
+    thresholds: { ew: 0.30, squeeze: 0.20, prerun: 0.45, sector: 0.40, wave: 0.25 },
   },
   {
     name: "Wide Net",
     shortName: "Wide Net",
     description: "Low thresholds, equal weights. Casts widest net for initial screening.",
-    weights: { ew: 25, squeeze: 25, prerun: 25, sector: 25 },
-    thresholds: { ew: 0.25, squeeze: 0.20, prerun: 0.25, sector: 0.25 },
+    weights: { ew: 20, squeeze: 20, prerun: 20, sector: 20, wave: 20 },
+    thresholds: { ew: 0.25, squeeze: 0.20, prerun: 0.25, sector: 0.25, wave: 0.20 },
   },
   {
     name: "Rotation Opportunities",
     shortName: "Rotation",
     description: "Stocks in IMPROVING sectors. Heavy sector weight to surface rotation plays early.",
-    weights: { ew: 20, squeeze: 15, prerun: 25, sector: 40 },
-    thresholds: { ew: 0.25, squeeze: 0.15, prerun: 0.30, sector: 0.50 },
+    weights: { ew: 15, squeeze: 15, prerun: 20, sector: 35, wave: 15 },
+    thresholds: { ew: 0.25, squeeze: 0.15, prerun: 0.30, sector: 0.50, wave: 0.20 },
   },
 ];

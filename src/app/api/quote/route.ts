@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     // MTF: Fetch daily data alongside weekly
     if (mtf && detail) {
       try {
-        const dailyUrl = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?interval=1d&range=1y&includePrePost=false`;
+        const dailyUrl = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?interval=1d&range=2y&includePrePost=false`;
         const dailyRes = await fetch(dailyUrl, {
           headers: {
             "User-Agent":

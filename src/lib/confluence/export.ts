@@ -17,6 +17,7 @@ export async function exportConfluenceToExcel(
     "Squeeze Score": Math.round(r.scores.squeezeNormalized * 100),
     "Pre-Run Score": Math.round(r.scores.prerunNormalized * 100),
     "Sector Score": Math.round(r.scores.sectorNormalized * 100),
+    "Wave Score": Math.round((r.scores.waveNormalized ?? 0) * 100),
     "EW Confidence": r.ewResult?.confidenceTier ?? "-",
     "EW Fib Zone": r.ewResult?.fibDepthLabel ?? "-",
     "EW Wave": r.ewResult?.wavePosition ?? "-",
@@ -31,6 +32,9 @@ export async function exportConfluenceToExcel(
     "Strat TFC": r.stratResult?.tfcAlignment ?? "-",
     "Strat Direction": r.stratResult?.actionDirection ?? "-",
     "Strat Bonus": r.stratBonus != null ? `${(r.stratBonus * 100).toFixed(0)}%` : "-",
+    "Wave Pattern": r.waveResult?.label ?? "-",
+    "Wave Confidence": r.waveResult?.confidence ?? "-",
+    "Wave Correction": r.waveResult?.hasCorrection ? "Yes" : "-",
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);

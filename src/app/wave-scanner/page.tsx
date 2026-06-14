@@ -11,13 +11,20 @@ import {
   ChevronRight,
   Download,
   Waves,
+  Save,
+  Trash2,
+  Plus,
+  Star,
+  List,
 } from "lucide-react";
 import type { PriceSeries } from "@/lib/ew-types";
 import {
   detectElliottWaves,
+  detectNearMisses,
   type P2ImpulsePattern,
   type P2ElliottWaveResult,
   type P2FibTargets,
+  type P2NearMissPattern,
   waveLength,
 } from "@/lib/phase2-wave-detector";
 import {
@@ -26,6 +33,7 @@ import {
   findNearestFib,
   type WaveScannerMode,
   type WaveScanResult,
+  type NearMissScanResult,
 } from "@/lib/phase2-scanner-modes";
 import { WAVE_UNIVERSES, WAVE_UNIVERSE_KEYS, type WaveUniverseKey } from "@/data/phase2-universes";
 import { ScannerCTA } from "@/components/scanner-cta";
@@ -39,6 +47,20 @@ import { loadFromCache, saveToCache } from "@/lib/scan-cache";
 import { CopyButton } from "@/components/copy-button";
 import { StalenessLabel } from "@/components/staleness-label";
 import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { WaveSparkline } from "@/components/wave-sparkline";
+import {
+  loadWatchlists,
+  saveWatchlist,
+  deleteWatchlist,
+  addTickerToWatchlist,
+  type P2Watchlist,
+} from "@/lib/phase2-watchlist";
+import {
+  loadSavedScans,
+  saveScan,
+  deleteScan,
+  type P2SavedScan,
+} from "@/lib/phase2-saved-scans";
 
 const ACCENT = "#8b5cf6"; // purple for wave scanner
 const BATCH_SIZE = 15;
@@ -82,6 +104,41 @@ function formatPrice(price: number): string {
   return price.toFixed(2);
 }
 
+// Grouped result: one per ticker, best pattern first, extras in additionalPatterns
+interface GroupedResult {
+  ticker: string;
+  name: string;
+  sector?: string;
+  currentPrice: number;
+  best: WaveScanResult;
+  additionalPatterns: WaveScanResult[];
+  patternCount: number;
+}
+
+function groupResultsByTicker(results: WaveScanResult[]): GroupedResult[] {
+  const map = new Map<string, WaveScanResult[]>();
+  for (const r of results) {
+    const existing = map.get(r.ticker);
+    if (existing) existing.push(r);
+    else map.set(r.ticker, [r]);
+  }
+
+  const groups: GroupedResult[] = [];
+  for (const [ticker, patterns] of map) {
+    patterns.sort((a, b) => b.pattern.confidence - a.pattern.confidence);
+    groups.push({
+      ticker,
+      name: patterns[0].name,
+      sector: patterns[0].sector,
+      currentPrice: patterns[0].currentPrice,
+      best: patterns[0],
+      additionalPatterns: patterns.slice(1),
+      patternCount: patterns.length,
+    });
+  }
+  return groups;
+}
+
 // ── Page wrapper ──
 
 export default function WaveScannerPageWrapper() {
@@ -113,6 +170,7 @@ function WaveScannerPage() {
   const [scannedCount, setScannedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [rawResults, setRawResults] = useState<WaveScanResult[]>([]);
+  const [nearMissResults, setNearMissResults] = useState<NearMissScanResult[]>([]);
   const scanAbort = useRef<AbortController | null>(null);
 
   // Ticker search
@@ -132,10 +190,24 @@ function WaveScannerPage() {
   // Expanded rows
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
-  // Load cache on mount
+  // Watchlists
+  const [watchlists, setWatchlists] = useState<P2Watchlist[]>([]);
+  const [selectedWatchlist, setSelectedWatchlist] = useState<string>("");
+  const [newWatchlistName, setNewWatchlistName] = useState("");
+  const [addToWatchlistId, setAddToWatchlistId] = useState<string>("");
+  const [deleteWlConfirm, setDeleteWlConfirm] = useState<string | null>(null);
+
+  // Saved scans
+  const [savedScans, setSavedScans] = useState<P2SavedScan[]>([]);
+  const [saveScanName, setSaveScanName] = useState("");
+  const [deleteScConfirm, setDeleteScConfirm] = useState<string | null>(null);
+
+  // Load cache, watchlists, saved scans on mount
   useEffect(() => {
     const cached = loadFromCache<WaveScanResult[]>(CACHE_KEY, CACHE_TTL);
     if (cached && cached.length > 0) setRawResults(cached);
+    setWatchlists(loadWatchlists());
+    setSavedScans(loadSavedScans());
   }, []);
 
   useEffect(() => {
@@ -152,15 +224,15 @@ function WaveScannerPage() {
     setScales(timeframe === "weekly" ? [3, 5, 8] : [4, 8, 16]);
   }, [timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Filter + sort results
+  // Filter + sort results (non near-miss modes)
   const filtered = useMemo(() => {
+    if (mode === "nearMiss") return [];
     return rawResults.filter((r) => {
       if (manualTickers.has(r.ticker)) return true;
       if (r.pattern.confidence < minConfidence) return false;
       if (directionFilter === "bull" && r.pattern.direction !== 1) return false;
       if (directionFilter === "bear" && r.pattern.direction !== -1) return false;
 
-      // Mode filtering (basic — detailed mode filtering happens at scan time)
       switch (mode) {
         case "activeImpulse":
           if (r.pattern.correction !== null) return false;
@@ -181,31 +253,45 @@ function WaveScannerPage() {
     });
   }, [rawResults, mode, minConfidence, directionFilter, correctionTypeFilter, manualTickers]);
 
-  const sorted = useMemo(() => {
-    const arr = [...filtered];
+  // Group by ticker
+  const grouped = useMemo(() => groupResultsByTicker(filtered), [filtered]);
+
+  const sortedGroups = useMemo(() => {
+    const arr = [...grouped];
     arr.sort((a, b) => {
       let cmp = 0;
+      const ar = a.best, br = b.best;
       switch (sortKey) {
         case "confidence":
-          cmp = a.pattern.confidence - b.pattern.confidence;
+          cmp = ar.pattern.confidence - br.pattern.confidence;
           break;
         case "direction":
-          cmp = a.pattern.direction - b.pattern.direction;
+          cmp = ar.pattern.direction - br.pattern.direction;
           break;
         case "scale":
-          cmp = a.pattern.scale - b.pattern.scale;
+          cmp = ar.pattern.scale - br.pattern.scale;
           break;
         case "ticker":
           cmp = a.ticker.localeCompare(b.ticker);
           break;
         case "impulseRange":
-          cmp = (a.fibTargets?.impulseRange ?? 0) - (b.fibTargets?.impulseRange ?? 0);
+          cmp = (ar.fibTargets?.impulseRange ?? 0) - (br.fibTargets?.impulseRange ?? 0);
           break;
       }
       return sortDir === "desc" ? -cmp : cmp;
     });
     return arr;
-  }, [filtered, sortKey, sortDir]);
+  }, [grouped, sortKey, sortDir]);
+
+  // Filtered near-miss results
+  const filteredNearMisses = useMemo(() => {
+    if (mode !== "nearMiss") return [];
+    return nearMissResults.filter((r) => {
+      if (directionFilter === "bull" && r.direction !== 1) return false;
+      if (directionFilter === "bear" && r.direction !== -1) return false;
+      return true;
+    });
+  }, [nearMissResults, mode, directionFilter]);
 
   // Stats
   const stats = useMemo(() => {
@@ -216,8 +302,8 @@ function WaveScannerPage() {
       if (r.pattern.correction) withCorrection++;
       if (r.pattern.confidence >= 70) highConf++;
     }
-    return { total: filtered.length, rawTotal: rawResults.length, bull, bear, withCorrection, highConf };
-  }, [rawResults, filtered]);
+    return { total: filtered.length, rawTotal: rawResults.length, bull, bear, withCorrection, highConf, nearMissCount: nearMissResults.length };
+  }, [rawResults, filtered, nearMissResults]);
 
   // ── Fetch OHLCV and detect waves for a single ticker ──
   const scanTicker = useCallback(async (
@@ -265,6 +351,54 @@ function WaveScannerPage() {
     return results;
   }, []);
 
+  // ── Scan ticker for near-misses ──
+  const scanTickerNearMiss = useCallback(async (
+    ticker: string,
+    name: string,
+    sector: string | undefined,
+    tf: Timeframe,
+    scaleList: number[],
+    signal: AbortSignal,
+  ): Promise<NearMissScanResult[]> => {
+    const url = `/api/quote?ticker=${encodeURIComponent(ticker)}&detail=1${tf === "daily" ? "&mtf=1" : ""}`;
+    const res = await fetch(url, { signal });
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const series: PriceSeries | null = tf === "weekly"
+      ? data.series ?? null
+      : data.dailySeries ?? null;
+
+    if (!series || !series.close || series.close.length < 20) return [];
+
+    const currentPrice = series.close[series.close.length - 1];
+    const nearMisses = detectNearMisses(series, scaleList);
+
+    return nearMisses.map((nm) => ({
+      ticker,
+      name,
+      sector,
+      direction: nm.direction,
+      scale: nm.scale,
+      failingRule: nm.failingRule,
+      rulesPassed: nm.ruleResults.passCount,
+      w0Price: nm.waves.w0.price,
+      w5Price: nm.waves.w5.price,
+      currentPrice,
+    }));
+  }, []);
+
+  // ── Get tickers to scan (universe or watchlist) ──
+  const getTickersToScan = useCallback(() => {
+    if (selectedWatchlist) {
+      const wl = watchlists.find((w) => w.id === selectedWatchlist);
+      if (wl) {
+        return wl.tickers.map((t) => ({ symbol: t, name: t, sector: undefined }));
+      }
+    }
+    return WAVE_UNIVERSES[universe] ?? [];
+  }, [universe, selectedWatchlist, watchlists]);
+
   // ── Batch scan ──
   const runScan = useCallback(async (force = false) => {
     scanAbort.current?.abort();
@@ -275,17 +409,20 @@ function WaveScannerPage() {
     setScanning(true);
     setScannedCount(0);
 
-    const tickers = WAVE_UNIVERSES[universe] ?? [];
+    const tickers = getTickersToScan();
     if (tickers.length === 0) {
       setScanning(false);
       return;
     }
 
+    const isNearMissMode = mode === "nearMiss";
+
     // Incremental: reuse cached results unless force
     let existingResults: WaveScanResult[] = [];
+    let existingNearMisses: NearMissScanResult[] = [];
     let tickersToScan = tickers;
 
-    if (!force && rawResults.length > 0) {
+    if (!force && !isNearMissMode && rawResults.length > 0) {
       const cachedSymbols = new Set(rawResults.map((r) => r.ticker));
       tickersToScan = tickers.filter((t) => !cachedSymbols.has(t.symbol));
       const universeSymbols = new Set(tickers.map((t) => t.symbol));
@@ -297,54 +434,70 @@ function WaveScannerPage() {
         setProgress("");
         return;
       }
-    } else {
+    } else if (!isNearMissMode) {
       setRawResults([]);
+    }
+
+    if (isNearMissMode) {
+      setNearMissResults([]);
     }
 
     setTotalCount(tickersToScan.length);
 
     const newResults: WaveScanResult[] = [];
+    const newNearMisses: NearMissScanResult[] = [];
 
     for (let i = 0; i < tickersToScan.length; i += BATCH_SIZE) {
       if (signal.aborted) break;
       const batch = tickersToScan.slice(i, i + BATCH_SIZE);
       setProgress(`Scanning ${Math.min(i + BATCH_SIZE, tickersToScan.length)}/${tickersToScan.length}...`);
 
-      // Fetch batch in parallel
-      const promises = batch.map((t) =>
-        scanTicker(t.symbol, t.name, t.sector, timeframe, scales, signal).catch(() => [] as WaveScanResult[])
-      );
+      if (isNearMissMode) {
+        const promises = batch.map((t) =>
+          scanTickerNearMiss(t.symbol, t.name, t.sector, timeframe, scales, signal).catch(() => [] as NearMissScanResult[])
+        );
+        const batchResults = await Promise.all(promises);
+        for (const results of batchResults) {
+          newNearMisses.push(...results);
+        }
+        setNearMissResults([...newNearMisses]);
+      } else {
+        const promises = batch.map((t) =>
+          scanTicker(t.symbol, t.name, t.sector, timeframe, scales, signal).catch(() => [] as WaveScanResult[])
+        );
+        const batchResults = await Promise.all(promises);
+        for (const results of batchResults) {
+          newResults.push(...results);
+        }
 
-      const batchResults = await Promise.all(promises);
-      for (const results of batchResults) {
-        newResults.push(...results);
+        setScannedCount(Math.min(i + BATCH_SIZE, tickersToScan.length));
+        const newSymbols = new Set(newResults.map((r) => r.ticker));
+        const merged = [
+          ...existingResults.filter((r) => !newSymbols.has(r.ticker)),
+          ...newResults,
+        ];
+        setRawResults(merged);
       }
 
       setScannedCount(Math.min(i + BATCH_SIZE, tickersToScan.length));
-      // Live merge
-      const newSymbols = new Set(newResults.map((r) => r.ticker));
-      const merged = [
-        ...existingResults.filter((r) => !newSymbols.has(r.ticker)),
-        ...newResults,
-      ];
-      setRawResults(merged);
 
       if (i + BATCH_SIZE < tickersToScan.length && !signal.aborted) {
         await new Promise((r) => setTimeout(r, BATCH_DELAY));
       }
     }
 
-    // Final merge
-    const newSymbols = new Set(newResults.map((r) => r.ticker));
-    const finalResults = [
-      ...existingResults.filter((r) => !newSymbols.has(r.ticker)),
-      ...newResults,
-    ];
-    setRawResults(finalResults);
-    saveToCache(CACHE_KEY, finalResults);
+    if (!isNearMissMode) {
+      const newSymbols = new Set(newResults.map((r) => r.ticker));
+      const finalResults = [
+        ...existingResults.filter((r) => !newSymbols.has(r.ticker)),
+        ...newResults,
+      ];
+      setRawResults(finalResults);
+      saveToCache(CACHE_KEY, finalResults);
+    }
     setScanning(false);
     setProgress("");
-  }, [universe, rawResults, timeframe, scales, scanTicker]);
+  }, [universe, rawResults, timeframe, scales, scanTicker, scanTickerNearMiss, mode, getTickersToScan]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -414,7 +567,7 @@ function WaveScannerPage() {
       setScales((prev) => {
         if (prev.includes(s)) {
           const next = prev.filter((v) => v !== s);
-          return next.length === 0 ? [s] : next; // must keep at least one
+          return next.length === 0 ? [s] : next;
         }
         return [...prev, s].sort((a, b) => a - b);
       });
@@ -432,6 +585,7 @@ function WaveScannerPage() {
     setMinConfidence(40);
     setDirectionFilter("all");
     setCorrectionTypeFilter("all");
+    setSelectedWatchlist("");
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Export CSV
@@ -443,7 +597,8 @@ function WaveScannerPage() {
       "Current Price", "Nearest Fib", "Fib Distance %",
     ].join(",");
 
-    const rows = sorted.map((r) => {
+    const allResults = sortedGroups.flatMap((g) => [g.best, ...g.additionalPatterns]);
+    const rows = allResults.map((r) => {
       const fibs = r.fibTargets;
       const f382 = fibs?.levels.find((l) => l.ratio === 0.382);
       const f50 = fibs?.levels.find((l) => l.ratio === 0.5);
@@ -477,12 +632,13 @@ function WaveScannerPage() {
     a.download = `wave-scan-${timeframe}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [sorted, timeframe]);
+  }, [sortedGroups, timeframe]);
 
   // Export Excel
   const exportExcel = useCallback(async () => {
     const XLSX = await import("xlsx");
-    const data = sorted.map((r) => {
+    const allResults = sortedGroups.flatMap((g) => [g.best, ...g.additionalPatterns]);
+    const data = allResults.map((r) => {
       const fibs = r.fibTargets;
       const f382 = fibs?.levels.find((l) => l.ratio === 0.382);
       const f50 = fibs?.levels.find((l) => l.ratio === 0.5);
@@ -512,9 +668,74 @@ function WaveScannerPage() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Wave Scan");
     XLSX.writeFile(wb, `wave-scan-${timeframe}-${new Date().toISOString().slice(0, 10)}.xlsx`);
-  }, [sorted, timeframe]);
+  }, [sortedGroups, timeframe]);
 
-  const universeCount = useMemo(() => (WAVE_UNIVERSES[universe] ?? []).length, [universe]);
+  // Watchlist handlers
+  const handleCreateWatchlist = useCallback(() => {
+    const name = newWatchlistName.trim();
+    if (!name) return;
+    const wl = saveWatchlist(name);
+    if (wl) {
+      setWatchlists(loadWatchlists());
+      setNewWatchlistName("");
+    }
+  }, [newWatchlistName]);
+
+  const handleDeleteWatchlist = useCallback((id: string) => {
+    deleteWatchlist(id);
+    setWatchlists(loadWatchlists());
+    if (selectedWatchlist === id) setSelectedWatchlist("");
+    setDeleteWlConfirm(null);
+  }, [selectedWatchlist]);
+
+  const handleAddToWatchlist = useCallback((ticker: string) => {
+    if (!addToWatchlistId) return;
+    addTickerToWatchlist(addToWatchlistId, ticker);
+    setWatchlists(loadWatchlists());
+  }, [addToWatchlistId]);
+
+  // Saved scan handlers
+  const handleSaveScan = useCallback(() => {
+    const name = saveScanName.trim();
+    if (!name || rawResults.length === 0) return;
+    saveScan({
+      name,
+      mode,
+      universe,
+      timeframe,
+      scales: [...scales],
+      minConfidence,
+      direction: directionFilter,
+      results: rawResults,
+    });
+    setSavedScans(loadSavedScans());
+    setSaveScanName("");
+  }, [saveScanName, rawResults, mode, universe, timeframe, scales, minConfidence, directionFilter]);
+
+  const handleLoadSavedScan = useCallback((scan: P2SavedScan) => {
+    setRawResults(scan.results);
+    setMode(scan.mode);
+    setTimeframe(scan.timeframe as Timeframe);
+    setMinConfidence(scan.minConfidence);
+    setDirectionFilter(scan.direction as "bull" | "bear" | "all");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDeleteScan = useCallback((id: string) => {
+    deleteScan(id);
+    setSavedScans(loadSavedScans());
+    setDeleteScConfirm(null);
+  }, []);
+
+  const universeCount = useMemo(() => {
+    if (selectedWatchlist) {
+      const wl = watchlists.find((w) => w.id === selectedWatchlist);
+      return wl?.tickers.length ?? 0;
+    }
+    return (WAVE_UNIVERSES[universe] ?? []).length;
+  }, [universe, selectedWatchlist, watchlists]);
+
+  const hasResults = mode === "nearMiss" ? nearMissResults.length > 0 : rawResults.length > 0;
+  const displayCount = mode === "nearMiss" ? filteredNearMisses.length : sortedGroups.length;
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1800px] mx-auto">
@@ -554,8 +775,12 @@ function WaveScannerPage() {
                 <span className="text-[#666]">{universeCount}</span>
               </div>
               <select
-                value={universe}
-                onChange={(e) => setUniverse(e.target.value)}
+                value={selectedWatchlist ? "__watchlist__" : universe}
+                onChange={(e) => {
+                  if (e.target.value === "__watchlist__") return;
+                  setSelectedWatchlist("");
+                  setUniverse(e.target.value);
+                }}
                 className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#8b5cf6] focus:outline-none"
               >
                 {WAVE_UNIVERSE_KEYS.map((k) => (
@@ -604,22 +829,24 @@ function WaveScannerPage() {
               </div>
             </div>
 
-            {/* Min Confidence */}
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-[#a0a0a0]">Min Confidence</span>
-                <span className="text-white">{minConfidence}%</span>
+            {/* Min Confidence (hidden for near-miss) */}
+            {mode !== "nearMiss" && (
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Min Confidence</span>
+                  <span className="text-white">{minConfidence}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={95}
+                  step={5}
+                  value={minConfidence}
+                  onChange={(e) => setMinConfidence(Number(e.target.value))}
+                  className="w-full accent-[#8b5cf6]"
+                />
               </div>
-              <input
-                type="range"
-                min={0}
-                max={95}
-                step={5}
-                value={minConfidence}
-                onChange={(e) => setMinConfidence(Number(e.target.value))}
-                className="w-full accent-[#8b5cf6]"
-              />
-            </div>
+            )}
 
             {/* Direction */}
             <div>
@@ -715,6 +942,153 @@ function WaveScannerPage() {
             accentColor={ACCENT}
           />
         </SidebarSection>
+
+        {/* Watchlists */}
+        <SidebarSection title="Watchlists" sectionKey="watchlists" collapsed={collapsed.has("watchlists")} onToggle={toggleSection}>
+          <div className="space-y-2">
+            {watchlists.length > 0 && (
+              <div className="space-y-1">
+                {watchlists.map((wl) => (
+                  <div
+                    key={wl.id}
+                    className={`flex items-center justify-between rounded-md px-2 py-1.5 text-xs cursor-pointer transition-colors ${
+                      selectedWatchlist === wl.id
+                        ? "bg-[#8b5cf6]/15 text-[#a78bfa] border border-[#8b5cf6]/30"
+                        : "text-[#a0a0a0] hover:text-white hover:bg-[#1a1a1a] border border-transparent"
+                    }`}
+                    onClick={() => setSelectedWatchlist(selectedWatchlist === wl.id ? "" : wl.id)}
+                  >
+                    <span className="truncate">
+                      <Star className="h-3 w-3 inline mr-1 opacity-50" />
+                      {wl.name} ({wl.tickers.length})
+                    </span>
+                    {deleteWlConfirm === wl.id ? (
+                      <div className="flex gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteWatchlist(wl.id); }}
+                          className="text-red-400 hover:text-red-300 text-[10px]"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteWlConfirm(null); }}
+                          className="text-[#666] hover:text-white text-[10px]"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteWlConfirm(wl.id); }}
+                        className="text-[#444] hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-1">
+              <input
+                value={newWatchlistName}
+                onChange={(e) => setNewWatchlistName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateWatchlist()}
+                placeholder="New watchlist..."
+                className="flex-1 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-2 py-1 text-xs text-white placeholder-[#555] focus:border-[#8b5cf6] focus:outline-none"
+              />
+              <button
+                onClick={handleCreateWatchlist}
+                disabled={!newWatchlistName.trim()}
+                className="rounded-md border border-[#2a2a2a] px-2 py-1 text-xs text-[#666] hover:text-white hover:border-[#444] disabled:opacity-30 transition-colors"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
+            </div>
+            {watchlists.length > 0 && (
+              <div>
+                <div className="text-[10px] text-[#555] mb-1">Add results to:</div>
+                <select
+                  value={addToWatchlistId}
+                  onChange={(e) => setAddToWatchlistId(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-2 py-1 text-xs text-white focus:border-[#8b5cf6] focus:outline-none"
+                >
+                  <option value="">Select watchlist...</option>
+                  {watchlists.map((wl) => (
+                    <option key={wl.id} value={wl.id}>{wl.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </SidebarSection>
+
+        {/* Saved Scans */}
+        <SidebarSection title="Saved Scans" sectionKey="savedScans" collapsed={collapsed.has("savedScans")} onToggle={toggleSection}>
+          <div className="space-y-2">
+            {rawResults.length > 0 && !scanning && (
+              <div className="flex gap-1">
+                <input
+                  value={saveScanName}
+                  onChange={(e) => setSaveScanName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSaveScan()}
+                  placeholder="Scan name..."
+                  className="flex-1 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-2 py-1 text-xs text-white placeholder-[#555] focus:border-[#8b5cf6] focus:outline-none"
+                />
+                <button
+                  onClick={handleSaveScan}
+                  disabled={!saveScanName.trim()}
+                  className="rounded-md border border-[#2a2a2a] px-2 py-1 text-xs text-[#666] hover:text-white hover:border-[#444] disabled:opacity-30 transition-colors"
+                  title="Save current scan"
+                >
+                  <Save className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+            {savedScans.length > 0 ? (
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {savedScans.map((sc) => (
+                  <div
+                    key={sc.id}
+                    className="flex items-center justify-between rounded-md px-2 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:bg-[#1a1a1a] cursor-pointer transition-colors border border-transparent"
+                    onClick={() => handleLoadSavedScan(sc)}
+                  >
+                    <div className="truncate">
+                      <span className="text-white">{sc.name}</span>
+                      <span className="text-[#555] ml-1">({sc.results.length})</span>
+                      <p className="text-[10px] text-[#444]">{new Date(sc.savedAt).toLocaleDateString()}</p>
+                    </div>
+                    {deleteScConfirm === sc.id ? (
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteScan(sc.id); }}
+                          className="text-red-400 hover:text-red-300 text-[10px]"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteScConfirm(null); }}
+                          className="text-[#666] hover:text-white text-[10px]"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteScConfirm(sc.id); }}
+                        className="text-[#444] hover:text-red-400 transition-colors shrink-0"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-[#555]">No saved scans yet.</p>
+            )}
+          </div>
+        </SidebarSection>
       </SidebarShell>
 
       {/* ── Main Content ── */}
@@ -732,7 +1106,7 @@ function WaveScannerPage() {
         )}
 
         {/* Summary stats */}
-        {rawResults.length > 0 && (
+        {hasResults && mode !== "nearMiss" && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
             <button
               onClick={() => { setDirectionFilter("all"); setMode("activeImpulse"); }}
@@ -789,8 +1163,26 @@ function WaveScannerPage() {
           </div>
         )}
 
+        {/* Near-miss summary */}
+        {mode === "nearMiss" && nearMissResults.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+            <div className="rounded-lg border border-orange-500/20 bg-[#141414] px-4 py-3 text-left">
+              <p className="text-[10px] uppercase tracking-wider text-orange-400/60 mb-1">Near-Misses</p>
+              <p className="text-lg font-bold text-orange-400">{filteredNearMisses.length}</p>
+            </div>
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-3 text-left">
+              <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">Rules</p>
+              <p className="text-lg font-bold text-[#a78bfa]">3/4</p>
+            </div>
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-3 text-left">
+              <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">Timeframe</p>
+              <p className="text-lg font-bold text-[#a78bfa]">{timeframe === "weekly" ? "W" : "D"}</p>
+            </div>
+          </div>
+        )}
+
         {/* Sort + Export row */}
-        {sorted.length > 0 && (
+        {displayCount > 0 && mode !== "nearMiss" && (
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <span className="text-xs text-[#666]">Sort:</span>
@@ -815,7 +1207,7 @@ function WaveScannerPage() {
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <CopyButton tickers={sorted.map((r) => r.ticker)} />
+              <CopyButton tickers={sortedGroups.map((g) => g.ticker)} />
               <button
                 onClick={exportCsv}
                 className="inline-flex items-center gap-1 rounded-md border border-[#2a2a2a] px-2.5 py-1 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
@@ -836,14 +1228,75 @@ function WaveScannerPage() {
           </div>
         )}
 
-        {/* Results Table */}
-        {sorted.length > 0 ? (
+        {/* Near-Miss Results Table */}
+        {mode === "nearMiss" && filteredNearMisses.length > 0 ? (
+          <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
+            <table className="w-full text-sm" style={{ minWidth: "800px" }}>
+              <thead>
+                <tr className="border-b border-[#2a2a2a] bg-[#141414]">
+                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-8">#</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-[120px]">Symbol</th>
+                  <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[60px]">Dir</th>
+                  <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[50px]">Scale</th>
+                  <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[60px]">Rules</th>
+                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666]">Failing Rule</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[80px]">W0</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[80px]">W5</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[80px]">Price</th>
+                  {addToWatchlistId && <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[40px]"></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredNearMisses.map((r, idx) => (
+                  <tr key={`${r.ticker}-${r.scale}-${idx}`} className="border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors">
+                    <td className="px-2 py-2 text-xs text-[#666]">{idx + 1}</td>
+                    <td className="px-2 py-2">
+                      <span className="font-medium text-white">{r.ticker}</span>
+                      <span className="text-[10px] text-[#666] ml-1.5 hidden lg:inline">{r.name}</span>
+                    </td>
+                    <td className="px-2 py-2 text-center">
+                      <span className={`text-xs font-medium ${directionColor(r.direction)}`}>
+                        {directionLabel(r.direction)}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-center text-xs text-[#ccc]">{r.scale}</td>
+                    <td className="px-2 py-2 text-center">
+                      <span className="inline-flex items-center rounded-md border border-orange-500/30 bg-orange-500/15 px-2 py-0.5 text-xs font-medium text-orange-400">
+                        {r.rulesPassed}/4
+                      </span>
+                    </td>
+                    <td className="px-2 py-2">
+                      <span className="inline-flex items-center rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400">
+                        {r.failingRule}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-right text-xs text-[#ccc]">{formatPrice(r.w0Price)}</td>
+                    <td className="px-2 py-2 text-right text-xs text-[#ccc]">{formatPrice(r.w5Price)}</td>
+                    <td className="px-2 py-2 text-right text-xs font-medium text-white">{formatPrice(r.currentPrice)}</td>
+                    {addToWatchlistId && (
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          onClick={() => handleAddToWatchlist(r.ticker)}
+                          className="text-[#555] hover:text-[#a78bfa] transition-colors"
+                          title="Add to watchlist"
+                        >
+                          <Star className="h-3 w-3" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : mode !== "nearMiss" && sortedGroups.length > 0 ? (
+          /* Normal Results Table (grouped by ticker) */
           <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
             <table className="w-full text-sm" style={{ minWidth: "1100px" }}>
               <thead>
                 <tr className="border-b border-[#2a2a2a] bg-[#141414]">
                   <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-8">#</th>
-                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-[120px] cursor-pointer hover:text-white" onClick={() => toggleSort("ticker")}>
+                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-[140px] cursor-pointer hover:text-white" onClick={() => toggleSort("ticker")}>
                     Symbol {sortKey === "ticker" && <span className="text-[#8b5cf6]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
                   </th>
                   <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[60px]">Dir</th>
@@ -867,19 +1320,20 @@ function WaveScannerPage() {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((result, idx) => (
-                  <ResultRow
-                    key={`${result.ticker}-${result.pattern.scale}-${result.pattern.detectedAtBar}`}
-                    result={result}
+                {sortedGroups.map((group, idx) => (
+                  <GroupedResultRow
+                    key={group.ticker}
+                    group={group}
                     index={idx}
-                    expanded={expandedTicker === result.ticker}
+                    expanded={expandedTicker === group.ticker}
                     onToggle={setExpandedTicker}
+                    onAddToWatchlist={addToWatchlistId ? handleAddToWatchlist : undefined}
                   />
                 ))}
               </tbody>
             </table>
           </div>
-        ) : rawResults.length > 0 && !scanning ? (
+        ) : hasResults && !scanning ? (
           <div className="flex flex-col items-center justify-center py-16 text-[#666]">
             <Waves className="h-12 w-12 mb-3 opacity-30" />
             <p className="text-sm">No patterns matched the current filters.</p>
@@ -907,7 +1361,7 @@ function WaveScannerPage() {
                 <p className="text-[10px] text-[#666]">Fib Levels</p>
               </div>
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
-                <p className="text-2xl font-bold text-[#a78bfa]">4</p>
+                <p className="text-2xl font-bold text-[#a78bfa]">5</p>
                 <p className="text-[10px] text-[#666]">Modes</p>
               </div>
             </div>
@@ -926,23 +1380,26 @@ function WaveScannerPage() {
   );
 }
 
-// ── Result Row ──
+// ── Grouped Result Row ──
 
-const ResultRow = memo(function ResultRow({
-  result,
+const GroupedResultRow = memo(function GroupedResultRow({
+  group,
   index,
   expanded,
   onToggle,
+  onAddToWatchlist,
 }: {
-  result: WaveScanResult;
+  group: GroupedResult;
   index: number;
   expanded: boolean;
   onToggle: (ticker: string | null) => void;
+  onAddToWatchlist?: (ticker: string) => void;
 }) {
   const handleClick = useCallback(() => {
-    onToggle(expanded ? null : result.ticker);
-  }, [onToggle, expanded, result.ticker]);
+    onToggle(expanded ? null : group.ticker);
+  }, [onToggle, expanded, group.ticker]);
 
+  const result = group.best;
   const fibs = result.fibTargets;
   const f382 = fibs?.levels.find((l) => l.ratio === 0.382);
   const f50 = fibs?.levels.find((l) => l.ratio === 0.5);
@@ -961,8 +1418,24 @@ const ResultRow = memo(function ResultRow({
           </div>
         </td>
         <td className="px-2 py-2">
-          <span className="font-medium text-white">{result.ticker}</span>
-          <span className="text-[10px] text-[#666] ml-1.5 hidden lg:inline truncate">{result.name}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-white">{group.ticker}</span>
+            {group.patternCount > 1 && (
+              <span className="inline-flex items-center rounded-full bg-[#8b5cf6]/15 px-1.5 py-0.5 text-[9px] font-medium text-[#a78bfa] border border-[#8b5cf6]/20">
+                {group.patternCount}
+              </span>
+            )}
+            <span className="text-[10px] text-[#666] hidden lg:inline truncate">{group.name}</span>
+            {onAddToWatchlist && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onAddToWatchlist(group.ticker); }}
+                className="text-[#444] hover:text-[#a78bfa] transition-colors ml-auto shrink-0"
+                title="Add to watchlist"
+              >
+                <Star className="h-3 w-3" />
+              </button>
+            )}
+          </div>
         </td>
         <td className="px-2 py-2 text-center">
           <span className={`text-xs font-medium ${directionColor(result.pattern.direction)}`}>
@@ -1007,7 +1480,7 @@ const ResultRow = memo(function ResultRow({
       {expanded && (
         <tr className="border-b border-[#1a1a1a]">
           <td colSpan={14} className="bg-[#141414] px-4 py-4">
-            <ExpandedDetail result={result} />
+            <ExpandedDetail result={result} additionalPatterns={group.additionalPatterns} />
           </td>
         </tr>
       )}
@@ -1017,123 +1490,172 @@ const ResultRow = memo(function ResultRow({
 
 // ── Expanded Detail ──
 
-function ExpandedDetail({ result }: { result: WaveScanResult }) {
+function ExpandedDetail({ result, additionalPatterns }: { result: WaveScanResult; additionalPatterns: WaveScanResult[] }) {
   const p = result.pattern;
   const w = p.waves;
   const fibs = result.fibTargets;
   const corr = p.correction;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {/* Wave Points */}
+    <div className="space-y-4">
+      {/* Wave Sparkline */}
       <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
-        <h4 className="text-xs font-medium text-[#a0a0a0] uppercase mb-2">Wave Points</h4>
-        <div className="space-y-1 text-xs">
-          {[
-            { label: "W0", point: w.w0 },
-            { label: "W1", point: w.w1 },
-            { label: "W2", point: w.w2 },
-            { label: "W3", point: w.w3 },
-            { label: "W4", point: w.w4 },
-            { label: "W5", point: w.w5 },
-          ].map(({ label, point }) => (
-            <div key={label} className="flex justify-between">
-              <span className="text-[#666]">{label}</span>
-              <span className="text-white">
-                {formatPrice(point.price)}
-                <span className="text-[#555] ml-1">bar {point.barIndex}</span>
+        <h4 className="text-xs font-medium text-[#a0a0a0] uppercase mb-2">Wave Structure</h4>
+        <WaveSparkline pattern={p} width={400} height={100} />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Wave Points */}
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
+          <h4 className="text-xs font-medium text-[#a0a0a0] uppercase mb-2">Wave Points</h4>
+          <div className="space-y-1 text-xs">
+            {[
+              { label: "W0", point: w.w0 },
+              { label: "W1", point: w.w1 },
+              { label: "W2", point: w.w2 },
+              { label: "W3", point: w.w3 },
+              { label: "W4", point: w.w4 },
+              { label: "W5", point: w.w5 },
+            ].map(({ label, point }) => (
+              <div key={label} className="flex justify-between">
+                <span className="text-[#666]">{label}</span>
+                <span className="text-white">
+                  {formatPrice(point.price)}
+                  <span className="text-[#555] ml-1">bar {point.barIndex}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Enrichment */}
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
+          <h4 className="text-xs font-medium text-[#a0a0a0] uppercase mb-2">Enrichment</h4>
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between">
+              <span className="text-[#666]">Extended Wave</span>
+              <span className="text-white">W{p.extendedWave}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#666]">Alternation</span>
+              <span className={p.hasAlternation ? "text-green-400" : "text-[#555]"}>{p.hasAlternation ? "Yes" : "No"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#666]">RSI Divergence</span>
+              <span className={p.hasRsiDivergence ? "text-green-400" : "text-[#555]"}>{p.hasRsiDivergence ? "Yes" : "No"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#666]">Volume Confirm</span>
+              <span className={p.hasVolumeConfirmation ? "text-green-400" : "text-[#555]"}>{p.hasVolumeConfirmation ? "Yes" : "No"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#666]">W2 Retrace</span>
+              <span className="text-white">{(p.w2RetraceRatio * 100).toFixed(1)}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#666]">W4 Retrace</span>
+              <span className="text-white">{(p.w4RetraceRatio * 100).toFixed(1)}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#666]">Wave lengths</span>
+              <span className="text-white text-[10px]">
+                W1:{formatPrice(waveLength(w, 1))} W3:{formatPrice(waveLength(w, 3))} W5:{formatPrice(waveLength(w, 5))}
               </span>
             </div>
-          ))}
+          </div>
+        </div>
+
+        {/* Fibonacci & Correction */}
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
+          <h4 className="text-xs font-medium text-[#a0a0a0] uppercase mb-2">
+            {corr ? "Correction & Fibs" : "Fibonacci Targets"}
+          </h4>
+          <div className="space-y-1 text-xs">
+            {fibs && fibs.levels.map((lvl) => (
+              <div key={lvl.label} className="flex justify-between">
+                <span className="text-[#666]">{lvl.label}</span>
+                <span className="text-[#a78bfa]">{formatPrice(lvl.price)}</span>
+              </div>
+            ))}
+            {fibs && (
+              <div className="flex justify-between border-t border-[#2a2a2a] pt-1 mt-1">
+                <span className="text-[#666]">Impulse Range</span>
+                <span className="text-white">{formatPrice(fibs.impulseRange)}</span>
+              </div>
+            )}
+            {corr && (
+              <>
+                <div className="border-t border-[#2a2a2a] pt-1 mt-2" />
+                <div className="flex justify-between">
+                  <span className="text-[#666]">Type</span>
+                  <span className="text-cyan-400 capitalize">{corr.correctionType}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#666]">A</span>
+                  <span className="text-white">{formatPrice(corr.points.a.price)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#666]">B</span>
+                  <span className="text-white">{formatPrice(corr.points.b.price)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#666]">C</span>
+                  <span className="text-white">{formatPrice(corr.points.c.price)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#666]">B Retrace</span>
+                  <span className="text-white">{(corr.bRetraceRatio * 100).toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#666]">C Retrace</span>
+                  <span className="text-white">{(corr.cRetraceRatio * 100).toFixed(1)}%</span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Enrichment */}
-      <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
-        <h4 className="text-xs font-medium text-[#a0a0a0] uppercase mb-2">Enrichment</h4>
-        <div className="space-y-1 text-xs">
-          <div className="flex justify-between">
-            <span className="text-[#666]">Extended Wave</span>
-            <span className="text-white">W{p.extendedWave}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[#666]">Alternation</span>
-            <span className={p.hasAlternation ? "text-green-400" : "text-[#555]"}>{p.hasAlternation ? "Yes" : "No"}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[#666]">RSI Divergence</span>
-            <span className={p.hasRsiDivergence ? "text-green-400" : "text-[#555]"}>{p.hasRsiDivergence ? "Yes" : "No"}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[#666]">Volume Confirm</span>
-            <span className={p.hasVolumeConfirmation ? "text-green-400" : "text-[#555]"}>{p.hasVolumeConfirmation ? "Yes" : "No"}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[#666]">W2 Retrace</span>
-            <span className="text-white">{(p.w2RetraceRatio * 100).toFixed(1)}%</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[#666]">W4 Retrace</span>
-            <span className="text-white">{(p.w4RetraceRatio * 100).toFixed(1)}%</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[#666]">Wave lengths</span>
-            <span className="text-white text-[10px]">
-              W1:{formatPrice(waveLength(w, 1))} W3:{formatPrice(waveLength(w, 3))} W5:{formatPrice(waveLength(w, 5))}
-            </span>
+      {/* Additional patterns for this ticker */}
+      {additionalPatterns.length > 0 && (
+        <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
+          <h4 className="text-xs font-medium text-[#a0a0a0] uppercase mb-2">
+            Other Patterns ({additionalPatterns.length})
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2a2a2a]">
+                  <th className="px-2 py-1 text-left text-[10px] text-[#666]">Dir</th>
+                  <th className="px-2 py-1 text-center text-[10px] text-[#666]">Scale</th>
+                  <th className="px-2 py-1 text-center text-[10px] text-[#666]">Conf</th>
+                  <th className="px-2 py-1 text-left text-[10px] text-[#666]">Status</th>
+                  <th className="px-2 py-1 text-right text-[10px] text-[#666]">W0</th>
+                  <th className="px-2 py-1 text-right text-[10px] text-[#666]">W5</th>
+                  <th className="px-2 py-1 text-right text-[10px] text-[#666]">Range</th>
+                </tr>
+              </thead>
+              <tbody>
+                {additionalPatterns.map((r, i) => (
+                  <tr key={i} className="border-b border-[#1a1a1a]/50">
+                    <td className={`px-2 py-1 ${directionColor(r.pattern.direction)}`}>{directionLabel(r.pattern.direction)}</td>
+                    <td className="px-2 py-1 text-center text-[#ccc]">{r.pattern.scale}</td>
+                    <td className="px-2 py-1 text-center">
+                      <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${confidenceBg(r.pattern.confidence)}`}>
+                        {r.pattern.confidence}%
+                      </span>
+                    </td>
+                    <td className={`px-2 py-1 ${waveStatusColor(r.pattern)}`}>{waveStatusLabel(r.pattern)}</td>
+                    <td className="px-2 py-1 text-right text-[#ccc]">{formatPrice(r.pattern.waves.w0.price)}</td>
+                    <td className="px-2 py-1 text-right text-[#ccc]">{formatPrice(r.pattern.waves.w5.price)}</td>
+                    <td className="px-2 py-1 text-right text-[#ccc]">{r.fibTargets ? formatPrice(r.fibTargets.impulseRange) : "\u2014"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
-
-      {/* Fibonacci & Correction */}
-      <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
-        <h4 className="text-xs font-medium text-[#a0a0a0] uppercase mb-2">
-          {corr ? "Correction & Fibs" : "Fibonacci Targets"}
-        </h4>
-        <div className="space-y-1 text-xs">
-          {fibs && fibs.levels.map((lvl) => (
-            <div key={lvl.label} className="flex justify-between">
-              <span className="text-[#666]">{lvl.label}</span>
-              <span className="text-[#a78bfa]">{formatPrice(lvl.price)}</span>
-            </div>
-          ))}
-          {fibs && (
-            <div className="flex justify-between border-t border-[#2a2a2a] pt-1 mt-1">
-              <span className="text-[#666]">Impulse Range</span>
-              <span className="text-white">{formatPrice(fibs.impulseRange)}</span>
-            </div>
-          )}
-          {corr && (
-            <>
-              <div className="border-t border-[#2a2a2a] pt-1 mt-2" />
-              <div className="flex justify-between">
-                <span className="text-[#666]">Type</span>
-                <span className="text-cyan-400 capitalize">{corr.correctionType}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#666]">A</span>
-                <span className="text-white">{formatPrice(corr.points.a.price)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#666]">B</span>
-                <span className="text-white">{formatPrice(corr.points.b.price)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#666]">C</span>
-                <span className="text-white">{formatPrice(corr.points.c.price)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#666]">B Retrace</span>
-                <span className="text-white">{(corr.bRetraceRatio * 100).toFixed(1)}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#666]">C Retrace</span>
-                <span className="text-white">{(corr.cRetraceRatio * 100).toFixed(1)}%</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

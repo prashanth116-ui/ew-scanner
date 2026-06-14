@@ -62,7 +62,7 @@ const BATCH_SIZE = 25;
 const BATCH_DELAY = 300;
 const CONCURRENT_BATCHES = 3;
 
-type SortKey = "confluence" | "ew" | "squeeze" | "prerun" | "sector" | "strat" | "pass";
+type SortKey = "confluence" | "ew" | "squeeze" | "prerun" | "sector" | "strat" | "wave" | "pass";
 type SortDir = "asc" | "desc";
 
 const SIGNAL_COLORS: Record<ConfluenceSignal, string> = {
@@ -134,6 +134,12 @@ function generateWhyThisStock(r: ConfluenceResult): string {
     parts.push("sustained momentum quality");
   }
 
+  if (r.waveResult) {
+    if (r.waveResult.score >= 60) parts.push(`strong wave pattern (${r.waveResult.confidence}%)`);
+    else if (r.waveResult.score >= 30) parts.push(`wave pattern detected`);
+    if (r.waveResult.hasCorrection) parts.push("ABC correction complete");
+  }
+
   if (r.stratResult) {
     if (r.stratResult.signal === "ACTIONABLE") {
       const dir = r.stratResult.actionDirection;
@@ -158,6 +164,7 @@ const SCANNER_LINKS: Record<string, { href: string; label: string }> = {
   prerun: { href: "/pre-run", label: "Pre-Run Scanner" },
   sector: { href: "/sectors", label: "Sector Scanner" },
   strat: { href: "/strat", label: "Strat Scanner" },
+  wave: { href: "/wave-scanner", label: "Wave Scanner" },
 };
 
 export default function ConfluencePageWrapper() {
@@ -292,6 +299,7 @@ function ConfluencePage() {
       const squeezeNorm = r.squeezeResult ? r.squeezeResult.squeezeScore / 100 : null;
       const prerunNorm = r.prerunResult ? r.prerunResult.finalScore / 24 : null;
       const sectorNorm = sectorInfo ? sectorInfo.compositeScore / 100 : null;
+      const waveNorm = r.waveResult ? r.waveResult.score / 100 : null;
 
       // Trending: compare to previous scan
       const prevScore = prevScoresRef.current.get(r.ticker);
@@ -303,6 +311,7 @@ function ConfluencePage() {
         ewNorm, squeezeNorm, prerunNorm, sectorNorm,
         weights, thresholds,
         trending,
+        waveNorm,
       );
 
       // Apply Strat conditional modifier
@@ -333,6 +342,7 @@ function ConfluencePage() {
           trend: sectorInfo.trend,
         } : null,
         stratResult: r.stratResult ?? null,
+        waveResult: r.waveResult ?? null,
         stratBonus: stratBonus !== 0 ? stratBonus : undefined,
         trending: trending === true ? true : undefined,
         momentumQuality: rotStock ? {
@@ -475,6 +485,9 @@ function ConfluencePage() {
           break;
         case "strat":
           cmp = (a.stratResult?.normalizedScore ?? 0) - (b.stratResult?.normalizedScore ?? 0);
+          break;
+        case "wave":
+          cmp = a.scores.waveNormalized - b.scores.waveNormalized;
           break;
         case "pass":
           cmp = a.scores.passCount - b.scores.passCount;
@@ -742,10 +755,10 @@ function ConfluencePage() {
           {/* Weights */}
           <SidebarSection title="Weights" sectionKey="weights" collapsed={collapsed.has("weights")} onToggle={toggleSection}>
               <div className="space-y-3">
-                {(["ew", "squeeze", "prerun", "sector"] as const).map((key) => (
+                {(["ew", "squeeze", "prerun", "sector", "wave"] as const).map((key) => (
                   <div key={key}>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-[#a0a0a0] capitalize">{key === "ew" ? "EW" : key === "prerun" ? "Pre-Run" : key.charAt(0).toUpperCase() + key.slice(1)}</span>
+                      <span className="text-[#a0a0a0] capitalize">{key === "ew" ? "EW" : key === "prerun" ? "Pre-Run" : key === "wave" ? "Wave" : key.charAt(0).toUpperCase() + key.slice(1)}</span>
                       <span className="text-white">{weights[key]}</span>
                     </div>
                     <input
@@ -764,10 +777,10 @@ function ConfluencePage() {
 
           {/* Thresholds */}
           <SidebarSection title="Thresholds" sectionKey="thresholds" collapsed={collapsed.has("thresholds")} onToggle={toggleSection}>
-                {(["ew", "squeeze", "prerun", "sector"] as const).map((key) => (
+                {(["ew", "squeeze", "prerun", "sector", "wave"] as const).map((key) => (
                   <div key={key} className="mb-3 last:mb-0">
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-[#a0a0a0] capitalize">{key === "ew" ? "EW" : key === "prerun" ? "Pre-Run" : key.charAt(0).toUpperCase() + key.slice(1)}</span>
+                      <span className="text-[#a0a0a0] capitalize">{key === "ew" ? "EW" : key === "prerun" ? "Pre-Run" : key === "wave" ? "Wave" : key.charAt(0).toUpperCase() + key.slice(1)}</span>
                       <span className="text-white">{(thresholds[key] * 100).toFixed(0)}%</span>
                     </div>
                     <input
@@ -1723,6 +1736,7 @@ function PassDots({ scores, thresholds, stratResult }: { scores: ConfluenceScore
     { val: scores.squeezeNormalized, thresh: thresholds.squeeze, label: "Sqz", color: null },
     { val: scores.prerunNormalized, thresh: thresholds.prerun, label: "Pre", color: null },
     { val: scores.sectorNormalized, thresh: thresholds.sector, label: "Sec", color: null },
+    { val: scores.waveNormalized, thresh: thresholds.wave ?? 0.3, label: "Wave", color: null },
   ];
 
   const stratNorm = stratResult?.normalizedScore ?? 0;

@@ -11,7 +11,7 @@
 import type { P2ImpulsePattern, P2ElliottWaveResult, P2FibTargets } from "./phase2-wave-detector";
 import { getValidPatterns } from "./phase2-wave-detector";
 
-export type WaveScannerMode = "activeImpulse" | "correctionEntry" | "postCorrection" | "highConfidence";
+export type WaveScannerMode = "activeImpulse" | "correctionEntry" | "postCorrection" | "highConfidence" | "nearMiss";
 
 export interface WaveScannerModeConfig {
   id: WaveScannerMode;
@@ -55,6 +55,14 @@ export const WAVE_SCANNER_MODES: WaveScannerModeConfig[] = [
     defaultScalesWeekly: [3, 5, 8],
     defaultScalesDaily: [4, 8, 16],
   },
+  {
+    id: "nearMiss",
+    label: "Near-Miss",
+    description: "Patterns passing 3 of 4 impulse rules — one rule away from valid.",
+    defaultMinConfidence: 0,
+    defaultScalesWeekly: [3, 5, 8],
+    defaultScalesDaily: [4, 8, 16],
+  },
 ];
 
 export interface WaveScanResult {
@@ -66,6 +74,19 @@ export interface WaveScanResult {
   currentPrice: number;
   nearestFibLabel: string | null;
   nearestFibDistance: number | null; // % distance from current to nearest fib
+}
+
+export interface NearMissScanResult {
+  ticker: string;
+  name: string;
+  sector?: string;
+  direction: 1 | -1;
+  scale: number;
+  failingRule: string;
+  rulesPassed: number;
+  w0Price: number;
+  w5Price: number;
+  currentPrice: number;
 }
 
 /**
@@ -131,6 +152,10 @@ export function filterByMode(
     case "highConfidence":
       // Already filtered by minConfidence above (default 70%)
       break;
+
+    case "nearMiss":
+      // Near-misses use a separate code path — return empty from filterByMode
+      return [];
   }
 
   return patterns;

@@ -431,6 +431,131 @@ export function checkImpulseRules(
 }
 
 // =============================================================================
+// Detailed Impulse Rule Checking (for near-miss detection)
+// =============================================================================
+
+export interface P2RuleResults {
+  r1: boolean; // W2 doesn't retrace beyond W0
+  r2: boolean; // W3 not shortest
+  r3: boolean; // W4 doesn't enter W1 territory
+  r5: boolean; // W5 makes new extreme beyond W3
+  direction: 1 | -1 | 0;
+  passCount: number;
+}
+
+/**
+ * Check Elliott impulse rules individually, returning per-rule pass/fail.
+ * Same logic as checkImpulseRules but returns detailed results.
+ */
+export function checkImpulseRulesDetailed(
+  p0: P2ZigzagPoint,
+  p1: P2ZigzagPoint,
+  p2: P2ZigzagPoint,
+  p3: P2ZigzagPoint,
+  p4: P2ZigzagPoint,
+  p5: P2ZigzagPoint,
+): P2RuleResults {
+  const w0y = p5.price;
+  const w1y = p4.price;
+  const w2y = p3.price;
+  const w3y = p2.price;
+  const w4y = p1.price;
+  const w5y = p0.price;
+
+  const l1 = Math.abs(w1y - w0y);
+  const l3 = Math.abs(w3y - w2y);
+  const l5 = Math.abs(w5y - w4y);
+
+  const r2 = !(l3 <= l1 && l3 <= l5);
+
+  // Try bullish first
+  if (p0.direction === 1) {
+    const r1 = w2y > w0y;
+    const r3 = w4y > w1y;
+    const r5 = w5y > w3y;
+    const passCount = [r1, r2, r3, r5].filter(Boolean).length;
+    return { r1, r2, r3, r5, direction: 1, passCount };
+  }
+
+  if (p0.direction === -1) {
+    const r1 = w2y < w0y;
+    const r3 = w4y < w1y;
+    const r5 = w5y < w3y;
+    const passCount = [r1, r2, r3, r5].filter(Boolean).length;
+    return { r1, r2, r3, r5, direction: -1, passCount };
+  }
+
+  return { r1: false, r2, r3: false, r5: false, direction: 0, passCount: 0 };
+}
+
+export interface P2NearMissPattern {
+  direction: 1 | -1;
+  waves: P2WavePoints;
+  scale: number;
+  ruleResults: P2RuleResults;
+  failingRule: string; // human-readable name of the single failing rule
+}
+
+const RULE_NAMES: Record<string, string> = {
+  r1: "W2 retraces beyond W0",
+  r2: "W3 is shortest wave",
+  r3: "W4 overlaps W1",
+  r5: "W5 doesn't exceed W3",
+};
+
+/**
+ * Detect near-miss patterns: zigzag windows where exactly 3 of 4 impulse rules pass.
+ */
+export function detectNearMisses(
+  series: PriceSeries,
+  scales?: number[],
+): P2NearMissPattern[] {
+  const effectiveScales = scales ?? [4, 8, 16];
+  const results: P2NearMissPattern[] = [];
+
+  if (series.close.length < 10) return results;
+
+  const rsiValues = computeRsi(series.close, 14);
+  const seen = new Set<string>();
+
+  for (const scale of effectiveScales) {
+    const zigzag = buildZigzag(series, scale, rsiValues);
+    if (zigzag.length < 6) continue;
+
+    for (let i = zigzag.length - 1; i >= 5; i--) {
+      const p0 = zigzag[i];
+      const p1 = zigzag[i - 1];
+      const p2 = zigzag[i - 2];
+      const p3 = zigzag[i - 3];
+      const p4 = zigzag[i - 4];
+      const p5 = zigzag[i - 5];
+
+      const rules = checkImpulseRulesDetailed(p0, p1, p2, p3, p4, p5);
+      if (rules.passCount !== 3 || rules.direction === 0) continue;
+
+      const w0 = p5, w1 = p4, w2 = p3, w3 = p2, w4 = p1, w5 = p0;
+
+      const key = `${scale}:${w0.barIndex}:${w5.barIndex}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      // Identify which single rule fails
+      const failingKey = !rules.r1 ? "r1" : !rules.r2 ? "r2" : !rules.r3 ? "r3" : "r5";
+
+      results.push({
+        direction: rules.direction as 1 | -1,
+        waves: { w0, w1, w2, w3, w4, w5 },
+        scale,
+        ruleResults: rules,
+        failingRule: RULE_NAMES[failingKey],
+      });
+    }
+  }
+
+  return results;
+}
+
+// =============================================================================
 // Enrichment
 // =============================================================================
 

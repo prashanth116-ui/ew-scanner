@@ -10,7 +10,8 @@ import { fetchPreRunData } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
 import { fetchStratData } from "@/lib/strat/data";
 import { scoreStrat } from "@/lib/strat/scoring";
-import type { ConfluenceScanResult, ConfluenceEWResult, ConfluenceSqueezeResult, ConfluencePreRunResult, ConfluenceStratResult } from "@/lib/confluence/types";
+import type { ConfluenceScanResult, ConfluenceEWResult, ConfluenceSqueezeResult, ConfluencePreRunResult, ConfluenceStratResult, ConfluenceWaveResult } from "@/lib/confluence/types";
+import { detectElliottWaves } from "@/lib/phase2-wave-detector";
 
 const MAX_BATCH = 25;
 const FETCH_TIMEOUT = 15000;
@@ -56,18 +57,20 @@ export async function POST(request: NextRequest) {
 
     const settled = await Promise.allSettled(
       tickers.map(async (ticker): Promise<ConfluenceScanResult | null> => {
-        // Run all 4 per-ticker fetches in parallel
-        const [ewSettled, squeezeSettled, prerunSettled, stratSettled] = await Promise.allSettled([
+        // Run all 5 per-ticker fetches in parallel
+        const [ewSettled, squeezeSettled, prerunSettled, stratSettled, waveSettled] = await Promise.allSettled([
           Promise.race([fetchAndScoreEW(ticker), timeout<InternalEWResult | null>(FETCH_TIMEOUT)]),
           Promise.race([fetchAndScoreSqueeze(ticker), timeout<InternalSqueezeResult | null>(FETCH_TIMEOUT)]),
           Promise.race([fetchAndScorePreRun(ticker), timeout<InternalPreRunResult | null>(FETCH_TIMEOUT)]),
           Promise.race([fetchAndScoreStratData(ticker), timeout<ConfluenceStratResult | null>(FETCH_TIMEOUT)]),
+          Promise.race([fetchAndScoreWave(ticker), timeout<ConfluenceWaveResult | null>(FETCH_TIMEOUT)]),
         ]);
 
         const ewRaw = ewSettled.status === "fulfilled" ? ewSettled.value : null;
         const squeezeRaw = squeezeSettled.status === "fulfilled" ? squeezeSettled.value : null;
         const prerunRaw = prerunSettled.status === "fulfilled" ? prerunSettled.value : null;
         const stratResult = stratSettled.status === "fulfilled" ? stratSettled.value : null;
+        const waveResult = waveSettled.status === "fulfilled" ? waveSettled.value : null;
 
         // Need at least one scanner result
         if (!ewRaw && !squeezeRaw && !prerunRaw) return null;
@@ -107,6 +110,7 @@ export async function POST(request: NextRequest) {
           squeezeResult,
           prerunResult,
           stratResult,
+          waveResult,
         };
       })
     );
@@ -211,5 +215,48 @@ async function fetchAndScoreStratData(ticker: string): Promise<ConfluenceStratRe
     hasBroadening: result.broadenings.length > 0,
     longTrigger: result.triggers.longTrigger,
     shortTrigger: result.triggers.shortTrigger,
+  };
+}
+
+async function fetchAndScoreWave(ticker: string): Promise<ConfluenceWaveResult | null> {
+  const quoteData = await fetchEWQuoteData(ticker, { detail: true });
+  if (!quoteData?.series || quoteData.series.close.length < 20) return null;
+
+  const ewResult = detectElliottWaves(quoteData.series, [3, 5, 8]);
+  const validPatterns = ewResult.patterns.filter((p) => p.isValid);
+
+  if (validPatterns.length === 0) return null;
+
+  const best = validPatterns.reduce((a, b) => (b.confidence > a.confidence ? b : a));
+
+  let score = Math.round((best.confidence / 95) * 100);
+  const hasCorrection = best.correction !== null;
+  if (hasCorrection) score = Math.min(100, score + 10);
+
+  // Check if price is in fib entry zone
+  const currentPrice = quoteData.series.close[quoteData.series.close.length - 1];
+  const idx = ewResult.patterns.indexOf(best);
+  const fibs = ewResult.fibTargets.get(idx);
+  if (fibs && !hasCorrection) {
+    const f382 = fibs.levels.find((l) => l.ratio === 0.382);
+    const f618 = fibs.levels.find((l) => l.ratio === 0.618);
+    if (f382 && f618) {
+      const lo = Math.min(f382.price, f618.price);
+      const hi = Math.max(f382.price, f618.price);
+      if (currentPrice >= lo && currentPrice <= hi) {
+        score = Math.min(100, score + 10);
+      }
+    }
+  }
+
+  let label = `${best.direction === 1 ? "Bull" : "Bear"} impulse (${best.confidence}%)`;
+  if (hasCorrection) label += ` + ABC ${best.correction!.correctionType}`;
+
+  return {
+    score: Math.min(100, score),
+    label,
+    direction: best.direction,
+    confidence: best.confidence,
+    hasCorrection,
   };
 }
