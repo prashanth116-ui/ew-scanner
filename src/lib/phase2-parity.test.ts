@@ -256,8 +256,8 @@ describe("Phase 2 Wave Detector — parity tests", () => {
         const fibs = result.fibTargets.get(validIdx);
         expect(fibs).toBeDefined();
         if (fibs) {
-          expect(fibs.levels.length).toBe(5);
-          expect(fibs.levels.map((l) => l.ratio)).toEqual([0.236, 0.382, 0.5, 0.618, 0.786]);
+          expect(fibs.levels.length).toBe(8);
+          expect(fibs.levels.map((l) => l.ratio)).toEqual([0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.272, 1.618]);
           expect(fibs.impulseRange).toBeGreaterThan(0);
         }
       }
@@ -327,6 +327,31 @@ describe("Phase 2 Wave Detector — parity tests", () => {
       // With these values: W1=|130-100|=30, W3=|135-115|=20, W5=|160-122|=38
       // W3(20) < W1(30) AND W3(20) < W5(38) → W3 is shortest → should reject
       expect(found).toBe(false);
+    });
+
+    it("accepts when W3 equals W1 in length", () => {
+      const mkPt = (price: number, dir: 1 | -1): P2ZigzagPoint => ({
+        price,
+        barIndex: 0,
+        timestamp: 0,
+        direction: dir,
+        rsi: null,
+        volume: null,
+      });
+
+      // W1=|120-100|=20, W3=|128-108|=20, W5=|160-125|=35
+      // W3 equals W1 — should pass Rule 2 (only rejects when strictly shortest)
+      const [found, direction] = checkImpulseRules(
+        mkPt(160, 1),   // W5
+        mkPt(125, -1),  // W4
+        mkPt(128, 1),   // W3
+        mkPt(108, -1),  // W2
+        mkPt(120, 1),   // W1
+        mkPt(100, -1),  // W0
+      );
+
+      expect(found).toBe(true);
+      expect(direction).toBe(1);
     });
   });
 

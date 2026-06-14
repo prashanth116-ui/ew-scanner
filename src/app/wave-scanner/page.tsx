@@ -171,6 +171,7 @@ function WaveScannerPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [rawResults, setRawResults] = useState<WaveScanResult[]>([]);
   const [nearMissResults, setNearMissResults] = useState<NearMissScanResult[]>([]);
+  const [failedCount, setFailedCount] = useState(0);
   const scanAbort = useRef<AbortController | null>(null);
 
   // Ticker search
@@ -241,9 +242,18 @@ function WaveScannerPage() {
           if (r.pattern.correction === null) return false;
           if (correctionTypeFilter !== "all" && r.pattern.correction.correctionType !== correctionTypeFilter) return false;
           break;
-        case "correctionEntry":
-          if (r.pattern.correction !== null) return false;
+        case "correctionEntry": {
+          // Show patterns where current price is in the fib retracement zone (23.6%-78.6%)
+          const fibs = r.fibTargets;
+          if (!fibs || fibs.levels.length < 2) return false;
+          const fib236 = fibs.levels.find((l) => l.ratio === 0.236);
+          const fib786 = fibs.levels.find((l) => l.ratio === 0.786);
+          if (!fib236 || !fib786) return false;
+          const lo = Math.min(fib236.price, fib786.price);
+          const hi = Math.max(fib236.price, fib786.price);
+          if (r.currentPrice < lo || r.currentPrice > hi) return false;
           break;
+        }
         case "highConfidence":
           if (r.pattern.confidence < 70) return false;
           break;
@@ -408,6 +418,7 @@ function WaveScannerPage() {
 
     setScanning(true);
     setScannedCount(0);
+    setFailedCount(0);
 
     const tickers = getTickersToScan();
     if (tickers.length === 0) {
@@ -453,22 +464,26 @@ function WaveScannerPage() {
       setProgress(`Scanning ${Math.min(i + BATCH_SIZE, tickersToScan.length)}/${tickersToScan.length}...`);
 
       if (isNearMissMode) {
+        let batchFailed = 0;
         const promises = batch.map((t) =>
-          scanTickerNearMiss(t.symbol, t.name, t.sector, timeframe, scales, signal).catch(() => [] as NearMissScanResult[])
+          scanTickerNearMiss(t.symbol, t.name, t.sector, timeframe, scales, signal).catch(() => { batchFailed++; return [] as NearMissScanResult[]; })
         );
         const batchResults = await Promise.all(promises);
         for (const results of batchResults) {
           newNearMisses.push(...results);
         }
+        setFailedCount((prev) => prev + batchFailed);
         setNearMissResults([...newNearMisses]);
       } else {
+        let batchFailed2 = 0;
         const promises = batch.map((t) =>
-          scanTicker(t.symbol, t.name, t.sector, timeframe, scales, signal).catch(() => [] as WaveScanResult[])
+          scanTicker(t.symbol, t.name, t.sector, timeframe, scales, signal).catch(() => { batchFailed2++; return [] as WaveScanResult[]; })
         );
         const batchResults = await Promise.all(promises);
         for (const results of batchResults) {
           newResults.push(...results);
         }
+        setFailedCount((prev) => prev + batchFailed2);
 
         setScannedCount(Math.min(i + BATCH_SIZE, tickersToScan.length));
         const newSymbols = new Set(newResults.map((r) => r.ticker));
@@ -1102,6 +1117,13 @@ function WaveScannerPage() {
               label={progress}
               color="bg-purple-500"
             />
+          </div>
+        )}
+
+        {/* Failed tickers notice */}
+        {!scanning && failedCount > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-400">
+            {failedCount} ticker{failedCount > 1 ? "s" : ""} failed to scan (network/data errors)
           </div>
         )}
 

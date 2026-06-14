@@ -128,9 +128,9 @@ interface SwingPoint {
 }
 
 /**
- * Find swing highs: bar whose high is strictly greater than the highs of
+ * Find swing highs: bar whose high is greater than or equal to the highs of
  * `leftBars` bars to its left AND `rightBars` bars to its right.
- * Uses >= comparison for neighbors (i.e. neighbor must be strictly lower).
+ * Uses > comparison for neighbors (i.e. neighbor may be equal).
  */
 export function findSwingHighs(
   highs: number[],
@@ -146,18 +146,18 @@ export function findSwingHighs(
     const candidate = highs[i];
     let isSwing = true;
 
-    // Check left: all must be strictly lower
+    // Check left: all must be lower or equal
     for (let j = i - leftBars; j < i; j++) {
-      if (highs[j] >= candidate) {
+      if (highs[j] > candidate) {
         isSwing = false;
         break;
       }
     }
     if (!isSwing) continue;
 
-    // Check right: all must be strictly lower
+    // Check right: all must be lower or equal
     for (let j = i + 1; j <= i + rightBars; j++) {
-      if (highs[j] >= candidate) {
+      if (highs[j] > candidate) {
         isSwing = false;
         break;
       }
@@ -189,18 +189,18 @@ export function findSwingLows(
     const candidate = lows[i];
     let isSwing = true;
 
-    // Check left: all must be strictly higher
+    // Check left: all must be higher or equal
     for (let j = i - leftBars; j < i; j++) {
-      if (lows[j] <= candidate) {
+      if (lows[j] < candidate) {
         isSwing = false;
         break;
       }
     }
     if (!isSwing) continue;
 
-    // Check right: all must be strictly higher
+    // Check right: all must be higher or equal
     for (let j = i + 1; j <= i + rightBars; j++) {
-      if (lows[j] <= candidate) {
+      if (lows[j] < candidate) {
         isSwing = false;
         break;
       }
@@ -409,7 +409,7 @@ export function checkImpulseRules(
   const l5 = Math.abs(w5y - w4y);
 
   // Rule 2: W3 not shortest (same for bull and bear)
-  const r2 = !(l3 <= l1 && l3 <= l5);
+  const r2 = !(l3 < l1 && l3 < l5);
 
   if (p0.direction === 1) {
     // Bullish
@@ -466,7 +466,7 @@ export function checkImpulseRulesDetailed(
   const l3 = Math.abs(w3y - w2y);
   const l5 = Math.abs(w5y - w4y);
 
-  const r2 = !(l3 <= l1 && l3 <= l5);
+  const r2 = !(l3 < l1 && l3 < l5);
 
   // Try bullish first
   if (p0.direction === 1) {
@@ -535,7 +535,7 @@ export function detectNearMisses(
 
       const w0 = p5, w1 = p4, w2 = p3, w3 = p2, w4 = p1, w5 = p0;
 
-      const key = `${scale}:${w0.barIndex}:${w5.barIndex}`;
+      const key = `${scale}:${rules.direction}:${w0.barIndex}:${w5.barIndex}`;
       if (seen.has(key)) continue;
       seen.add(key);
 
@@ -568,8 +568,8 @@ export function detectNearMisses(
  *   Alternation (>10% diff):    +10
  *   RSI divergence at W5 vs W3: +10
  *   Volume at W3 > SMA:         +10
- *   W2 retrace 38-62%:           +5
- *   W4 retrace 23-50%:           +5
+ *   W2 retrace 23.6-78.6%:      +5
+ *   W4 retrace 23.6-61.8%:      +5
  *   Max:                         95
  */
 export function enrichPattern(
@@ -627,8 +627,8 @@ export function enrichPattern(
   if (pattern.hasAlternation) conf += 10;
   if (pattern.hasRsiDivergence) conf += 10;
   if (pattern.hasVolumeConfirmation) conf += 10;
-  if (pattern.w2RetraceRatio >= 0.38 && pattern.w2RetraceRatio <= 0.62) conf += 5;
-  if (pattern.w4RetraceRatio >= 0.23 && pattern.w4RetraceRatio <= 0.50) conf += 5;
+  if (pattern.w2RetraceRatio >= 0.236 && pattern.w2RetraceRatio <= 0.786) conf += 5;
+  if (pattern.w4RetraceRatio >= 0.236 && pattern.w4RetraceRatio <= 0.618) conf += 5;
 
   pattern.confidence = Math.min(conf, 95);
 }
@@ -638,19 +638,20 @@ export function enrichPattern(
 // =============================================================================
 
 /**
- * Scan bars after detection for Rule 3 violation (W4 enters W1 territory).
+ * Scan bars within the pattern range for Rule 3 violation (W4 enters W1 territory).
  *
- * For bullish: invalidated if any bar's low < W1 price.
- * For bearish: invalidated if any bar's high > W1 price.
+ * For bullish: invalidated if any bar's low < W1 price (within W0-W5 range).
+ * For bearish: invalidated if any bar's high > W1 price (within W0-W5 range).
  */
 export function checkInvalidation(
   pattern: P2ImpulsePattern,
   series: PriceSeries,
 ): void {
   const w1Price = pattern.waves.w1.price;
-  const start = pattern.detectedAtBar + 1;
+  const start = pattern.waves.w0.barIndex;
+  const end = pattern.waves.w5.barIndex;
 
-  for (let i = start; i < series.close.length; i++) {
+  for (let i = start; i <= end; i++) {
     if (pattern.direction === 1 && series.low[i] < w1Price) {
       pattern.isValid = false;
       pattern.invalidatedAtBar = i;
@@ -676,11 +677,11 @@ export function checkInvalidation(
  *   - Wave C: next low pivot after B (continue down)
  *
  * Classification:
- *   - B retrace > 90% of A move -> "flat"
+ *   - B retrace > 80% of A move -> "flat"
  *   - Otherwise -> "zigzag"
  *
  * Validation:
- *   - |C - W5| / |W5 - W0| < 0.854 (max retrace rule)
+ *   - |C - W5| / |W5 - W0| < 1.0 (max retrace rule — allows up to 100%)
  */
 export function trackAbc(
   impulse: P2ImpulsePattern,
@@ -734,16 +735,16 @@ export function trackAbc(
   const bRetrace = Math.abs(waveB.price - waveA.price);
   const bRetraceRatio = aMove > 0 ? bRetrace / aMove : 0;
 
-  // Classify: flat if B retraces > 90% of A move
-  const correctionType: "flat" | "zigzag" = bRetraceRatio > 0.90 ? "flat" : "zigzag";
+  // Classify: flat if B retraces > 80% of A move
+  const correctionType: "flat" | "zigzag" = bRetraceRatio > 0.80 ? "flat" : "zigzag";
 
   // C retrace ratio: |C - W5| / |W5 - W0|
   const impulseRange = Math.abs(w5.price - w0.price);
   const cRetrace = Math.abs(waveC.price - w5.price);
   const cRetraceRatio = impulseRange > 0 ? cRetrace / impulseRange : 0;
 
-  // Validate: max retrace rule
-  if (cRetraceRatio >= 0.854) return null;
+  // Validate: max retrace rule (allow up to 100% of impulse)
+  if (cRetraceRatio >= 1.0) return null;
 
   return {
     points: { a: waveA, b: waveB, c: waveC },
@@ -767,6 +768,9 @@ const FIB_RATIOS: [number, string][] = [
   [0.5, "50.0%"],
   [0.618, "61.8%"],
   [0.786, "78.6%"],
+  [1.0, "100%"],
+  [1.272, "127.2%"],
+  [1.618, "161.8%"],
 ];
 
 /**
@@ -779,6 +783,8 @@ export function computeFibTargets(impulse: P2ImpulsePattern): P2FibTargets {
   const w5Price = impulse.waves.w5.price;
   const w0Price = impulse.waves.w0.price;
   const impRange = Math.abs(w5Price - w0Price);
+
+  if (impRange === 0) return { levels: [], impulseRange: 0 };
 
   const levels: P2FibTarget[] = FIB_RATIOS.map(([ratio, label]) => {
     const price = impulse.direction === 1
@@ -800,7 +806,7 @@ export function computeFibTargets(impulse: P2ImpulsePattern): P2FibTargets {
  * 1. Pre-compute RSI and volume SMA for all bars
  * 2. For each scale: build zigzag, check impulse rules at each 6-point
  *    window, enrich matches, check invalidation
- * 3. Deduplicate by (scale, w0.barIndex, w5.barIndex)
+ * 3. Deduplicate by (scale, direction, w0.barIndex, w5.barIndex)
  * 4. Phase 2: track ABC corrections and compute Fibonacci targets
  * 5. Return P2ElliottWaveResult
  */
@@ -850,7 +856,7 @@ export function detectElliottWaves(
       const w0 = p5, w1 = p4, w2 = p3, w3 = p2, w4 = p1, w5 = p0;
 
       // Deduplicate
-      const key = `${scale}:${w0.barIndex}:${w5.barIndex}`;
+      const key = `${scale}:${direction}:${w0.barIndex}:${w5.barIndex}`;
       if (seen.has(key)) continue;
       seen.add(key);
 
