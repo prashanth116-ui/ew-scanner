@@ -738,7 +738,7 @@ function WaveScannerPage() {
   const displayCount = mode === "nearMiss" ? filteredNearMisses.length : sortedGroups.length;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 px-4 sm:px-6 py-6 max-w-[1800px] mx-auto">
+    <div className="flex flex-col lg:flex-row gap-4 px-2 sm:px-4 py-4 w-full">
       <SidebarShell open={sidebarOpen} onToggle={setSidebarOpen}>
         {/* Mode Selector */}
         <SidebarSection title="Scanner Mode" sectionKey="mode" collapsed={collapsed.has("mode")} onToggle={toggleSection}>
@@ -1230,8 +1230,8 @@ function WaveScannerPage() {
 
         {/* Near-Miss Results Table */}
         {mode === "nearMiss" && filteredNearMisses.length > 0 ? (
-          <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
-            <table className="w-full text-sm" style={{ minWidth: "800px" }}>
+          <div className="rounded-lg border border-[#2a2a2a]">
+            <table className="w-full text-sm table-fixed">
               <thead>
                 <tr className="border-b border-[#2a2a2a] bg-[#141414]">
                   <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-8">#</th>
@@ -1291,32 +1291,32 @@ function WaveScannerPage() {
           </div>
         ) : mode !== "nearMiss" && sortedGroups.length > 0 ? (
           /* Normal Results Table (grouped by ticker) */
-          <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
-            <table className="w-full text-sm" style={{ minWidth: "1100px" }}>
+          <div className="rounded-lg border border-[#2a2a2a]">
+            <table className="w-full text-sm table-fixed">
               <thead>
                 <tr className="border-b border-[#2a2a2a] bg-[#141414]">
-                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-8">#</th>
-                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-[140px] cursor-pointer hover:text-white" onClick={() => toggleSort("ticker")}>
+                  <th className="px-1.5 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"2.5rem"}}>#</th>
+                  <th className="px-1.5 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] cursor-pointer hover:text-white" onClick={() => toggleSort("ticker")}>
                     Symbol {sortKey === "ticker" && <span className="text-[#8b5cf6]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
                   </th>
-                  <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[60px]">Dir</th>
-                  <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[50px] cursor-pointer hover:text-white" onClick={() => toggleSort("scale")}>
-                    Scale {sortKey === "scale" && <span className="text-[#8b5cf6]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
+                  <th className="px-1.5 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"3.5rem"}}>Dir</th>
+                  <th className="px-1.5 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] cursor-pointer hover:text-white" style={{width:"3rem"}} onClick={() => toggleSort("scale")}>
+                    Sc {sortKey === "scale" && <span className="text-[#8b5cf6]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
                   </th>
-                  <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] w-[70px] cursor-pointer hover:text-white" onClick={() => toggleSort("confidence")}>
+                  <th className="px-1.5 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-[#666] cursor-pointer hover:text-white" style={{width:"4rem"}} onClick={() => toggleSort("confidence")}>
                     Conf {sortKey === "confidence" && <span className="text-[#8b5cf6]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
                   </th>
-                  <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666] w-[110px]">Status</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[80px]">W0</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[80px]">W5</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[80px] cursor-pointer hover:text-white" onClick={() => toggleSort("impulseRange")}>
+                  <th className="px-1.5 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"6.5rem"}}>Status</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"4.5rem"}}>W0</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"4.5rem"}}>W5</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] cursor-pointer hover:text-white" style={{width:"4.5rem"}} onClick={() => toggleSort("impulseRange")}>
                     Range {sortKey === "impulseRange" && <span className="text-[#8b5cf6]">{sortDir === "desc" ? "\u25BC" : "\u25B2"}</span>}
                   </th>
-                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[70px]">38.2%</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[70px]">50%</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[70px]">61.8%</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[80px]">Price</th>
-                  <th className="px-2 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666] w-[80px]">Near Fib</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"4.5rem"}}>38.2%</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"3.5rem"}}>50%</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"4.5rem"}}>61.8%</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"4.5rem"}}>Price</th>
+                  <th className="px-1.5 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-[#666]" style={{width:"5.5rem"}}>Near Fib</th>
                 </tr>
               </thead>
               <tbody>
@@ -1411,21 +1411,20 @@ const GroupedResultRow = memo(function GroupedResultRow({
         className={`border-b border-[#1a1a1a] hover:bg-[#1a1a1a] cursor-pointer transition-colors ${expanded ? "bg-[#1a1a1a]" : ""}`}
         onClick={handleClick}
       >
-        <td className="px-2 py-2 text-[#666]">
+        <td className="px-1.5 py-1.5 text-[#666]">
           <div className="flex items-center gap-1">
             {expanded ? <ChevronDown className="h-3 w-3 text-[#a78bfa]" /> : <ChevronRight className="h-3 w-3" />}
             <span className="text-xs">{index + 1}</span>
           </div>
         </td>
-        <td className="px-2 py-2">
-          <div className="flex items-center gap-1.5">
-            <span className="font-medium text-white">{group.ticker}</span>
+        <td className="px-1.5 py-1.5">
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="font-medium text-white truncate">{group.ticker}</span>
             {group.patternCount > 1 && (
-              <span className="inline-flex items-center rounded-full bg-[#8b5cf6]/15 px-1.5 py-0.5 text-[9px] font-medium text-[#a78bfa] border border-[#8b5cf6]/20">
+              <span className="inline-flex items-center rounded-full bg-[#8b5cf6]/15 px-1 py-0.5 text-[9px] font-medium text-[#a78bfa] border border-[#8b5cf6]/20 shrink-0">
                 {group.patternCount}
               </span>
             )}
-            <span className="text-[10px] text-[#666] hidden lg:inline truncate">{group.name}</span>
             {onAddToWatchlist && (
               <button
                 onClick={(e) => { e.stopPropagation(); onAddToWatchlist(group.ticker); }}
@@ -1437,34 +1436,34 @@ const GroupedResultRow = memo(function GroupedResultRow({
             )}
           </div>
         </td>
-        <td className="px-2 py-2 text-center">
+        <td className="px-1.5 py-1.5 text-center">
           <span className={`text-xs font-medium ${directionColor(result.pattern.direction)}`}>
             {directionLabel(result.pattern.direction)}
           </span>
         </td>
-        <td className="px-2 py-2 text-center text-xs text-[#ccc]">{result.pattern.scale}</td>
-        <td className="px-2 py-2 text-center">
-          <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${confidenceBg(result.pattern.confidence)}`}>
+        <td className="px-1.5 py-1.5 text-center text-xs text-[#ccc]">{result.pattern.scale}</td>
+        <td className="px-1.5 py-1.5 text-center">
+          <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium ${confidenceBg(result.pattern.confidence)}`}>
             {result.pattern.confidence}%
           </span>
         </td>
-        <td className="px-2 py-2">
-          <span className={`text-xs ${waveStatusColor(result.pattern)}`}>
+        <td className="px-1.5 py-1.5">
+          <span className={`text-xs ${waveStatusColor(result.pattern)} truncate block`}>
             {waveStatusLabel(result.pattern)}
           </span>
         </td>
-        <td className="px-2 py-2 text-right text-xs text-[#ccc]">{formatPrice(result.pattern.waves.w0.price)}</td>
-        <td className="px-2 py-2 text-right text-xs text-[#ccc]">{formatPrice(result.pattern.waves.w5.price)}</td>
-        <td className="px-2 py-2 text-right text-xs text-[#ccc]">
+        <td className="px-1.5 py-1.5 text-right text-xs text-[#ccc]">{formatPrice(result.pattern.waves.w0.price)}</td>
+        <td className="px-1.5 py-1.5 text-right text-xs text-[#ccc]">{formatPrice(result.pattern.waves.w5.price)}</td>
+        <td className="px-1.5 py-1.5 text-right text-xs text-[#ccc]">
           {fibs ? formatPrice(fibs.impulseRange) : "\u2014"}
         </td>
-        <td className="px-2 py-2 text-right text-xs text-[#888]">{f382 ? formatPrice(f382.price) : "\u2014"}</td>
-        <td className="px-2 py-2 text-right text-xs text-[#888]">{f50 ? formatPrice(f50.price) : "\u2014"}</td>
-        <td className="px-2 py-2 text-right text-xs text-[#888]">{f618 ? formatPrice(f618.price) : "\u2014"}</td>
-        <td className="px-2 py-2 text-right text-xs font-medium text-white">{formatPrice(result.currentPrice)}</td>
-        <td className="px-2 py-2 text-right">
+        <td className="px-1.5 py-1.5 text-right text-xs text-[#888]">{f382 ? formatPrice(f382.price) : "\u2014"}</td>
+        <td className="px-1.5 py-1.5 text-right text-xs text-[#888]">{f50 ? formatPrice(f50.price) : "\u2014"}</td>
+        <td className="px-1.5 py-1.5 text-right text-xs text-[#888]">{f618 ? formatPrice(f618.price) : "\u2014"}</td>
+        <td className="px-1.5 py-1.5 text-right text-xs font-medium text-white">{formatPrice(result.currentPrice)}</td>
+        <td className="px-1.5 py-1.5 text-right">
           {result.nearestFibLabel ? (
-            <span className="text-[10px] text-[#a78bfa]">
+            <span className="text-[10px] text-[#a78bfa] truncate block">
               {result.nearestFibLabel}
               {result.nearestFibDistance != null && (
                 <span className="text-[#666] ml-0.5">({result.nearestFibDistance > 0 ? "+" : ""}{result.nearestFibDistance.toFixed(1)}%)</span>
