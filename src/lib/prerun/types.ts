@@ -59,6 +59,10 @@ export interface PreRunStockData {
   pctFromBaseHigh: number | null;          // K: % below 3mo high (base resistance)
   floatShares: number | null;              // F: Float shares for turnover calc
   floatTurnover20d: number | null;         // F: Cumulative 20d volume / float
+  // F (leading): OBV trend + volume-price divergence
+  obvTrendSlope: number | null;             // OBV 10-period linear regression slope (normalized)
+  obvTrendDirection: "rising" | "flat" | "falling" | null; // Classified OBV trend
+  vpDivergenceBullish: boolean | null;      // Price lower-low + volume-on-downs decreasing
   // Phase 2: Revenue + earnings enhancement
   quarterlyRevenue: { period: string; value: number }[] | null; // Last 4-8 quarters from SEC EDGAR
   earningsBeatStreak: number | null;       // Consecutive earnings beats (actual > estimate)
@@ -118,7 +122,7 @@ export interface PreRunScores {
   scoreC: number; // Narrative catalyst (0-3, manual, expanded)
   scoreD: number; // Earnings inflection (0-3, boosted proximity)
   scoreE: number; // Institutional under-ownership (0-2)
-  scoreF: number; // Volume accumulation (0-2)
+  scoreF: number; // Volume accumulation (0-3, enhanced with OBV/VP leading indicators)
   scoreG: number; // Index inclusion potential (0-2, manual)
   scoreH: number; // Insider buying (0-2)
   scoreI: number; // Options flow / put-call skew (0-2)
@@ -138,7 +142,7 @@ export interface PreRunScores {
 }
 
 /** Maximum possible raw score (before modifiers: sector momentum + sector quadrant). */
-export const MAX_SCORE = 39;
+export const MAX_SCORE = 40;
 
 export interface PreRunResult {
   data: PreRunStockData;

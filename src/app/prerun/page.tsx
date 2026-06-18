@@ -1582,7 +1582,7 @@ const ResultCard = memo(function ResultCard({
 
   const criteriaLabels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "M2", "N", "O", "P", "Q"] as const;
   const criteriaValues = [s.scoreA, s.scoreB, s.scoreC, s.scoreD, s.scoreE, s.scoreF, s.scoreG, s.scoreH, s.scoreI, s.scoreJ, s.scoreK, s.scoreL, s.scoreM, s.scoreM2, s.scoreN, s.scoreO, s.scoreP, s.scoreQ];
-  const criteriaMaxes = [2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
+  const criteriaMaxes = [2, 3, 3, 3, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
   const emaTfLabel = d.emaM2Timeframe ?? "15m";
   const criteriaNames = ["Base", "SI", "Catalyst", "Earnings", "Coverage", "Volume", "Index", "Insider", "Options", "RelStr", "Breakout", "HigherLows", "EMAReclaim", `${emaTfLabel}EMA`, "RangeCoil", "FailedBD", "Revisions", "Squeeze"];
 
@@ -1687,6 +1687,22 @@ const ResultCard = memo(function ResultCard({
           </div>
         ))}
       </div>
+
+      {/* Leading volume indicator badges */}
+      {(d.obvTrendDirection === "rising" || d.vpDivergenceBullish === true) && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {d.obvTrendDirection === "rising" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400" title={`OBV slope: ${d.obvTrendSlope?.toFixed(4) ?? "?"}`}>
+              OBV Rising
+            </span>
+          )}
+          {d.vpDivergenceBullish === true && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-400" title="Price lower-low with decreasing down-volume">
+              VP Divergence
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Pattern match badge */}
       {result.patternMatch && (

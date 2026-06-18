@@ -840,6 +840,55 @@ function calcVolumeAccumulation(
   };
 }
 
+/** Calculate cumulative On-Balance Volume from closes + volumes. */
+function calcOBV(closes: number[], volumes: number[]): number[] {
+  const obv: number[] = [0];
+  for (let i = 1; i < closes.length; i++) {
+    if (closes[i] > closes[i - 1]) obv.push(obv[i - 1] + volumes[i]);
+    else if (closes[i] < closes[i - 1]) obv.push(obv[i - 1] - volumes[i]);
+    else obv.push(obv[i - 1]);
+  }
+  return obv;
+}
+
+/** OBV trend: linear regression slope over last 10 bars, normalized by avg absolute OBV. */
+function calcOBVTrend(closes: number[], volumes: number[]): { slope: number; direction: "rising" | "flat" | "falling" } {
+  const obv = calcOBV(closes, volumes);
+  const n = Math.min(10, obv.length);
+  const recent = obv.slice(-n);
+  // Linear regression slope
+  const xMean = (n - 1) / 2;
+  let num = 0, den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (i - xMean) * recent[i];
+    den += (i - xMean) ** 2;
+  }
+  const rawSlope = den !== 0 ? num / den : 0;
+  const avgAbsOBV = recent.reduce((s, v) => s + Math.abs(v), 0) / n || 1;
+  const slope = rawSlope / avgAbsOBV;
+  const direction = slope > 0.01 ? "rising" : slope < -0.01 ? "falling" : "flat";
+  return { slope, direction };
+}
+
+/** Volume-Price Divergence: price makes lower low but volume on down-moves decreases (seller exhaustion). */
+function calcVPDivergence(closes: number[], opens: number[], volumes: number[], lows: number[]): boolean {
+  const swings = findSwingLows(lows);
+  if (swings.length < 2) return false;
+  const [prev, curr] = swings.slice(-2);
+  if (curr.value >= prev.value) return false; // No lower low
+  // Avg down-day volume around each swing low (±2 bars)
+  const avgDownVol = (center: number) => {
+    let sum = 0, count = 0;
+    for (let i = Math.max(0, center - 2); i <= Math.min(closes.length - 1, center + 2); i++) {
+      if (closes[i] < opens[i]) { sum += volumes[i]; count++; }
+    }
+    return count > 0 ? sum / count : 0;
+  };
+  const prevDownVol = avgDownVol(prev.index);
+  const currDownVol = avgDownVol(curr.index);
+  return prevDownVol > 0 && currDownVol < prevDownVol * 0.85; // Volume decreased 15%+
+}
+
 /** Calculate weeks in base (how long price has been below ATH). */
 function calcWeeksInBase(
   highs: number[],
@@ -1551,6 +1600,19 @@ export async function fetchPreRunData(
     }
   }
 
+  // ── OBV + VP Divergence (leading volume indicators) ──
+  let obvTrendSlope: number | null = null;
+  let obvTrendDirection: "rising" | "flat" | "falling" | null = null;
+  let vpDivergenceBullish: boolean | null = null;
+
+  if (chart3mo && chart3mo.closes.length >= 20) {
+    const { closes, opens, volumes, lows } = chart3mo;
+    const obvTrend = calcOBVTrend(closes, volumes);
+    obvTrendSlope = obvTrend.slope;
+    obvTrendDirection = obvTrend.direction;
+    vpDivergenceBullish = calcVPDivergence(closes, opens, volumes, lows);
+  }
+
   return {
     ticker: ticker.toUpperCase(),
     companyName:
@@ -1583,6 +1645,9 @@ export async function fetchPreRunData(
     pctFromBaseHigh,
     floatShares,
     floatTurnover20d,
+    obvTrendSlope,
+    obvTrendDirection,
+    vpDivergenceBullish,
     quarterlyRevenue,
     earningsBeatStreak,
     // Phase 3: Stage 1→2 criteria

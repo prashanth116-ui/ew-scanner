@@ -1,7 +1,7 @@
 /**
  * Pre-Run scoring engine.
  * 3 hard gates + 18 criteria (A-Q + M2) with weighted scoring.
- * B and C expanded to 0-3, D expanded to 0-3. Max raw = 39.
+ * B and C expanded to 0-3, D expanded to 0-3, F expanded to 0-3. Max raw = 40.
  * Modifiers (not in MAX_SCORE): sector momentum +1/0/-1, sector quadrant +2/0/-1/-2.
  */
 
@@ -125,21 +125,27 @@ export function scoreE(data: PreRunStockData): number {
   return 0;
 }
 
-/** Criterion F: Volume accumulation (0-2). Enhanced with float turnover. */
+/** Criterion F: Volume accumulation (0-3). Enhanced with float turnover + OBV/VP leading indicators. */
 export function scoreF(data: PreRunStockData): number {
   const avgUp = data.avgVolumeUpDays ?? 0;
   const avgDown = data.avgVolumeDownDays ?? 1;
   const floatTurnover = data.floatTurnover20d ?? 0;
 
+  let base = 0;
   if (avgDown === 0) {
-    return avgUp > 0 ? 2 : 0;
+    base = avgUp > 0 ? 2 : 0;
+  } else {
+    const ratio = avgUp / avgDown;
+    if (ratio >= 1.3 || (ratio >= 1.0 && floatTurnover >= 1.0)) base = 2;
+    else if (ratio >= 1.0) base = 1;
   }
-  const ratio = avgUp / avgDown;
 
-  // Float turnover bonus: if >1x float traded in 20 days, bump up
-  if (ratio >= 1.3 || (ratio >= 1.0 && floatTurnover >= 1.0)) return 2;
-  if (ratio >= 1.0) return 1;
-  return 0;
+  // Leading volume bonus: +1 only if BOTH OBV rising AND bullish VP divergence
+  const obvRising = data.obvTrendDirection === "rising";
+  const vpBullish = data.vpDivergenceBullish === true;
+  const bonus = (obvRising && vpBullish) ? 1 : 0;
+
+  return Math.min(3, base + bonus);
 }
 
 /** Criterion G: Index inclusion potential (manual — 0/1/2). */
