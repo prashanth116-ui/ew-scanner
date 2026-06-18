@@ -4,6 +4,9 @@ export type PreRunVerdict = "PRIORITY" | "KEEP" | "WATCH" | "DISCARD";
 export type PreRunRisk = "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
 export type EmaTimeframe = "15m" | "1h" | "4h" | "12h" | "1d" | "1wk" | "1mo";
 
+export type VCPViewMode = "standard" | "vcp";
+export type VCPPhase = "FOCUS_LIST" | "WATCHLIST_CANDIDATE" | "EARLY_SETUP" | "IGNORE";
+
 export const ALL_EMA_TIMEFRAMES: readonly EmaTimeframe[] = ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"] as const;
 
 export interface M2TimeframeResult {
@@ -81,6 +84,25 @@ export interface PreRunStockData {
   atrContracting: boolean | null;          // N: Is 5-day ATR < 20-day ATR
   failedBreakdownRecovery: number | null;  // O: 0=none, 1=wick test only, 2=broke below + recovered in 3 bars
   analystRevisionTrend: number | null;     // P: Analyst estimate revision direction (-1/0/+1)
+  // VCP Breakout Scanner fields
+  vcpSma50: number | null;
+  vcpSma200: number | null;
+  vcpSma10: number | null;
+  vcpAvgVolume50d: number | null;
+  vcpAvgVolume10d: number | null;
+  vcpAvgDollarVolume: number | null;
+  vcpDistFromSma50Pct: number | null;
+  vcpDistFromSma200Pct: number | null;
+  vcpAtrPct: number | null;
+  vcpRange5d: number | null;
+  vcpRange10d: number | null;
+  vcpRange20d: number | null;
+  vcpTightCloses: boolean | null;
+  vcpInsideBarCount: number | null;
+  vcpDryVolumeDays: number | null;
+  vcpPivotHigh: number | null;
+  vcpRelStrengthVsSPY: number | null;
+  vcpAtrMultipleAbove50: number | null;
   lastUpdated: string;
 }
 
@@ -126,6 +148,51 @@ export interface PreRunResult {
   patternMatch: { template: string; similarity: number } | null;
   gate1Bypassed?: boolean;
 }
+
+// ── VCP Breakout Scanner types ──
+
+export interface VCPScores {
+  trendScore: number;       // 0-25
+  volumeScore: number;      // 0-20
+  compressionScore: number; // 0-25
+  relStrengthScore: number; // 0-15
+  riskQualityScore: number; // 0-15
+  totalScore: number;       // 0-100
+}
+
+export interface VCPGates {
+  priceAbove10: boolean;
+  avgVolAbove500k: boolean;
+  dollarVolAbove20m: boolean;
+  mktCapAbove1b: boolean;
+  aboveSma200: boolean;
+  aboveSma50: boolean;
+  allPass: boolean;
+}
+
+export interface VCPRiskCalc {
+  accountSize: number;
+  riskPct: number;
+  entry: number | null;
+  stop: number | null;
+  riskPerShare: number | null;
+  shares: number | null;
+  target2R: number | null;
+  target3R: number | null;
+  target6R: number | null;
+  target10R: number | null;
+  sma10Exit: number | null;
+}
+
+export interface VCPResult {
+  data: PreRunStockData;
+  gates: VCPGates;
+  scores: VCPScores;
+  phase: VCPPhase;
+  riskCalc: VCPRiskCalc;
+}
+
+export const VCP_MAX_SCORE = 100;
 
 export interface PreRunWatchlistItem {
   id: string;
@@ -220,6 +287,7 @@ export interface PreRunPreset {
   multiTF?: boolean;
   skipGate3?: boolean;
   quadrantFilter?: string;
+  viewMode?: VCPViewMode;
 }
 
 export const PRERUN_PRESETS: PreRunPreset[] = [
@@ -268,5 +336,12 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     description: "Only scan stocks in RRG LEADING sectors. Ride sector momentum with quality base.",
     filters: { minScore: 11 },
     quadrantFilter: "LEADING",
+  },
+  {
+    name: "Inst. VCP Breakout",
+    shortName: "VCP",
+    description: "Institutional-quality stocks in confirmed uptrends forming tight volatility contractions near breakout pivots.",
+    filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 0 },
+    viewMode: "vcp",
   },
 ];

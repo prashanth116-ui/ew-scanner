@@ -14,6 +14,7 @@ import type {
   PreRunFilters,
   MultiTFM2Result,
   EmaTimeframe,
+  VCPResult,
 } from "./types";
 
 const WATCHLIST_KEY = "ew-scanner-prerun-watchlist";
@@ -21,6 +22,7 @@ const ALERTS_KEY = "ew-scanner-prerun-alerts";
 const HISTORY_KEY = "ew-scanner-prerun-history";
 const SCANS_KEY = "ew-scanner-prerun-scans";
 const SCAN_RESULTS_KEY = "ew-scanner-prerun-scan-results";
+const VCP_RESULTS_KEY = "ew-scanner-prerun-vcp-results";
 const MAX_ALERTS = 200;
 const MAX_HISTORY = 500;
 const MAX_SCANS = 30;
@@ -273,6 +275,50 @@ export function saveScanResults(results: PreRunResult[]): void {
     results,
   };
   localStorage.setItem(SCAN_RESULTS_KEY, JSON.stringify(cache));
+}
+
+// ── VCP Scan Results Cache ──
+
+interface VCPResultsCache {
+  date: string;
+  results: VCPResult[];
+}
+
+export function loadVCPScanResults(): VCPResult[] {
+  if (!isClient()) return [];
+  try {
+    const raw = localStorage.getItem(VCP_RESULTS_KEY);
+    if (!raw) return [];
+    const cache = JSON.parse(raw) as VCPResultsCache;
+    return cache.results ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export function loadVCPScanResultsWithDate(): { results: VCPResult[]; date: string | null } {
+  if (!isClient()) return { results: [], date: null };
+  try {
+    const raw = localStorage.getItem(VCP_RESULTS_KEY);
+    if (!raw) return { results: [], date: null };
+    const cache = JSON.parse(raw) as VCPResultsCache;
+    return { results: cache.results ?? [], date: cache.date ?? null };
+  } catch {
+    return { results: [], date: null };
+  }
+}
+
+export function saveVCPScanResults(results: VCPResult[]): void {
+  if (!isClient()) return;
+  try {
+    const cache: VCPResultsCache = {
+      date: new Date().toISOString(),
+      results,
+    };
+    localStorage.setItem(VCP_RESULTS_KEY, JSON.stringify(cache));
+  } catch {
+    // Quota exceeded — silently skip
+  }
 }
 
 // ── Seed watchlist (runs once if watchlist empty) ──

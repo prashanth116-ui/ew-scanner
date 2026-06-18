@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookOpen, AlertTriangle, TrendingUp, Zap, Target, Shield, Layers, ChevronDown, ChevronUp, ClipboardList, Database, Sparkles } from "lucide-react";
+import { BookOpen, AlertTriangle, TrendingUp, Zap, Target, Shield, Layers, ChevronDown, ChevronUp, ClipboardList, Database, Sparkles, Activity } from "lucide-react";
 
 function Section({
   icon: Icon,
@@ -781,6 +781,7 @@ export default function PreRunGuidePage() {
                   { name: "High SI", ath: "0%", si: "20%", score: "11", use: "Maximum squeeze fuel, any ATH discount" },
                   { name: "Early Mover", ath: "40%", si: "Any", score: "14", use: "Stage 1\u21922: base + EMA reclaim + timing + higher lows (A/M/M2/K/L\u22651)" },
                   { name: "Pullback Buy", ath: "20%", si: "Any", score: "11", use: "20-35% pullback from ATH with EMA timing + volume (M2/F\u22651)" },
+                  { name: "VCP Breakout", ath: "Any", si: "Any", score: "0", use: "Institutional VCP mode: uptrend + compression + tight base near pivot (separate 0-100 engine)" },
                 ].map((p) => (
                   <tr key={p.name} className="border-b border-[#2a2a2a]/50">
                     <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{p.name}</td>
@@ -797,6 +798,220 @@ export default function PreRunGuidePage() {
             <strong className="text-[#a0a0a0]">Default filters:</strong> 20% from ATH, score &ge;11.
             Presets override only the values shown &mdash; unspecified filters use defaults.
           </p>
+        </Section>
+
+        {/* VCP Breakout Scanner */}
+        <Section icon={Activity} title="Institutional VCP Breakout Scanner">
+          <p>
+            A separate view mode that targets the opposite profile from the standard scanner:
+            institutional-quality stocks in confirmed uptrends forming tight volatility contractions
+            near breakout pivots. Select the <strong className="text-white">Inst. VCP Breakout</strong> preset
+            to activate this mode.
+          </p>
+
+          {/* VCP Gates */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              6 Institutional Quality Gates (all must pass)
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Gate</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Rule</th>
+                    <th className="py-1.5 text-left font-medium">Threshold</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  {[
+                    { gate: "G1", rule: "Price above $10", threshold: "Price \u2265 $10" },
+                    { gate: "G2", rule: "Average volume liquidity", threshold: "50d avg volume \u2265 500K shares" },
+                    { gate: "G3", rule: "Dollar volume liquidity", threshold: "Avg dollar volume \u2265 $20M/day" },
+                    { gate: "G4", rule: "Market capitalization", threshold: "Market cap \u2265 $1B" },
+                    { gate: "G5", rule: "Above 200-day SMA", threshold: "Price > 200 SMA (confirmed uptrend)" },
+                    { gate: "G6", rule: "Above 50-day SMA", threshold: "Price > 50 SMA (intermediate trend)" },
+                  ].map((g) => (
+                    <tr key={g.gate} className="border-b border-[#2a2a2a]/50">
+                      <td className="py-1.5 pr-3 font-medium text-white">{g.gate}</td>
+                      <td className="py-1.5 pr-3">{g.rule}</td>
+                      <td className="py-1.5 text-[#5ba3e6]">{g.threshold}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-1.5 text-[10px] text-[#666]">
+              If any gate fails, the total score is forced to 0 and the stock is classified as IGNORE.
+              These gates ensure only liquid, institutional-grade, uptrending stocks are scored.
+            </p>
+          </div>
+
+          {/* VCP Scoring Categories */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              5 Scoring Categories (max 100 points)
+            </h3>
+            <div className="space-y-3">
+              {[
+                {
+                  cat: "Trend",
+                  max: 25,
+                  color: "text-emerald-400",
+                  bg: "bg-emerald-500/10 border-emerald-500/20",
+                  details: [
+                    "+5 above 50 SMA",
+                    "+5 above 200 SMA",
+                    "+5 golden cross (50 SMA > 200 SMA)",
+                    "+5 within 25% of 52w high (+3 bonus within 15%)",
+                    "-3 penalty if extended >10% above 50 SMA",
+                  ],
+                },
+                {
+                  cat: "Volume",
+                  max: 20,
+                  color: "text-cyan-400",
+                  bg: "bg-cyan-500/10 border-cyan-500/20",
+                  details: [
+                    "0-8 pts for dry volume days (days with vol < 60% of 20d avg)",
+                    "0-6 pts for up/down volume ratio (\u22651.5x = 6, \u22651.2x = 4)",
+                    "0-6 pts for volume contraction (10d avg / 50d avg declining)",
+                  ],
+                },
+                {
+                  cat: "Compression",
+                  max: 25,
+                  color: "text-purple-400",
+                  bg: "bg-purple-500/10 border-purple-500/20",
+                  details: [
+                    "+5 ATR contracting (5d ATR < 20d ATR)",
+                    "+5 range nesting (5d range < 10d < 20d)",
+                    "+5 tight closes (last 5 candles close spread < 1.5%)",
+                    "+5 inside bars (2+ in last 5 bars)",
+                    "+5 ATR% < 2% of price",
+                  ],
+                },
+                {
+                  cat: "Relative Strength",
+                  max: 15,
+                  color: "text-amber-400",
+                  bg: "bg-amber-500/10 border-amber-500/20",
+                  details: [
+                    "0-8 pts RS vs SPY (>10% = 8, >5% = 6, >0% = 3)",
+                    "0-7 pts RS vs sector ETF (>5% = 7, >0% = 4)",
+                  ],
+                },
+                {
+                  cat: "Risk Quality",
+                  max: 15,
+                  color: "text-rose-400",
+                  bg: "bg-rose-500/10 border-rose-500/20",
+                  details: [
+                    "0-5 pts tight stop (ATR% < 2% = 5, < 3% = 3)",
+                    "0-5 pts not extended (0-5% above 50 SMA = 5, 5-10% = 3)",
+                    "0-5 pts liquidity ($100M+/day = 5, $50M+ = 3, $20M+ = 1)",
+                  ],
+                },
+              ].map((c) => (
+                <div key={c.cat} className={`rounded-lg border ${c.bg} px-4 py-3`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-sm font-bold ${c.color}`}>{c.cat}</span>
+                    <span className="text-xs text-[#666]">/{c.max} pts</span>
+                  </div>
+                  <ul className="space-y-0.5">
+                    {c.details.map((d, i) => (
+                      <li key={i} className="text-xs text-[#a0a0a0]">{d}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* VCP Phase Classification */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              Phase Classification
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-emerald-400">FOCUS LIST</p>
+                <p className="text-xs text-[#c0c0c0]">&ge;85 pts</p>
+              </div>
+              <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-cyan-400">WATCHLIST</p>
+                <p className="text-xs text-[#c0c0c0]">75&ndash;84 pts</p>
+              </div>
+              <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-amber-400">EARLY SETUP</p>
+                <p className="text-xs text-[#c0c0c0]">65&ndash;74 pts</p>
+              </div>
+              <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-red-400">IGNORE</p>
+                <p className="text-xs text-[#c0c0c0]">&lt;65 or gate fail</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Risk Calculator */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              Built-in Risk Calculator
+            </h3>
+            <p className="text-xs text-[#a0a0a0] mb-2">
+              Each VCP card includes a risk calculator row with auto-computed entry, stop, and R-targets.
+              Adjust account size and risk % in the sidebar to recalculate live without re-scanning.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Field</th>
+                    <th className="py-1.5 text-left font-medium">Calculation</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  {[
+                    { field: "Entry", calc: "Pivot high + $0.10" },
+                    { field: "Stop", calc: "Entry \u2212 1.5 \u00d7 ATR(14)" },
+                    { field: "Risk/Share", calc: "Entry \u2212 Stop" },
+                    { field: "Shares", calc: "Account \u00d7 Risk% \u00f7 Risk/Share (capped at 25% of account)" },
+                    { field: "2R\u201310R Targets", calc: "Entry + N \u00d7 Risk/Share" },
+                    { field: "10 SMA Exit", calc: "Trailing exit when price closes below 10 SMA" },
+                  ].map((r) => (
+                    <tr key={r.field} className="border-b border-[#2a2a2a]/50">
+                      <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{r.field}</td>
+                      <td className="py-1.5">{r.calc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Alert Conditions */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              Alert Condition Badges
+            </h3>
+            <p className="text-xs text-[#a0a0a0] mb-2">
+              Each VCP card displays condition badges at the bottom to highlight actionable signals:
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {[
+                { label: "VCP Compression", desc: "Range nesting + ATR contracting", color: "text-purple-400 border-purple-500/20" },
+                { label: "Breakout Trigger", desc: "Price > pivot high", color: "text-green-400 border-green-500/20" },
+                { label: "Tight Closes", desc: "5-candle close spread < 1.5%", color: "text-cyan-400 border-cyan-500/20" },
+                { label: "Dry Volume", desc: "3+ days below 60% of avg volume", color: "text-amber-400 border-amber-500/20" },
+                { label: "Below 10 SMA", desc: "Exit signal: price < 10 SMA", color: "text-red-400 border-red-500/20" },
+              ].map((a) => (
+                <div key={a.label} className={`rounded border ${a.color} bg-[#141414] px-3 py-2`}>
+                  <p className={`text-xs font-medium ${a.color.split(" ")[0]}`}>{a.label}</p>
+                  <p className="text-[10px] text-[#666]">{a.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </Section>
 
         {/* Common Mistakes */}

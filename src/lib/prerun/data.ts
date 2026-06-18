@@ -490,12 +490,12 @@ export function calcEMA(closes: number[], period: number): number[] {
 }
 
 /** Calculate True Range for a single bar. */
-function calcTR(high: number, low: number, prevClose: number): number {
+export function calcTR(high: number, low: number, prevClose: number): number {
   return Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
 }
 
 /** Calculate ATR array from OHLC data. */
-function calcATRArray(highs: number[], lows: number[], closes: number[], period: number): number[] {
+export function calcATRArray(highs: number[], lows: number[], closes: number[], period: number): number[] {
   if (closes.length < 2) return [];
   const trs: number[] = [highs[0] - lows[0]];
   for (let i = 1; i < closes.length; i++) {
@@ -1184,6 +1184,7 @@ export async function fetchPreRunData(
     fetchYahooOptionsFlow(ticker),           // I: Options flow
     fetchSectorETFReturn(sectorETF),         // J: Sector return
     fetchSECQuarterlyRevenue(ticker),        // D: Revenue acceleration
+    fetchSectorETFReturn("SPY"),             // VCP: SPY 20d return (cache hit)
   ]);
 
   const summary = settled[0].status === "fulfilled" ? settled[0].value : null;
@@ -1198,6 +1199,7 @@ export async function fetchPreRunData(
   const putVolume = optionsFlow?.putVolume ?? null;
   const sectorReturn20d = settled[7].status === "fulfilled" ? settled[7].value : null;
   const quarterlyRevenue = settled[8].status === "fulfilled" ? settled[8].value : null;
+  const spyReturn20d = settled[9].status === "fulfilled" ? settled[9].value : null;
 
   if (!summary) return null;
 
@@ -1208,6 +1210,12 @@ export async function fetchPreRunData(
   const detail = (summary.summaryDetail ?? {}) as Record<string, unknown>;
   const trend = (summary.recommendationTrend ?? {}) as Record<string, unknown>;
   const holders = (summary.majorHoldersBreakdown ?? {}) as Record<string, unknown>;
+
+  // VCP: Extract SMA + volume data from summaryDetail
+  const vcpSma50 = extractRaw(detail.fiftyDayAverage);
+  const vcpSma200 = extractRaw(detail.twoHundredDayAverage);
+  const vcpAvgVolume50d = extractRaw(detail.averageVolume);
+  const vcpAvgVolume10d = extractRaw(detail.averageDailyVolume10Day);
 
   const currentPrice = extractRaw(price.regularMarketPrice);
   const high52w = extractRaw(detail.fiftyTwoWeekHigh);
@@ -1437,6 +1445,112 @@ export async function fetchPreRunData(
     failedBreakdownRecovery = calcFailedBreakdownRecovery(chart3mo.closes, chart3mo.lows, chart3mo.highs);
   }
 
+  // ── VCP fields ──
+  let vcpSma10: number | null = null;
+  let vcpAvgDollarVolume: number | null = null;
+  let vcpDistFromSma50Pct: number | null = null;
+  let vcpDistFromSma200Pct: number | null = null;
+  let vcpAtrPct: number | null = null;
+  let vcpRange5d: number | null = null;
+  let vcpRange10d: number | null = null;
+  let vcpRange20d: number | null = null;
+  let vcpTightCloses: boolean | null = null;
+  let vcpInsideBarCount: number | null = null;
+  let vcpDryVolumeDays: number | null = null;
+  let vcpPivotHigh: number | null = null;
+  let vcpRelStrengthVsSPY: number | null = null;
+  let vcpAtrMultipleAbove50: number | null = null;
+
+  // Dollar volume
+  if (vcpAvgVolume50d !== null && currentPrice !== null) {
+    vcpAvgDollarVolume = vcpAvgVolume50d * currentPrice;
+  }
+
+  // Distance from MAs
+  if (currentPrice !== null && vcpSma50 !== null && vcpSma50 > 0) {
+    vcpDistFromSma50Pct = ((currentPrice - vcpSma50) / vcpSma50) * 100;
+  }
+  if (currentPrice !== null && vcpSma200 !== null && vcpSma200 > 0) {
+    vcpDistFromSma200Pct = ((currentPrice - vcpSma200) / vcpSma200) * 100;
+  }
+
+  if (chart3mo && chart3mo.closes.length >= 20 && currentPrice !== null) {
+    const { closes, highs, lows, volumes } = chart3mo;
+
+    // SMA(10)
+    vcpSma10 = calcSMA(closes, 10);
+
+    // ATR(14) %
+    const atrArr = calcATRArray(highs, lows, closes, 14);
+    const lastAtr = atrArr.length > 0 ? atrArr[atrArr.length - 1] : 0;
+    if (currentPrice > 0 && lastAtr > 0) {
+      vcpAtrPct = (lastAtr / currentPrice) * 100;
+    }
+
+    // ATR multiple above 50 SMA
+    if (vcpSma50 !== null && lastAtr > 0) {
+      vcpAtrMultipleAbove50 = (currentPrice - vcpSma50) / lastAtr;
+    }
+
+    // Range N-day (high-low range as % of price)
+    const rangeCalc = (n: number): number | null => {
+      if (highs.length < n) return null;
+      const hi = Math.max(...highs.slice(-n));
+      const lo = Math.min(...lows.slice(-n).filter((l) => l > 0));
+      return currentPrice > 0 ? ((hi - lo) / currentPrice) * 100 : null;
+    };
+    vcpRange5d = rangeCalc(5);
+    vcpRange10d = rangeCalc(10);
+    vcpRange20d = rangeCalc(20);
+
+    // Tight closes: spread of last 5 closes < 1.5% of price
+    if (closes.length >= 5) {
+      const last5 = closes.slice(-5);
+      const spread = Math.max(...last5) - Math.min(...last5);
+      vcpTightCloses = currentPrice > 0 ? spread / currentPrice < 0.015 : null;
+    }
+
+    // Inside bar count in last 5 bars
+    if (highs.length >= 6) {
+      let insideCount = 0;
+      for (let i = highs.length - 5; i < highs.length; i++) {
+        if (highs[i] <= highs[i - 1] && lows[i] >= lows[i - 1]) {
+          insideCount++;
+        }
+      }
+      vcpInsideBarCount = insideCount;
+    }
+
+    // Dry volume days: days in last 10 with vol < 60% of 20d avg
+    if (volumes.length >= 20) {
+      const avg20Vol = volumes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+      let dryCount = 0;
+      const last10Vols = volumes.slice(-10);
+      for (const v of last10Vols) {
+        if (v < avg20Vol * 0.6) dryCount++;
+      }
+      vcpDryVolumeDays = dryCount;
+    }
+
+    // Pivot high: most recent 3-bar pivot high (high > 2 neighbors on each side)
+    if (highs.length >= 5) {
+      for (let i = highs.length - 3; i >= 2; i--) {
+        if (
+          highs[i] > highs[i - 1] && highs[i] > highs[i - 2] &&
+          highs[i] > highs[i + 1] && highs[i] > highs[i + 2]
+        ) {
+          vcpPivotHigh = highs[i];
+          break;
+        }
+      }
+    }
+
+    // Relative strength vs SPY
+    if (stockReturn20d !== null && spyReturn20d !== null) {
+      vcpRelStrengthVsSPY = stockReturn20d - spyReturn20d;
+    }
+  }
+
   return {
     ticker: ticker.toUpperCase(),
     companyName:
@@ -1493,6 +1607,25 @@ export async function fetchPreRunData(
     atrContracting,
     failedBreakdownRecovery,
     analystRevisionTrend,
+    // VCP fields
+    vcpSma50,
+    vcpSma200,
+    vcpSma10,
+    vcpAvgVolume50d,
+    vcpAvgVolume10d,
+    vcpAvgDollarVolume,
+    vcpDistFromSma50Pct,
+    vcpDistFromSma200Pct,
+    vcpAtrPct,
+    vcpRange5d,
+    vcpRange10d,
+    vcpRange20d,
+    vcpTightCloses,
+    vcpInsideBarCount,
+    vcpDryVolumeDays,
+    vcpPivotHigh,
+    vcpRelStrengthVsSPY,
+    vcpAtrMultipleAbove50,
     lastUpdated: new Date().toISOString(),
   };
 }

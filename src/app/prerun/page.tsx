@@ -17,17 +17,26 @@ import {
   FileDown,
   Sparkles,
   Layers,
+  Target,
+  Shield,
+  Activity,
 } from "lucide-react";
 import Link from "next/link";
 import type {
   PreRunResult,
+  PreRunStockData,
   PreRunFilters,
   SavedPreRunScan,
   PreRunCriteriaFilter,
   MultiTFM2Result,
   EmaTimeframe,
+  VCPViewMode,
+  VCPResult,
+  VCPPhase,
+  VCPScores,
+  VCPRiskCalc,
 } from "@/lib/prerun/types";
-import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES } from "@/lib/prerun/types";
+import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES, VCP_MAX_SCORE } from "@/lib/prerun/types";
 import {
   type TFFilterValue, type TrendFilterValue, type BoolFilterValue, type VolFilterValue,
   type LeadingFilters,
@@ -44,8 +53,10 @@ import {
   saveScanResults,
   saveMultiTFCache,
   loadMultiTFCache,
+  saveVCPScanResults,
+  loadVCPScanResults,
 } from "@/lib/prerun/storage";
-import { exportPreRunToExcel } from "@/lib/prerun/export";
+import { exportPreRunToExcel, exportVCPToExcel } from "@/lib/prerun/export";
 import {
   getTickersForSector,
   getSectorBuckets,
@@ -76,6 +87,7 @@ const BATCH_DELAY = 500;
 
 type SortKey = "score" | "pctFromAth" | "shortFloat" | "earnings";
 type SortDir = "asc" | "desc";
+type VCPSortKey = "score" | "compression" | "atrPct" | "relStrength" | "dollarVolume" | "distFrom52wHigh";
 
 const MARKET_CAP_OPTIONS = [
   { label: "Any", value: 0 },
@@ -123,6 +135,15 @@ function PreRunPage() {
 
   // Quadrant pre-scan filter
   const [quadrantFilter, setQuadrantFilter] = usePersistedFilter("ew-filter:prerun:quadrantFilter", "All");
+
+  // VCP mode
+  const [viewMode, setViewMode] = useState<VCPViewMode>("standard");
+  const [vcpResults, setVcpResults] = useState<VCPResult[]>([]);
+  const [vcpAccountSize, setVcpAccountSize] = usePersistedFilter("ew-filter:prerun:vcpAccountSize", 100_000);
+  const [vcpRiskPct, setVcpRiskPct] = usePersistedFilter("ew-filter:prerun:vcpRiskPct", 0.20);
+  const [vcpMinScore, setVcpMinScore] = usePersistedFilter("ew-filter:prerun:vcpMinScore", 0);
+  const [vcpPhaseFilter, setVcpPhaseFilter] = usePersistedFilter("ew-filter:prerun:vcpPhaseFilter", "All");
+  const [vcpSortKey, setVcpSortKey] = usePersistedFilter<VCPSortKey>("ew-filter:prerun:vcpSortKey", "score");
 
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
@@ -193,6 +214,11 @@ function PreRunPage() {
     const cached = loadFromCache<PreRunResult[]>("ew-prerun-scan-v1", 30 * 60 * 1000);
     if (cached && cached.length > 0) {
       setRawResults(cached);
+    }
+    // Load VCP cache
+    const vcpCached = loadFromCache<VCPResult[]>("ew-prerun-vcp-v1", 30 * 60 * 1000);
+    if (vcpCached && vcpCached.length > 0) {
+      setVcpResults(vcpCached);
     }
     // Load multi-TF cache
     const tfCache = loadMultiTFCache();
@@ -326,6 +352,57 @@ function PreRunPage() {
     return { total: filtered.length, priority, keep, watch };
   }, [filtered]);
 
+  // ── VCP filter + sort ──
+  const vcpFiltered = useMemo(() => {
+    return vcpResults.filter((r) => {
+      if (vcpMinScore > 0 && r.scores.totalScore < vcpMinScore) return false;
+      if (vcpPhaseFilter !== "All" && r.phase !== vcpPhaseFilter) return false;
+      if (filters.sectorBucket !== "All") {
+        const sector = getSectorForTicker(r.data.ticker);
+        if (sector !== filters.sectorBucket) return false;
+      }
+      if (filters.maxMarketCap > 0 && (r.data.marketCap ?? Infinity) > filters.maxMarketCap) return false;
+      return true;
+    });
+  }, [vcpResults, vcpMinScore, vcpPhaseFilter, filters.sectorBucket, filters.maxMarketCap]);
+
+  const vcpSorted = useMemo(() => {
+    const arr = [...vcpFiltered];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (vcpSortKey) {
+        case "score":
+          cmp = a.scores.totalScore - b.scores.totalScore;
+          break;
+        case "compression":
+          cmp = a.scores.compressionScore - b.scores.compressionScore;
+          break;
+        case "atrPct":
+          cmp = (a.data.vcpAtrPct ?? 100) - (b.data.vcpAtrPct ?? 100);
+          break;
+        case "relStrength":
+          cmp = a.scores.relStrengthScore - b.scores.relStrengthScore;
+          break;
+        case "dollarVolume":
+          cmp = (a.data.vcpAvgDollarVolume ?? 0) - (b.data.vcpAvgDollarVolume ?? 0);
+          break;
+        case "distFrom52wHigh":
+          cmp = (a.data.pctFromAth ?? 100) - (b.data.pctFromAth ?? 100);
+          break;
+      }
+      // Always desc for VCP
+      return -cmp;
+    });
+    return arr;
+  }, [vcpFiltered, vcpSortKey]);
+
+  const vcpStats = useMemo(() => {
+    const focus = vcpFiltered.filter((r) => r.phase === "FOCUS_LIST").length;
+    const watchlist = vcpFiltered.filter((r) => r.phase === "WATCHLIST_CANDIDATE").length;
+    const early = vcpFiltered.filter((r) => r.phase === "EARLY_SETUP").length;
+    return { total: vcpFiltered.length, focus, watchlist, early };
+  }, [vcpFiltered]);
+
   // Phase 2: Multi-TF M2 scan for candidate tickers
   const runMultiTFPhase2 = useCallback(async (candidates: PreRunResult[]) => {
     if (candidates.length === 0) return;
@@ -431,6 +508,7 @@ function PreRunPage() {
 
     setScanning(true);
     setRawResults([]);
+    setVcpResults([]);
     setScannedCount(0);
     if (showMultiTF) setMultiTFResults(new Map());
 
@@ -454,7 +532,8 @@ function PreRunPage() {
     // For multi-TF presets, force Phase 1 to use 1d (free — reuses chart3mo)
     const phase1Timeframe: EmaTimeframe = showMultiTF ? "1d" : emaTimeframe;
 
-    const results: PreRunResult[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const results: any[] = [];
 
     for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
       if (signal.aborted) break;
@@ -467,14 +546,14 @@ function PreRunPage() {
         const res = await fetch("/api/prerun/scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tickers: batch, emaTimeframe: phase1Timeframe, sectorQuadrants }),
+          body: JSON.stringify({ tickers: batch, emaTimeframe: phase1Timeframe, sectorQuadrants, viewMode }),
           signal,
         });
 
         if (res.ok) {
-          const data = (await res.json()) as { results: PreRunResult[] };
-          if (data.results) {
-            results.push(...data.results);
+          const json = await res.json();
+          if (json.results) {
+            results.push(...json.results);
           }
         }
       } catch (err) {
@@ -482,11 +561,15 @@ function PreRunPage() {
       }
 
       setScannedCount(Math.min(i + BATCH_SIZE, tickers.length));
-      setRawResults((prev) => {
-        const scannedTickers = new Set(results.map(r => r.data.ticker));
-        const manual = prev.filter(r => !scannedTickers.has(r.data.ticker));
-        return [...results, ...manual];
-      });
+      if (viewMode === "vcp") {
+        setVcpResults([...results] as unknown as VCPResult[]);
+      } else {
+        setRawResults((prev) => {
+          const scannedTickers = new Set(results.map(r => r.data.ticker));
+          const manual = prev.filter(r => !scannedTickers.has(r.data.ticker));
+          return [...results, ...manual];
+        });
+      }
 
       if (i + BATCH_SIZE < tickers.length && !signal.aborted) {
         await new Promise((r) => setTimeout(r, BATCH_DELAY));
@@ -494,26 +577,33 @@ function PreRunPage() {
     }
 
     // Save results to persistent storage + localStorage cache
-    saveScanResults(results);
-    saveToCache("ew-prerun-scan-v1", results);
+    if (viewMode === "vcp") {
+      saveVCPScanResults(results as unknown as VCPResult[]);
+      saveToCache("ew-prerun-vcp-v1", results);
+    } else {
+      saveScanResults(results as PreRunResult[]);
+      saveToCache("ew-prerun-scan-v1", results);
+    }
     setScanning(false);
     setProgress("");
 
-    // After scan results are finalized, record signals
-    const signals: ClientSignal[] = results
-      .filter((r) => r.scores.finalScore >= 4)
-      .map((r) => ({
-        scanner: "prerun" as const,
-        ticker: r.data.ticker,
-        signal_date: new Date().toISOString().slice(0, 10),
-        price_at_signal: r.data.currentPrice ?? 0,
-        score: r.scores.finalScore,
-        signal_strength: r.verdict,
-      }));
-    recordSignals(signals);
+    // After scan results are finalized, record signals (standard mode only)
+    if (viewMode !== "vcp") {
+      const signals: ClientSignal[] = (results as PreRunResult[])
+        .filter((r) => r.scores.finalScore >= 4)
+        .map((r) => ({
+          scanner: "prerun" as const,
+          ticker: r.data.ticker,
+          signal_date: new Date().toISOString().slice(0, 10),
+          price_at_signal: r.data.currentPrice ?? 0,
+          score: r.scores.finalScore,
+          signal_strength: r.verdict,
+        }));
+      recordSignals(signals);
+    }
 
-    // Phase 2: Multi-TF M2 scan for candidates that pass filters
-    if (showMultiTF && !signal.aborted && results.length > 0) {
+    // Phase 2: Multi-TF M2 scan for candidates that pass filters (standard only)
+    if (viewMode !== "vcp" && showMultiTF && !signal.aborted && results.length > 0) {
       // Filter candidates using current criteria filters
       const candidates = results.filter((r) => {
         if (r.scores.finalScore < minScore) return false;
@@ -526,7 +616,7 @@ function PreRunPage() {
       });
       runMultiTFPhase2(candidates);
     }
-  }, [sectorBucket, emaTimeframe, showMultiTF, criteriaFilters, minScore, runMultiTFPhase2, sectorQuadrants, quadrantFilter]);
+  }, [sectorBucket, emaTimeframe, showMultiTF, criteriaFilters, minScore, runMultiTFPhase2, sectorQuadrants, quadrantFilter, viewMode]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -656,6 +746,7 @@ function PreRunPage() {
     setShowMultiTF(preset.multiTF ?? false);
     setSkipGate3(preset.skipGate3 ?? false);
     setQuadrantFilter(preset.quadrantFilter ?? "All");
+    setViewMode(preset.viewMode ?? "standard");
   }, []);
 
   // Add to watchlist
@@ -687,9 +778,14 @@ function PreRunPage() {
 
   // Export
   const handleExport = useCallback(() => {
-    if (sorted.length === 0) return;
-    exportPreRunToExcel(sorted);
-  }, [sorted]);
+    if (viewMode === "vcp") {
+      if (vcpSorted.length === 0) return;
+      exportVCPToExcel(vcpSorted);
+    } else {
+      if (sorted.length === 0) return;
+      exportPreRunToExcel(sorted);
+    }
+  }, [sorted, vcpSorted, viewMode]);
 
   const sectorBuckets = useMemo(() => getSectorBuckets(), []);
 
@@ -703,11 +799,125 @@ function PreRunPage() {
 
         {/* Filters */}
         <SidebarSection
-          title={`Filters (${minPctFromAth}% ATH, ${minShortFloat}% SI${minScore > 0 ? `, ${minScore}+ score` : ""})`}
+          title={viewMode === "vcp" ? "VCP Filters" : `Filters (${minPctFromAth}% ATH, ${minShortFloat}% SI${minScore > 0 ? `, ${minScore}+ score` : ""})`}
           sectionKey="filters"
           collapsed={collapsed.has("filters")}
           onToggle={toggleSection}
         >
+          {viewMode === "vcp" ? (
+            <div className="space-y-4">
+              {/* Min VCP Score */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Min VCP Score</span>
+                  <span className="text-white">{vcpMinScore === 0 ? "Any" : `${vcpMinScore}/${VCP_MAX_SCORE}`}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={vcpMinScore}
+                  onChange={(e) => setVcpMinScore(Number(e.target.value))}
+                  className="w-full accent-[#10b981]"
+                />
+              </div>
+              {/* Phase Filter */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Phase</span>
+                </div>
+                <select
+                  value={vcpPhaseFilter}
+                  onChange={(e) => setVcpPhaseFilter(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#10b981] focus:outline-none"
+                >
+                  <option value="All">All Phases</option>
+                  <option value="FOCUS_LIST">Focus List</option>
+                  <option value="WATCHLIST_CANDIDATE">Watchlist Candidate</option>
+                  <option value="EARLY_SETUP">Early Setup</option>
+                </select>
+              </div>
+              {/* Min Market Cap */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Min Market Cap</span>
+                </div>
+                <select
+                  value={maxMarketCap}
+                  onChange={(e) => setMaxMarketCap(Number(e.target.value))}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#10b981] focus:outline-none"
+                >
+                  {MARKET_CAP_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Sector Bucket */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Sector</span>
+                </div>
+                <select
+                  value={sectorBucket}
+                  onChange={(e) => setSectorBucket(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#10b981] focus:outline-none"
+                >
+                  <option value="All">All Sectors</option>
+                  {sectorBuckets.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Account Size */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Account Size</span>
+                  <span className="text-white">${vcpAccountSize.toLocaleString()}</span>
+                </div>
+                <input
+                  type="number"
+                  value={vcpAccountSize}
+                  onChange={(e) => setVcpAccountSize(Number(e.target.value) || 100_000)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#10b981] focus:outline-none"
+                />
+              </div>
+              {/* Risk % */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Risk %</span>
+                  <span className="text-white">{vcpRiskPct.toFixed(2)}%</span>
+                </div>
+                <input
+                  type="number"
+                  step={0.05}
+                  min={0.05}
+                  max={2}
+                  value={vcpRiskPct}
+                  onChange={(e) => setVcpRiskPct(Number(e.target.value) || 0.20)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#10b981] focus:outline-none"
+                />
+              </div>
+              {/* Reset */}
+              <button
+                onClick={() => {
+                  setVcpMinScore(0);
+                  setVcpPhaseFilter("All");
+                  setMaxMarketCap(0);
+                  setSectorBucket("All");
+                  setVcpAccountSize(100_000);
+                  setVcpRiskPct(0.20);
+                }}
+                className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
+              >
+                Reset VCP Filters
+              </button>
+            </div>
+          ) : (
             <div className="space-y-4">
               {/* Min % from ATH */}
               <div>
@@ -894,6 +1104,7 @@ function PreRunPage() {
                 Reset Filters
               </button>
             </div>
+          )}
         </SidebarSection>
 
         {/* Active criteria filters indicator */}
@@ -1007,8 +1218,33 @@ function PreRunPage() {
           </div>
         )}
 
-        {/* Summary bar */}
-        {rawResults.length > 0 && (
+        {/* Summary bar — VCP mode */}
+        {viewMode === "vcp" && vcpResults.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">Candidates</p>
+              <p className="text-lg font-bold text-white">
+                {vcpStats.total}
+                <span className="text-xs font-normal text-[#666] ml-1">/ {vcpResults.length}</span>
+              </p>
+            </div>
+            <div className="rounded-lg border border-emerald-500/20 bg-[#141414] px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wider text-emerald-400/60 mb-1">Focus List</p>
+              <p className="text-lg font-bold text-emerald-400">{vcpStats.focus}</p>
+            </div>
+            <div className="rounded-lg border border-cyan-500/20 bg-[#141414] px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wider text-cyan-400/60 mb-1">Watchlist</p>
+              <p className="text-lg font-bold text-cyan-400">{vcpStats.watchlist}</p>
+            </div>
+            <div className="rounded-lg border border-amber-500/20 bg-[#141414] px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wider text-amber-400/60 mb-1">Early Setup</p>
+              <p className="text-lg font-bold text-amber-400">{vcpStats.early}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Summary bar — Standard mode */}
+        {viewMode !== "vcp" && rawResults.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-3">
               <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
@@ -1048,8 +1284,50 @@ function PreRunPage() {
           </div>
         )}
 
-        {/* Sort + Export row */}
-        {sorted.length > 0 && (
+        {/* Sort + Export row — VCP mode */}
+        {viewMode === "vcp" && vcpSorted.length > 0 && (
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#666]">Sort:</span>
+              {(
+                [
+                  { key: "score", label: "Score" },
+                  { key: "compression", label: "Compression" },
+                  { key: "atrPct", label: "ATR%" },
+                  { key: "relStrength", label: "RS" },
+                  { key: "dollarVolume", label: "$Volume" },
+                  { key: "distFrom52wHigh", label: "52w High" },
+                ] as { key: VCPSortKey; label: string }[]
+              ).map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => setVcpSortKey(s.key)}
+                  className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors ${
+                    vcpSortKey === s.key
+                      ? "bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30"
+                      : "text-[#a0a0a0] hover:text-white border border-[#2a2a2a] hover:border-[#444]"
+                  }`}
+                >
+                  {s.label}
+                  {vcpSortKey === s.key && <ArrowUpDown className="h-3 w-3" />}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Export</span>
+              </button>
+              <CopyButton tickers={vcpSorted.map((r) => r.data.ticker)} />
+            </div>
+          </div>
+        )}
+
+        {/* Sort + Export row — Standard mode */}
+        {viewMode !== "vcp" && sorted.length > 0 && (
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <span className="text-xs text-[#666]">Sort:</span>
@@ -1116,8 +1394,62 @@ function PreRunPage() {
           </div>
         )}
 
+        {/* VCP Results */}
+        {viewMode === "vcp" && vcpSorted.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">
+            {vcpSorted.map((result, idx) => (
+              <VCPResultCard
+                key={result.data.ticker}
+                result={result}
+                index={idx}
+                accountSize={vcpAccountSize}
+                riskPct={vcpRiskPct}
+                onAddToWatchlist={handleAddToWatchlist}
+                justAdded={addedTicker === result.data.ticker}
+              />
+            ))}
+          </div>
+        )}
+
+        {viewMode === "vcp" && vcpResults.length > 0 && vcpSorted.length === 0 && !scanning && (
+          <div className="flex flex-col items-center justify-center py-16 text-[#666]">
+            <Target className="h-12 w-12 mb-3 opacity-30" />
+            <p className="text-sm">No stocks matched VCP filters.</p>
+            <p className="text-xs mt-1">Try lowering Min VCP Score or changing Phase filter.</p>
+          </div>
+        )}
+
+        {viewMode === "vcp" && vcpResults.length === 0 && !scanning && (
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-12 text-center">
+            <Target className="mx-auto h-12 w-12 text-[#333]" />
+            <h2 className="mt-4 text-lg font-semibold text-white">VCP Breakout Scanner</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
+              Scan for institutional-quality stocks forming tight volatility contractions near breakout pivots.
+              Scores 5 categories across 100 points with 6 hard gates.
+            </p>
+            <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#10b981]">{getTickersForSector("All").length}</p>
+                <p className="text-[10px] text-[#666]">Stocks</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#10b981]">5</p>
+                <p className="text-[10px] text-[#666]">Score Categories</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#10b981]">6</p>
+                <p className="text-[10px] text-[#666]">Hard Gates</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#10b981]">100</p>
+                <p className="text-[10px] text-[#666]">Max Score</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Multi-TF M2 Table */}
-        {showMultiTF && multiTFResults.size > 0 && (
+        {viewMode !== "vcp" && showMultiTF && multiTFResults.size > 0 && (
           <MultiTFTable
             results={multiTFResults}
             scanning={multiTFScanning}
@@ -1126,7 +1458,7 @@ function PreRunPage() {
         )}
 
         {/* Multi-TF Phase 2 progress */}
-        {multiTFScanning && (
+        {viewMode !== "vcp" && multiTFScanning && (
           <div className="mb-4">
             <ProgressBar
               current={0}
@@ -1137,8 +1469,8 @@ function PreRunPage() {
           </div>
         )}
 
-        {/* Results */}
-        {sorted.length > 0 ? (
+        {/* Standard Results */}
+        {viewMode !== "vcp" && sorted.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {sorted.map((result, idx) => (
               <ResultCard
@@ -1153,7 +1485,7 @@ function PreRunPage() {
               />
             ))}
           </div>
-        ) : rawResults.length > 0 && !scanning ? (
+        ) : viewMode !== "vcp" && rawResults.length > 0 && !scanning ? (
           <div className="flex flex-col items-center justify-center py-16 text-[#666]">
             <TrendingUp className="h-12 w-12 mb-3 opacity-30" />
             <p className="text-sm">
@@ -1163,7 +1495,7 @@ function PreRunPage() {
               Try lowering Min Score or Min % from ATH.
             </p>
           </div>
-        ) : !scanning ? (
+        ) : viewMode !== "vcp" && !scanning ? (
           <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-12 text-center">
             <TrendingUp className="mx-auto h-12 w-12 text-[#333]" />
             <h2 className="mt-4 text-lg font-semibold text-white">
@@ -1447,6 +1779,309 @@ const ResultCard = memo(function ResultCard({
             <Sparkles className="h-3.5 w-3.5" />
           )}
           AI Score
+        </button>
+      </div>
+    </div>
+  );
+});
+
+// -- VCP Result Card Component --
+
+function vcpPhaseBadge(phase: VCPPhase): { label: string; color: string } {
+  switch (phase) {
+    case "FOCUS_LIST": return { label: "FOCUS LIST", color: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" };
+    case "WATCHLIST_CANDIDATE": return { label: "WATCHLIST", color: "text-cyan-400 border-cyan-500/30 bg-cyan-500/10" };
+    case "EARLY_SETUP": return { label: "EARLY SETUP", color: "text-amber-400 border-amber-500/30 bg-amber-500/10" };
+    case "IGNORE": return { label: "IGNORE", color: "text-[#666] border-[#2a2a2a] bg-[#0f0f0f]" };
+  }
+}
+
+function vcpScoreBarColor(score: number, max: number): string {
+  const pct = max > 0 ? score / max : 0;
+  if (pct >= 0.8) return "bg-emerald-500";
+  if (pct >= 0.6) return "bg-cyan-500";
+  if (pct >= 0.4) return "bg-amber-500";
+  return "bg-[#333]";
+}
+
+/** Client-side VCP risk recalculation. */
+function recalcVCPRisk(data: PreRunStockData, accountSize: number, riskPct: number): VCPRiskCalc {
+  const pivotHigh = data.vcpPivotHigh;
+  const atrPct = data.vcpAtrPct;
+  const price = data.currentPrice;
+  const sma10 = data.vcpSma10;
+
+  if (pivotHigh === null || atrPct === null || price === null || price <= 0) {
+    return { accountSize, riskPct, entry: null, stop: null, riskPerShare: null, shares: null, target2R: null, target3R: null, target6R: null, target10R: null, sma10Exit: sma10 };
+  }
+
+  const entry = pivotHigh + 0.10;
+  const atrDollar = (atrPct / 100) * price;
+  const stop = entry - 1.5 * atrDollar;
+  const riskPerShare = entry - stop;
+
+  if (riskPerShare <= 0) {
+    return { accountSize, riskPct, entry, stop, riskPerShare: 0, shares: 0, target2R: null, target3R: null, target6R: null, target10R: null, sma10Exit: sma10 };
+  }
+
+  const maxByRisk = Math.floor((accountSize * (riskPct / 100)) / riskPerShare);
+  const maxByPos = Math.floor((accountSize * 0.25) / entry);
+  const shares = Math.min(maxByRisk, maxByPos);
+
+  return {
+    accountSize, riskPct,
+    entry: Math.round(entry * 100) / 100,
+    stop: Math.round(stop * 100) / 100,
+    riskPerShare: Math.round(riskPerShare * 100) / 100,
+    shares,
+    target2R: Math.round((entry + 2 * riskPerShare) * 100) / 100,
+    target3R: Math.round((entry + 3 * riskPerShare) * 100) / 100,
+    target6R: Math.round((entry + 6 * riskPerShare) * 100) / 100,
+    target10R: Math.round((entry + 10 * riskPerShare) * 100) / 100,
+    sma10Exit: sma10,
+  };
+}
+
+const VCPResultCard = memo(function VCPResultCard({
+  result,
+  index,
+  accountSize,
+  riskPct,
+  onAddToWatchlist,
+  justAdded,
+}: {
+  result: VCPResult;
+  index: number;
+  accountSize: number;
+  riskPct: number;
+  onAddToWatchlist: (result: PreRunResult) => void;
+  justAdded: boolean;
+}) {
+  const d = result.data;
+  const s = result.scores;
+  const g = result.gates;
+  const phase = vcpPhaseBadge(result.phase);
+
+  // Recalculate risk with current account params
+  const risk = useMemo(() => recalcVCPRisk(d, accountSize, riskPct), [d, accountSize, riskPct]);
+
+  // Score breakdown
+  const scoreBars = [
+    { label: "Trend", score: s.trendScore, max: 25 },
+    { label: "Volume", score: s.volumeScore, max: 20 },
+    { label: "Compress", score: s.compressionScore, max: 25 },
+    { label: "RS", score: s.relStrengthScore, max: 15 },
+    { label: "Risk", score: s.riskQualityScore, max: 15 },
+  ];
+
+  // Gate indicators
+  const gates = [
+    { label: "P>$10", pass: g.priceAbove10 },
+    { label: "Vol>500k", pass: g.avgVolAbove500k },
+    { label: "$Vol>$20M", pass: g.dollarVolAbove20m },
+    { label: "MCap>$1B", pass: g.mktCapAbove1b },
+    { label: ">200SMA", pass: g.aboveSma200 },
+    { label: ">50SMA", pass: g.aboveSma50 },
+  ];
+
+  // Alert conditions
+  const alerts = [
+    { label: "VCP Compression", active: (d.vcpRange5d !== null && d.vcpRange10d !== null && d.vcpRange5d < d.vcpRange10d) && d.atrContracting === true },
+    { label: "Breakout Trigger", active: d.currentPrice !== null && d.vcpPivotHigh !== null && d.currentPrice > d.vcpPivotHigh },
+    { label: "Dry Volume", active: (d.vcpDryVolumeDays ?? 0) >= 3 },
+    { label: "Tight Closes", active: d.vcpTightCloses === true },
+    { label: "Below 10 SMA", active: d.currentPrice !== null && d.vcpSma10 !== null && d.currentPrice < d.vcpSma10 },
+  ];
+
+  const fmtNum = (v: number | null, decimals = 1) => v !== null ? v.toFixed(decimals) : "-";
+  const fmtDollar = (v: number | null) => v !== null ? `$${v.toFixed(2)}` : "-";
+  const fmtVol = (v: number | null) => {
+    if (v === null) return "-";
+    if (v >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(1)}B`;
+    if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(0)}M`;
+    return `$${(v / 1_000).toFixed(0)}K`;
+  };
+
+  return (
+    <div
+      className="ew-card-in rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4 hover:border-[#3a3a3a] transition-colors flex flex-col"
+      style={{ animationDelay: `${index * 40}ms` }}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-white">{d.ticker}</h3>
+            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${phase.color}`}>
+              {phase.label}
+            </span>
+          </div>
+          <p className="text-xs text-[#a0a0a0] truncate mt-0.5">{d.companyName}</p>
+        </div>
+        {d.currentPrice !== null && (
+          <p className="text-sm font-medium text-white shrink-0 ml-2">${d.currentPrice.toFixed(2)}</p>
+        )}
+      </div>
+
+      {/* Total score bar */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between text-xs mb-1">
+          <span className="text-[#a0a0a0]">VCP Score</span>
+          <span className="font-medium text-white">{s.totalScore}/{VCP_MAX_SCORE}</span>
+        </div>
+        <div className="h-2 bg-[#0f0f0f] rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${vcpScoreBarColor(s.totalScore, VCP_MAX_SCORE)}`}
+            style={{ width: `${Math.min(100, s.totalScore)}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Score breakdown bars */}
+      <div className="space-y-1.5 mb-3">
+        {scoreBars.map((bar) => (
+          <div key={bar.label} className="flex items-center gap-2">
+            <span className="text-[9px] text-[#666] w-16 text-right shrink-0">{bar.label}</span>
+            <div className="flex-1 h-1.5 bg-[#0f0f0f] rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${vcpScoreBarColor(bar.score, bar.max)}`}
+                style={{ width: `${bar.max > 0 ? (bar.score / bar.max) * 100 : 0}%` }}
+              />
+            </div>
+            <span className="text-[9px] text-[#a0a0a0] w-8 shrink-0">{bar.score}/{bar.max}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Gate indicators */}
+      <div className="flex flex-wrap items-center gap-1 mb-3">
+        {gates.map((gate) => (
+          <span
+            key={gate.label}
+            className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium ${
+              gate.pass
+                ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                : "bg-red-500/10 text-red-400 border border-red-500/20"
+            }`}
+          >
+            {gate.label}
+            {gate.pass ? <Check className="h-2 w-2" /> : <X className="h-2 w-2" />}
+          </span>
+        ))}
+      </div>
+
+      {/* Key metrics grid */}
+      <div className="grid grid-cols-3 gap-x-3 gap-y-1.5 mb-3 text-[10px]">
+        <div>
+          <span className="text-[#555]">Avg $Vol</span>
+          <p className="text-white font-medium">{fmtVol(d.vcpAvgDollarVolume)}</p>
+        </div>
+        <div>
+          <span className="text-[#555]">Dist 50SMA</span>
+          <p className="text-white font-medium">{fmtNum(d.vcpDistFromSma50Pct)}%</p>
+        </div>
+        <div>
+          <span className="text-[#555]">Dist 200SMA</span>
+          <p className="text-white font-medium">{fmtNum(d.vcpDistFromSma200Pct)}%</p>
+        </div>
+        <div>
+          <span className="text-[#555]">From 52w High</span>
+          <p className="text-white font-medium">{fmtNum(d.pctFromAth)}%</p>
+        </div>
+        <div>
+          <span className="text-[#555]">ATR%</span>
+          <p className="text-white font-medium">{fmtNum(d.vcpAtrPct)}%</p>
+        </div>
+        <div>
+          <span className="text-[#555]">Rel Vol 10d/50d</span>
+          <p className="text-white font-medium">
+            {d.vcpAvgVolume10d !== null && d.vcpAvgVolume50d !== null && d.vcpAvgVolume50d > 0
+              ? `${(d.vcpAvgVolume10d / d.vcpAvgVolume50d).toFixed(2)}x`
+              : "-"}
+          </p>
+        </div>
+      </div>
+
+      {/* Compression indicators */}
+      <div className="flex flex-wrap items-center gap-1 mb-3">
+        <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${s.compressionScore >= 20 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : s.compressionScore >= 10 ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-[#0f0f0f] text-[#555] border border-[#2a2a2a]"}`}>
+          Comp: {s.compressionScore}/25
+        </span>
+        <span className="rounded px-1.5 py-0.5 text-[9px] bg-[#0f0f0f] text-[#a0a0a0] border border-[#2a2a2a]">
+          IB: {d.vcpInsideBarCount ?? 0}
+        </span>
+        <span className="rounded px-1.5 py-0.5 text-[9px] bg-[#0f0f0f] text-[#a0a0a0] border border-[#2a2a2a]">
+          Dry: {d.vcpDryVolumeDays ?? 0}d
+        </span>
+        <span className={`rounded px-1.5 py-0.5 text-[9px] border ${d.vcpTightCloses ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-[#0f0f0f] text-[#555] border-[#2a2a2a]"}`}>
+          Tight: {d.vcpTightCloses ? "Y" : "N"}
+        </span>
+        <span className={`rounded px-1.5 py-0.5 text-[9px] border ${
+          d.vcpRange5d !== null && d.vcpRange10d !== null && d.vcpRange20d !== null && d.vcpRange5d < d.vcpRange10d && d.vcpRange10d < d.vcpRange20d
+            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+            : "bg-[#0f0f0f] text-[#555] border-[#2a2a2a]"
+        }`}>
+          Nest: {d.vcpRange5d !== null && d.vcpRange10d !== null && d.vcpRange20d !== null && d.vcpRange5d < d.vcpRange10d && d.vcpRange10d < d.vcpRange20d ? "Y" : "N"}
+        </span>
+      </div>
+
+      {/* Risk calculator row */}
+      {risk.entry !== null && (
+        <div className="rounded-md border border-[#2a2a2a] bg-[#0f0f0f] px-3 py-2 mb-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Shield className="h-3 w-3 text-[#10b981]" />
+            <span className="text-[10px] uppercase tracking-wider text-[#10b981]">Risk Calc</span>
+          </div>
+          <div className="grid grid-cols-4 gap-x-2 gap-y-1 text-[10px]">
+            <div><span className="text-[#555]">Entry</span><p className="text-white font-medium">{fmtDollar(risk.entry)}</p></div>
+            <div><span className="text-[#555]">Stop</span><p className="text-white font-medium">{fmtDollar(risk.stop)}</p></div>
+            <div><span className="text-[#555]">Risk/Sh</span><p className="text-white font-medium">{fmtDollar(risk.riskPerShare)}</p></div>
+            <div><span className="text-[#555]">Shares</span><p className="text-white font-medium">{risk.shares ?? "-"}</p></div>
+            <div><span className="text-[#555]">2R</span><p className="text-emerald-400">{fmtDollar(risk.target2R)}</p></div>
+            <div><span className="text-[#555]">3R</span><p className="text-emerald-400">{fmtDollar(risk.target3R)}</p></div>
+            <div><span className="text-[#555]">6R</span><p className="text-emerald-400">{fmtDollar(risk.target6R)}</p></div>
+            <div><span className="text-[#555]">10R</span><p className="text-emerald-400">{fmtDollar(risk.target10R)}</p></div>
+          </div>
+          {risk.sma10Exit !== null && (
+            <p className="text-[9px] text-[#555] mt-1">10 SMA Exit: ${risk.sma10Exit.toFixed(2)}</p>
+          )}
+        </div>
+      )}
+
+      {/* Alert condition badges */}
+      <div className="flex flex-wrap items-center gap-1 mb-3">
+        {alerts.map((alert) => (
+          <span
+            key={alert.label}
+            className={`rounded px-1.5 py-0.5 text-[9px] border ${
+              alert.active
+                ? alert.label === "Below 10 SMA"
+                  ? "bg-red-500/10 text-red-400 border-red-500/20"
+                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                : "bg-[#0f0f0f] text-[#444] border-[#1a1a1a]"
+            }`}
+          >
+            {alert.label}
+          </span>
+        ))}
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-2 mt-auto pt-1">
+        <button
+          onClick={() => onAddToWatchlist(result as unknown as PreRunResult)}
+          disabled={justAdded}
+          className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            justAdded
+              ? "bg-green-500/10 text-green-400 border border-green-500/20"
+              : "border border-[#2a2a2a] text-[#a0a0a0] hover:text-white hover:border-[#444]"
+          }`}
+        >
+          {justAdded ? (
+            <><Check className="h-3.5 w-3.5" />Added</>
+          ) : (
+            <><ListPlus className="h-3.5 w-3.5" />Add to Watchlist</>
+          )}
         </button>
       </div>
     </div>

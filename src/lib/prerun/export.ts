@@ -1,7 +1,7 @@
 /** Pre-Run export to Excel/CSV. */
 
-import type { PreRunResult } from "./types";
-import { MAX_SCORE } from "./types";
+import type { PreRunResult, VCPResult } from "./types";
+import { MAX_SCORE, VCP_MAX_SCORE } from "./types";
 
 export async function exportPreRunToExcel(results: PreRunResult[]): Promise<void> {
   const XLSX = await import("xlsx");
@@ -61,4 +61,60 @@ export async function exportPreRunToExcel(results: PreRunResult[]): Promise<void
   XLSX.utils.book_append_sheet(wb, ws, "Pre-Run Scan");
 
   XLSX.writeFile(wb, `prerun-scan-${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+export async function exportVCPToExcel(results: VCPResult[]): Promise<void> {
+  const XLSX = await import("xlsx");
+
+  const rows = results.map((r) => {
+    const d = r.data;
+    const s = r.scores;
+    const g = r.gates;
+    const rc = r.riskCalc;
+    return {
+      Ticker: d.ticker,
+      Company: d.companyName,
+      Price: d.currentPrice?.toFixed(2) ?? "-",
+      Phase: r.phase,
+      [`Total Score (/${VCP_MAX_SCORE})`]: s.totalScore,
+      "Trend /25": s.trendScore,
+      "Volume /20": s.volumeScore,
+      "Compression /25": s.compressionScore,
+      "RS /15": s.relStrengthScore,
+      "Risk Quality /15": s.riskQualityScore,
+      "Gate: P>$10": g.priceAbove10 ? "Y" : "N",
+      "Gate: Vol>500k": g.avgVolAbove500k ? "Y" : "N",
+      "Gate: $Vol>$20M": g.dollarVolAbove20m ? "Y" : "N",
+      "Gate: MCap>$1B": g.mktCapAbove1b ? "Y" : "N",
+      "Gate: >200SMA": g.aboveSma200 ? "Y" : "N",
+      "Gate: >50SMA": g.aboveSma50 ? "Y" : "N",
+      "Dist 50SMA %": d.vcpDistFromSma50Pct?.toFixed(1) ?? "-",
+      "Dist 200SMA %": d.vcpDistFromSma200Pct?.toFixed(1) ?? "-",
+      "% From 52w High": d.pctFromAth?.toFixed(1) ?? "-",
+      "ATR %": d.vcpAtrPct?.toFixed(2) ?? "-",
+      "Range 5d %": d.vcpRange5d?.toFixed(2) ?? "-",
+      "Range 10d %": d.vcpRange10d?.toFixed(2) ?? "-",
+      "Range 20d %": d.vcpRange20d?.toFixed(2) ?? "-",
+      "Tight Closes": d.vcpTightCloses === true ? "Y" : d.vcpTightCloses === false ? "N" : "-",
+      "Inside Bars": d.vcpInsideBarCount ?? "-",
+      "Dry Vol Days": d.vcpDryVolumeDays ?? "-",
+      "Avg Dollar Vol": d.vcpAvgDollarVolume ? `$${(d.vcpAvgDollarVolume / 1e6).toFixed(0)}M` : "-",
+      "Market Cap": d.marketCap ? `$${(d.marketCap / 1e9).toFixed(1)}B` : "-",
+      Entry: rc.entry?.toFixed(2) ?? "-",
+      Stop: rc.stop?.toFixed(2) ?? "-",
+      "Risk/Share": rc.riskPerShare?.toFixed(2) ?? "-",
+      Shares: rc.shares ?? "-",
+      "2R Target": rc.target2R?.toFixed(2) ?? "-",
+      "3R Target": rc.target3R?.toFixed(2) ?? "-",
+      "6R Target": rc.target6R?.toFixed(2) ?? "-",
+      "10R Target": rc.target10R?.toFixed(2) ?? "-",
+      "10 SMA Exit": rc.sma10Exit?.toFixed(2) ?? "-",
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "VCP Breakout Scan");
+
+  XLSX.writeFile(wb, `vcp-scan-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
