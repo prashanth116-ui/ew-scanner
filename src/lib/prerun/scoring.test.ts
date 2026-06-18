@@ -37,8 +37,9 @@ function makeData(overrides: Partial<PreRunStockData> = {}): PreRunStockData {
     pctFromBaseHigh: null,
     floatShares: null,
     floatTurnover20d: null,
-    obvTrendSlope: null,
-    obvTrendDirection: null,
+    obvDivergent: null,
+    obvPctFromHigh: null,
+    pricePctFromHigh20d: null,
     vpDivergenceBullish: null,
     quarterlyRevenue: null,
     earningsBeatStreak: null,
@@ -247,35 +248,35 @@ describe("scoreF", () => {
 // ── Score F: Leading indicators (OBV + VP divergence) ──
 
 describe("scoreF with leading indicators", () => {
-  it("returns 3 when base=2 + both OBV rising AND VP divergence", () => {
+  it("returns 3 when base=2 + both OBV divergent AND VP divergence", () => {
     expect(scoreF(makeData({
       avgVolumeUpDays: 2_000_000, avgVolumeDownDays: 1_000_000,
-      obvTrendDirection: "rising", vpDivergenceBullish: true,
+      obvDivergent: true, vpDivergenceBullish: true,
     }))).toBe(3);
   });
 
-  it("returns 2 when base=2 + OBV rising only (no VP)", () => {
-    expect(scoreF(makeData({ avgVolumeUpDays: 2_000_000, avgVolumeDownDays: 1_000_000, obvTrendDirection: "rising", vpDivergenceBullish: false }))).toBe(2);
+  it("returns 2 when base=2 + OBV divergent only (no VP)", () => {
+    expect(scoreF(makeData({ avgVolumeUpDays: 2_000_000, avgVolumeDownDays: 1_000_000, obvDivergent: true, vpDivergenceBullish: false }))).toBe(2);
   });
 
-  it("returns 2 when base=2 + VP divergence only (no OBV)", () => {
-    expect(scoreF(makeData({ avgVolumeUpDays: 2_000_000, avgVolumeDownDays: 1_000_000, obvTrendDirection: "flat", vpDivergenceBullish: true }))).toBe(2);
+  it("returns 2 when base=2 + VP divergence only (no OBV divergence)", () => {
+    expect(scoreF(makeData({ avgVolumeUpDays: 2_000_000, avgVolumeDownDays: 1_000_000, obvDivergent: false, vpDivergenceBullish: true }))).toBe(2);
   });
 
   it("returns 2 when base=2 + no leading signal", () => {
-    expect(scoreF(makeData({ avgVolumeUpDays: 2_000_000, avgVolumeDownDays: 1_000_000, obvTrendDirection: "flat" }))).toBe(2);
-    expect(scoreF(makeData({ avgVolumeUpDays: 2_000_000, avgVolumeDownDays: 1_000_000, obvTrendDirection: "falling" }))).toBe(2);
+    expect(scoreF(makeData({ avgVolumeUpDays: 2_000_000, avgVolumeDownDays: 1_000_000, obvDivergent: false }))).toBe(2);
+    expect(scoreF(makeData({ avgVolumeUpDays: 2_000_000, avgVolumeDownDays: 1_000_000, obvDivergent: null }))).toBe(2);
   });
 
   it("returns 1 when base=0 + both leading signals (bonus lifts 0 to 1)", () => {
     expect(scoreF(makeData({
       avgVolumeUpDays: 800_000, avgVolumeDownDays: 1_000_000,
-      obvTrendDirection: "rising", vpDivergenceBullish: true,
+      obvDivergent: true, vpDivergenceBullish: true,
     }))).toBe(1);
   });
 
   it("returns 0 when base=0 + only one leading signal (no bonus)", () => {
-    expect(scoreF(makeData({ avgVolumeUpDays: 800_000, avgVolumeDownDays: 1_000_000, obvTrendDirection: "rising" }))).toBe(0);
+    expect(scoreF(makeData({ avgVolumeUpDays: 800_000, avgVolumeDownDays: 1_000_000, obvDivergent: true }))).toBe(0);
     expect(scoreF(makeData({ avgVolumeUpDays: 800_000, avgVolumeDownDays: 1_000_000, vpDivergenceBullish: true }))).toBe(0);
   });
 });

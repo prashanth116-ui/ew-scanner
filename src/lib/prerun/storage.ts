@@ -196,7 +196,7 @@ export function savePreRunScan(
   name: string,
   filters: PreRunFilters,
   candidates: PreRunResult[],
-  extra?: { quadrantFilter?: string; skipGate3?: boolean; criteriaFilters?: import("./types").PreRunCriteriaFilter[]; multiTF?: boolean }
+  extra?: { quadrantFilter?: string; skipGate3?: boolean; criteriaFilters?: import("./types").PreRunCriteriaFilter[]; multiTF?: boolean; filterObvDivergence?: boolean; filterVpDivergence?: boolean }
 ): SavedPreRunScan | null {
   if (!isClient()) return null;
 
@@ -211,6 +211,8 @@ export function savePreRunScan(
     ...(extra?.skipGate3 && { skipGate3: extra.skipGate3 }),
     ...(extra?.criteriaFilters?.length && { criteriaFilters: extra.criteriaFilters }),
     ...(extra?.multiTF && { multiTF: extra.multiTF }),
+    ...(extra?.filterObvDivergence && { filterObvDivergence: extra.filterObvDivergence }),
+    ...(extra?.filterVpDivergence && { filterVpDivergence: extra.filterVpDivergence }),
   };
 
   const existing = loadPreRunScans();

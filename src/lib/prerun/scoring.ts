@@ -140,10 +140,10 @@ export function scoreF(data: PreRunStockData): number {
     else if (ratio >= 1.0) base = 1;
   }
 
-  // Leading volume bonus: +1 only if BOTH OBV rising AND bullish VP divergence
-  const obvRising = data.obvTrendDirection === "rising";
+  // Leading volume bonus: +1 only if BOTH OBV divergent AND bullish VP divergence
+  const obvDivergent = data.obvDivergent === true;
   const vpBullish = data.vpDivergenceBullish === true;
-  const bonus = (obvRising && vpBullish) ? 1 : 0;
+  const bonus = (obvDivergent && vpBullish) ? 1 : 0;
 
   return Math.min(3, base + bonus);
 }

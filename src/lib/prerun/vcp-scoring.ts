@@ -93,8 +93,8 @@ export function scoreVolume(data: PreRunStockData): number {
     else if (volRatio <= 0.85) score += 2;
   }
 
-  // OBV trend bonus (0-2, within existing 20-point cap)
-  if (data.obvTrendDirection === "rising") score += 2;
+  // OBV divergence bonus (0-2, within existing 20-point cap)
+  if (data.obvDivergent === true) score += 2;
 
   return Math.max(0, Math.min(20, score));
 }

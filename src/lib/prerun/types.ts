@@ -59,9 +59,10 @@ export interface PreRunStockData {
   pctFromBaseHigh: number | null;          // K: % below 3mo high (base resistance)
   floatShares: number | null;              // F: Float shares for turnover calc
   floatTurnover20d: number | null;         // F: Cumulative 20d volume / float
-  // F (leading): OBV trend + volume-price divergence
-  obvTrendSlope: number | null;             // OBV 10-period linear regression slope (normalized)
-  obvTrendDirection: "rising" | "flat" | "falling" | null; // Classified OBV trend
+  // F (leading): OBV-price divergence + volume-price divergence
+  obvDivergent: boolean | null;              // OBV near 20-bar high while price is not (stealth accumulation)
+  obvPctFromHigh: number | null;             // How far OBV is from its 20-bar high (%)
+  pricePctFromHigh20d: number | null;        // How far price is from its 20-bar high (%)
   vpDivergenceBullish: boolean | null;      // Price lower-low + volume-on-downs decreasing
   // Phase 2: Revenue + earnings enhancement
   quarterlyRevenue: { period: string; value: number }[] | null; // Last 4-8 quarters from SEC EDGAR
@@ -252,6 +253,8 @@ export interface SavedPreRunScan {
   skipGate3?: boolean;
   criteriaFilters?: PreRunCriteriaFilter[];
   multiTF?: boolean;
+  filterObvDivergence?: boolean;
+  filterVpDivergence?: boolean;
 }
 
 export interface PreRunFilters {
@@ -292,6 +295,8 @@ export interface PreRunPreset {
   skipGate3?: boolean;
   quadrantFilter?: string;
   viewMode?: VCPViewMode;
+  filterObvDivergence?: boolean;
+  filterVpDivergence?: boolean;
 }
 
 export const PRERUN_PRESETS: PreRunPreset[] = [
@@ -344,5 +349,13 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     description: "Institutional-quality stocks in confirmed uptrends forming tight volatility contractions near breakout pivots.",
     filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 65 },
     viewMode: "vcp",
+  },
+  {
+    name: "Stealth Accumulation",
+    shortName: "Stealth",
+    description: "OBV-price divergence OR seller exhaustion (VP divergence). Finds institutional buying while price stays flat.",
+    filters: { minPctFromAth: 20, minShortFloat: 0, minScore: 11 },
+    filterObvDivergence: true,
+    filterVpDivergence: true,
   },
 ];

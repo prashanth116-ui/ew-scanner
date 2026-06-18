@@ -217,7 +217,7 @@ function QuickReferenceCard() {
                     { l: "C", name: "Narrative Catalyst", max: 3, s0: "No catalyst", s1: "Speculative", s2: "3: Multiple catalysts" },
                     { l: "D", name: "Earnings Inflection", max: 3, s0: "Declining rev", s1: "Growth or near earn", s2: "Accel rev + earn <60d" },
                     { l: "E", name: "Inst. Under-Ownership", max: 2, s0: "Inst >70%", s1: "Inst 40-70%", s2: "Inst <40%" },
-                    { l: "F", name: "Volume Accumulation", max: 3, s0: "Distribution", s1: "Neutral", s2: "3: base 2 + OBV rising or VP divergence" },
+                    { l: "F", name: "Volume Accumulation", max: 3, s0: "Distribution", s1: "Neutral", s2: "3: base 2 + OBV-price divergence + VP divergence" },
                     { l: "G", name: "Index Inclusion", max: 2, s0: "N/A", s1: "Possible", s2: "Plausible <18mo" },
                     { l: "H", name: "Insider Buying", max: 2, s0: "None 90d", s1: "1-2 buys", s2: "3+ cluster buys" },
                     { l: "I", name: "Options Flow", max: 2, s0: "P/C >1.0", s1: "P/C 0.5-1.0", s2: "P/C <0.5 (bullish)" },
@@ -260,7 +260,7 @@ function QuickReferenceCard() {
               </table>
             </div>
             <p className="mt-1.5 text-[10px] text-[#666]">
-              Time decay: Bases &gt;2 years (104 weeks) halve score A. B &amp; C expanded to 0-3 (highest predictive signal). F expanded to 0-3 with OBV trend and volume-price divergence bonus.
+              Time decay: Bases &gt;2 years (104 weeks) halve score A. B &amp; C expanded to 0-3 (highest predictive signal). F expanded to 0-3 with OBV-price divergence and volume-price divergence bonus.
             </p>
           </div>
 
@@ -412,7 +412,7 @@ export default function PreRunGuidePage() {
         <Section icon={Layers} title="Layer 2: Eighteen Criteria (max 40 Points + Sector Modifier)">
           <p>
             Each criterion scores 0-2 (B, C, D expanded to 0-3 for higher
-            predictive weight; F expanded to 0-3 with OBV/VP leading indicators).
+            predictive weight; F expanded to 0-3 with OBV-price divergence/VP leading indicators).
             Total possible: 40 points + sector momentum
             modifier (&plusmn;1). Criteria A, B, C are highest weight. Criteria L-O
             power the &ldquo;Stage 1&rarr;2 / base breakout&rdquo; preset for identifying
@@ -467,7 +467,7 @@ export default function PreRunGuidePage() {
               letter="F"
               label="Volume Accumulation"
               weight="MEDIUM (0-3)"
-              score3="Base 2 + OBV trending up OR bullish volume-price divergence. Leading accumulation signal."
+              score3="Base 2 + OBV-price divergence AND bullish volume-price divergence. Stealth accumulation signal."
               score2="Up/down volume ratio >1.3x OR float turnover >1x in 20 days. Clear smart money accumulation."
               score1="Some volume evidence but inconsistent. Mixed signals or moderate float turnover."
               score0="Distribution pattern (heavy selling) or no pattern. No accumulation visible."

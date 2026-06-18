@@ -151,6 +151,10 @@ function PreRunPage() {
   // Gate 3 skip (for Pullback Buy — shows stocks below SMA20)
   const [skipGate3, setSkipGate3] = usePersistedFilter("ew-filter:prerun:skipGate3", false);
 
+  // Volume signal filters (OBV divergence / VP divergence)
+  const [filterObvDivergence, setFilterObvDivergence] = usePersistedFilter("ew-filter:prerun:obvDivergence", false);
+  const [filterVpDivergence, setFilterVpDivergence] = usePersistedFilter("ew-filter:prerun:vpDivergence", false);
+
   // Multi-TF M2 state
   const [multiTFResults, setMultiTFResults] = useState<Map<string, MultiTFM2Result>>(new Map());
   const [showMultiTF, setShowMultiTF] = useState(false);
@@ -316,9 +320,15 @@ function PreRunPage() {
         const allowedQuadrants = quadrantFilter.split(",");
         if (!sector || !allowedQuadrants.includes(sectorQuadrants[sector])) return false;
       }
+      // OBV / VP divergence filters (OR logic when both checked)
+      if (filterObvDivergence || filterVpDivergence) {
+        const obvPass = filterObvDivergence && r.data.obvDivergent === true;
+        const vpPass = filterVpDivergence && r.data.vpDivergenceBullish === true;
+        if (!obvPass && !vpPass) return false;
+      }
       return true;
     });
-  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate3, quadrantFilter, sectorQuadrants]);
+  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate3, quadrantFilter, sectorQuadrants, filterObvDivergence, filterVpDivergence]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -705,10 +715,12 @@ function PreRunPage() {
       skipGate3: skipGate3 || undefined,
       criteriaFilters: criteriaFilters.length > 0 ? criteriaFilters : undefined,
       multiTF: showMultiTF || undefined,
+      filterObvDivergence: filterObvDivergence || undefined,
+      filterVpDivergence: filterVpDivergence || undefined,
     });
     setSavedScans(loadPreRunScans());
     setSaveName("");
-  }, [saveName, filters, filtered, quadrantFilter, skipGate3, criteriaFilters, showMultiTF]);
+  }, [saveName, filters, filtered, quadrantFilter, skipGate3, criteriaFilters, showMultiTF, filterObvDivergence, filterVpDivergence]);
 
   const handleDelete = useCallback((id: string) => {
     if (!confirm("Delete this saved scan?")) return;
@@ -731,6 +743,8 @@ function PreRunPage() {
     setCriteriaFilters(scan.criteriaFilters ?? []);
     setShowMultiTF(scan.multiTF ?? false);
     setMultiTFResults(new Map());
+    setFilterObvDivergence(scan.filterObvDivergence ?? false);
+    setFilterVpDivergence(scan.filterVpDivergence ?? false);
   }, []);
 
   // Preset
@@ -749,6 +763,8 @@ function PreRunPage() {
     setSkipGate3(preset.skipGate3 ?? false);
     setQuadrantFilter(preset.quadrantFilter ?? "All");
     setViewMode(preset.viewMode ?? "standard");
+    setFilterObvDivergence(preset.filterObvDivergence ?? false);
+    setFilterVpDivergence(preset.filterVpDivergence ?? false);
     // Sync VCP min score from preset when in VCP mode
     if (preset.viewMode === "vcp") {
       setVcpMinScore(f.minScore);
@@ -1089,6 +1105,34 @@ function PreRunPage() {
                   <option value="1mo">1mo</option>
                 </select>
               </div>
+              {/* Volume Signal Filters */}
+              <div>
+                <div className="mb-2 text-xs text-[#a0a0a0]">Volume Signals</div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setFilterObvDivergence((v: boolean) => !v)}
+                    className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] transition-colors ${
+                      filterObvDivergence
+                        ? "bg-green-500/10 text-green-400 border border-green-500/30"
+                        : "border border-[#2a2a2a] text-[#a0a0a0] hover:text-white hover:border-[#444]"
+                    }`}
+                    title="Show only stocks with OBV-price divergence (OBV near 20-bar high while price is not)"
+                  >
+                    OBV Divergence
+                  </button>
+                  <button
+                    onClick={() => setFilterVpDivergence((v: boolean) => !v)}
+                    className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] transition-colors ${
+                      filterVpDivergence
+                        ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
+                        : "border border-[#2a2a2a] text-[#a0a0a0] hover:text-white hover:border-[#444]"
+                    }`}
+                    title="Show only stocks with volume-price divergence (seller exhaustion on lower lows)"
+                  >
+                    VP Divergence
+                  </button>
+                </div>
+              </div>
               <button
                 onClick={() => {
                   clearPersistedFilters("ew-filter:prerun");
@@ -1104,6 +1148,8 @@ function PreRunPage() {
                   setSkipGate3(false);
                   setQuadrantFilter("All");
                   setShowMultiTF(false);
+                  setFilterObvDivergence(false);
+                  setFilterVpDivergence(false);
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >
@@ -1123,6 +1169,22 @@ function PreRunPage() {
             <button
               onClick={() => setCriteriaFilters([])}
               className="ml-auto text-[#5ba3e6]/50 hover:text-[#5ba3e6]"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+
+        {/* Active volume signal filters indicator */}
+        {(filterObvDivergence || filterVpDivergence) && (
+          <div className="flex items-center gap-2 rounded-md border border-green-500/20 bg-green-500/5 px-3 py-2">
+            <TrendingUp className="h-3 w-3 text-green-400 shrink-0" />
+            <span className="text-[10px] text-green-400">
+              Volume filter: {[filterObvDivergence && "OBV Divergence", filterVpDivergence && "VP Divergence"].filter(Boolean).join(" + ")}
+            </span>
+            <button
+              onClick={() => { setFilterObvDivergence(false); setFilterVpDivergence(false); }}
+              className="ml-auto text-green-400/50 hover:text-green-400"
             >
               <X className="h-3 w-3" />
             </button>
@@ -1689,11 +1751,11 @@ const ResultCard = memo(function ResultCard({
       </div>
 
       {/* Leading volume indicator badges */}
-      {(d.obvTrendDirection === "rising" || d.vpDivergenceBullish === true) && (
+      {(d.obvDivergent === true || d.vpDivergenceBullish === true) && (
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          {d.obvTrendDirection === "rising" && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400" title={`OBV slope: ${d.obvTrendSlope?.toFixed(4) ?? "?"}`}>
-              OBV Rising
+          {d.obvDivergent === true && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400" title={`OBV ${d.obvPctFromHigh?.toFixed(1) ?? "?"}% from high, price ${d.pricePctFromHigh20d?.toFixed(1) ?? "?"}% from high`}>
+              OBV Divergence
             </span>
           )}
           {d.vpDivergenceBullish === true && (

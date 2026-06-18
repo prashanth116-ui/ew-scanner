@@ -851,23 +851,25 @@ function calcOBV(closes: number[], volumes: number[]): number[] {
   return obv;
 }
 
-/** OBV trend: linear regression slope over last 10 bars, normalized by avg absolute OBV. */
-function calcOBVTrend(closes: number[], volumes: number[]): { slope: number; direction: "rising" | "flat" | "falling" } {
+/** OBV-Price Divergence: OBV at/near its 20-bar high while price is NOT near its 20-bar high.
+ *  This detects stealth accumulation — institutions buying while price stays flat. */
+function calcOBVPriceDivergence(closes: number[], volumes: number[]): { divergent: boolean; obvPctFromHigh: number; pricePctFromHigh: number } {
   const obv = calcOBV(closes, volumes);
-  const n = Math.min(10, obv.length);
-  const recent = obv.slice(-n);
-  // Linear regression slope
-  const xMean = (n - 1) / 2;
-  let num = 0, den = 0;
-  for (let i = 0; i < n; i++) {
-    num += (i - xMean) * recent[i];
-    den += (i - xMean) ** 2;
-  }
-  const rawSlope = den !== 0 ? num / den : 0;
-  const avgAbsOBV = recent.reduce((s, v) => s + Math.abs(v), 0) / n || 1;
-  const slope = rawSlope / avgAbsOBV;
-  const direction = slope > 0.01 ? "rising" : slope < -0.01 ? "falling" : "flat";
-  return { slope, direction };
+  const n = Math.min(20, obv.length);
+  const recentOBV = obv.slice(-n);
+  const recentCloses = closes.slice(-n);
+
+  const obvHigh = Math.max(...recentOBV);
+  const priceHigh = Math.max(...recentCloses);
+  const obvNow = recentOBV[recentOBV.length - 1];
+  const priceNow = recentCloses[recentCloses.length - 1];
+
+  const obvPctFromHigh = obvHigh !== 0 ? ((obvHigh - obvNow) / Math.abs(obvHigh)) * 100 : 0;
+  const pricePctFromHigh = priceHigh !== 0 ? ((priceHigh - priceNow) / priceHigh) * 100 : 0;
+
+  // Divergent = OBV within 5% of its 20-bar high AND price > 5% below its 20-bar high
+  const divergent = obvPctFromHigh <= 5 && pricePctFromHigh > 5;
+  return { divergent, obvPctFromHigh, pricePctFromHigh };
 }
 
 /** Volume-Price Divergence: price makes lower low but volume on down-moves decreases (seller exhaustion). */
@@ -876,6 +878,7 @@ function calcVPDivergence(closes: number[], opens: number[], volumes: number[], 
   if (swings.length < 2) return false;
   const [prev, curr] = swings.slice(-2);
   if (curr.value >= prev.value) return false; // No lower low
+  if (curr.index < closes.length - 15) return false; // Too old — second swing low must be recent
   // Avg down-day volume around each swing low (±2 bars)
   const avgDownVol = (center: number) => {
     let sum = 0, count = 0;
@@ -886,7 +889,7 @@ function calcVPDivergence(closes: number[], opens: number[], volumes: number[], 
   };
   const prevDownVol = avgDownVol(prev.index);
   const currDownVol = avgDownVol(curr.index);
-  return prevDownVol > 0 && currDownVol < prevDownVol * 0.85; // Volume decreased 15%+
+  return prevDownVol > 0 && currDownVol < prevDownVol * 0.70; // Volume decreased 30%+
 }
 
 /** Calculate weeks in base (how long price has been below ATH). */
@@ -1600,16 +1603,18 @@ export async function fetchPreRunData(
     }
   }
 
-  // ── OBV + VP Divergence (leading volume indicators) ──
-  let obvTrendSlope: number | null = null;
-  let obvTrendDirection: "rising" | "flat" | "falling" | null = null;
+  // ── OBV-Price Divergence + VP Divergence (leading volume indicators) ──
+  let obvDivergent: boolean | null = null;
+  let obvPctFromHigh: number | null = null;
+  let pricePctFromHigh20d: number | null = null;
   let vpDivergenceBullish: boolean | null = null;
 
   if (chart3mo && chart3mo.closes.length >= 20) {
     const { closes, opens, volumes, lows } = chart3mo;
-    const obvTrend = calcOBVTrend(closes, volumes);
-    obvTrendSlope = obvTrend.slope;
-    obvTrendDirection = obvTrend.direction;
+    const obvResult = calcOBVPriceDivergence(closes, volumes);
+    obvDivergent = obvResult.divergent;
+    obvPctFromHigh = obvResult.obvPctFromHigh;
+    pricePctFromHigh20d = obvResult.pricePctFromHigh;
     vpDivergenceBullish = calcVPDivergence(closes, opens, volumes, lows);
   }
 
@@ -1645,8 +1650,9 @@ export async function fetchPreRunData(
     pctFromBaseHigh,
     floatShares,
     floatTurnover20d,
-    obvTrendSlope,
-    obvTrendDirection,
+    obvDivergent,
+    obvPctFromHigh,
+    pricePctFromHigh20d,
     vpDivergenceBullish,
     quarterlyRevenue,
     earningsBeatStreak,
