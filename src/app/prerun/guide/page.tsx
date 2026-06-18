@@ -777,11 +777,11 @@ export default function PreRunGuidePage() {
               </thead>
               <tbody className="text-[#c0c0c0]">
                 {[
-                  { name: "SNDK", ath: "40%", si: "15%", score: "15", use: "Classic multi-bagger: deep base + high SI + catalyst" },
-                  { name: "High SI", ath: "0%", si: "20%", score: "11", use: "Maximum squeeze fuel, any ATH discount" },
-                  { name: "Early Mover", ath: "40%", si: "Any", score: "14", use: "Stage 1\u21922: base + EMA reclaim + timing + higher lows (A/M/M2/K/L\u22651)" },
-                  { name: "Pullback Buy", ath: "20%", si: "Any", score: "11", use: "20-35% pullback from ATH with EMA timing + volume (M2/F\u22651)" },
-                  { name: "VCP Breakout", ath: "Any", si: "Any", score: "0", use: "Institutional VCP mode: uptrend + compression + tight base near pivot (separate 0-100 engine)" },
+                  { name: "SNDK", ath: "40%", si: "15%", score: "18", use: "Classic multi-bagger: deep base + high SI. Catches early base formation." },
+                  { name: "Early Mover", ath: "30%", si: "Any", score: "16", use: "Stage 1\u21922: base + EMA + timing + higher lows + volume (A/M/M2/K/L/F\u22651)" },
+                  { name: "Pullback Buy", ath: "20%", si: "Any", score: "15", use: "20-35% pullback with M2 timing + volume accumulation (M2/F\u22651)" },
+                  { name: "Leading", ath: "Any", si: "Any", score: "17", use: "RRG LEADING/IMPROVING sectors with EMA confirmation (M\u22651)" },
+                  { name: "VCP Breakout", ath: "Any", si: "Any", score: "65", use: "Institutional VCP mode: uptrend + compression + tight base near pivot (separate 0-100 engine)" },
                 ].map((p) => (
                   <tr key={p.name} className="border-b border-[#2a2a2a]/50">
                     <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{p.name}</td>

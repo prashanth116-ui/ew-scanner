@@ -49,8 +49,8 @@ export function scoreTrend(data: PreRunStockData): number {
   const high52w = data.high52w ?? 0;
   if (price > 0 && high52w > 0) {
     const pctFrom52w = ((high52w - price) / high52w) * 100;
-    if (pctFrom52w <= 15) score += 8;       // within 15%: +5 base +3 bonus
-    else if (pctFrom52w <= 25) score += 5;  // within 25%: +5 base
+    if (pctFrom52w <= 15) score += 5;       // within 15%: strong proximity
+    else if (pctFrom52w <= 25) score += 3;  // within 25%: moderate proximity
   }
 
   // Extended penalty: >10% above SMA50

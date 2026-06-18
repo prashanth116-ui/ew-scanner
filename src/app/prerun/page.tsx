@@ -313,7 +313,8 @@ function PreRunPage() {
       // Post-scan quadrant filter
       if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
         const sector = getSectorForTicker(r.data.ticker);
-        if (!sector || sectorQuadrants[sector] !== quadrantFilter) return false;
+        const allowedQuadrants = quadrantFilter.split(",");
+        if (!sector || !allowedQuadrants.includes(sectorQuadrants[sector])) return false;
       }
       return true;
     });
@@ -518,7 +519,8 @@ function PreRunPage() {
     if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
       tickers = tickers.filter((t) => {
         const sector = getSectorForTicker(t);
-        return sector && sectorQuadrants[sector] === quadrantFilter;
+        const allowedQuadrants = quadrantFilter.split(",");
+        return sector && allowedQuadrants.includes(sectorQuadrants[sector] ?? "");
       });
     }
 
@@ -747,6 +749,10 @@ function PreRunPage() {
     setSkipGate3(preset.skipGate3 ?? false);
     setQuadrantFilter(preset.quadrantFilter ?? "All");
     setViewMode(preset.viewMode ?? "standard");
+    // Sync VCP min score from preset when in VCP mode
+    if (preset.viewMode === "vcp") {
+      setVcpMinScore(f.minScore);
+    }
   }, []);
 
   // Add to watchlist
