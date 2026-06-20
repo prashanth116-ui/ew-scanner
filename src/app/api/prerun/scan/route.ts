@@ -31,13 +31,14 @@ export async function POST(request: NextRequest) {
     }
 
     const results = [];
+    const failedTickers: string[] = [];
     for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
       const batch = tickers.slice(i, i + BATCH_SIZE);
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
           const data = await fetchPreRunData(ticker, emaTimeframe);
-          if (!data) return null;
+          if (!data) return { ticker, failed: true as const };
           if (viewMode === "vcp") {
             return scoreVCP(data);
           }
@@ -47,9 +48,16 @@ export async function POST(request: NextRequest) {
         })
       );
 
-      for (const r of settled) {
+      for (let j = 0; j < settled.length; j++) {
+        const r = settled[j];
         if (r.status === "fulfilled" && r.value) {
-          results.push(r.value);
+          if ("failed" in r.value) {
+            failedTickers.push(batch[j]);
+          } else {
+            results.push(r.value);
+          }
+        } else if (r.status === "rejected") {
+          failedTickers.push(batch[j]);
         }
       }
 
@@ -74,7 +82,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ results, count: results.length, viewMode });
+    return NextResponse.json({ results, count: results.length, viewMode, failedTickers: failedTickers.length > 0 ? failedTickers : undefined });
   } catch (err) {
     logError("api/prerun/scan", err);
     return NextResponse.json(

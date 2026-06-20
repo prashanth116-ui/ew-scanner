@@ -64,6 +64,12 @@ export interface PreRunStockData {
   obvPctFromHigh: number | null;             // How far OBV is from its 20-bar high (%)
   pricePctFromHigh20d: number | null;        // How far price is from its 20-bar high (%)
   vpDivergenceBullish: boolean | null;      // Price lower-low + volume-on-downs decreasing
+  // F (leading): Distribution day count
+  distributionDays20d: number | null;        // Count of down-price + high-volume days in last 20 bars
+  // H: Insider buying short window
+  insiderBuys45d: number | null;             // Insider buy transactions in last 45d (cluster detection)
+  // Data quality
+  dataQuality: number | null;                // 0-100: percentage of API calls that succeeded
   // Phase 2: Revenue + earnings enhancement
   quarterlyRevenue: { period: string; value: number }[] | null; // Last 4-8 quarters from SEC EDGAR
   earningsBeatStreak: number | null;       // Consecutive earnings beats (actual > estimate)
@@ -249,6 +255,7 @@ export interface SavedPreRunScan {
   candidateCount: number;
   candidates: PreRunResult[];
   /** Extended state (added post-launch, optional for backward compat) */
+  viewMode?: VCPViewMode;
   quadrantFilter?: string;
   skipGate3?: boolean;
   criteriaFilters?: PreRunCriteriaFilter[];
@@ -295,6 +302,7 @@ export interface PreRunPreset {
   skipGate3?: boolean;
   quadrantFilter?: string;
   viewMode?: VCPViewMode;
+  vcpMinScore?: number;
   filterObvDivergence?: boolean;
   filterVpDivergence?: boolean;
 }
@@ -310,13 +318,10 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
   {
     name: "Early Mover",
     shortName: "Early Mover",
-    description: "Stage 1→2 breakout: base + EMA reclaim + timing + higher lows + breakout proximity + volume accumulation.",
-    filters: { minPctFromAth: 30, minShortFloat: 0, minScore: 16, verdict: "All", sectorBucket: "All" },
+    description: "Stage 1→2 breakout: EMA timing + higher lows + volume accumulation.",
+    filters: { minPctFromAth: 25, minShortFloat: 0, minScore: 14, verdict: "All", sectorBucket: "All" },
     criteriaFilters: [
-      { criterion: "A", min: 1 },
-      { criterion: "M", min: 1 },
       { criterion: "M2", min: 1 },
-      { criterion: "K", min: 1 },
       { criterion: "L", min: 1 },
       { criterion: "F", min: 1 },
     ],
@@ -347,8 +352,9 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     name: "Inst. VCP Breakout",
     shortName: "VCP",
     description: "Institutional-quality stocks in confirmed uptrends forming tight volatility contractions near breakout pivots.",
-    filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 65 },
+    filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 0 },
     viewMode: "vcp",
+    vcpMinScore: 65,
   },
   {
     name: "Stealth Accumulation",
@@ -357,5 +363,18 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     filters: { minPctFromAth: 20, minShortFloat: 0, minScore: 11 },
     filterObvDivergence: true,
     filterVpDivergence: true,
+  },
+  {
+    name: "Aggressive Early",
+    shortName: "Early+",
+    description: "Earliest detection: volume divergence + range coil + EMA timing. Lower score threshold catches setups 1-2 weeks before breakout.",
+    filters: { minPctFromAth: 20, minShortFloat: 0, minScore: 10 },
+    criteriaFilters: [
+      { criterion: "M2", min: 1 },
+      { criterion: "N", min: 1 },
+    ],
+    filterObvDivergence: true,
+    filterVpDivergence: true,
+    multiTF: true,
   },
 ];

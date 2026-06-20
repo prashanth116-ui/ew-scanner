@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 // Mock server-only so we can import pure functions from data.ts in tests
 vi.mock("server-only", () => ({}));
 
-import { scoreA, scoreB, scoreD, scoreE, scoreF, scoreH, scoreI, scoreJ, scoreK, scoreM2, calcSectorModifier, scorePreRun, autoScorePreRun } from "./scoring";
+import { scoreA, scoreB, scoreD, scoreE, scoreF, scoreH, scoreI, scoreJ, scoreK, scoreL, scoreM, scoreM2, scoreN, scoreO, scoreP, scoreQ, calcSectorModifier, scorePreRun, autoScorePreRun } from "./scoring";
 import { calcDisplacementAndFVG } from "./data";
 import type { PreRunStockData } from "./types";
 
@@ -41,6 +41,9 @@ function makeData(overrides: Partial<PreRunStockData> = {}): PreRunStockData {
     obvPctFromHigh: null,
     pricePctFromHigh20d: null,
     vpDivergenceBullish: null,
+    distributionDays20d: null,
+    insiderBuys45d: null,
+    dataQuality: null,
     quarterlyRevenue: null,
     earningsBeatStreak: null,
     higherLowsCount: null,
@@ -284,19 +287,28 @@ describe("scoreF with leading indicators", () => {
 // ── Score H: Insider buying ──
 
 describe("scoreH", () => {
-  it("returns 2 for cluster buying (3+ buys)", () => {
-    expect(scoreH(makeData({ insiderBuys90d: 5 }))).toBe(2);
-    expect(scoreH(makeData({ insiderBuys90d: 3 }))).toBe(2);
+  it("returns 2 for recent 45d cluster (2+ buys in 45d)", () => {
+    expect(scoreH(makeData({ insiderBuys90d: 2, insiderBuys45d: 2 }))).toBe(2);
+    expect(scoreH(makeData({ insiderBuys90d: 3, insiderBuys45d: 3 }))).toBe(2);
   });
 
-  it("returns 1 for some insider interest (1-2 buys)", () => {
-    expect(scoreH(makeData({ insiderBuys90d: 1 }))).toBe(1);
-    expect(scoreH(makeData({ insiderBuys90d: 2 }))).toBe(1);
+  it("returns 2 for spread 90d cluster (3+ buys over 90d)", () => {
+    expect(scoreH(makeData({ insiderBuys90d: 3, insiderBuys45d: 1 }))).toBe(2);
+    expect(scoreH(makeData({ insiderBuys90d: 5, insiderBuys45d: 0 }))).toBe(2);
+  });
+
+  it("returns 1 for single recent buy (1 in 45d)", () => {
+    expect(scoreH(makeData({ insiderBuys90d: 1, insiderBuys45d: 1 }))).toBe(1);
+  });
+
+  it("returns 1 for some 90d insider interest (1-2 buys, no 45d)", () => {
+    expect(scoreH(makeData({ insiderBuys90d: 1, insiderBuys45d: 0 }))).toBe(1);
+    expect(scoreH(makeData({ insiderBuys90d: 2, insiderBuys45d: 0 }))).toBe(1);
   });
 
   it("returns 0 for no insider buys", () => {
-    expect(scoreH(makeData({ insiderBuys90d: 0 }))).toBe(0);
-    expect(scoreH(makeData({ insiderBuys90d: null }))).toBe(0);
+    expect(scoreH(makeData({ insiderBuys90d: 0, insiderBuys45d: 0 }))).toBe(0);
+    expect(scoreH(makeData({ insiderBuys90d: null, insiderBuys45d: null }))).toBe(0);
   });
 });
 
@@ -494,6 +506,140 @@ describe("scoreM2", () => {
       emaM2DisplacementNearCross: true,
       emaM2FvgNearCross: true,
     }))).toBe(2);
+  });
+});
+
+// ── Score L: Higher Lows ──
+
+describe("scoreL", () => {
+  it("returns 2 for 3 higher lows", () => {
+    expect(scoreL(makeData({ higherLowsCount: 3 }))).toBe(2);
+  });
+
+  it("returns 1 for 2 higher lows", () => {
+    expect(scoreL(makeData({ higherLowsCount: 2 }))).toBe(1);
+  });
+
+  it("returns 0 for 0-1 higher lows", () => {
+    expect(scoreL(makeData({ higherLowsCount: 1 }))).toBe(0);
+    expect(scoreL(makeData({ higherLowsCount: 0 }))).toBe(0);
+  });
+
+  it("returns 0 when null", () => {
+    expect(scoreL(makeData({ higherLowsCount: null }))).toBe(0);
+  });
+});
+
+// ── Score M: EMA Reclaim ──
+
+describe("scoreM", () => {
+  it("returns 2 for above both EMAs + recent crossover", () => {
+    expect(scoreM(makeData({ aboveEma21: true, aboveEma50: true, emaCrossoverWithin20d: true }))).toBe(2);
+  });
+
+  it("returns 1 for above one EMA", () => {
+    expect(scoreM(makeData({ aboveEma21: true, aboveEma50: false }))).toBe(1);
+    expect(scoreM(makeData({ aboveEma21: false, aboveEma50: true }))).toBe(1);
+  });
+
+  it("returns 1 for above both but no recent crossover", () => {
+    expect(scoreM(makeData({ aboveEma21: true, aboveEma50: true, emaCrossoverWithin20d: false }))).toBe(1);
+  });
+
+  it("returns 0 for below both", () => {
+    expect(scoreM(makeData({ aboveEma21: false, aboveEma50: false }))).toBe(0);
+  });
+
+  it("returns 0 when null", () => {
+    expect(scoreM(makeData({ aboveEma21: null, aboveEma50: null }))).toBe(0);
+  });
+});
+
+// ── Score N: Range Coil ──
+
+describe("scoreN", () => {
+  it("returns 2 for both conditions met", () => {
+    expect(scoreN(makeData({ closesNearRangeTop: true, atrContracting: true }))).toBe(2);
+  });
+
+  it("returns 1 for only closesNearTop", () => {
+    expect(scoreN(makeData({ closesNearRangeTop: true, atrContracting: false }))).toBe(1);
+  });
+
+  it("returns 1 for only atrContracting", () => {
+    expect(scoreN(makeData({ closesNearRangeTop: false, atrContracting: true }))).toBe(1);
+  });
+
+  it("returns 0 for both false", () => {
+    expect(scoreN(makeData({ closesNearRangeTop: false, atrContracting: false }))).toBe(0);
+  });
+
+  it("returns 0 when both null", () => {
+    expect(scoreN(makeData({ closesNearRangeTop: null, atrContracting: null }))).toBe(0);
+  });
+
+  it("returns 1 when one is true and other is null", () => {
+    expect(scoreN(makeData({ closesNearRangeTop: true, atrContracting: null }))).toBe(1);
+    expect(scoreN(makeData({ closesNearRangeTop: null, atrContracting: true }))).toBe(1);
+  });
+});
+
+// ── Score O: Failed Breakdown Recovery ──
+
+describe("scoreO", () => {
+  it("returns 2 for full breakdown recovery", () => {
+    expect(scoreO(makeData({ failedBreakdownRecovery: 2 }))).toBe(2);
+  });
+
+  it("returns 1 for wick test only", () => {
+    expect(scoreO(makeData({ failedBreakdownRecovery: 1 }))).toBe(1);
+  });
+
+  it("returns 0 for none", () => {
+    expect(scoreO(makeData({ failedBreakdownRecovery: 0 }))).toBe(0);
+    expect(scoreO(makeData({ failedBreakdownRecovery: null }))).toBe(0);
+  });
+});
+
+// ── Score P: Analyst Revision Momentum ──
+
+describe("scoreP", () => {
+  it("returns 2 for positive trend", () => {
+    expect(scoreP(makeData({ analystRevisionTrend: 1 }))).toBe(2);
+  });
+
+  it("returns 1 for stable", () => {
+    expect(scoreP(makeData({ analystRevisionTrend: 0 }))).toBe(1);
+  });
+
+  it("returns 0 for declining or null", () => {
+    expect(scoreP(makeData({ analystRevisionTrend: -1 }))).toBe(0);
+    expect(scoreP(makeData({ analystRevisionTrend: null }))).toBe(0);
+  });
+});
+
+// ── Score Q: Short Squeeze Probability ──
+
+describe("scoreQ", () => {
+  it("returns 2 for 3+ signals", () => {
+    expect(scoreQ(makeData({
+      shortFloat: 20, floatTurnover20d: 1.0, insiderBuys90d: 1, putCallRatio: 0.5,
+    }))).toBe(2);
+  });
+
+  it("returns 1 for 2 signals", () => {
+    expect(scoreQ(makeData({
+      shortFloat: 20, floatTurnover20d: 1.0, insiderBuys90d: 0, putCallRatio: null,
+    }))).toBe(1);
+  });
+
+  it("returns 0 for 0-1 signals", () => {
+    expect(scoreQ(makeData({ shortFloat: 5, floatTurnover20d: 0, insiderBuys90d: 0, putCallRatio: null }))).toBe(0);
+    expect(scoreQ(makeData({ shortFloat: 20, floatTurnover20d: 0, insiderBuys90d: 0, putCallRatio: null }))).toBe(0);
+  });
+
+  it("returns 0 when all data null", () => {
+    expect(scoreQ(makeData({ shortFloat: null, floatTurnover20d: null, insiderBuys90d: null, putCallRatio: null }))).toBe(0);
   });
 });
 

@@ -219,7 +219,7 @@ function QuickReferenceCard() {
                     { l: "E", name: "Inst. Under-Ownership", max: 2, s0: "Inst >70%", s1: "Inst 40-70%", s2: "Inst <40%" },
                     { l: "F", name: "Volume Accumulation", max: 3, s0: "Distribution", s1: "Neutral", s2: "3: base 2 + OBV-price divergence + VP divergence" },
                     { l: "G", name: "Index Inclusion", max: 2, s0: "N/A", s1: "Possible", s2: "Plausible <18mo" },
-                    { l: "H", name: "Insider Buying", max: 2, s0: "None 90d", s1: "1-2 buys", s2: "3+ cluster buys" },
+                    { l: "H", name: "Insider Buying", max: 2, s0: "None 90d", s1: "1 recent buy", s2: "2+ in 45d or 3+ in 90d" },
                     { l: "I", name: "Options Flow", max: 2, s0: "P/C >1.0", s1: "P/C 0.5-1.0", s2: "P/C <0.5 (bullish)" },
                     { l: "J", name: "Rel. Strength vs Sector", max: 2, s0: "Under by >5%", s1: "Within 5%", s2: "Over by >5%" },
                     { l: "K", name: "Breakout Proximity", max: 2, s0: ">10% below resist", s1: "5-10% below", s2: "<5% (coiling)" },
@@ -484,8 +484,8 @@ export default function PreRunGuidePage() {
               letter="H"
               label="Insider Buying"
               weight="MEDIUM"
-              score2="3+ insider purchases in last 90 days. Cluster buying = strong conviction."
-              score1="1-2 insider purchases. Some insider interest."
+              score2="2+ insider purchases in last 45 days (early cluster) OR 3+ in last 90 days. Strong conviction signal."
+              score1="1 insider purchase in last 45 days, or 1-2 in 90 days. Some insider interest."
               score0="No insider buys in last 90 days."
             />
             <CriterionRow

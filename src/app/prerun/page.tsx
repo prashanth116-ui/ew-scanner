@@ -137,7 +137,7 @@ function PreRunPage() {
   const [quadrantFilter, setQuadrantFilter] = usePersistedFilter("ew-filter:prerun:quadrantFilter", "All");
 
   // VCP mode
-  const [viewMode, setViewMode] = useState<VCPViewMode>("standard");
+  const [viewMode, setViewMode] = usePersistedFilter<VCPViewMode>("ew-filter:prerun:viewMode", "standard");
   const [vcpResults, setVcpResults] = useState<VCPResult[]>([]);
   const [vcpAccountSize, setVcpAccountSize] = usePersistedFilter("ew-filter:prerun:vcpAccountSize", 100_000);
   const [vcpRiskPct, setVcpRiskPct] = usePersistedFilter("ew-filter:prerun:vcpRiskPct", 0.20);
@@ -711,6 +711,7 @@ function PreRunPage() {
   const handleSave = useCallback(() => {
     const name = saveName.trim() || `Pre-Run ${new Date().toLocaleDateString()}`;
     savePreRunScan(name, filters, filtered, {
+      viewMode: viewMode !== "standard" ? viewMode : undefined,
       quadrantFilter: quadrantFilter !== "All" ? quadrantFilter : undefined,
       skipGate3: skipGate3 || undefined,
       criteriaFilters: criteriaFilters.length > 0 ? criteriaFilters : undefined,
@@ -738,6 +739,7 @@ function PreRunPage() {
     setVerdictFilter(scan.filters.verdict);
     setEmaTimeframe(scan.filters.emaTimeframe ?? "15m");
     setRawResults(scan.candidates);
+    setViewMode(scan.viewMode ?? "standard");
     setQuadrantFilter(scan.quadrantFilter ?? "All");
     setSkipGate3(scan.skipGate3 ?? false);
     setCriteriaFilters(scan.criteriaFilters ?? []);
@@ -767,7 +769,7 @@ function PreRunPage() {
     setFilterVpDivergence(preset.filterVpDivergence ?? false);
     // Sync VCP min score from preset when in VCP mode
     if (preset.viewMode === "vcp") {
-      setVcpMinScore(f.minScore);
+      setVcpMinScore(preset.vcpMinScore ?? f.minScore);
     }
   }, []);
 
@@ -933,6 +935,13 @@ function PreRunPage() {
                   setSectorBucket("All");
                   setVcpAccountSize(100_000);
                   setVcpRiskPct(0.20);
+                  setViewMode("standard");
+                  setCriteriaFilters([]);
+                  setMinPctFromAth(DEFAULT_PRERUN_FILTERS.minPctFromAth);
+                  setMinShortFloat(DEFAULT_PRERUN_FILTERS.minShortFloat);
+                  setMinScore(DEFAULT_PRERUN_FILTERS.minScore);
+                  setFilterObvDivergence(false);
+                  setFilterVpDivergence(false);
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >
@@ -1147,6 +1156,7 @@ function PreRunPage() {
                   setCriteriaFilters([]);
                   setSkipGate3(false);
                   setQuadrantFilter("All");
+                  setViewMode("standard");
                   setShowMultiTF(false);
                   setFilterObvDivergence(false);
                   setFilterVpDivergence(false);

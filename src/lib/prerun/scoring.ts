@@ -128,7 +128,7 @@ export function scoreE(data: PreRunStockData): number {
 /** Criterion F: Volume accumulation (0-3). Enhanced with float turnover + OBV/VP leading indicators. */
 export function scoreF(data: PreRunStockData): number {
   const avgUp = data.avgVolumeUpDays ?? 0;
-  const avgDown = data.avgVolumeDownDays ?? 1;
+  const avgDown = data.avgVolumeDownDays ?? 0;
   const floatTurnover = data.floatTurnover20d ?? 0;
 
   let base = 0;
@@ -153,11 +153,15 @@ export function scoreG(manualScore: number): number {
   return Math.max(0, Math.min(2, manualScore));
 }
 
-/** Criterion H: Insider buying (0-2). */
+/** Criterion H: Insider buying (0-2). Uses 45d cluster detection for early signals. */
 export function scoreH(data: PreRunStockData): number {
-  const buys = data.insiderBuys90d ?? 0;
-  if (buys >= 3) return 2;  // Cluster buying — strong conviction
-  if (buys >= 1) return 1;  // Some insider interest
+  const buys90 = data.insiderBuys90d ?? 0;
+  const buys45 = data.insiderBuys45d ?? 0;
+  // 45d cluster is more actionable (recent buying)
+  if (buys45 >= 2) return 2;   // Recent cluster buying — strong early signal
+  if (buys90 >= 3) return 2;   // Spread cluster over 90d — still strong conviction
+  if (buys45 >= 1) return 1;   // Recent insider interest
+  if (buys90 >= 1) return 1;   // Some insider interest
   return 0;
 }
 
