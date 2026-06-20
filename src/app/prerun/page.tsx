@@ -51,10 +51,11 @@ import {
   addToPreRunWatchlist,
   seedWatchlistIfEmpty,
   saveScanResults,
+  loadScanResultsWithDate,
   saveMultiTFCache,
   loadMultiTFCache,
   saveVCPScanResults,
-  loadVCPScanResults,
+  loadVCPScanResultsWithDate,
 } from "@/lib/prerun/storage";
 import { exportPreRunToExcel, exportVCPToExcel } from "@/lib/prerun/export";
 import {
@@ -155,6 +156,12 @@ function PreRunPage() {
   const [filterObvDivergence, setFilterObvDivergence] = usePersistedFilter("ew-filter:prerun:obvDivergence", false);
   const [filterVpDivergence, setFilterVpDivergence] = usePersistedFilter("ew-filter:prerun:vpDivergence", false);
 
+  // Top Picks filter
+  const [showTopPicks, setShowTopPicks] = usePersistedFilter("ew-filter:prerun:topPicks", false);
+
+  // Staleness: date when results were loaded from persistent storage (not TTL cache)
+  const [persistentScanDate, setPersistentScanDate] = useState<string | null>(null);
+
   // Multi-TF M2 state
   const [multiTFResults, setMultiTFResults] = useState<Map<string, MultiTFM2Result>>(new Map());
   const [showMultiTF, setShowMultiTF] = useState(false);
@@ -214,16 +221,30 @@ function PreRunPage() {
       }
       setSectorQuadrants(qmap);
     }
-    // Pre-populate from cache (30-min TTL)
+    // Pre-populate from cache (30-min TTL), fallback to persistent storage
+    let loadedPersistentDate: string | null = null;
     const cached = loadFromCache<PreRunResult[]>("ew-prerun-scan-v1", 30 * 60 * 1000);
     if (cached && cached.length > 0) {
       setRawResults(cached);
+    } else {
+      const persistent = loadScanResultsWithDate();
+      if (persistent.results.length > 0) {
+        setRawResults(persistent.results);
+        loadedPersistentDate = persistent.date;
+      }
     }
-    // Load VCP cache
+    // Load VCP cache (30-min TTL), fallback to persistent storage
     const vcpCached = loadFromCache<VCPResult[]>("ew-prerun-vcp-v1", 30 * 60 * 1000);
     if (vcpCached && vcpCached.length > 0) {
       setVcpResults(vcpCached);
+    } else {
+      const vcpPersistent = loadVCPScanResultsWithDate();
+      if (vcpPersistent.results.length > 0) {
+        setVcpResults(vcpPersistent.results);
+        if (!loadedPersistentDate) loadedPersistentDate = vcpPersistent.date;
+      }
     }
+    if (loadedPersistentDate) setPersistentScanDate(loadedPersistentDate);
     // Load multi-TF cache
     const tfCache = loadMultiTFCache();
     if (tfCache && tfCache.results.length > 0) {
@@ -327,9 +348,20 @@ function PreRunPage() {
         const vpPass = filterVpDivergence && r.data.vpDivergenceBullish === true;
         if (!obvPass && !vpPass) return false;
       }
+      // Top Picks: high-conviction filter (2+ signals firing + good data quality)
+      if (showTopPicks) {
+        const signals = [
+          r.scores.scoreM2 >= 1,
+          r.scores.scoreF >= 1,
+          r.scores.scoreL >= 1,
+          r.scores.scoreK >= 1,
+        ].filter(Boolean).length;
+        if (signals < 2) return false;
+        if ((r.data.dataQuality ?? 0) < 70) return false;
+      }
       return true;
     });
-  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate3, quadrantFilter, sectorQuadrants, filterObvDivergence, filterVpDivergence]);
+  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate3, quadrantFilter, sectorQuadrants, filterObvDivergence, filterVpDivergence, showTopPicks]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -597,6 +629,7 @@ function PreRunPage() {
       saveScanResults(results as PreRunResult[]);
       saveToCache("ew-prerun-scan-v1", results);
     }
+    setPersistentScanDate(null);
     setScanning(false);
     setProgress("");
 
@@ -750,6 +783,7 @@ function PreRunPage() {
     setMultiTFResults(new Map());
     setFilterObvDivergence(scan.filterObvDivergence ?? false);
     setFilterVpDivergence(scan.filterVpDivergence ?? false);
+    setShowTopPicks(false);
   }, []);
 
   // Preset
@@ -770,6 +804,7 @@ function PreRunPage() {
     setViewMode(preset.viewMode ?? "standard");
     setFilterObvDivergence(preset.filterObvDivergence ?? false);
     setFilterVpDivergence(preset.filterVpDivergence ?? false);
+    setShowTopPicks(false);
     // Sync VCP min score from preset when in VCP mode
     if (preset.viewMode === "vcp") {
       setVcpMinScore(preset.vcpMinScore ?? f.minScore);
@@ -1163,6 +1198,7 @@ function PreRunPage() {
                   setShowMultiTF(false);
                   setFilterObvDivergence(false);
                   setFilterVpDivergence(false);
+                  setShowTopPicks(false);
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >
@@ -1337,6 +1373,11 @@ function PreRunPage() {
                   / {rawResults.length}
                 </span>
               </p>
+              {persistentScanDate && (
+                <p className="text-[10px] text-amber-400/70 mt-0.5">
+                  Scanned {new Date(persistentScanDate).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </p>
+              )}
             </div>
             <div className="rounded-lg border border-purple-500/20 bg-[#141414] px-4 py-3">
               <p className="text-[10px] uppercase tracking-wider text-purple-400/60 mb-1">
@@ -1450,6 +1491,18 @@ function PreRunPage() {
               >
                 <FileDown className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Export</span>
+              </button>
+              <button
+                onClick={() => setShowTopPicks((v) => !v)}
+                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs transition-colors ${
+                  showTopPicks
+                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                    : "border border-[#2a2a2a] text-[#a0a0a0] hover:text-white hover:border-[#444]"
+                }`}
+                title="Show only high-conviction picks: 2+ signals firing + good data quality"
+              >
+                <Target className="h-3 w-3" />
+                <span className="hidden sm:inline">Top Picks</span>
               </button>
               <button
                 onClick={() => setShowMultiTF((v) => !v)}
