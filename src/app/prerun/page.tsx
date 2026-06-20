@@ -315,7 +315,8 @@ function PreRunPage() {
         if (getCriterionScore(r.scores, cf.criterion) < cf.min) return false;
       }
       // Post-scan quadrant filter
-      if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
+      if (quadrantFilter !== "All") {
+        if (Object.keys(sectorQuadrants).length === 0) return false; // No RRG data — filter all
         const sector = getSectorForTicker(r.data.ticker);
         const allowedQuadrants = quadrantFilter.split(",");
         if (!sector || !allowedQuadrants.includes(sectorQuadrants[sector])) return false;
@@ -712,6 +713,7 @@ function PreRunPage() {
     const name = saveName.trim() || `Pre-Run ${new Date().toLocaleDateString()}`;
     savePreRunScan(name, filters, filtered, {
       viewMode: viewMode !== "standard" ? viewMode : undefined,
+      vcpMinScore: viewMode === "vcp" && vcpMinScore > 0 ? vcpMinScore : undefined,
       quadrantFilter: quadrantFilter !== "All" ? quadrantFilter : undefined,
       skipGate3: skipGate3 || undefined,
       criteriaFilters: criteriaFilters.length > 0 ? criteriaFilters : undefined,
@@ -721,7 +723,7 @@ function PreRunPage() {
     });
     setSavedScans(loadPreRunScans());
     setSaveName("");
-  }, [saveName, filters, filtered, quadrantFilter, skipGate3, criteriaFilters, showMultiTF, filterObvDivergence, filterVpDivergence]);
+  }, [saveName, filters, filtered, viewMode, vcpMinScore, quadrantFilter, skipGate3, criteriaFilters, showMultiTF, filterObvDivergence, filterVpDivergence]);
 
   const handleDelete = useCallback((id: string) => {
     if (!confirm("Delete this saved scan?")) return;
@@ -740,6 +742,7 @@ function PreRunPage() {
     setEmaTimeframe(scan.filters.emaTimeframe ?? "15m");
     setRawResults(scan.candidates);
     setViewMode(scan.viewMode ?? "standard");
+    if (scan.vcpMinScore !== undefined) setVcpMinScore(scan.vcpMinScore);
     setQuadrantFilter(scan.quadrantFilter ?? "All");
     setSkipGate3(scan.skipGate3 ?? false);
     setCriteriaFilters(scan.criteriaFilters ?? []);

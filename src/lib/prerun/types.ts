@@ -256,6 +256,7 @@ export interface SavedPreRunScan {
   candidates: PreRunResult[];
   /** Extended state (added post-launch, optional for backward compat) */
   viewMode?: VCPViewMode;
+  vcpMinScore?: number;
   quadrantFilter?: string;
   skipGate3?: boolean;
   criteriaFilters?: PreRunCriteriaFilter[];
