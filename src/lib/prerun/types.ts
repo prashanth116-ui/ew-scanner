@@ -258,6 +258,7 @@ export interface SavedPreRunScan {
   viewMode?: VCPViewMode;
   vcpMinScore?: number;
   quadrantFilter?: string;
+  skipGate1?: boolean;
   skipGate3?: boolean;
   criteriaFilters?: PreRunCriteriaFilter[];
   multiTF?: boolean;
@@ -267,6 +268,7 @@ export interface SavedPreRunScan {
 
 export interface PreRunFilters {
   minPctFromAth: number;
+  maxPctFromAth: number; // 0 = no limit
   minShortFloat: number;
   maxMarketCap: number; // 0 = no limit
   minScore: number;
@@ -278,6 +280,7 @@ export interface PreRunFilters {
 
 export const DEFAULT_PRERUN_FILTERS: PreRunFilters = {
   minPctFromAth: 20,
+  maxPctFromAth: 0,
   minShortFloat: 0,
   maxMarketCap: 0,
   minScore: 11,
@@ -300,6 +303,7 @@ export interface PreRunPreset {
   criteriaFilters?: PreRunCriteriaFilter[];
   recommended?: boolean;
   multiTF?: boolean;
+  skipGate1?: boolean;
   skipGate3?: boolean;
   quadrantFilter?: string;
   viewMode?: VCPViewMode;
@@ -320,7 +324,7 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     name: "Early Mover",
     shortName: "Early Mover",
     description: "Stage 1→2 breakout: EMA timing + higher lows + volume accumulation.",
-    filters: { minPctFromAth: 25, minShortFloat: 0, minScore: 14, verdict: "All", sectorBucket: "All" },
+    filters: { minPctFromAth: 25, minScore: 14 },
     criteriaFilters: [
       { criterion: "M2", min: 1 },
       { criterion: "L", min: 1 },
@@ -331,22 +335,25 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
   {
     name: "Pullback Buy",
     shortName: "Pullback",
-    description: "Catch 20-35% pullbacks from ATH with M2 timing + volume confirmation.",
-    filters: { minPctFromAth: 20, minShortFloat: 0, minScore: 15, verdict: "All", sectorBucket: "All" },
+    description: "Catch 20-40% pullbacks from ATH with higher lows + M2 timing + volume confirmation.",
+    filters: { maxPctFromAth: 40, minScore: 15 },
     criteriaFilters: [
       { criterion: "M2", min: 1 },
       { criterion: "F", min: 1 },
+      { criterion: "L", min: 1 },
     ],
     multiTF: true,
   },
   {
     name: "Leading Sector Scan",
     shortName: "Leading",
-    description: "Stocks in RRG LEADING or IMPROVING sectors with EMA confirmation.",
-    filters: { minScore: 17 },
+    description: "Stocks in RRG LEADING or IMPROVING sectors with EMA confirmation. Skips ATH gate to find sector leaders.",
+    filters: { minPctFromAth: 0, minScore: 12 },
     criteriaFilters: [
       { criterion: "M", min: 1 },
     ],
+    skipGate1: true,
+    skipGate3: true,
     quadrantFilter: "LEADING,IMPROVING",
   },
   {
@@ -360,16 +367,19 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
   {
     name: "Stealth Accumulation",
     shortName: "Stealth",
-    description: "OBV-price divergence OR seller exhaustion (VP divergence). Finds institutional buying while price stays flat.",
-    filters: { minPctFromAth: 20, minShortFloat: 0, minScore: 11 },
+    description: "OBV-price divergence OR seller exhaustion (VP divergence) with EMA timing. Finds institutional buying while price stays flat.",
+    filters: { minScore: 11 },
+    criteriaFilters: [
+      { criterion: "M2", min: 1 },
+    ],
     filterObvDivergence: true,
     filterVpDivergence: true,
   },
   {
     name: "Aggressive Early",
     shortName: "Early+",
-    description: "Earliest detection: volume divergence + range coil + EMA timing. Lower score threshold catches setups 1-2 weeks before breakout.",
-    filters: { minPctFromAth: 20, minShortFloat: 0, minScore: 10 },
+    description: "Pre-breakout detection: volume divergence + range coil + EMA timing. Lower score threshold catches setups 1-2 weeks before breakout.",
+    filters: { minScore: 10 },
     criteriaFilters: [
       { criterion: "M2", min: 1 },
       { criterion: "N", min: 1 },

@@ -196,7 +196,7 @@ export function savePreRunScan(
   name: string,
   filters: PreRunFilters,
   candidates: PreRunResult[],
-  extra?: { viewMode?: import("./types").VCPViewMode; vcpMinScore?: number; quadrantFilter?: string; skipGate3?: boolean; criteriaFilters?: import("./types").PreRunCriteriaFilter[]; multiTF?: boolean; filterObvDivergence?: boolean; filterVpDivergence?: boolean }
+  extra?: { viewMode?: import("./types").VCPViewMode; vcpMinScore?: number; quadrantFilter?: string; skipGate1?: boolean; skipGate3?: boolean; criteriaFilters?: import("./types").PreRunCriteriaFilter[]; multiTF?: boolean; filterObvDivergence?: boolean; filterVpDivergence?: boolean }
 ): SavedPreRunScan | null {
   if (!isClient()) return null;
 
@@ -210,6 +210,7 @@ export function savePreRunScan(
     ...(extra?.viewMode && extra.viewMode !== "standard" && { viewMode: extra.viewMode }),
     ...(extra?.vcpMinScore && { vcpMinScore: extra.vcpMinScore }),
     ...(extra?.quadrantFilter && extra.quadrantFilter !== "All" && { quadrantFilter: extra.quadrantFilter }),
+    ...(extra?.skipGate1 && { skipGate1: extra.skipGate1 }),
     ...(extra?.skipGate3 && { skipGate3: extra.skipGate3 }),
     ...(extra?.criteriaFilters?.length && { criteriaFilters: extra.criteriaFilters }),
     ...(extra?.multiTF && { multiTF: extra.multiTF }),

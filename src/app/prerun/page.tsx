@@ -126,6 +126,7 @@ function PreRunPage() {
 
   // Filters
   const [minPctFromAth, setMinPctFromAth] = usePersistedFilter("ew-filter:prerun:minPctFromAth", DEFAULT_PRERUN_FILTERS.minPctFromAth);
+  const [maxPctFromAth, setMaxPctFromAth] = usePersistedFilter("ew-filter:prerun:maxPctFromAth", DEFAULT_PRERUN_FILTERS.maxPctFromAth);
   const [minShortFloat, setMinShortFloat] = usePersistedFilter("ew-filter:prerun:minShortFloat", DEFAULT_PRERUN_FILTERS.minShortFloat);
   const [maxMarketCap, setMaxMarketCap] = usePersistedFilter("ew-filter:prerun:maxMarketCap", DEFAULT_PRERUN_FILTERS.maxMarketCap);
   const [minScore, setMinScore] = usePersistedFilter("ew-filter:prerun:minScore", DEFAULT_PRERUN_FILTERS.minScore);
@@ -151,6 +152,8 @@ function PreRunPage() {
 
   // Gate 3 skip (for Pullback Buy — shows stocks below SMA20)
   const [skipGate3, setSkipGate3] = usePersistedFilter("ew-filter:prerun:skipGate3", false);
+  // Gate 1 skip (for Leading Sector — allows stocks near ATH)
+  const [skipGate1, setSkipGate1] = usePersistedFilter("ew-filter:prerun:skipGate1", false);
 
   // Volume signal filters (OBV divergence / VP divergence)
   const [filterObvDivergence, setFilterObvDivergence] = usePersistedFilter("ew-filter:prerun:obvDivergence", false);
@@ -294,6 +297,7 @@ function PreRunPage() {
   const filters: PreRunFilters = useMemo(
     () => ({
       minPctFromAth,
+      maxPctFromAth,
       minShortFloat,
       maxMarketCap,
       minScore,
@@ -302,7 +306,7 @@ function PreRunPage() {
       verdict: verdictFilter,
       emaTimeframe,
     }),
-    [minPctFromAth, minShortFloat, maxMarketCap, minScore, sectorBucket, earningsWithin, verdictFilter, emaTimeframe]
+    [minPctFromAth, maxPctFromAth, minShortFloat, maxMarketCap, minScore, sectorBucket, earningsWithin, verdictFilter, emaTimeframe]
   );
 
   // Helper to get a criterion score by letter
@@ -316,10 +320,11 @@ function PreRunPage() {
   const filtered = useMemo(() => {
     return rawResults.filter((r) => {
       if (filters.minPctFromAth > 0 && (r.data.pctFromAth ?? 0) < filters.minPctFromAth) return false;
+      if (filters.maxPctFromAth > 0 && (r.data.pctFromAth ?? 0) > filters.maxPctFromAth) return false;
       if (filters.minShortFloat > 0 && (r.data.shortFloat ?? 0) < filters.minShortFloat) return false;
       if (filters.maxMarketCap > 0 && (r.data.marketCap ?? Infinity) > filters.maxMarketCap) return false;
-      if (skipGate3) {
-        if (!r.gates.gate1 && !r.gate1Bypassed) return false;
+      if (skipGate3 || skipGate1) {
+        if (!skipGate1 && !r.gates.gate1 && !r.gate1Bypassed) return false;
         if (filters.minScore > 0 && r.scores.totalScore < filters.minScore) return false;
       } else {
         if (filters.minScore > 0 && r.scores.finalScore < filters.minScore) return false;
@@ -361,15 +366,16 @@ function PreRunPage() {
       }
       return true;
     });
-  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate3, quadrantFilter, sectorQuadrants, filterObvDivergence, filterVpDivergence, showTopPicks]);
+  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate1, skipGate3, quadrantFilter, sectorQuadrants, filterObvDivergence, filterVpDivergence, showTopPicks]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
+    const useTotal = skipGate3 || skipGate1;
     arr.sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
         case "score":
-          cmp = skipGate3
+          cmp = useTotal
             ? (a.scores.totalScore - b.scores.totalScore)
             : (a.scores.finalScore - b.scores.finalScore);
           break;
@@ -386,7 +392,7 @@ function PreRunPage() {
       return sortDir === "desc" ? -cmp : cmp;
     });
     return arr;
-  }, [filtered, sortKey, sortDir, skipGate3]);
+  }, [filtered, sortKey, sortDir, skipGate1, skipGate3]);
 
   // Stats
   const stats = useMemo(() => {
@@ -748,6 +754,7 @@ function PreRunPage() {
       viewMode: viewMode !== "standard" ? viewMode : undefined,
       vcpMinScore: viewMode === "vcp" && vcpMinScore > 0 ? vcpMinScore : undefined,
       quadrantFilter: quadrantFilter !== "All" ? quadrantFilter : undefined,
+      skipGate1: skipGate1 || undefined,
       skipGate3: skipGate3 || undefined,
       criteriaFilters: criteriaFilters.length > 0 ? criteriaFilters : undefined,
       multiTF: showMultiTF || undefined,
@@ -756,7 +763,7 @@ function PreRunPage() {
     });
     setSavedScans(loadPreRunScans());
     setSaveName("");
-  }, [saveName, filters, filtered, viewMode, vcpMinScore, quadrantFilter, skipGate3, criteriaFilters, showMultiTF, filterObvDivergence, filterVpDivergence]);
+  }, [saveName, filters, filtered, viewMode, vcpMinScore, quadrantFilter, skipGate1, skipGate3, criteriaFilters, showMultiTF, filterObvDivergence, filterVpDivergence]);
 
   const handleDelete = useCallback((id: string) => {
     if (!confirm("Delete this saved scan?")) return;
@@ -766,6 +773,7 @@ function PreRunPage() {
 
   const handleLoadScan = useCallback((scan: SavedPreRunScan) => {
     setMinPctFromAth(scan.filters.minPctFromAth);
+    setMaxPctFromAth(scan.filters.maxPctFromAth ?? 0);
     setMinShortFloat(scan.filters.minShortFloat);
     setMaxMarketCap(scan.filters.maxMarketCap);
     setMinScore(scan.filters.minScore);
@@ -777,6 +785,7 @@ function PreRunPage() {
     setViewMode(scan.viewMode ?? "standard");
     if (scan.vcpMinScore !== undefined) setVcpMinScore(scan.vcpMinScore);
     setQuadrantFilter(scan.quadrantFilter ?? "All");
+    setSkipGate1(scan.skipGate1 ?? false);
     setSkipGate3(scan.skipGate3 ?? false);
     setCriteriaFilters(scan.criteriaFilters ?? []);
     setShowMultiTF(scan.multiTF ?? false);
@@ -790,6 +799,7 @@ function PreRunPage() {
   const applyPreset = useCallback((preset: typeof PRERUN_PRESETS[number]) => {
     const f = { ...DEFAULT_PRERUN_FILTERS, ...preset.filters };
     setMinPctFromAth(f.minPctFromAth);
+    setMaxPctFromAth(f.maxPctFromAth);
     setMinShortFloat(f.minShortFloat);
     setMaxMarketCap(f.maxMarketCap);
     setMinScore(f.minScore);
@@ -799,6 +809,7 @@ function PreRunPage() {
     setEmaTimeframe(f.emaTimeframe);
     setCriteriaFilters(preset.criteriaFilters ?? []);
     setShowMultiTF(preset.multiTF ?? false);
+    setSkipGate1(preset.skipGate1 ?? false);
     setSkipGate3(preset.skipGate3 ?? false);
     setQuadrantFilter(preset.quadrantFilter ?? "All");
     setViewMode(preset.viewMode ?? "standard");
@@ -1004,6 +1015,22 @@ function PreRunPage() {
                   className="w-full accent-[#5ba3e6]"
                 />
               </div>
+              {/* Max % from ATH */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Max % from ATH</span>
+                  <span className="text-white">{maxPctFromAth === 0 ? "No limit" : `${maxPctFromAth}%`}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={80}
+                  step={5}
+                  value={maxPctFromAth}
+                  onChange={(e) => setMaxPctFromAth(Number(e.target.value))}
+                  className="w-full accent-[#5ba3e6]"
+                />
+              </div>
               {/* Min Short Float % */}
               <div>
                 <div className="flex justify-between text-xs mb-1">
@@ -1184,6 +1211,7 @@ function PreRunPage() {
                 onClick={() => {
                   clearPersistedFilters("ew-filter:prerun");
                   setMinPctFromAth(DEFAULT_PRERUN_FILTERS.minPctFromAth);
+                  setMaxPctFromAth(DEFAULT_PRERUN_FILTERS.maxPctFromAth);
                   setMinShortFloat(DEFAULT_PRERUN_FILTERS.minShortFloat);
                   setMaxMarketCap(DEFAULT_PRERUN_FILTERS.maxMarketCap);
                   setMinScore(DEFAULT_PRERUN_FILTERS.minScore);
@@ -1192,6 +1220,7 @@ function PreRunPage() {
                   setVerdictFilter(DEFAULT_PRERUN_FILTERS.verdict);
                   setEmaTimeframe(DEFAULT_PRERUN_FILTERS.emaTimeframe);
                   setCriteriaFilters([]);
+                  setSkipGate1(false);
                   setSkipGate3(false);
                   setQuadrantFilter("All");
                   setViewMode("standard");
@@ -1357,6 +1386,18 @@ function PreRunPage() {
               <p className="text-[10px] uppercase tracking-wider text-amber-400/60 mb-1">Early Setup</p>
               <p className="text-lg font-bold text-amber-400">{vcpStats.early}</p>
             </div>
+          </div>
+        )}
+
+        {/* Warning: quadrant filter active but no RRG data */}
+        {quadrantFilter !== "All" && Object.keys(sectorQuadrants).length === 0 && rawResults.length > 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 mb-4">
+            <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+            <p className="text-xs text-amber-400">
+              Sector rotation data not loaded — all results filtered out. Visit{" "}
+              <Link href="/sectors" className="underline hover:text-amber-300">/sectors</Link>{" "}
+              first to load RRG quadrant data, then return here.
+            </p>
           </div>
         )}
 
@@ -1616,6 +1657,7 @@ function PreRunPage() {
                 onRequestAiScore={requestAiScore}
                 aiScoring={aiScoringTicker === result.data.ticker}
                 aiResult={aiResults.get(result.data.ticker) ?? null}
+                useTotal={skipGate1 || skipGate3}
               />
             ))}
           </div>
@@ -1694,6 +1736,7 @@ const ResultCard = memo(function ResultCard({
   onRequestAiScore,
   aiScoring,
   aiResult,
+  useTotal,
 }: {
   result: PreRunResult;
   index: number;
@@ -1702,9 +1745,11 @@ const ResultCard = memo(function ResultCard({
   onRequestAiScore: (result: PreRunResult) => void;
   aiScoring: boolean;
   aiResult: { suggestedScore: number; reasoning: string; confidence: string } | null;
+  useTotal?: boolean;
 }) {
   const d = result.data;
   const s = result.scores;
+  const displayScore = useTotal ? s.totalScore : s.finalScore;
   const g = result.gates;
   const isPriority = result.verdict === "PRIORITY";
 
@@ -1769,7 +1814,7 @@ const ResultCard = memo(function ResultCard({
         <div className="flex items-center justify-between text-xs mb-1">
           <span className="text-[#a0a0a0]">Score</span>
           <span className="font-medium text-white">
-            {s.finalScore}/{MAX_SCORE}
+            {displayScore}/{MAX_SCORE}
             {s.sectorModifier !== 0 && (
               <span className={s.sectorModifier > 0 ? "text-green-400 ml-1" : "text-red-400 ml-1"}>
                 ({s.sectorModifier > 0 ? "+" : ""}{s.sectorModifier} sector)
@@ -1779,8 +1824,8 @@ const ResultCard = memo(function ResultCard({
         </div>
         <div className="h-2 bg-[#0f0f0f] rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${scoreBarGradient(s.finalScore, MAX_SCORE)}`}
-            style={{ width: `${Math.min(100, (s.finalScore / MAX_SCORE) * 100)}%` }}
+            className={`h-full rounded-full transition-all duration-500 ${scoreBarGradient(displayScore, MAX_SCORE)}`}
+            style={{ width: `${Math.min(100, (displayScore / MAX_SCORE) * 100)}%` }}
           />
         </div>
       </div>
