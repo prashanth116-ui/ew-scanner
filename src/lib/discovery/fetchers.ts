@@ -212,48 +212,55 @@ export async function fetchCoinGeckoTopVolume(
     }));
 }
 
-// ── Polygon Stock Movers ──
+// ── Yahoo Finance Gainers ──
 
-interface PolygonMoversResponse {
-  tickers?: Array<{
-    ticker: string;
-    todaysChangePerc: number;
-    todaysChange: number;
-    updated: number;
-    day?: {
-      v?: number;
-      c?: number;
-    };
-  }>;
+interface YahooScreenerResponse {
+  finance?: {
+    result?: Array<{
+      quotes?: Array<{
+        symbol: string;
+        shortName?: string;
+        regularMarketChangePercent?: number;
+        regularMarketVolume?: number;
+        marketCap?: number;
+        regularMarketPrice?: number;
+      }>;
+    }>;
+  };
 }
 
-/** Fetch top stock gainers from Polygon (>10% change). */
-export async function fetchPolygonMovers(
-  apiKey: string
-): Promise<DiscoveredTicker[]> {
+/** Fetch top stock gainers from Yahoo Finance screener (>10% change, no API key). */
+export async function fetchYahooGainers(): Promise<DiscoveredTicker[]> {
   const res = await fetchWithRetry(
-    `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers?apiKey=${apiKey}`,
+    "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?scrIds=day_gainers&count=25",
     { headers: { accept: "application/json" } },
     { timeout: 10000, retries: 1, baseDelay: 2000 }
   );
 
   if (!res.ok) {
-    throw new Error(`Polygon movers: ${res.status} ${res.statusText}`);
+    throw new Error(`Yahoo gainers: ${res.status} ${res.statusText}`);
   }
 
-  const data = (await res.json()) as PolygonMoversResponse;
-  const tickers = data.tickers ?? [];
+  const data = (await res.json()) as YahooScreenerResponse;
+  const quotes = data.finance?.result?.[0]?.quotes ?? [];
 
-  return tickers
-    .filter((t) => t.todaysChangePerc > 10)
-    .map((t) => ({
-      symbol: t.ticker,
-      name: null,
+  return quotes
+    .filter(
+      (q) =>
+        q.regularMarketChangePercent != null &&
+        q.regularMarketChangePercent > 10
+    )
+    .map((q) => ({
+      symbol: q.symbol,
+      name: q.shortName ?? null,
       asset_class: "stock" as const,
-      source: "polygon_movers" as const,
-      price_change_pct: Math.round(t.todaysChangePerc * 100) / 100,
-      volume: t.day?.v ? Math.round(t.day.v) : null,
-      market_cap: null,
-      price_at_discovery: t.day?.c ?? null,
+      source: "yahoo_gainers" as const,
+      price_change_pct:
+        q.regularMarketChangePercent != null
+          ? Math.round(q.regularMarketChangePercent * 100) / 100
+          : null,
+      volume: q.regularMarketVolume ? Math.round(q.regularMarketVolume) : null,
+      market_cap: q.marketCap ? Math.round(q.marketCap) : null,
+      price_at_discovery: q.regularMarketPrice ?? null,
     }));
 }

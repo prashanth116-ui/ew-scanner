@@ -15,7 +15,7 @@ import { getAllCatalystSymbols } from "@/data/catalyst-universe";
 import {
   fetchCoinGeckoTrending,
   fetchCoinGeckoTopVolume,
-  fetchPolygonMovers,
+  fetchYahooGainers,
 } from "@/lib/discovery/fetchers";
 import {
   upsertDiscoveredTickers,
@@ -84,31 +84,26 @@ export async function GET(request: NextRequest) {
     logError("discovery/coingecko_top_volume", err);
   }
 
-  // 3. Polygon stock movers (requires API key)
-  const polygonKey = process.env.POLYGON_API_KEY;
-  if (polygonKey) {
-    try {
-      const movers = await fetchPolygonMovers(polygonKey);
-      let added = 0;
-      const seenSymbols = new Set(
-        allDiscovered.map((d) => d.symbol.toUpperCase())
-      );
-      for (const t of movers) {
-        const upper = t.symbol.toUpperCase();
-        if (!staticSymbols.has(upper) && !seenSymbols.has(upper)) {
-          allDiscovered.push(t);
-          seenSymbols.add(upper);
-          added++;
-        }
+  // 3. Yahoo Finance stock gainers (no API key needed)
+  try {
+    const gainers = await fetchYahooGainers();
+    let added = 0;
+    const seenSymbols = new Set(
+      allDiscovered.map((d) => d.symbol.toUpperCase())
+    );
+    for (const t of gainers) {
+      const upper = t.symbol.toUpperCase();
+      if (!staticSymbols.has(upper) && !seenSymbols.has(upper)) {
+        allDiscovered.push(t);
+        seenSymbols.add(upper);
+        added++;
       }
-      console.log(`[discovery] Polygon movers: ${movers.length} fetched, ${added} new`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`polygon_movers: ${msg}`);
-      logError("discovery/polygon_movers", err);
     }
-  } else {
-    console.log("[discovery] POLYGON_API_KEY not set, skipping stock movers");
+    console.log(`[discovery] Yahoo gainers: ${gainers.length} fetched, ${added} new`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`yahoo_gainers: ${msg}`);
+    logError("discovery/yahoo_gainers", err);
   }
 
   // Upsert to Supabase

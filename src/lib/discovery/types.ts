@@ -4,6 +4,7 @@ export type AssetClass = "stock" | "crypto";
 /** Source that discovered the ticker. */
 export type DiscoverySource =
   | "polygon_movers"
+  | "yahoo_gainers"
   | "coingecko_trending"
   | "coingecko_top_volume";
 

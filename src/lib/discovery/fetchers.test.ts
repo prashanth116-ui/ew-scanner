@@ -8,7 +8,7 @@ vi.mock("@/lib/yahoo-utils", () => ({
   fetchWithRetry: vi.fn(),
 }));
 
-import { coingeckoIdToYahoo, fetchCoinGeckoTrending, fetchCoinGeckoTopVolume, fetchPolygonMovers } from "./fetchers";
+import { coingeckoIdToYahoo, fetchCoinGeckoTrending, fetchCoinGeckoTopVolume, fetchYahooGainers } from "./fetchers";
 import { fetchWithRetry } from "@/lib/yahoo-utils";
 
 const mockFetch = vi.mocked(fetchWithRetry);
@@ -124,26 +124,52 @@ describe("fetchCoinGeckoTopVolume", () => {
   });
 });
 
-describe("fetchPolygonMovers", () => {
+describe("fetchYahooGainers", () => {
   it("filters stocks with >10% change", async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({
-        tickers: [
-          { ticker: "AAPL", todaysChangePerc: 5, todaysChange: 8, updated: 1, day: { v: 1e6, c: 175 } },
-          { ticker: "GME", todaysChangePerc: 25.5, todaysChange: 5, updated: 1, day: { v: 5e7, c: 25 } },
-          { ticker: "AMC", todaysChangePerc: 15, todaysChange: 1, updated: 1, day: { v: 3e7, c: 8 } },
-        ],
+        finance: {
+          result: [{
+            quotes: [
+              { symbol: "AAPL", shortName: "Apple Inc.", regularMarketChangePercent: 5, regularMarketVolume: 1e6, marketCap: 2.5e12, regularMarketPrice: 175 },
+              { symbol: "GME", shortName: "GameStop Corp.", regularMarketChangePercent: 25.5, regularMarketVolume: 5e7, marketCap: 8e9, regularMarketPrice: 25 },
+              { symbol: "AMC", shortName: "AMC Entertainment", regularMarketChangePercent: 15, regularMarketVolume: 3e7, marketCap: 2e9, regularMarketPrice: 8 },
+            ],
+          }],
+        },
       }),
     } as Response);
 
-    const result = await fetchPolygonMovers("test-key");
+    const result = await fetchYahooGainers();
 
     expect(result).toHaveLength(2);
     expect(result[0].symbol).toBe("GME");
+    expect(result[0].name).toBe("GameStop Corp.");
     expect(result[0].asset_class).toBe("stock");
-    expect(result[0].source).toBe("polygon_movers");
+    expect(result[0].source).toBe("yahoo_gainers");
     expect(result[0].price_change_pct).toBe(25.5);
+    expect(result[0].market_cap).toBe(8e9);
     expect(result[1].symbol).toBe("AMC");
+  });
+
+  it("throws on non-OK response", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      statusText: "Service Unavailable",
+    } as Response);
+
+    await expect(fetchYahooGainers()).rejects.toThrow("Yahoo gainers: 503");
+  });
+
+  it("handles empty quotes array", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ finance: { result: [{ quotes: [] }] } }),
+    } as Response);
+
+    const result = await fetchYahooGainers();
+    expect(result).toHaveLength(0);
   });
 });
