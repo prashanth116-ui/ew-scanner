@@ -20,4 +20,6 @@ export interface CryptoRotationResult extends Omit<SectorRotationResult, "crossS
     trend: "rising" | "falling" | "flat";
     altSeasonSignal: boolean;
   };
+  /** Symbols added by the discovery layer (for UI "trending" badges). */
+  discoveredSymbols?: string[];
 }

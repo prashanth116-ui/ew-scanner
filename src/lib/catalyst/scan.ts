@@ -11,6 +11,7 @@ import {
   getAllSectorETFs,
 } from "@/data/catalyst-universe";
 import { fetchBatchCatalystData, fetchAllETFData } from "./data";
+import { mergeWithDiscovered } from "@/lib/discovery/merge";
 import { computeScores, buildResult, detectFireDrills } from "./scoring";
 import { getUpcomingCatalysts, getDaysToCatalyst } from "./calendar";
 import type { CatalystScanResponse, CatalystResult } from "./types";
@@ -38,13 +39,19 @@ export async function runCatalystScan(options?: {
     universe = universe.filter((t) => options.tiers!.includes(t.tier));
   }
 
-  const symbols = universe.map((t) => t.symbol);
+  const staticSymbols = universe.map((t) => t.symbol);
+
+  // Merge discovered stock movers into the fetch list (for data + calendar coverage)
+  const { symbols } = await mergeWithDiscovered(staticSymbols, "stock", {
+    maxDiscovered: 10,
+    minPriceChangePct: 10,
+  });
 
   // 2. Fetch all layer ETF data (for sector momentum factor)
   const etfSymbols = getAllSectorETFs();
   const etfDataMap = await fetchAllETFData(etfSymbols);
 
-  // 3. Batch fetch catalyst data for all tickers
+  // 3. Batch fetch catalyst data for all tickers (includes discovered)
   const allData = await fetchBatchCatalystData(symbols, 10, 500);
 
   // 4. Detect fire drills (any stock with 1d change > 10%)

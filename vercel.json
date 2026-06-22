@@ -27,6 +27,10 @@
     {
       "path": "/api/sector-rotation/institutional-refresh",
       "schedule": "0 6 * * 0"
+    },
+    {
+      "path": "/api/discovery/cron",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

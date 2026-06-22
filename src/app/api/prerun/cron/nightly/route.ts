@@ -3,6 +3,7 @@ import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
 import { getAllSectorSymbols } from "@/data/sector-universe";
+import { mergeWithDiscovered } from "@/lib/discovery/merge";
 import { sendTelegramMessage } from "@/lib/ew-telegram";
 import type { PreRunResult } from "@/lib/prerun/types";
 import { MAX_SCORE } from "@/lib/prerun/types";
@@ -156,7 +157,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tickers = getAllSectorSymbols();
+    // Merge discovered stock movers into the nightly scan universe
+    const { symbols: tickers } = await mergeWithDiscovered(
+      getAllSectorSymbols(),
+      "stock",
+      { maxDiscovered: 25 }
+    );
     const results: PreRunResult[] = [];
 
     // Pre-warm sector ETF cache — avoids 14 serial fetches during scan

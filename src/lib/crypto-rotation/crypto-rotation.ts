@@ -11,6 +11,7 @@ import "server-only";
 
 import { fetchYahooChart, calcSMA, fetchBatchQuotes } from "@/lib/prerun/data";
 import { CRYPTO_UNIVERSE, CRYPTO_BENCHMARK, getAllCryptoSymbols } from "@/data/crypto-sector-universe";
+import { mergeWithDiscovered } from "@/lib/discovery/merge";
 import type { SectorRotationScore, RRGQuadrant } from "../sector-rotation/types";
 import type { StockInput } from "../sector-rotation/stock-enrichment";
 import type { CryptoRotationResult } from "./types";
@@ -96,7 +97,9 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
   // Fetch BTC + all proxy charts + batch quotes in parallel
   const proxySymbols = sectorGroups.map((s) => s.etf);
   const allChartSymbols = [...new Set([CRYPTO_BENCHMARK, ...proxySymbols])];
-  const allTokenSymbols = getAllCryptoSymbols();
+  // Merge discovered crypto tickers into the static universe for batch quoting
+  const { symbols: allTokenSymbols, discoveredSymbols: discoveredCrypto } =
+    await mergeWithDiscovered(getAllCryptoSymbols(), "crypto", { maxDiscovered: 15 });
 
   const [chartResults, batchQuotes] = await Promise.all([
     Promise.allSettled(allChartSymbols.map((sym) => fetchYahooChart(sym, "1y", "1d"))),
@@ -431,6 +434,7 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
       trend: "flat",
       altSeasonSignal: regime.altSeasonSignal,
     },
+    discoveredSymbols: [...discoveredCrypto],
   };
 
   cachedResult = { data: result, ts: Date.now() };
