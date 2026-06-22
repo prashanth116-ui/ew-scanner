@@ -5,6 +5,7 @@
 
 import "server-only";
 
+import { inflateRawSync } from "node:zlib";
 import type { SqueezeData } from "./ew-types";
 import { extractRaw } from "@/lib/yahoo-utils";
 
@@ -139,7 +140,34 @@ let ftdCacheTime = 0;
 const FTD_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
 
 /**
- * Download the SEC FTD file once and cache it for 24 hours.
+ * Extract text from a single-entry SEC zip file using Node built-in zlib.
+ * Reads central directory to get correct compressed size, then inflateRaw.
+ */
+function extractZipText(buf: Buffer): string {
+  // Find End of Central Directory (EOCD) — signature 0x06054b50
+  let eocdOffset = -1;
+  for (let i = buf.length - 22; i >= 0; i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) { eocdOffset = i; break; }
+  }
+  if (eocdOffset < 0) throw new Error("No EOCD");
+
+  const cdOffset = buf.readUInt32LE(eocdOffset + 16);
+  const compMethod = buf.readUInt16LE(cdOffset + 10);
+  const compSize = buf.readUInt32LE(cdOffset + 20);
+  const localHeaderOffset = buf.readUInt32LE(cdOffset + 42);
+
+  const localFnameLen = buf.readUInt16LE(localHeaderOffset + 26);
+  const localExtraLen = buf.readUInt16LE(localHeaderOffset + 28);
+  const dataStart = localHeaderOffset + 30 + localFnameLen + localExtraLen;
+  const compData = buf.subarray(dataStart, dataStart + compSize);
+
+  if (compMethod === 8) return inflateRawSync(compData).toString("utf8");
+  if (compMethod === 0) return compData.toString("utf8");
+  throw new Error(`Unsupported zip method ${compMethod}`);
+}
+
+/**
+ * Download the SEC FTD zip file once and cache it for 24 hours.
  * Returns Map<SYMBOL, totalFtdShares> for all tickers in the file.
  * Returns empty map on failure — never blocks scan.
  */
@@ -155,8 +183,9 @@ export async function fetchBulkFTDMap(): Promise<Map<string, number>> {
   ];
 
   for (const { y, m } of months) {
-    const half1 = `cnsfails${y}${String(m).padStart(2, "0")}a.txt`;
-    const half2 = `cnsfails${y}${String(m).padStart(2, "0")}b.txt`;
+    const mm = String(m).padStart(2, "0");
+    const half1 = `cnsfails${y}${mm}a.zip`;
+    const half2 = `cnsfails${y}${mm}b.zip`;
 
     for (const filename of [half2, half1]) {
       try {
@@ -166,7 +195,8 @@ export async function fetchBulkFTDMap(): Promise<Map<string, number>> {
         });
         if (!res.ok) continue;
 
-        const text = await res.text();
+        const buf = Buffer.from(await res.arrayBuffer());
+        const text = extractZipText(buf);
         const map = new Map<string, number>();
 
         for (const line of text.split("\n")) {
