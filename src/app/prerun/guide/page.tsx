@@ -584,7 +584,11 @@ export default function PreRunGuidePage() {
             <br />
             <strong className="text-[#a0a0a0]">Sector modifier:</strong> +1 if sector ETF 20d return &gt; +5% (tailwind), -1 if &lt; -5% (headwind).
             <br />
-            <strong className="text-[#a0a0a0]">Stage 1&rarr;2 / Base breakout:</strong> Criteria L-O are designed to identify stocks transitioning from Stage 1 (accumulation/base) to Stage 2 (markup). The &ldquo;Early Mover&rdquo; preset enforces A&ge;1, M&ge;1, M2&ge;1, K&ge;1, L&ge;1 to surface stocks with confirmed base + EMA reclaim + EMA timing + higher lows + proximity to breakout.
+            <strong className="text-[#a0a0a0]">Stage 1&rarr;2 / Base breakout:</strong> Criteria L-O are designed to identify stocks transitioning from Stage 1 (accumulation/base) to Stage 2 (markup). The &ldquo;Early Mover&rdquo; preset enforces M2&ge;1, L&ge;1, F&ge;1 (EMA timing + higher lows + volume accumulation) as the core breakout signals, with A, M, K scores visible in the UI for manual confirmation. Multi-TF M2 is auto-enabled.
+            <br />
+            <strong className="text-[#a0a0a0]">Stealth Accumulation:</strong> Requires OBV-price divergence OR VP divergence plus M2&ge;1 EMA timing. Catches institutional buying when price is flat but volume signals accumulation.
+            <br />
+            <strong className="text-[#a0a0a0]">Aggressive Early:</strong> Requires M2&ge;1 + N&ge;1 (range coil) + divergence. Lowest score threshold (10) catches pre-breakout setups 1-2 weeks before the move.
           </p>
         </Section>
 
@@ -780,9 +784,11 @@ export default function PreRunGuidePage() {
               <tbody className="text-[#c0c0c0]">
                 {[
                   { name: "SNDK", ath: "40%", si: "15%", score: "18", use: "Classic multi-bagger: deep base + high SI. Catches early base formation." },
-                  { name: "Early Mover", ath: "30%", si: "Any", score: "16", use: "Stage 1\u21922: base + EMA + timing + higher lows + volume (A/M/M2/K/L/F\u22651)" },
-                  { name: "Pullback Buy", ath: "20%", si: "Any", score: "15", use: "20-35% pullback with M2 timing + volume accumulation (M2/F\u22651)" },
-                  { name: "Leading", ath: "Any", si: "Any", score: "17", use: "RRG LEADING/IMPROVING sectors with EMA confirmation (M\u22651)" },
+                  { name: "Early Mover", ath: "25%", si: "Any", score: "14", use: "Stage 1\u21922: EMA timing + higher lows + volume accumulation (M2/L/F\u22651). Multi-TF enabled." },
+                  { name: "Pullback Buy", ath: "20\u201340%", si: "Any", score: "15", use: "20-40% pullback with higher lows + M2 timing + volume confirmation (M2/F/L\u22651)" },
+                  { name: "Leading", ath: "Any*", si: "Any", score: "12", use: "RRG LEADING/IMPROVING sectors with EMA confirmation (M\u22651). Skips ATH + base gates." },
+                  { name: "Stealth", ath: "20%", si: "Any", score: "11", use: "OBV or VP divergence + EMA timing (M2\u22651). Institutional buying while price stays flat." },
+                  { name: "Aggressive Early", ath: "20%", si: "Any", score: "10", use: "Volume divergence + range coil + EMA timing (M2/N\u22651). Pre-breakout detection." },
                   { name: "VCP Breakout", ath: "Any", si: "Any", score: "65", use: "Institutional VCP mode: uptrend + compression + tight base near pivot (separate 0-100 engine)" },
                 ].map((p) => (
                   <tr key={p.name} className="border-b border-[#2a2a2a]/50">
@@ -799,6 +805,8 @@ export default function PreRunGuidePage() {
           <p className="mt-2 text-xs text-[#666]">
             <strong className="text-[#a0a0a0]">Default filters:</strong> 20% from ATH, score &ge;11.
             Presets override only the values shown &mdash; unspecified filters use defaults.
+            <br />
+            <strong className="text-[#a0a0a0]">*Leading preset:</strong> Skips Gate 1 (ATH distance) and Gate 3 (base forming) to include sector leaders near all-time highs. Uses totalScore instead of finalScore since gates are bypassed. Requires <Link href="/sectors" className="underline hover:text-[#5ba3e6]">/sectors</Link> data for RRG quadrant filtering.
           </p>
         </Section>
 
