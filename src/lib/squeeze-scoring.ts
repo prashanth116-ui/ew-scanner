@@ -16,6 +16,8 @@ export const DEFAULT_SQUEEZE_FILTERS: SqueezeFilters = {
   maxNearLowPct: 0, // 0 = no limit
   minScore: 0,
   requireEwAlignment: false,
+  requireSiTrendUp: false,
+  minFtdScore: 0,
 };
 
 /** Wave positions that indicate squeeze-aligned bottoms. */
@@ -185,7 +187,7 @@ export function computeSqueezeScore(data: SqueezeData): ScoredSqueezeCandidate {
     ftdPressure: ftdScore,
   };
 
-  const squeezeScore = Math.round(
+  const rawScore = Math.round(
     components.siPercent +
     components.daysTocover +
     components.floatSize +
@@ -195,6 +197,10 @@ export function computeSqueezeScore(data: SqueezeData): ScoredSqueezeCandidate {
     components.ftdPressure
   );
 
+  // SI trend adjustment: +5 if rising, -5 if falling, 0 if flat/unknown
+  const siTrendAdj = data.siTrend === "up" ? 5 : data.siTrend === "down" ? -5 : 0;
+  const squeezeScore = Math.max(0, rawScore + siTrendAdj);
+
   return {
     ...data,
     squeezeScore,
@@ -202,6 +208,7 @@ export function computeSqueezeScore(data: SqueezeData): ScoredSqueezeCandidate {
     tier: getTier(squeezeScore),
     volumeRatio,
     nearLowPct,
+    siTrendAdjustment: siTrendAdj,
   };
 }
 
@@ -234,6 +241,8 @@ export function scoreSqueezeBatch(
       if (filters.requireEwAlignment && !isSqueezeAlignedWavePosition(c.ewPosition)) {
         return false;
       }
+      if (filters.requireSiTrendUp && c.siTrend !== "up") return false;
+      if (filters.minFtdScore > 0 && c.components.ftdPressure < filters.minFtdScore) return false;
       return true;
     })
     .sort((a, b) => b.squeezeScore - a.squeezeScore);

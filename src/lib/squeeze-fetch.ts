@@ -133,6 +133,69 @@ export async function fetchSqueezeData(
   return parseSqueezeData(ticker, data);
 }
 
+// ── Bulk FTD Cache ──
+let cachedFtdMap: Map<string, number> | null = null;
+let ftdCacheTime = 0;
+const FTD_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
+
+/**
+ * Download the SEC FTD file once and cache it for 24 hours.
+ * Returns Map<SYMBOL, totalFtdShares> for all tickers in the file.
+ * Returns empty map on failure — never blocks scan.
+ */
+export async function fetchBulkFTDMap(): Promise<Map<string, number>> {
+  if (cachedFtdMap && Date.now() - ftdCacheTime < FTD_CACHE_TTL) return cachedFtdMap;
+
+  const SEC_UA = "EW-Scanner admin@ew-scanner.app";
+  const now = new Date();
+
+  const months = [
+    { y: now.getFullYear(), m: now.getMonth() + 1 },
+    { y: now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear(), m: now.getMonth() === 0 ? 12 : now.getMonth() },
+  ];
+
+  for (const { y, m } of months) {
+    const half1 = `cnsfails${y}${String(m).padStart(2, "0")}a.txt`;
+    const half2 = `cnsfails${y}${String(m).padStart(2, "0")}b.txt`;
+
+    for (const filename of [half2, half1]) {
+      try {
+        const url = `https://www.sec.gov/files/data/fails-deliver-data/${filename}`;
+        const res = await fetch(url, {
+          headers: { "User-Agent": SEC_UA },
+        });
+        if (!res.ok) continue;
+
+        const text = await res.text();
+        const map = new Map<string, number>();
+
+        for (const line of text.split("\n")) {
+          const fields = line.split("|");
+          if (fields.length >= 4) {
+            const symbol = fields[2]?.trim().toUpperCase();
+            if (!symbol || symbol === "SYMBOL") continue;
+            const qty = parseInt(fields[3], 10);
+            if (!isNaN(qty) && qty > 0) {
+              map.set(symbol, (map.get(symbol) ?? 0) + qty);
+            }
+          }
+        }
+
+        if (map.size > 0) {
+          cachedFtdMap = map;
+          ftdCacheTime = Date.now();
+          return map;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  // Return empty map on failure — never blocks scan
+  return new Map();
+}
+
 /**
  * Fetch SEC Failures-to-Deliver (FTD) share count for a ticker.
  * SEC publishes pipe-delimited text files twice monthly (~2 week lag).

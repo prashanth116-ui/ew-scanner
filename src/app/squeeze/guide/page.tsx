@@ -579,35 +579,50 @@ export default function SqueezeGuidePage() {
             <div className="mt-2 space-y-2">
               <PresetExplainer
                 name="GME-Style Setup"
-                filters="SI >20%, DTC >3, Float <150M, MktCap <$5B, Near Low <30%"
-                desc="Mirrors the conditions that preceded GME's squeeze. Best signal quality — fewer candidates, higher conviction."
+                filters="SI >20%, DTC >3, Float <150M, MktCap <$5B, Near Low <30%, Score &ge;40"
+                desc="Mirrors the conditions that preceded GME's squeeze. Best signal quality — fewer candidates, higher conviction. Score gate ensures multiple squeeze factors are firing simultaneously."
               />
               <PresetExplainer
                 name="Volume Ignition"
-                filters="SI >10%, DTC >2, Volume >2x avg"
-                desc="Catches squeezes that may already be starting. The volume surge filter is key — it finds active covering, not just setups."
+                filters="SI >10%, DTC >2, Volume >2x avg, Score &ge;30"
+                desc="Catches squeezes that may already be starting. The volume surge filter is key — it finds active covering, not just setups. Score gate filters noise from low-conviction volume spikes."
               />
               <PresetExplainer
                 name="Micro Float Bomb"
-                filters="SI >15%, DTC >2, Float <20M"
+                filters="SI >15%, DTC >2, Float <20M, Score &ge;30"
                 desc="Tiny floats with extreme squeeze mechanics. Highest volatility and risk. Best for small positions with asymmetric upside."
               />
               <PresetExplainer
                 name="Near 52w Low"
-                filters="SI >10%, Near Low <20%, MktCap <$10B"
-                desc="Finds complacent shorts near 52-week lows. These stocks have the most 'potential energy' — any positive catalyst creates maximum pain for shorts."
+                filters="SI >10%, Near Low <20%, MktCap <$10B, Score &ge;25"
+                desc="Finds complacent shorts near 52-week lows. These stocks have the most &lsquo;potential energy&rsquo; — any positive catalyst creates maximum pain for shorts."
               />
               <PresetExplainer
                 name="Wide Net"
                 filters="SI >5%, DTC >1"
-                desc="Relaxed filters for initial screening. Returns the most candidates. Use this first, then narrow with stricter presets."
+                desc="Relaxed filters for initial screening. Returns the most candidates. Use this first, then narrow with stricter presets. No score gate — shows all candidates."
+              />
+              <PresetExplainer
+                name="Leading Squeeze"
+                filters="SI >10%, Score &ge;25, RRG Quadrant = LEADING"
+                desc="Squeeze candidates in RRG LEADING sectors. Combines squeeze mechanics with sector momentum tailwind — shorts fighting the trend are most vulnerable. Requires sector rotation data from /sectors."
+              />
+              <PresetExplainer
+                name="SI Trend Rising"
+                filters="SI >10%, DTC >2, Score &ge;25, SI Trend = Up"
+                desc="Filters to stocks where short interest is increasing across recent FINRA reports. Rising SI means shorts are piling in — building more squeeze pressure. Requires 2+ historical SI data points to detect trend."
+              />
+              <PresetExplainer
+                name="FTD + Short Squeeze"
+                filters="SI >10%, FTD Score &ge;4, Score &ge;30"
+                desc="Combines high failure-to-deliver pressure with short interest. FTDs indicate settlement failures that force buying within T+35 days — a mechanical catalyst that doesn't require news or sentiment."
               />
             </div>
           </SubSection>
 
           <SubSection title="How Scores Work">
             <p className="mb-2">
-              The screener assigns a <strong className="text-white">0-115 composite score</strong> based on seven components:
+              The screener assigns a <strong className="text-white">composite score</strong> based on seven components (max 115) plus an SI trend adjustment (&plusmn;5):
             </p>
             <div className="mt-2 overflow-x-auto">
               <table className="w-full text-xs">
@@ -649,10 +664,15 @@ export default function SqueezeGuidePage() {
                     <td className="px-3 py-1.5">15</td>
                     <td className="px-3 py-1.5">Failures to deliver as % of float &mdash; settlement pressure on shorts</td>
                   </tr>
-                  <tr>
+                  <tr className="border-b border-[#222]">
                     <td className="px-3 py-1.5 text-white">EW Alignment</td>
                     <td className="px-3 py-1.5">15</td>
                     <td className="px-3 py-1.5">Elliott Wave position in a squeeze-favorable zone</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-1.5 text-white">SI Trend</td>
+                    <td className="px-3 py-1.5">&plusmn;5</td>
+                    <td className="px-3 py-1.5">SI% direction across recent FINRA reports &mdash; rising SI adds +5, falling subtracts -5</td>
                   </tr>
                 </tbody>
               </table>

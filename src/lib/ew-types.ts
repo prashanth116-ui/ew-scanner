@@ -289,6 +289,8 @@ export interface SqueezeData {
   // Optional enrichment for FTD / SMA
   ftdShares?: number | null;
   sma50?: number | null;
+  // SI trend from historical data
+  siTrend?: "up" | "down" | "flat" | null;
 }
 
 export interface SqueezeComponentScores {
@@ -309,6 +311,7 @@ export interface ScoredSqueezeCandidate extends SqueezeData {
   tier: SqueezeTier;
   volumeRatio: number | null;
   nearLowPct: number | null; // how far above 52w low (0% = at low)
+  siTrendAdjustment: number; // -5 to +5
 }
 
 export interface SqueezeFilters {
@@ -320,6 +323,8 @@ export interface SqueezeFilters {
   maxNearLowPct: number; // max % above 52w low, 0 = no limit
   minScore: number; // 0-100, skip stocks below this
   requireEwAlignment: boolean;
+  requireSiTrendUp: boolean;
+  minFtdScore: number; // 0-15
 }
 
 export interface SavedSqueezeScan {

@@ -117,6 +117,18 @@ const PRESETS: SqueezePreset[] = [
     filters: { minSiPercent: 10, minScore: 25 },
     quadrantFilter: "LEADING",
   },
+  {
+    name: "SI Trend Rising",
+    shortName: "SI Rising",
+    description: "Short interest increasing over recent reports. Building squeeze pressure.",
+    filters: { minSiPercent: 10, minDaysToCover: 2, minScore: 25, requireSiTrendUp: true },
+  },
+  {
+    name: "FTD + Short Squeeze",
+    shortName: "FTD Squeeze",
+    description: "High FTD pressure + short interest. Settlement failures force buying.",
+    filters: { minSiPercent: 10, minFtdScore: 4, minScore: 30 },
+  },
 ];
 
 type SortKey =
@@ -163,6 +175,8 @@ function SqueezePage() {
   const [maxNearLow, setMaxNearLow] = usePersistedFilter("ew-filter:squeeze:maxNearLow", DEFAULT_SQUEEZE_FILTERS.maxNearLowPct);
   const [minScore, setMinScore] = usePersistedFilter("ew-filter:squeeze:minScore", DEFAULT_SQUEEZE_FILTERS.minScore);
   const [requireEw, setRequireEw] = usePersistedFilter("ew-filter:squeeze:requireEw", DEFAULT_SQUEEZE_FILTERS.requireEwAlignment);
+  const [requireSiTrendUp, setRequireSiTrendUp] = usePersistedFilter("ew-filter:squeeze:siTrendUp", DEFAULT_SQUEEZE_FILTERS.requireSiTrendUp);
+  const [minFtdScore, setMinFtdScore] = usePersistedFilter("ew-filter:squeeze:minFtdScore", DEFAULT_SQUEEZE_FILTERS.minFtdScore);
   const [sectorFilter, setSectorFilter] = usePersistedFilter("ew-filter:squeeze:sectorFilter", "All");
   const [quadrantFilter, setQuadrantFilter] = usePersistedFilter("ew-filter:squeeze:quadrantFilter", "All");
 
@@ -283,8 +297,10 @@ function SqueezePage() {
       maxNearLowPct: debouncedNearLow,
       minScore: debouncedScore,
       requireEwAlignment: requireEw,
+      requireSiTrendUp,
+      minFtdScore,
     }),
-    [debouncedSi, debouncedDtc, debouncedFloat, debouncedVol, debouncedMktCap, debouncedNearLow, debouncedScore, requireEw]
+    [debouncedSi, debouncedDtc, debouncedFloat, debouncedVol, debouncedMktCap, debouncedNearLow, debouncedScore, requireEw, requireSiTrendUp, minFtdScore]
   );
 
   // Score + filter + sort (exempt manually-searched tickers from filters)
@@ -626,6 +642,8 @@ function SqueezePage() {
     setMaxNearLow(scan.filters.maxNearLowPct ?? 0);
     setMinScore(scan.filters.minScore ?? 0);
     setRequireEw(scan.filters.requireEwAlignment);
+    setRequireSiTrendUp(scan.filters.requireSiTrendUp ?? false);
+    setMinFtdScore(scan.filters.minFtdScore ?? 0);
     setRawResults(scan.candidates);
     setSearchedTickers(new Set());
   }, []);
@@ -641,6 +659,8 @@ function SqueezePage() {
     setMaxNearLow(f.maxNearLowPct);
     setMinScore(f.minScore);
     setRequireEw(f.requireEwAlignment);
+    setRequireSiTrendUp(f.requireSiTrendUp);
+    setMinFtdScore(f.minFtdScore);
     setSectorFilter(preset.sectorFilter ?? "All");
     setQuadrantFilter(preset.quadrantFilter ?? "All");
   }, []);
@@ -881,6 +901,8 @@ function SqueezePage() {
                   setMaxNearLow(DEFAULT_SQUEEZE_FILTERS.maxNearLowPct);
                   setMinScore(DEFAULT_SQUEEZE_FILTERS.minScore);
                   setRequireEw(DEFAULT_SQUEEZE_FILTERS.requireEwAlignment);
+                  setRequireSiTrendUp(DEFAULT_SQUEEZE_FILTERS.requireSiTrendUp);
+                  setMinFtdScore(DEFAULT_SQUEEZE_FILTERS.minFtdScore);
                   setSectorFilter("All");
                   setQuadrantFilter("All");
                 }}
@@ -1051,6 +1073,18 @@ function SqueezePage() {
                 {stats.highCount}
               </p>
             </div>
+          </div>
+        )}
+
+        {/* Quadrant warning: no sector data loaded but quadrant filter active */}
+        {quadrantFilter !== "All" && Object.keys(sectorQuadrants).length === 0 && rawResults.length > 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 mb-4">
+            <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+            <p className="text-xs text-amber-400">
+              Sector rotation data not loaded — all results filtered out. Visit{" "}
+              <Link href="/sectors" className="underline hover:text-amber-300">/sectors</Link>{" "}
+              first to load RRG quadrant data, then return here.
+            </p>
           </div>
         )}
 
