@@ -13,6 +13,10 @@ export interface MergeOptions {
   maxDiscovered?: number;
   /** Minimum absolute price change % to include (default: 0). */
   minPriceChangePct?: number;
+  /** Minimum market cap in USD to include (default: 0 = no filter). */
+  minMarketCap?: number;
+  /** Minimum price in USD to include (default: 0 = no filter). */
+  minPrice?: number;
 }
 
 export interface MergeResult {
@@ -35,6 +39,8 @@ export async function mergeWithDiscovered(
 ): Promise<MergeResult> {
   const maxDiscovered = options?.maxDiscovered ?? 25;
   const minPriceChangePct = options?.minPriceChangePct ?? 0;
+  const minMarketCap = options?.minMarketCap ?? 0;
+  const minPrice = options?.minPrice ?? 0;
 
   try {
     const discovered = await loadDiscoveredTickers(assetClass);
@@ -52,6 +58,18 @@ export async function mergeWithDiscovered(
         (d) =>
           d.price_change_pct != null &&
           Math.abs(d.price_change_pct) >= minPriceChangePct
+      );
+    }
+
+    if (minMarketCap > 0) {
+      filtered = filtered.filter(
+        (d) => d.market_cap != null && d.market_cap >= minMarketCap
+      );
+    }
+
+    if (minPrice > 0) {
+      filtered = filtered.filter(
+        (d) => d.price_at_discovery != null && d.price_at_discovery >= minPrice
       );
     }
 

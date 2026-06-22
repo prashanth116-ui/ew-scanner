@@ -15,7 +15,13 @@ export type StratComboName =
   | "1-2-2U_REV"
   | "1-2-2D_REV"
   | "3-2-2U_REV"
-  | "3-2-2D_REV";
+  | "3-2-2D_REV"
+  | "2-2-2U_CONT"
+  | "2-2-2D_CONT"
+  | "1-3-2U"
+  | "1-3-2D"
+  | "2-3-2U_REV"
+  | "2-3-2D_REV";
 
 export interface StratBar {
   open: number;

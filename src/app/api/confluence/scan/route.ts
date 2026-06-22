@@ -72,8 +72,12 @@ export async function POST(request: NextRequest) {
         const stratResult = stratSettled.status === "fulfilled" ? stratSettled.value : null;
         const waveResult = waveSettled.status === "fulfilled" ? waveSettled.value : null;
 
-        // Need at least one scanner result
-        if (!ewRaw && !squeezeRaw && !prerunRaw) return null;
+        // Count how many of the 5 scanners returned data
+        const scannerCount = [ewRaw, squeezeRaw, prerunRaw, stratResult, waveResult]
+          .filter((r) => r != null).length;
+
+        // Need at least 2 scanner results for meaningful confluence
+        if (scannerCount < 2) return null;
 
         // Determine company name from whichever source has it
         const name =
@@ -111,6 +115,7 @@ export async function POST(request: NextRequest) {
           prerunResult,
           stratResult,
           waveResult,
+          scannerCount,
         };
       })
     );

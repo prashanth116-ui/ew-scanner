@@ -9,6 +9,7 @@ import type { PreRunStockData, EmaTimeframe, M2TimeframeResult } from "./types";
 import { getYahooCrumb, invalidateCrumbCache } from "../squeeze-fetch";
 import { getSectorForTicker, getSectorETF } from "@/data/prerun-universe";
 import { fetchWithRetry, extractRaw, deduplicatedChartFetch } from "@/lib/yahoo-utils";
+import { logError } from "@/lib/error-logger";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -970,7 +971,7 @@ export async function fetchBatchQuotes(
 ): Promise<Map<string, BatchQuote>> {
   let auth = await getYahooCrumb();
   if (!auth) {
-    console.error("[fetchBatchQuotes] Failed to get Yahoo crumb — returning empty");
+    logError("prerun/batchQuotes", new Error("Failed to get Yahoo crumb"), { symbolCount: symbols.length });
     return new Map();
   }
 
@@ -998,7 +999,7 @@ export async function fetchBatchQuotes(
       return [];
     }
     if (!res.ok) {
-      console.error(`[fetchBatchQuotes] HTTP ${res.status} for batch of ${batch.length} symbols`);
+      logError("prerun/batchQuotes", new Error(`HTTP ${res.status}`), { batchSize: batch.length });
       if (res.status === 401) hadAuth401 = true;
       return [];
     }
@@ -1041,7 +1042,7 @@ export async function fetchBatchQuotes(
 
   // Retry with fresh crumb if we got 401s and have no results
   if (hadAuth401 && results.size === 0) {
-    console.warn("[fetchBatchQuotes] Got 401, retrying with fresh crumb...");
+    logError("prerun/batchQuotes", new Error("Got 401, retrying with fresh crumb"));
     invalidateCrumbCache();
     auth = await getYahooCrumb();
     if (!auth) return results;
@@ -1070,7 +1071,7 @@ export async function fetchBatchQuotes(
     }
   }
 
-  console.log(`[fetchBatchQuotes] Fetched ${results.size}/${symbols.length} stock quotes`);
+  // Batch quotes fetch complete — results.size / symbols.length logged via data quality
   return results;
 }
 

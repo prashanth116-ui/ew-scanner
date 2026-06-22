@@ -248,7 +248,12 @@ export async function fetchYahooGainers(): Promise<DiscoveredTicker[]> {
     .filter(
       (q) =>
         q.regularMarketChangePercent != null &&
-        q.regularMarketChangePercent > 10
+        q.regularMarketChangePercent > 10 &&
+        // Quality gates: filter out OTC, penny stocks, illiquid, micro-caps
+        !q.symbol.includes(".") &&
+        (q.regularMarketPrice == null || q.regularMarketPrice >= 2) &&
+        (q.marketCap == null || q.marketCap >= 50_000_000) &&
+        (q.regularMarketVolume == null || q.regularMarketVolume >= 100_000)
     )
     .map((q) => ({
       symbol: q.symbol,

@@ -113,6 +113,15 @@ const COMBO_PATTERNS: ComboPattern[] = [
   // 3-2-2 Reversals
   { name: "3-2-2U_REV", sequence: ["3", "2D", "2U"], direction: "BULL", description: "3-2-2 Bullish Reversal" },
   { name: "3-2-2D_REV", sequence: ["3", "2U", "2D"], direction: "BEAR", description: "3-2-2 Bearish Reversal" },
+  // 2-2-2 Continuations (consecutive directional bars)
+  { name: "2-2-2U_CONT", sequence: ["2U", "2U", "2U"], direction: "BULL", description: "2-2-2 Bullish Continuation" },
+  { name: "2-2-2D_CONT", sequence: ["2D", "2D", "2D"], direction: "BEAR", description: "2-2-2 Bearish Continuation" },
+  // 1-3-2 Expansion breakout (compression → expansion → follow-through)
+  { name: "1-3-2U", sequence: ["1", "3", "2U"], direction: "BULL", description: "1-3-2 Bullish Expansion" },
+  { name: "1-3-2D", sequence: ["1", "3", "2D"], direction: "BEAR", description: "1-3-2 Bearish Expansion" },
+  // 2-3-2 Reversals (directional → outside → follow-through)
+  { name: "2-3-2U_REV", sequence: ["2D", "3", "2U"], direction: "BULL", description: "2-3-2 Bullish Reversal" },
+  { name: "2-3-2D_REV", sequence: ["2U", "3", "2D"], direction: "BEAR", description: "2-3-2 Bearish Reversal" },
 ];
 
 /** Detect all active combos from last 3 classified bars in a timeframe. */
@@ -232,7 +241,9 @@ export function detectCombos(
   return combos;
 }
 
-/** Compute Timeframe Continuity (TFC) from 3 timeframe directions. */
+/** Compute Timeframe Continuity (TFC) from 3 timeframe directions.
+ *  Weighted by timeframe hierarchy: monthly 2x, weekly 1.5x, daily 1x.
+ *  Normalized to 0-3 range to maintain backward compatibility with scoring. */
 export function computeTFC(
   monthly: StratDirection,
   weekly: StratDirection,
@@ -243,18 +254,24 @@ export function computeTFC(
   const bearCount = dirs.filter((d) => d === "BEAR").length;
 
   let alignment: TFCAlignment;
-  let score: number;
 
   if (bullCount === 3) {
     alignment = "FULL_BULL";
-    score = 3;
   } else if (bearCount === 3) {
     alignment = "FULL_BEAR";
-    score = 3;
   } else {
     alignment = "MIXED";
-    score = Math.max(bullCount, bearCount);
   }
+
+  // Weighted scoring: monthly 2x, weekly 1.5x, daily 1x (max raw = 4.5)
+  const targetDir = bullCount >= bearCount ? "BULL" : "BEAR";
+  let rawWeighted = 0;
+  if (monthly === targetDir) rawWeighted += 2.0;
+  if (weekly === targetDir) rawWeighted += 1.5;
+  if (daily === targetDir) rawWeighted += 1.0;
+
+  // Normalize to 0-3 range: rawWeighted / 4.5 * 3
+  const score = Math.round((rawWeighted / 4.5) * 3 * 100) / 100;
 
   return { monthly, weekly, daily, alignment, score };
 }

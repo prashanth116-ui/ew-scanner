@@ -129,6 +129,8 @@ export type SITrendDirection = "up" | "down" | "flat";
 
 /**
  * Compute SI% trend direction from historical data points.
+ * Uses simple linear regression (least squares) for 3+ points to smooth noise,
+ * falls back to endpoint difference for 2 points.
  * @param siValues - SI% values ordered oldest → newest (min 2 entries)
  * @returns Trend direction and scoring adjustment
  */
@@ -140,8 +142,24 @@ export function computeSITrend(
   // Use last 3 entries (or fewer if unavailable)
   const recent = siValues.slice(-3);
 
-  // Simple slope: compare last vs first
-  const slope = recent[recent.length - 1] - recent[0];
+  let slope: number;
+
+  if (recent.length >= 3) {
+    // Linear regression slope (least squares) — robust to single outliers
+    const n = recent.length;
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+    for (let i = 0; i < n; i++) {
+      sumX += i;
+      sumY += recent[i];
+      sumXY += i * recent[i];
+      sumX2 += i * i;
+    }
+    const denom = n * sumX2 - sumX * sumX;
+    slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+  } else {
+    // 2 points: simple difference
+    slope = recent[recent.length - 1] - recent[0];
+  }
 
   if (slope > 1) return { direction: "up", adjustment: 5 };   // SI increasing → more pressure → +5
   if (slope < -1) return { direction: "down", adjustment: -5 }; // SI decreasing → less pressure → -5

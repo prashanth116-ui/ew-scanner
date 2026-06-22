@@ -7,7 +7,7 @@ import "server-only";
 
 import { inflateRawSync } from "node:zlib";
 import type { SqueezeData } from "./ew-types";
-import { extractRaw } from "@/lib/yahoo-utils";
+import { extractRaw, fetchWithRetry } from "@/lib/yahoo-utils";
 
 const YAHOO_SUMMARY =
   "https://query1.finance.yahoo.com/v10/finance/quoteSummary";
@@ -113,9 +113,9 @@ export async function fetchSqueezeData(
   if (!auth) return null;
 
   const url = `${YAHOO_SUMMARY}/${encodeURIComponent(ticker)}?modules=defaultKeyStatistics,price,summaryDetail&crumb=${encodeURIComponent(auth.crumb)}`;
-  let res = await fetch(url, {
+  let res = await fetchWithRetry(url, {
     headers: { "User-Agent": UA, Cookie: auth.cookie },
-  });
+  }, { timeout: 10000, retries: 1, baseDelay: 2000 });
 
   // If 401, invalidate and retry once
   if (res.status === 401) {
@@ -124,9 +124,9 @@ export async function fetchSqueezeData(
     if (!retryAuth) return null;
 
     const retryUrl = `${YAHOO_SUMMARY}/${encodeURIComponent(ticker)}?modules=defaultKeyStatistics,price,summaryDetail&crumb=${encodeURIComponent(retryAuth.crumb)}`;
-    res = await fetch(retryUrl, {
+    res = await fetchWithRetry(retryUrl, {
       headers: { "User-Agent": UA, Cookie: retryAuth.cookie },
-    });
+    }, { timeout: 10000, retries: 1, baseDelay: 2000 });
   }
 
   if (!res.ok) return null;

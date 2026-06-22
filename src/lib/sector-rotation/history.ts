@@ -83,8 +83,8 @@ export function saveSnapshot(data: SectorRotationResult): void {
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-  } catch (err) {
-    console.warn("[sector-history] Failed to persist snapshot:", err);
+  } catch {
+    // localStorage write failed — non-critical, snapshot will be recreated next time
   }
 }
 
@@ -113,8 +113,8 @@ function loadStore(): HistoryStore {
       return { snapshots: [], version: SCHEMA_VERSION };
     }
     return store;
-  } catch (err) {
-    console.warn("[sector-history] Failed to load store:", err);
+  } catch {
+    // localStorage read failed — non-critical, return empty store
     return { snapshots: [], version: SCHEMA_VERSION };
   }
 }

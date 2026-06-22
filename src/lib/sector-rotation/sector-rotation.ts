@@ -243,16 +243,23 @@ export async function calculateSectorRotation(
         }
       }
     } else {
-      // Tier 2: Pre-run stock-level data (uses SMA-20 — only SMA available in PreRunStockData;
-      // Tier 1 uses SMA-50 from batch quotes for better consistency with standard breadth metrics)
-      const stocksWithPrice = allStocks.filter(
+      // Tier 2: Pre-run stock-level data — prefer SMA-50 for consistency with Tier 1,
+      // fall back to SMA-20 if SMA-50 not available in pre-run data
+      const stocksWithSma50 = allStocks.filter(
+        (r) => r.data.currentPrice !== null && r.data.vcpSma50 !== null
+      );
+      const stocksWithSma20 = allStocks.filter(
         (r) => r.data.currentPrice !== null && r.data.sma20 !== null
       );
+      const stocksWithPrice = stocksWithSma50.length >= 5 ? stocksWithSma50 : stocksWithSma20;
+      const usingSma50 = stocksWithSma50.length >= 5;
+
       if (stocksWithPrice.length >= 5) {
         const aboveSma = stocksWithPrice.filter(
-          (r) => r.data.currentPrice! > r.data.sma20!
+          (r) => usingSma50 ? r.data.currentPrice! > r.data.vcpSma50! : r.data.currentPrice! > r.data.sma20!
         ).length;
         breadthPct = Math.round((aboveSma / stocksWithPrice.length) * 100);
+        breadthEstimated = !usingSma50; // SMA-20 is less accurate than SMA-50
       } else if (chart.closes.length >= 20) {
         // Tier 3: ETF-level breadth proxy (sigmoid)
         const sma20 = calcSMA(chart.closes, 20);
@@ -656,7 +663,7 @@ export async function calculateSectorRotation(
   }
 
   const enrichedStocks = enrichStocks(stockInputs);
-  console.log(`[sectorRotation] Enriched ${enrichedStocks.passed.length} stocks (${enrichedStocks.rejected.length} rejected, ${enrichedStocks.pullbackWatch.length} pullback watch)`);
+  // Stock enrichment stats logged at debug level — not an error condition
 
   // Compute 20d daily returns per ETF for sparklines (all categories)
   const etfReturns20d: Record<string, number[]> = {};

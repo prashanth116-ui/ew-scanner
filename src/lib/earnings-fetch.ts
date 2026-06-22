@@ -12,6 +12,7 @@ import "server-only";
 
 import { getYahooCrumb, invalidateCrumbCache } from "./squeeze-fetch";
 import { extractRaw } from "./yahoo-utils";
+import { logError } from "./error-logger";
 
 const YAHOO_SUMMARY =
   "https://query1.finance.yahoo.com/v10/finance/quoteSummary";
@@ -175,7 +176,10 @@ export async function fetchEarningsData(
   const result = (
     data as { quoteSummary?: { result?: Record<string, unknown>[] } }
   )?.quoteSummary?.result?.[0];
-  if (!result) return null;
+  if (!result) {
+    logError("earnings/fetch", new Error("Empty modules"), { ticker, modules: Object.keys((data as Record<string, unknown>)?.quoteSummary ?? {}) });
+    return null;
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mod = (key: string) => (result[key] ?? {}) as Record<string, any>;

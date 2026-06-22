@@ -118,6 +118,8 @@ export interface ConfluenceScanResult {
   prerunResult: ConfluencePreRunResult | null;
   stratResult: ConfluenceStratResult | null;
   waveResult: ConfluenceWaveResult | null;
+  /** Number of scanners that returned data (0-5). */
+  scannerCount?: number;
 }
 
 export interface ConfluencePreset {
