@@ -8,11 +8,19 @@ vi.mock("./storage", () => ({
   loadDiscoveredTickers: vi.fn(),
 }));
 
+// Mock the promotion module
+vi.mock("./promotion", () => ({
+  loadPromotedTickers: vi.fn(),
+}));
+
 import { mergeWithDiscovered, isDiscoveredTicker } from "./merge";
 import { loadDiscoveredTickers } from "./storage";
+import { loadPromotedTickers } from "./promotion";
 import type { DiscoveredTicker } from "./types";
+import type { PromotedTicker } from "./promotion";
 
 const mockLoad = vi.mocked(loadDiscoveredTickers);
+const mockLoadPromoted = vi.mocked(loadPromotedTickers);
 
 function makeTicker(overrides: Partial<DiscoveredTicker> = {}): DiscoveredTicker {
   return {
@@ -28,9 +36,27 @@ function makeTicker(overrides: Partial<DiscoveredTicker> = {}): DiscoveredTicker
   };
 }
 
+function makePromoted(overrides: Partial<PromotedTicker> = {}): PromotedTicker {
+  return {
+    id: "uuid-1",
+    symbol: "PROMO",
+    name: "Promo Corp",
+    asset_class: "stock",
+    sector: "Technology",
+    promoted_at: "2026-01-01T00:00:00Z",
+    last_qualified_at: "2026-06-01T00:00:00Z",
+    best_score: 18,
+    best_verdict: "KEEP",
+    source: "discovery",
+    expires_at: "2026-12-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
 describe("mergeWithDiscovered", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLoadPromoted.mockResolvedValue([]);
   });
 
   it("adds discovered tickers to static list", async () => {
@@ -97,6 +123,8 @@ describe("mergeWithDiscovered", () => {
     expect(result.symbols).toEqual(staticList);
     expect(result.discoveredCount).toBe(0);
     expect(result.discoveredSymbols.size).toBe(0);
+    expect(result.promotedCount).toBe(0);
+    expect(result.promotedSymbols.size).toBe(0);
   });
 
   it("handles empty discovered list", async () => {
@@ -119,6 +147,99 @@ describe("mergeWithDiscovered", () => {
     expect(result.symbols).toContain("NULL-USD");
     expect(result.symbols).toContain("OK-USD");
     expect(result.discoveredCount).toBe(2);
+  });
+
+  // ── Promoted ticker tests ──
+
+  it("includes promoted tickers in merge result", async () => {
+    mockLoad.mockResolvedValue([]);
+    mockLoadPromoted.mockResolvedValue([
+      makePromoted({ symbol: "PROMO1" }),
+      makePromoted({ symbol: "PROMO2", best_score: 22 }),
+    ]);
+
+    const result = await mergeWithDiscovered(["AAPL", "MSFT"], "stock");
+
+    expect(result.symbols).toEqual(["AAPL", "MSFT", "PROMO1", "PROMO2"]);
+    expect(result.promotedCount).toBe(2);
+    expect(result.promotedSymbols.has("PROMO1")).toBe(true);
+    expect(result.promotedSymbols.has("PROMO2")).toBe(true);
+    expect(result.discoveredCount).toBe(0);
+  });
+
+  it("deduplicates promoted tickers against static universe", async () => {
+    mockLoad.mockResolvedValue([]);
+    mockLoadPromoted.mockResolvedValue([
+      makePromoted({ symbol: "AAPL" }), // Already in static
+      makePromoted({ symbol: "NEWCO" }),
+    ]);
+
+    const result = await mergeWithDiscovered(["AAPL", "MSFT"], "stock");
+
+    expect(result.symbols).toEqual(["AAPL", "MSFT", "NEWCO"]);
+    expect(result.promotedCount).toBe(1);
+    expect(result.promotedSymbols.has("NEWCO")).toBe(true);
+    expect(result.promotedSymbols.has("AAPL")).toBe(false);
+  });
+
+  it("promoted tickers are not counted against maxDiscovered cap", async () => {
+    mockLoad.mockResolvedValue([
+      makeTicker({ symbol: "DISC1", asset_class: "stock", price_change_pct: 50 }),
+      makeTicker({ symbol: "DISC2", asset_class: "stock", price_change_pct: 40 }),
+      makeTicker({ symbol: "DISC3", asset_class: "stock", price_change_pct: 30 }),
+    ]);
+    mockLoadPromoted.mockResolvedValue([
+      makePromoted({ symbol: "PROMO1" }),
+      makePromoted({ symbol: "PROMO2" }),
+    ]);
+
+    const result = await mergeWithDiscovered([], "stock", { maxDiscovered: 2 });
+
+    // 2 promoted (uncapped) + 2 discovered (capped at maxDiscovered=2)
+    expect(result.promotedCount).toBe(2);
+    expect(result.discoveredCount).toBe(2);
+    expect(result.symbols).toHaveLength(4);
+    expect(result.symbols).toContain("PROMO1");
+    expect(result.symbols).toContain("PROMO2");
+  });
+
+  it("deduplicates discovered against promoted (promoted wins)", async () => {
+    mockLoad.mockResolvedValue([
+      makeTicker({ symbol: "OVERLAP", asset_class: "stock", price_change_pct: 60 }),
+      makeTicker({ symbol: "UNIQUE", asset_class: "stock", price_change_pct: 40 }),
+    ]);
+    mockLoadPromoted.mockResolvedValue([
+      makePromoted({ symbol: "OVERLAP" }),
+    ]);
+
+    const result = await mergeWithDiscovered([], "stock");
+
+    // OVERLAP comes from promoted, not discovered
+    expect(result.promotedSymbols.has("OVERLAP")).toBe(true);
+    expect(result.discoveredSymbols.has("OVERLAP")).toBe(false);
+    expect(result.discoveredSymbols.has("UNIQUE")).toBe(true);
+    expect(result.symbols).toEqual(["OVERLAP", "UNIQUE"]);
+  });
+
+  it("includes promotedSymbols and promotedCount in result", async () => {
+    mockLoad.mockResolvedValue([]);
+    mockLoadPromoted.mockResolvedValue([makePromoted({ symbol: "ABC" })]);
+
+    const result = await mergeWithDiscovered(["XYZ"], "stock");
+
+    expect(result).toHaveProperty("promotedSymbols");
+    expect(result).toHaveProperty("promotedCount");
+    expect(result.promotedSymbols).toBeInstanceOf(Set);
+    expect(result.promotedCount).toBe(1);
+  });
+
+  it("returns empty promoted fields on error", async () => {
+    mockLoad.mockRejectedValue(new Error("fail"));
+
+    const result = await mergeWithDiscovered(["BTC-USD"], "crypto");
+
+    expect(result.promotedSymbols.size).toBe(0);
+    expect(result.promotedCount).toBe(0);
   });
 });
 

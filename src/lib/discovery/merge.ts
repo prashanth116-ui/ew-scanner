@@ -1,11 +1,12 @@
 /**
- * Merge utility: combines static universe symbols with discovered tickers.
+ * Merge utility: combines static universe symbols with discovered and promoted tickers.
  * Graceful fallback: returns static universe unchanged on any error.
  */
 
 import "server-only";
 
 import { loadDiscoveredTickers } from "./storage";
+import { loadPromotedTickers } from "./promotion";
 import type { AssetClass, DiscoveredTicker } from "./types";
 
 export interface MergeOptions {
@@ -20,17 +21,24 @@ export interface MergeOptions {
 }
 
 export interface MergeResult {
-  /** Combined symbol array (static + discovered). */
+  /** Combined symbol array (static + promoted + discovered). */
   symbols: string[];
   /** Symbols that came from discovery (for UI badges). */
   discoveredSymbols: Set<string>;
   /** Count of discovered symbols added. */
   discoveredCount: number;
+  /** Symbols that came from promotion (scored WATCH+ previously). */
+  promotedSymbols: Set<string>;
+  /** Count of promoted symbols added. */
+  promotedCount: number;
 }
 
 /**
- * Merge discovered tickers into a static symbol list.
+ * Merge discovered and promoted tickers into a static symbol list.
  * Deduplicates case-insensitively. Returns static list unchanged on any error.
+ *
+ * Priority: static > promoted > discovered.
+ * Promoted tickers are NOT subject to maxDiscovered cap.
  */
 export async function mergeWithDiscovered(
   staticSymbols: string[],
@@ -43,14 +51,29 @@ export async function mergeWithDiscovered(
   const minPrice = options?.minPrice ?? 0;
 
   try {
-    const discovered = await loadDiscoveredTickers(assetClass);
+    const [discovered, promoted] = await Promise.all([
+      loadDiscoveredTickers(assetClass),
+      loadPromotedTickers(assetClass),
+    ]);
 
     // Build case-insensitive set of static symbols for dedup
     const staticUpper = new Set(staticSymbols.map((s) => s.toUpperCase()));
 
-    // Filter and deduplicate
+    // Add promoted tickers (not subject to maxDiscovered cap)
+    const promotedFiltered = promoted.filter(
+      (p) => !staticUpper.has(p.symbol.toUpperCase())
+    );
+    const promotedSymbols = new Set(promotedFiltered.map((p) => p.symbol));
+
+    // Build combined dedup set (static + promoted)
+    const usedUpper = new Set(staticUpper);
+    for (const p of promotedFiltered) {
+      usedUpper.add(p.symbol.toUpperCase());
+    }
+
+    // Filter and deduplicate discovered against static + promoted
     let filtered: DiscoveredTicker[] = discovered.filter(
-      (d) => !staticUpper.has(d.symbol.toUpperCase())
+      (d) => !usedUpper.has(d.symbol.toUpperCase())
     );
 
     if (minPriceChangePct > 0) {
@@ -85,9 +108,15 @@ export async function mergeWithDiscovered(
     const discoveredSymbols = new Set(toAdd.map((d) => d.symbol));
 
     return {
-      symbols: [...staticSymbols, ...toAdd.map((d) => d.symbol)],
+      symbols: [
+        ...staticSymbols,
+        ...promotedFiltered.map((p) => p.symbol),
+        ...toAdd.map((d) => d.symbol),
+      ],
       discoveredSymbols,
       discoveredCount: toAdd.length,
+      promotedSymbols,
+      promotedCount: promotedFiltered.length,
     };
   } catch (err) {
     console.error("[discovery] mergeWithDiscovered error, returning static:", err);
@@ -95,6 +124,8 @@ export async function mergeWithDiscovered(
       symbols: staticSymbols,
       discoveredSymbols: new Set(),
       discoveredCount: 0,
+      promotedSymbols: new Set(),
+      promotedCount: 0,
     };
   }
 }

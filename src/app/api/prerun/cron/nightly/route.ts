@@ -4,6 +4,12 @@ import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
 import { getAllSectorSymbols } from "@/data/sector-universe";
 import { mergeWithDiscovered } from "@/lib/discovery/merge";
+import {
+  promoteDiscoveredTickers,
+  purgeExpiredPromotions,
+  countActivePromotions,
+} from "@/lib/discovery/promotion";
+import type { PromotionCandidate } from "@/lib/discovery/promotion";
 import { sendTelegramMessage } from "@/lib/ew-telegram";
 import type { PreRunResult } from "@/lib/prerun/types";
 import { MAX_SCORE } from "@/lib/prerun/types";
@@ -16,7 +22,8 @@ const BATCH_DELAY = 1100; // Respect Finnhub 60/min rate limit
 function formatTelegramSummary(
   scannedCount: number,
   qualifying: PreRunResult[],
-  aiScored: { ticker: string; score: number; reasoning: string }[]
+  aiScored: { ticker: string; score: number; reasoning: string }[],
+  promotionStats?: { promoted: number; active: number; purged: number }
 ): string {
   const date = new Date().toLocaleDateString("en-US", {
     weekday: "short",
@@ -75,6 +82,14 @@ function formatTelegramSummary(
 
   if (qualifying.length === 0) {
     lines.push("No qualifying candidates today.");
+  }
+
+  // Promotion stats
+  if (promotionStats) {
+    lines.push("");
+    lines.push(
+      `<b>Promoted:</b> ${promotionStats.promoted} new | ${promotionStats.active} active | ${promotionStats.purged} expired`
+    );
   }
 
   // AI auto-scores
@@ -157,8 +172,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Merge discovered stock movers into the nightly scan universe
-    const { symbols: tickers } = await mergeWithDiscovered(
+    // Merge discovered + promoted stock movers into the nightly scan universe
+    const {
+      symbols: tickers,
+      discoveredSymbols,
+      promotedCount: mergedPromotedCount,
+    } = await mergeWithDiscovered(
       getAllSectorSymbols(),
       "stock",
       { maxDiscovered: 25 }
@@ -224,12 +243,34 @@ export async function GET(request: NextRequest) {
     }));
     await recordSignalBatch(signalRecords).catch(() => {});
 
+    // Promote qualifying discovered tickers (score >= 14, all gates pass, stocks only)
+    const promotionCandidates: PromotionCandidate[] = qualifying
+      .filter((r) => discoveredSymbols.has(r.data.ticker))
+      .map((r) => ({
+        symbol: r.data.ticker,
+        name: r.data.companyName,
+        assetClass: "stock" as const,
+        sector: "",
+        score: r.scores.finalScore,
+        verdict: r.verdict,
+      }));
+
+    const promotedCount = await promoteDiscoveredTickers(promotionCandidates);
+    const purgedPromotions = await purgeExpiredPromotions();
+    const activePromotions = await countActivePromotions();
+
+    const promotionStats = {
+      promoted: promotedCount,
+      active: activePromotions,
+      purged: purgedPromotions,
+    };
+
     // Send Telegram summary
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
     let telegramSent = false;
     if (botToken && chatId) {
-      const message = formatTelegramSummary(tickers.length, qualifying, aiScored);
+      const message = formatTelegramSummary(tickers.length, qualifying, aiScored, promotionStats);
       const tgResult = await sendTelegramMessage(botToken, chatId, message);
       telegramSent = tgResult.ok;
       if (!tgResult.ok) {
@@ -253,6 +294,10 @@ export async function GET(request: NextRequest) {
       telegramSent,
       aiScored: aiScored.length,
       rotationCalculated: rotationResult !== null,
+      promotedCount,
+      purgedPromotions,
+      activePromotions,
+      mergedPromotedCount,
       results: qualifying,
     });
   } catch (err) {
