@@ -100,6 +100,18 @@ export function getSnapshot(date: string): DailySnapshot | null {
   return loadStore().snapshots.find((s) => s.date === date) ?? null;
 }
 
+/** Extract a time series of composite scores for a single sector. Returns oldest-first. */
+export function getSectorTimeseries(history: DailySnapshot[], sector: string): { date: string; score: number }[] {
+  const series: { date: string; score: number }[] = [];
+  // history is newest-first, we want oldest-first for charting
+  for (let i = history.length - 1; i >= 0; i--) {
+    const snap = history[i];
+    const found = snap.sectors.find((s) => s.sector === sector);
+    if (found) series.push({ date: snap.date, score: found.compositeScore });
+  }
+  return series;
+}
+
 // ── Internal ──
 
 function loadStore(): HistoryStore {

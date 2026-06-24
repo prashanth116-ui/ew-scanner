@@ -1,33 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, RefreshCw, FileDown, ChevronRight } from "lucide-react";
+import { Loader2, RefreshCw, FileDown, ChevronRight, MoreHorizontal } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import Link from "next/link";
 import { ScannerCTA } from "@/components/scanner-cta";
-import { compositeColor, compositeTextColor } from "@/lib/color-utils";
 import { getEquitySectors, getSubSectors, getCrossAssetETFs } from "@/data/sector-universe";
 import {
   useCollapsedPanels,
   CollapsiblePanel,
-  quadrantColor,
   RegimeBanner,
   CorrelationMatrix,
   SectorComparison,
   RRGChart,
   AlertPanel,
   StockSearch,
-  TradingActionBadge,
-  ComparisonDelta,
-  EtfSparkline,
   SubSectorPanel,
   CrossAssetPanel,
   DataStalenessWarning,
   SectorNav,
+  SummaryStrip,
+  SectorCard,
+  ExpandedStockTable,
+  HistoryChart,
   SORT_MODE_OPTIONS,
   LOADING_PHASES,
-  type SortMode,
 } from "./_components";
 import { useSectorData } from "./_use-sector-data";
 
@@ -53,11 +51,14 @@ export default function SectorRotationPage() {
     comparisonMap,
     comparisonSummary,
     allStocks,
+    stocksBySector,
     handleExport,
     watchlistTickers,
   } = useSectorData();
 
   const [collapsedPanels, togglePanel] = useCollapsedPanels();
+  const [expandedSector, setExpandedSector] = useState<string | null>(null);
+  const [overflowOpen, setOverflowOpen] = useState(false);
 
   if (loading && !data) {
     return (
@@ -92,41 +93,76 @@ export default function SectorRotationPage() {
   if (!data) return null;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
-            <SectorNav active="dashboard" />
-            <Link href="/sectors/crypto" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Crypto <ChevronRight className="h-3 w-3 inline ml-0.5" />
-            </Link>
-            <Link href="/rotation" className="rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
-              Rotation Tracker <ChevronRight className="h-3 w-3 inline ml-0.5" />
-            </Link>
+    <div className="mx-auto max-w-7xl px-6">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-30 -mx-6 px-6 py-4 bg-[#111]/95 backdrop-blur border-b border-[#2a2a2a]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
+              <SectorNav active="dashboard" />
+              <Link href="/sectors/crypto" className="hidden sm:inline-flex rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
+                Crypto <ChevronRight className="h-3 w-3 inline ml-0.5" />
+              </Link>
+              <Link href="/rotation" className="hidden sm:inline-flex rounded-md border border-[#333] px-2 py-1 text-[11px] text-[#888] hover:text-white hover:border-[#444] transition-colors">
+                Rotation Tracker <ChevronRight className="h-3 w-3 inline ml-0.5" />
+              </Link>
+            </div>
+            <div className="mt-1 flex items-center gap-3">
+              <DataAgeBadge calculatedAt={data.calculatedAt} warnAfterMin={20} />
+              <span className="text-xs text-[#555]">{new Date(data.calculatedAt).toLocaleString()}</span>
+              {data.stockQuotes && <span className="text-xs text-[#555] hidden sm:inline">{Object.keys(data.stockQuotes).length} quotes{data.quotesAsOf ? ` as of ${new Date(data.quotesAsOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}</span>}
+            </div>
           </div>
-          <div className="mt-1 flex items-center gap-3">
-            <DataAgeBadge calculatedAt={data.calculatedAt} warnAfterMin={20} />
-            <span className="text-xs text-[#555]">{new Date(data.calculatedAt).toLocaleString()}</span>
-            {data.stockQuotes && <span className="text-xs text-[#555]">{Object.keys(data.stockQuotes).length} quotes{data.quotesAsOf ? ` as of ${new Date(data.quotesAsOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}</span>}
+          <div className="flex items-center gap-2">
+            <StockSearch allStocks={allStocks} />
+            <AlertPanel sectors={data.sectors} data={data} />
+            {/* Desktop action buttons */}
+            <button onClick={handleExport} className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="Export to Excel">
+              <FileDown className="h-4 w-4" /><span>Export</span>
+            </button>
+            <CopyButton tickers={watchlistTickers} className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" />
+            <button onClick={() => fetchData(true)} disabled={loading} className="hidden sm:flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50" aria-label="Refresh data">
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+            </button>
+            {/* Mobile overflow menu */}
+            <div className="relative sm:hidden">
+              <button onClick={() => setOverflowOpen(!overflowOpen)} className="flex items-center rounded-lg border border-[#333] px-2 py-1.5 text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="More actions">
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+              {overflowOpen && (
+                <div className="absolute right-0 top-full mt-1 z-50 rounded-lg border border-[#2a2a2a] bg-[#111] py-1 shadow-xl min-w-[140px]">
+                  <button onClick={() => { handleExport(); setOverflowOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white">
+                    <FileDown className="h-3.5 w-3.5" /> Export
+                  </button>
+                  <button onClick={() => { fetchData(true); setOverflowOpen(false); }} disabled={loading} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50">
+                    <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+                  </button>
+                  <Link href="/sectors/crypto" className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" onClick={() => setOverflowOpen(false)}>
+                    Crypto
+                  </Link>
+                  <Link href="/rotation" className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" onClick={() => setOverflowOpen(false)}>
+                    Rotation Tracker
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <StockSearch allStocks={allStocks} />
-          <AlertPanel sectors={data.sectors} data={data} />
-          <button onClick={handleExport} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="Export to Excel">
-            <FileDown className="h-4 w-4" /><span className="hidden sm:inline">Export</span>
-          </button>
-          <CopyButton tickers={watchlistTickers} className="flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" />
-          <button onClick={() => fetchData(true)} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50" aria-label="Refresh data">
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
-          </button>
         </div>
       </div>
 
+      <div className="space-y-6 py-6">
+      {/* Summary Strip */}
+      <SummaryStrip data={data} sectors={data.sectors} />
+
       {/* Onboarding Banner */}
       <OnboardingBanner />
+
+      {/* ── Market Context ── */}
+      <div className="flex items-center gap-3 pt-2">
+        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">Market Context</span>
+        <div className="h-px flex-1 bg-[#2a2a2a]" />
+      </div>
 
       {/* Regime Banner */}
       <CollapsiblePanel id="regime" title="Macro Regime" collapsed={collapsedPanels.has("regime")} onToggle={togglePanel}
@@ -163,6 +199,12 @@ export default function SectorRotationPage() {
           </div>
         </div>
       </CollapsiblePanel>
+
+      {/* ── Sector Analysis ── */}
+      <div className="flex items-center gap-3 pt-2">
+        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">Sector Analysis</span>
+        <div className="h-px flex-1 bg-[#2a2a2a]" />
+      </div>
 
       {/* Sector Heatmap Grid */}
       <CollapsiblePanel id="sector-scores" title="Sector Scores" collapsed={collapsedPanels.has("sector-scores")} onToggle={togglePanel}
@@ -216,49 +258,38 @@ export default function SectorRotationPage() {
             </div>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {sortedSectors.map((s) => (
-            <div key={s.sector} className={`rounded-lg border p-3 transition-colors ${s.stealthAccumulation ? "border-cyan-500/40 bg-cyan-500/5" : "border-[#2a2a2a] bg-[#141414]"}`}>
-              <div className="flex items-start justify-between gap-1">
-                <div className="min-w-0">
-                  <div className="truncate text-xs font-medium text-white" title={s.sector}>{s.sector}</div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-[#666]">{s.etf}</span>
-                    <EtfSparkline returns={data.etfReturns20d?.[s.etf]} />
-                  </div>
-                </div>
-                <span className="text-lg shrink-0">{s.trendArrow}</span>
-              </div>
-              <div className="mt-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className={compositeTextColor(s.compositeScore)}>{s.compositeScore}</span>
-                  <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${quadrantColor(s.quadrant)}`}>{s.quadrant}</span>
-                </div>
-                <div className="mt-1 h-1.5 w-full rounded-full bg-[#2a2a2a]">
-                  <div className={`h-1.5 rounded-full ${compositeColor(s.compositeScore)}`} style={{ width: `${s.compositeScore}%` }} />
-                </div>
-                <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-[#888]">
-                  <span>RS {s.rsRatio.toFixed(1)}</span>
-                  <span>CMF {s.cmf20 >= 0 ? "+" : ""}{s.cmf20.toFixed(3)}</span>
-                  <span>Breadth {s.breadthPct != null ? `${s.breadthPct.toFixed(0)}%` : "N/A"}</span>
-                </div>
-                <div className="mt-1.5 flex items-center justify-between">
-                  <TradingActionBadge sector={s} />
-                  {(s.dataQuality ?? 100) < 100 && <span className="text-[10px] text-amber-400/70" title={`Scoring factors: momentum, acceleration, Mansfield RS, CMF (always available), breadth, smart money. ${s.dataQualityBreakdown ? `Missing: ${[!s.dataQualityBreakdown.breadth && "breadth", !s.dataQualityBreakdown.smartMoney && "smart money"].filter(Boolean).join(", ")}. ` : ""}Weights are redistributed across available factors.`}>{s.dataQuality ?? 100}% data</span>}
-                </div>
-                <ComparisonDelta sector={s} comparisonMap={comparisonMap} />
-              </div>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {sortedSectors.flatMap((s) => {
+            const stocks = stocksBySector.get(s.sector) ?? [];
+            const isExpanded = expandedSector === s.sector;
+            return [
+              <SectorCard
+                key={s.sector}
+                sector={s}
+                stocks={stocks}
+                etfReturns={data.etfReturns20d?.[s.etf]}
+                comparisonMap={comparisonMap}
+                history={history}
+                isExpanded={isExpanded}
+                onToggle={() => setExpandedSector(isExpanded ? null : s.sector)}
+              />,
+              isExpanded && <ExpandedStockTable key={`expand-${s.sector}`} stocks={stocks} />,
+            ];
+          })}
         </div>
       </CollapsiblePanel>
+
+      {/* Sector History */}
+      {history.length >= 3 && (
+        <HistoryChart sectors={data.sectors} history={history} collapsed={collapsedPanels.has("sector-history")} onToggle={togglePanel} />
+      )}
 
       {/* RRG & Leading Indicators */}
       <CollapsiblePanel id="rrg-indicators" title="RRG & Leading Indicators" collapsed={collapsedPanels.has("rrg-indicators")} onToggle={togglePanel}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <h3 className="mb-3 text-sm font-semibold text-[#888]">Relative Rotation Graph</h3>
-            <div className="mx-auto max-w-[500px]"><RRGChart sectors={data.sectors} subSectorScores={subSectorScores} crossAssetScores={crossAssetScores} /></div>
+            <RRGChart sectors={data.sectors} subSectorScores={subSectorScores} crossAssetScores={crossAssetScores} />
           </div>
           <div className="space-y-4 rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <h3 className="mb-2 text-sm font-semibold text-[#888]">Leading Indicators</h3>
@@ -289,6 +320,12 @@ export default function SectorRotationPage() {
           </div>
         </div>
       </CollapsiblePanel>
+
+      {/* ── Supporting Data ── */}
+      <div className="flex items-center gap-3 pt-2">
+        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">Supporting Data</span>
+        <div className="h-px flex-1 bg-[#2a2a2a]" />
+      </div>
 
       {/* Sub-Sector Leading Indicators */}
       {subSectorScores.length > 0 && (
@@ -334,6 +371,7 @@ export default function SectorRotationPage() {
       </CollapsiblePanel>
 
       <ScannerCTA />
+      </div>
     </div>
   );
 }
