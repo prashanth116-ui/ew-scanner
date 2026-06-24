@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Loader2, RefreshCw, AlertTriangle, TrendingUp, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Loader2, RefreshCw, AlertTriangle, TrendingUp, TrendingDown, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import Link from "next/link";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { useSectorData } from "../_use-sector-data";
@@ -15,6 +15,8 @@ import {
 } from "../_components";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
+import type { FuturesSnapshot, InternalsSnapshot } from "@/lib/premarket/types";
+import { computeBiasScore } from "@/lib/premarket/scoring";
 import { loadHistory } from "@/lib/sector-rotation/history";
 import {
   computeMarketPosture,
@@ -47,14 +49,28 @@ export default function DailyBriefPage() {
   const [macroEvents, setMacroEvents] = useState<CatalystCalendarEvent[]>([]);
   const [macroLoading, setMacroLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabView>("brief");
+  const [futures, setFutures] = useState<FuturesSnapshot[]>([]);
+  const [internals, setInternals] = useState<InternalsSnapshot>({ addLine: null, tick: null, trin: null });
+  const [pulseLoading, setPulseLoading] = useState(true);
 
-  // Fetch macro events
+  // Fetch macro events + pre-market data in parallel
   useEffect(() => {
     fetch("/api/macro-events")
       .then((res) => (res.ok ? res.json() : []))
       .then((events: CatalystCalendarEvent[]) => setMacroEvents(events))
       .catch(() => setMacroEvents([]))
       .finally(() => setMacroLoading(false));
+
+    fetch("/api/premarket")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((result: { futures: FuturesSnapshot[]; internals: InternalsSnapshot } | null) => {
+        if (result) {
+          setFutures(result.futures);
+          setInternals(result.internals);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPulseLoading(false));
   }, []);
 
   // Compute analysis
@@ -92,6 +108,23 @@ export default function DailyBriefPage() {
         : null,
     [data, posture, previousSnapshot, previousPosture]
   );
+
+  // Compute bias score from pre-market + existing regime/posture data
+  const biasResult = useMemo(() => {
+    if (!posture || futures.length === 0) return null;
+    const regimeData = data?.regime ? {
+      regime: data.regime.regime,
+      regimeConfidence: 50,
+      vix: data.regime.vix,
+      vixSlope: data.regime.vixSlope,
+      yield10y: data.regime.yield10y,
+      dxy: data.regime.dxy,
+      dxyTrend: data.regime.dxyTrend,
+      favoredSectors: data.regime.favoredSectors,
+      avoidSectors: data.regime.avoidSectors,
+    } : null;
+    return computeBiasScore(futures, internals, posture, regimeData);
+  }, [futures, internals, posture, data?.regime]);
 
   // Persist today's posture (side effect)
   useEffect(() => {
@@ -193,6 +226,35 @@ export default function DailyBriefPage() {
 
       {/* Brief Content */}
       {activeTab === "brief" && <>
+
+      {/* 0. Pre-Market Pulse */}
+      <CollapsiblePanel
+        id="pulse"
+        title={`Pre-Market Pulse \u2014 ${new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" })}`}
+        collapsed={collapsed.has("pulse")}
+        onToggle={toggle}
+        badge={
+          biasResult ? (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium border ${
+              biasResult.score >= 2 ? "bg-green-500/10 border-green-500/30 text-green-400"
+                : biasResult.score <= -2 ? "bg-red-500/10 border-red-500/30 text-red-400"
+                : "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
+            }`}>
+              {biasResult.label} ({biasResult.score > 0 ? "+" : ""}{biasResult.score})
+            </span>
+          ) : pulseLoading ? (
+            <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">Loading...</span>
+          ) : null
+        }
+      >
+        <PreMarketPulseContent
+          futures={futures}
+          internals={internals}
+          regime={data?.regime ?? null}
+          biasResult={biasResult}
+          loading={pulseLoading}
+        />
+      </CollapsiblePanel>
 
       {/* 1. Market Posture Banner */}
       {posture && <PostureBanner posture={posture} />}
@@ -370,6 +432,160 @@ function PostureBanner({ posture }: { posture: PostureResult }) {
         <span className={`text-xl font-bold ${style.text}`}>{posture.posture}</span>
       </div>
       <p className="mt-2 text-sm text-[#ccc]">{posture.reasoning}</p>
+    </div>
+  );
+}
+
+// ── Pre-Market Pulse ──
+
+const INDEX_FUTURES = new Set(["ES=F", "NQ=F", "RTY=F"]);
+
+function FuturesRow({ items, label }: { items: FuturesSnapshot[]; label: string }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+      <span className="text-[10px] text-[#555] font-medium uppercase tracking-wider w-12 shrink-0">{label}</span>
+      {items.map((f) => {
+        const isUp = f.changePct >= 0;
+        return (
+          <div key={f.symbol} className="flex items-center gap-1.5 text-xs">
+            <span className="text-[#888] font-medium">{f.symbol.replace("=F", "")}</span>
+            <span className="text-[#ccc] font-mono">{f.price.toFixed(2)}</span>
+            <span className={`flex items-center gap-0.5 font-semibold ${isUp ? "text-green-400" : "text-red-400"}`}>
+              {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+              {isUp ? "+" : ""}{f.changePct.toFixed(2)}%
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PreMarketPulseContent({
+  futures,
+  internals,
+  regime,
+  biasResult,
+  loading,
+}: {
+  futures: FuturesSnapshot[];
+  internals: InternalsSnapshot;
+  regime: { vix: number; vixSlope: string; yield10y: number; dxy: number; dxyTrend: string; regimeConfidence: number } | null;
+  biasResult: { score: number; label: string } | null;
+  loading: boolean;
+}) {
+  if (loading && futures.length === 0) {
+    return <p className="text-sm text-[#666]">Loading pre-market data...</p>;
+  }
+
+  if (futures.length === 0 && !regime) {
+    return <p className="text-sm text-[#666]">Pre-market data unavailable.</p>;
+  }
+
+  const trendArrow = (slope: string) =>
+    slope === "rising" ? "\u2191" : slope === "falling" ? "\u2193" : "\u2192";
+
+  const indexFutures = futures.filter((f) => INDEX_FUTURES.has(f.symbol));
+  const commodities = futures.filter((f) => !INDEX_FUTURES.has(f.symbol));
+
+  // Data timestamp from the most recent futures quote
+  const latestTs = futures.reduce((max, f) => Math.max(max, f.timestamp), 0);
+
+  return (
+    <div className="space-y-3">
+      {/* Bias Gauge */}
+      {biasResult && (
+        <div className="space-y-1.5">
+          <div className="relative h-2.5 rounded-full bg-gradient-to-r from-red-600/40 via-yellow-500/40 to-green-600/40">
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-4 w-4 rounded-full border-2 border-white/80 shadow-lg transition-all duration-500"
+              style={{
+                left: `${((biasResult.score + 10) / 20) * 100}%`,
+                backgroundColor: biasResult.score >= 2 ? "#22c55e" : biasResult.score <= -2 ? "#ef4444" : "#eab308",
+              }}
+            />
+          </div>
+          <div className="flex justify-between text-[9px] text-[#555]">
+            <span>-10</span>
+            <span>0</span>
+            <span>+10</span>
+          </div>
+        </div>
+      )}
+
+      {/* Index Futures */}
+      <FuturesRow items={indexFutures} label="Index" />
+
+      {/* Commodities */}
+      <FuturesRow items={commodities} label="Cmdty" />
+
+      {/* Macro indicators: VIX, 10Y, DXY, Regime Confidence */}
+      {regime && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+          <span className="text-[10px] text-[#555] font-medium uppercase tracking-wider w-12 shrink-0">Macro</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[#888]">VIX</span>
+            <span className={`font-medium ${regime.vix < 15 ? "text-green-400" : regime.vix > 25 ? "text-red-400" : "text-[#ccc]"}`}>
+              {regime.vix.toFixed(1)}
+            </span>
+            <span className="text-[#666]">{trendArrow(regime.vixSlope)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[#888]">10Y</span>
+            <span className="text-[#ccc] font-medium">{regime.yield10y.toFixed(2)}%</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[#888]">DXY</span>
+            <span className="text-[#ccc] font-medium">{regime.dxy.toFixed(1)}</span>
+            <span className="text-[#666]">{trendArrow(regime.dxyTrend)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[#888]">Confidence</span>
+            <span className={`font-medium ${regime.regimeConfidence >= 70 ? "text-green-400" : regime.regimeConfidence >= 50 ? "text-[#ccc]" : "text-amber-400"}`}>
+              {regime.regimeConfidence}%
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Internals */}
+      {(internals.tick != null || internals.trin != null || internals.addLine != null) && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+          <span className="text-[10px] text-[#555] font-medium uppercase tracking-wider w-12 shrink-0">Intrnl</span>
+          {internals.tick != null && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[#888]">TICK</span>
+              <span className={`font-medium ${internals.tick > 500 ? "text-green-400" : internals.tick < -500 ? "text-red-400" : "text-[#ccc]"}`}>
+                {internals.tick > 0 ? "+" : ""}{Math.round(internals.tick)}
+              </span>
+            </div>
+          )}
+          {internals.trin != null && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[#888]">TRIN</span>
+              <span className={`font-medium ${internals.trin < 0.8 ? "text-green-400" : internals.trin > 1.2 ? "text-red-400" : "text-[#ccc]"}`}>
+                {internals.trin.toFixed(2)}
+              </span>
+            </div>
+          )}
+          {internals.addLine != null && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[#888]">A/D</span>
+              <span className={`font-medium ${internals.addLine > 0 ? "text-green-400" : internals.addLine < 0 ? "text-red-400" : "text-[#ccc]"}`}>
+                {internals.addLine > 0 ? "+" : ""}{Math.round(internals.addLine)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Data timestamp */}
+      {latestTs > 0 && (
+        <p className="text-[10px] text-[#444]">
+          As of {new Date(latestTs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" })}
+        </p>
+      )}
     </div>
   );
 }
@@ -690,6 +906,20 @@ function BriefGuide() {
         <h2 className="text-lg font-bold text-white mb-4">Section-by-Section Guide</h2>
         <div className="space-y-5">
 
+          {/* Pre-Market Pulse */}
+          <GuideSection
+            title="Pre-Market Pulse"
+            color="text-cyan-400"
+            description="Macro context for the session ahead. Combines index futures, VIX, 10Y yield, USD index, and NYSE internals into a single bias score from -10 (bear) to +10 (bull)."
+            details={[
+              { label: "Futures", desc: "ES, NQ, RTY — pre-market price and percent change. Green/red coloring based on direction." },
+              { label: "Macro", desc: "VIX level and slope, 10-Year yield, Dollar Index (DXY) trend. These drive the regime classification." },
+              { label: "Internals", desc: "NYSE TICK, TRIN (Arms Index), Advance-Decline line. Available during market hours only." },
+              { label: "Bias Score", desc: "Weighted composite: posture, regime, VIX level, futures direction, and internals readings." },
+            ]}
+            unique="Consolidates futures + macro + internals into the Brief. Previously required checking multiple external sources."
+          />
+
           {/* Market Posture */}
           <GuideSection
             title="Market Posture"
@@ -779,7 +1009,8 @@ function BriefGuide() {
       <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-5">
         <h2 className="text-lg font-bold text-white mb-3">How to Use This Page</h2>
         <ol className="text-sm text-[#ccc] space-y-2 list-decimal list-inside">
-          <li><strong className="text-white">Check posture first.</strong> If DEFENSIVE or CASH, reduce exposure regardless of individual sector strength.</li>
+          <li><strong className="text-white">Scan pre-market pulse.</strong> Check bias score, futures direction, VIX, and macro indicators for session context.</li>
+          <li><strong className="text-white">Check posture.</strong> If DEFENSIVE or CASH, reduce exposure regardless of individual sector strength.</li>
           <li><strong className="text-white">Review what changed.</strong> Posture shifts and quadrant transitions are the highest-signal changes. Act on these first.</li>
           <li><strong className="text-white">Scan risk flags.</strong> Red flags override green signals. Address risks before adding positions.</li>
           <li><strong className="text-white">Check sector tiers.</strong> Actionable sectors are your candidates. Then drill into the full dashboard or picks page.</li>

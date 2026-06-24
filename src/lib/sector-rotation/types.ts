@@ -149,6 +149,7 @@ export interface SectorRotationResult {
   /** Regime data (VIX, 10Y, DXY) */
   regime?: {
     regime: "RISK_ON" | "RISK_OFF" | "INFLATIONARY" | "MIXED";
+    regimeConfidence: number;
     vix: number;
     vixSlope: "rising" | "falling" | "flat";
     yield10y: number;
