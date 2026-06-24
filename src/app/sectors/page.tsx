@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Loader2, RefreshCw, FileDown, ChevronRight, MoreHorizontal } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { DataAgeBadge } from "@/components/data-age-badge";
@@ -24,10 +24,18 @@ import {
   SectorCard,
   ExpandedStockTable,
   HistoryChart,
+  ActionSummary,
   SORT_MODE_OPTIONS,
   LOADING_PHASES,
 } from "./_components";
 import { useSectorData } from "./_use-sector-data";
+import {
+  computeMarketPosture,
+  computeSectorTiers,
+  computeRiskFlags,
+} from "@/lib/sector-rotation/brief";
+
+const DEFAULT_COLLAPSED = ["regime", "rotation-status", "sub-sectors", "cross-asset", "correlation", "cross-pairs", "sector-comparison"];
 
 const ETF_COUNT = getEquitySectors().length + getSubSectors().length + getCrossAssetETFs().length;
 
@@ -54,9 +62,23 @@ export default function SectorRotationPage() {
     stocksBySector,
     handleExport,
     watchlistTickers,
+    rotationData,
   } = useSectorData();
 
-  const [collapsedPanels, togglePanel] = useCollapsedPanels();
+  const [collapsedPanels, togglePanel] = useCollapsedPanels(undefined, DEFAULT_COLLAPSED);
+
+  const posture = useMemo(
+    () => (data ? computeMarketPosture(data, rotationData) : null),
+    [data, rotationData]
+  );
+  const tiers = useMemo(
+    () => (data ? computeSectorTiers(data.sectors, rotationData) : null),
+    [data, rotationData]
+  );
+  const riskFlags = useMemo(
+    () => (data ? computeRiskFlags(data, rotationData) : []),
+    [data, rotationData]
+  );
   const [expandedSector, setExpandedSector] = useState<string | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
 
@@ -155,12 +177,19 @@ export default function SectorRotationPage() {
       {/* Summary Strip */}
       <SummaryStrip data={data} sectors={data.sectors} />
 
+      {/* Action Summary */}
+      {posture && tiers && (
+        <div id="action-summary">
+          <ActionSummary posture={posture} riskFlags={riskFlags} tiers={tiers} />
+        </div>
+      )}
+
       {/* Onboarding Banner */}
       <OnboardingBanner />
 
-      {/* ── Market Context ── */}
+      {/* ── 1. Assess ── */}
       <div className="flex items-center gap-3 pt-2">
-        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">Market Context</span>
+        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">1. Assess &mdash; Market Conditions</span>
         <div className="h-px flex-1 bg-[#2a2a2a]" />
       </div>
 
@@ -200,9 +229,9 @@ export default function SectorRotationPage() {
         </div>
       </CollapsiblePanel>
 
-      {/* ── Sector Analysis ── */}
+      {/* ── 2. Analyze ── */}
       <div className="flex items-center gap-3 pt-2">
-        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">Sector Analysis</span>
+        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">2. Analyze &mdash; Sector Strength</span>
         <div className="h-px flex-1 bg-[#2a2a2a]" />
       </div>
 
@@ -273,7 +302,7 @@ export default function SectorRotationPage() {
                 isExpanded={isExpanded}
                 onToggle={() => setExpandedSector(isExpanded ? null : s.sector)}
               />,
-              isExpanded && <ExpandedStockTable key={`expand-${s.sector}`} stocks={stocks} />,
+              isExpanded && <ExpandedStockTable key={`expand-${s.sector}`} stocks={stocks} sector={s} />,
             ];
           })}
         </div>
@@ -321,9 +350,9 @@ export default function SectorRotationPage() {
         </div>
       </CollapsiblePanel>
 
-      {/* ── Supporting Data ── */}
+      {/* ── 3. Act ── */}
       <div className="flex items-center gap-3 pt-2">
-        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">Supporting Data</span>
+        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">3. Act &mdash; Supporting Data</span>
         <div className="h-px flex-1 bg-[#2a2a2a]" />
       </div>
 

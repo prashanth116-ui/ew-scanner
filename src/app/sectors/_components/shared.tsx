@@ -55,13 +55,15 @@ export function Sparkline({ returns, width = 60, height = 20 }: { returns?: numb
 
 // ── Collapsible Panel ──
 
-export function useCollapsedPanels(storageKey = COLLAPSED_KEY): [Set<string>, (id: string) => void] {
+export function useCollapsedPanels(storageKey = COLLAPSED_KEY, defaultCollapsed?: string[]): [Set<string>, (id: string) => void] {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set<string>();
+    if (typeof window === "undefined") return new Set<string>(defaultCollapsed);
     try {
       const raw = localStorage.getItem(storageKey);
-      return raw ? new Set(JSON.parse(raw) as string[]) : new Set<string>();
-    } catch { return new Set<string>(); }
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+      // First visit — use defaults if provided
+      return new Set<string>(defaultCollapsed);
+    } catch { return new Set<string>(defaultCollapsed); }
   });
 
   const toggle = useCallback((id: string) => {

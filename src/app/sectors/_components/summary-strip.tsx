@@ -2,6 +2,7 @@
 
 import type { SectorRotationResult, SectorRotationScore } from "@/lib/sector-rotation/types";
 import { getTradingAction } from "./helpers";
+import { InfoTip } from "./info-tip";
 
 export function SummaryStrip({ data, sectors }: { data: SectorRotationResult; sectors: SectorRotationScore[] }) {
   const improving = sectors.filter((s) => s.acceleration > 0).length;
@@ -30,7 +31,7 @@ export function SummaryStrip({ data, sectors }: { data: SectorRotationResult; se
       <div className="h-4 w-px bg-[#2a2a2a] shrink-0" />
       {/* Dispersion */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-[10px] text-[#555]">Disp</span>
+        <span className="flex items-center gap-0.5 text-[10px] text-[#555]">Disp <InfoTip text="How spread out sector scores are \u2014 higher means more rotation opportunity" /></span>
         <span className={`text-sm font-bold font-mono ${
           data.dispersionIndex > 4 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#888]"
         }`}>{data.dispersionIndex.toFixed(1)}</span>
@@ -38,7 +39,7 @@ export function SummaryStrip({ data, sectors }: { data: SectorRotationResult; se
       <div className="h-4 w-px bg-[#2a2a2a] shrink-0" />
       {/* Spread */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-[10px] text-[#555]">Spread</span>
+        <span className="flex items-center gap-0.5 text-[10px] text-[#555]">Spread <InfoTip text="Gap between best and worst sector scores \u2014 wider spread means clearer winners and losers" /></span>
         <span className={`text-sm font-bold font-mono ${
           (data.sectorSpread ?? 0) > 8 ? "text-green-400" : (data.sectorSpread ?? 0) > 4 ? "text-amber-400" : "text-[#888]"
         }`}>{(data.sectorSpread ?? 0).toFixed(1)}%</span>

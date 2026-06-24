@@ -11,6 +11,8 @@ import type { StockInSector } from "./types";
 import { quadrantColor, getTradingAction, actionBorderColor, getStockPhase, rsColor, rsAccelColor } from "./helpers";
 import { TradingActionBadge, ComparisonDelta } from "./comparison-delta";
 import { EtfSparkline } from "./shared";
+import { InfoTip } from "./info-tip";
+import type { TradingAction } from "./types";
 
 // ── Score Sparkline (composite score over history) ──
 
@@ -74,6 +76,64 @@ function convictionLabel(score: number): { label: string; color: string } {
   return { label: "LOW", color: "text-[#888] bg-[#2a2a2a] border-[#333]" };
 }
 
+// ── Why Text ──
+
+function getWhyText(sector: SectorRotationScore): string {
+  const action = getTradingAction(sector);
+  if (action === "TRADE" && sector.quadrant === "LEADING" && sector.acceleration > 0) {
+    return "Strong momentum with money flowing in";
+  }
+  if (action === "BUILD" && sector.quadrant === "IMPROVING") {
+    return "Improving momentum \u2014 building position opportunity";
+  }
+  if (action === "WATCH" && sector.quadrant === "LEADING" && sector.acceleration < 0) {
+    return "Still leading but losing steam \u2014 watch for weakening";
+  }
+  if (action === "TRIM" && sector.quadrant === "WEAKENING") {
+    return "Momentum fading \u2014 consider reducing exposure";
+  }
+  if (action === "AVOID" && sector.quadrant === "LAGGING") {
+    return "Weak across all metrics \u2014 stay away";
+  }
+  if (action === "TRADE") return "Strong composite score in leading quadrant";
+  if (action === "BUILD") return "Gaining momentum \u2014 early position opportunity";
+  if (action === "WATCH") return "Monitor for improvement before adding exposure";
+  if (action === "TRIM") return "Weakening signals \u2014 reduce or exit";
+  return "Poor metrics \u2014 avoid new positions";
+}
+
+function getGuidanceBullets(sector: SectorRotationScore, stocks: StockInSector[]): string[] {
+  const action = getTradingAction(sector);
+  const bullets: string[] = [];
+
+  const actionGuidance: Record<TradingAction, string> = {
+    TRADE: `${sector.sector} is in the LEADING quadrant with positive acceleration \u2014 this is the strongest setup for full position sizing.`,
+    BUILD: `${sector.sector} is IMPROVING with positive acceleration \u2014 scale into positions as momentum builds.`,
+    WATCH: `${sector.sector} shows mixed signals \u2014 monitor for quadrant transition before committing capital.`,
+    TRIM: `${sector.sector} is in the WEAKENING quadrant \u2014 tighten stops and reduce exposure.`,
+    AVOID: `${sector.sector} is LAGGING with weak metrics \u2014 no new positions recommended.`,
+  };
+  bullets.push(actionGuidance[action]);
+
+  // Top conviction stock
+  const topStocks = [...stocks]
+    .map((s) => ({ ...s, _conv: getConvictionScore(s) }))
+    .sort((a, b) => b._conv - a._conv);
+  const topHigh = topStocks.find((s) => s._conv >= 7);
+  if (topHigh) {
+    bullets.push(`Top pick: ${topHigh.ticker} (${topHigh.companyName}) \u2014 HIGH conviction.`);
+  }
+
+  // Risk note
+  if (sector.acceleration < -2) {
+    bullets.push("Caution: Acceleration is strongly negative \u2014 momentum deteriorating rapidly.");
+  } else if ((sector.dataQuality ?? 100) < 50) {
+    bullets.push(`Data quality is only ${sector.dataQuality}% \u2014 signals may be unreliable.`);
+  }
+
+  return bullets;
+}
+
 // ── Sector Card ──
 
 export function SectorCard({
@@ -126,11 +186,15 @@ export function SectorCard({
           <div className="flex items-center gap-2">
             <ScoreRing score={pct} />
             <span className={`font-mono font-semibold ${compositeTextColor(pct)}`}>{pct}</span>
+            <InfoTip text="0-100 score combining RS ratio, momentum, CMF, breadth, and trend" />
           </div>
-          <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${quadrantColor(sector.quadrant)}`}>{sector.quadrant}</span>
+          <div className="flex items-center gap-1">
+            <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${quadrantColor(sector.quadrant)}`}>{sector.quadrant}</span>
+            <InfoTip text="RRG position \u2014 LEADING (strong), IMPROVING (gaining), WEAKENING (fading), LAGGING (weak)" />
+          </div>
         </div>
-        <div className="mt-1.5 flex flex-wrap gap-x-3 text-[10px] text-[#888] font-mono">
-          <span>RS {sector.rsRatio.toFixed(1)}</span>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 text-[10px] text-[#888] font-mono">
+          <span className="flex items-center gap-0.5">RS {sector.rsRatio.toFixed(1)} <InfoTip text="Relative strength vs SPY \u2014 positive means outperforming the market" /></span>
           <span>CMF {sector.cmf20 >= 0 ? "+" : ""}{sector.cmf20.toFixed(3)}</span>
           <span>Breadth {sector.breadthPct != null ? `${sector.breadthPct.toFixed(0)}%` : "N/A"}</span>
         </div>
@@ -138,6 +202,7 @@ export function SectorCard({
           <TradingActionBadge sector={sector} />
           {(sector.dataQuality ?? 100) < 100 && <span className="text-[10px] text-amber-400/70">{sector.dataQuality ?? 100}% data</span>}
         </div>
+        <p className="mt-1 text-[10px] text-[#777] italic leading-snug">{getWhyText(sector)}</p>
         <ComparisonDelta sector={sector} comparisonMap={comparisonMap} />
         {/* Top 3 stock pills */}
         {topStocks.length > 0 && (
@@ -174,7 +239,7 @@ export function SectorCard({
 
 // ── Expanded Stock Table ──
 
-export function ExpandedStockTable({ stocks }: { stocks: StockInSector[] }) {
+export function ExpandedStockTable({ stocks, sector }: { stocks: StockInSector[]; sector?: SectorRotationScore }) {
   const [showAll, setShowAll] = useState(false);
 
   const rankedStocks = useMemo(() => {
@@ -193,8 +258,23 @@ export function ExpandedStockTable({ stocks }: { stocks: StockInSector[] }) {
     return <p className="text-xs text-[#555] py-2 text-center">No stock data available for this sector.</p>;
   }
 
+  const guidanceBullets = sector ? getGuidanceBullets(sector, stocks) : [];
+
   return (
     <div className="col-span-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
+      {guidanceBullets.length > 0 && (
+        <div className="mb-3 rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-2.5">
+          <div className="text-[11px] font-semibold text-[#aaa] mb-1.5">What to do with {sector!.sector}:</div>
+          <ul className="space-y-1">
+            {guidanceBullets.map((b, i) => (
+              <li key={i} className="flex items-start gap-2 text-[11px] text-[#999] leading-snug">
+                <span className="mt-1 h-1 w-1 rounded-full bg-[#555] shrink-0" />
+                {b}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
