@@ -61,16 +61,23 @@ export default function DailyBriefPage() {
       .catch(() => setMacroEvents([]))
       .finally(() => setMacroLoading(false));
 
-    fetch("/api/premarket")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((result: { futures: FuturesSnapshot[]; internals: InternalsSnapshot } | null) => {
-        if (result) {
-          setFutures(result.futures);
-          setInternals(result.internals);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setPulseLoading(false));
+    const fetchPulse = () => {
+      fetch("/api/premarket")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((result: { futures: FuturesSnapshot[]; internals: InternalsSnapshot } | null) => {
+          if (result) {
+            setFutures(result.futures);
+            setInternals(result.internals);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setPulseLoading(false));
+    };
+    fetchPulse();
+
+    // Auto-refresh pre-market data every 2 minutes
+    const pulseInterval = setInterval(fetchPulse, 2 * 60 * 1000);
+    return () => clearInterval(pulseInterval);
   }, []);
 
   // Compute analysis
@@ -114,7 +121,7 @@ export default function DailyBriefPage() {
     if (!posture || futures.length === 0) return null;
     const regimeData = data?.regime ? {
       regime: data.regime.regime,
-      regimeConfidence: 50,
+      regimeConfidence: data.regime.regimeConfidence,
       vix: data.regime.vix,
       vixSlope: data.regime.vixSlope,
       yield10y: data.regime.yield10y,

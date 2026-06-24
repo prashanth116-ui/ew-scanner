@@ -147,6 +147,42 @@ export function computeBiasScore(
     });
   }
 
+  // ── Commodities ──
+  const cl = futures.find((f) => f.symbol === "CL=F");
+  const gc = futures.find((f) => f.symbol === "GC=F");
+
+  if (cl) {
+    // Rising oil is inflationary headwind; falling oil is deflationary tailwind
+    const clScore = cl.changePct < -1.0 ? 1 : cl.changePct > 1.0 ? -1 : 0;
+    score += clScore;
+    checklist.push({
+      id: "cl",
+      category: "futures",
+      label: `CL: ${cl.changePct >= 0 ? "+" : ""}${cl.changePct.toFixed(2)}%`,
+      status: clScore > 0 ? "bullish" : clScore < 0 ? "bearish" : "neutral",
+      detail: clScore > 0 ? "Falling oil — deflationary tailwind for equities" :
+        clScore < 0 ? "Rising oil — inflationary headwind for equities" :
+          `Crude Oil at $${cl.price.toFixed(2)}`,
+      autoChecked: clScore > 0,
+    });
+  }
+
+  if (gc) {
+    // Rising gold signals risk-off / flight to safety
+    const gcScore = gc.changePct > 1.0 ? -1 : gc.changePct < -0.5 ? 1 : 0;
+    score += gcScore;
+    checklist.push({
+      id: "gc",
+      category: "futures",
+      label: `GC: ${gc.changePct >= 0 ? "+" : ""}${gc.changePct.toFixed(2)}%`,
+      status: gcScore > 0 ? "bullish" : gcScore < 0 ? "bearish" : "neutral",
+      detail: gcScore < 0 ? "Gold surging — flight to safety / risk-off signal" :
+        gcScore > 0 ? "Gold falling — risk appetite improving" :
+          `Gold at $${gc.price.toFixed(2)}`,
+      autoChecked: gcScore > 0,
+    });
+  }
+
   // ── Internals ──
   if (internals.tick != null) {
     const tickScore = internals.tick > 500 ? 1 : internals.tick < -500 ? -1 : 0;
