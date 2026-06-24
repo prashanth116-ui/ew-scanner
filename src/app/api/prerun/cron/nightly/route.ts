@@ -172,16 +172,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // ?discovered-only=true → scan only discovered/promoted tickers (fast test mode)
+    const discoveredOnly = request.nextUrl.searchParams.get("discovered-only") === "true";
+
     // Merge discovered + promoted stock movers into the nightly scan universe
     const {
       symbols: tickers,
       discoveredSymbols,
       promotedCount: mergedPromotedCount,
-    } = await mergeWithDiscovered(
-      getAllSectorSymbols(),
-      "stock",
-      { maxDiscovered: 25 }
-    );
+    } = discoveredOnly
+      ? await mergeWithDiscovered([], "stock", { maxDiscovered: 25 })
+      : await mergeWithDiscovered(getAllSectorSymbols(), "stock", { maxDiscovered: 25 });
     const results: PreRunResult[] = [];
 
     // Pre-warm sector ETF cache — avoids 14 serial fetches during scan
