@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import { Loader2, RefreshCw, AlertTriangle, TrendingUp, TrendingDown, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import Link from "next/link";
 import { DataAgeBadge } from "@/components/data-age-badge";
@@ -15,7 +15,7 @@ import {
 } from "../_components";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
-import type { FuturesSnapshot, InternalsSnapshot } from "@/lib/premarket/types";
+import type { FuturesSnapshot, InternalsSnapshot, ChecklistItem } from "@/lib/premarket/types";
 import { computeBiasScore } from "@/lib/premarket/scoring";
 import { loadHistory } from "@/lib/sector-rotation/history";
 import {
@@ -260,6 +260,7 @@ export default function DailyBriefPage() {
           regime={data?.regime ?? null}
           biasResult={biasResult}
           loading={pulseLoading}
+          subSectorScores={data?.subSectorScores ?? []}
         />
       </CollapsiblePanel>
 
@@ -341,9 +342,9 @@ export default function DailyBriefPage() {
           }
         >
           <div className="space-y-4">
-            <TierTable label="Actionable" sectors={tiers.actionable} labelColor="text-green-400" />
-            <TierTable label="Watch" sectors={tiers.watch} labelColor="text-amber-400" />
-            <TierTable label="Avoid" sectors={tiers.avoid} labelColor="text-red-400" />
+            <TierTable label="Actionable" sectors={tiers.actionable} labelColor="text-green-400" subSectorScores={data?.subSectorScores ?? []} />
+            <TierTable label="Watch" sectors={tiers.watch} labelColor="text-amber-400" subSectorScores={data?.subSectorScores ?? []} />
+            <TierTable label="Avoid" sectors={tiers.avoid} labelColor="text-red-400" subSectorScores={data?.subSectorScores ?? []} />
           </div>
         </CollapsiblePanel>
       )}
@@ -443,7 +444,49 @@ function PostureBanner({ posture }: { posture: PostureResult }) {
   );
 }
 
+// ── Sub-sector → parent GICS mapping ──
+
+const SUB_SECTOR_PARENT: Record<string, string> = {
+  KRE: "XLF",   // Regional Banks → Financials
+  XHB: "XLY",   // Homebuilders → Consumer Discretionary
+  IYT: "XLI",   // Transports → Industrials
+  XRT: "XLY",   // Retail → Consumer Discretionary
+  ITA: "XLI",   // Aerospace & Defense → Industrials
+  ARKX: "XLI",  // Space & Defense Innovation → Industrials
+  UFO: "XLI",   // Space → Industrials
+};
+
 // ── Pre-Market Pulse ──
+
+function generateBiasSummary(bias: { score: number; checklist: ChecklistItem[] }): string {
+  const bullish = bias.checklist.filter((i) => i.status === "bullish");
+  const bearish = bias.checklist.filter((i) => i.status === "bearish");
+
+  const futuresBull = bullish.some((i) => i.category === "futures");
+  const futuresBear = bearish.some((i) => i.category === "futures");
+  const lowVol = bullish.some((i) => i.id === "vix");
+  const highVol = bearish.some((i) => i.id === "vix");
+  const rotationBull = bullish.some((i) => i.category === "sectors");
+  const rotationBear = bearish.some((i) => i.category === "sectors");
+
+  const parts: string[] = [];
+  if (futuresBull) parts.push("futures are up");
+  else if (futuresBear) parts.push("futures are down");
+  if (lowVol) parts.push("volatility is low");
+  else if (highVol) parts.push("VIX is elevated");
+  if (rotationBull) parts.push("rotation favors risk-on");
+  else if (rotationBear) parts.push("rotation leans defensive");
+
+  if (bias.score >= 3) {
+    const detail = parts.length > 0 ? parts.join(", ") + " — " : "";
+    return `${detail}conditions lean bullish.`;
+  }
+  if (bias.score <= -3) {
+    const detail = parts.length > 0 ? parts.join(" and ") + " — " : "";
+    return `${detail}caution warranted.`;
+  }
+  return "Mixed signals across futures, macro, and rotation — no clear directional edge.";
+}
 
 const INDEX_FUTURES = new Set(["ES=F", "NQ=F", "RTY=F"]);
 
@@ -475,12 +518,14 @@ function PreMarketPulseContent({
   regime,
   biasResult,
   loading,
+  subSectorScores,
 }: {
   futures: FuturesSnapshot[];
   internals: InternalsSnapshot;
   regime: { vix: number; vixSlope: string; yield10y: number; dxy: number; dxyTrend: string; regimeConfidence: number } | null;
-  biasResult: { score: number; label: string } | null;
+  biasResult: { score: number; label: string; checklist: ChecklistItem[] } | null;
   loading: boolean;
+  subSectorScores: SectorRotationScore[];
 }) {
   if (loading && futures.length === 0) {
     return <p className="text-sm text-[#666]">Loading pre-market data...</p>;
@@ -518,17 +563,24 @@ function PreMarketPulseContent({
             <span>0</span>
             <span>+10</span>
           </div>
+          <p className="text-xs text-[#999] mt-1">{generateBiasSummary(biasResult)}</p>
         </div>
       )}
 
       {/* Index Futures */}
       <FuturesRow items={indexFutures} label="Index" />
+      {indexFutures.length > 0 && (
+        <p className="text-[10px] text-[#555] ml-12">S&amp;P 500, Nasdaq, Russell 2000 futures — shows overnight market direction</p>
+      )}
 
       {/* Commodities */}
       <FuturesRow items={commodities} label="Cmdty" />
+      {commodities.length > 0 && (
+        <p className="text-[10px] text-[#555] ml-12">Oil (economic activity) and gold (safety demand) — context for risk appetite</p>
+      )}
 
       {/* Macro indicators: VIX, 10Y, DXY, Regime Confidence */}
-      {regime && (
+      {regime && (<>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
           <span className="text-[10px] text-[#555] font-medium uppercase tracking-wider w-12 shrink-0">Macro</span>
           <div className="flex items-center gap-1.5">
@@ -554,10 +606,11 @@ function PreMarketPulseContent({
             </span>
           </div>
         </div>
-      )}
+        <p className="text-[10px] text-[#555] ml-12">{"VIX = fear gauge (< 15 calm, > 25 stressed) · 10Y = bond yields · DXY = US dollar strength"}</p>
+      </>)}
 
       {/* Internals */}
-      {(internals.tick != null || internals.trin != null || internals.addLine != null) && (
+      {(internals.tick != null || internals.trin != null || internals.addLine != null) && (<>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
           <span className="text-[10px] text-[#555] font-medium uppercase tracking-wider w-12 shrink-0">Intrnl</span>
           {internals.tick != null && (
@@ -585,7 +638,28 @@ function PreMarketPulseContent({
             </div>
           )}
         </div>
-      )}
+        <p className="text-[10px] text-[#555] ml-12">TICK = net upticks vs downticks · TRIN = Arms Index ({"< 0.8 bullish, > 1.2 bearish"}) · A/D = advance-decline breadth</p>
+      </>)}
+
+      {/* Sub-Sector Rotation */}
+      {subSectorScores.length > 0 && (<>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <span className="text-[10px] text-[#555] font-medium uppercase tracking-wider w-12 shrink-0">Rotatn</span>
+          {subSectorScores.map((s) => {
+            const qColor = s.quadrant === "LEADING" ? "bg-green-500/20 text-green-400 border-green-500/30"
+              : s.quadrant === "IMPROVING" ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
+              : s.quadrant === "WEAKENING" ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+              : s.quadrant === "LAGGING" ? "bg-red-500/20 text-red-400 border-red-500/30"
+              : "bg-[#222] text-[#888] border-[#333]";
+            return (
+              <span key={s.etf} className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${qColor}`}>
+                {s.etf}
+              </span>
+            );
+          })}
+        </div>
+        <p className="text-[10px] text-[#555] ml-12">Sub-sector quadrants — leading indicators that move before broad GICS sectors</p>
+      </>)}
 
       {/* Data timestamp */}
       {latestTs > 0 && (
@@ -597,7 +671,17 @@ function PreMarketPulseContent({
   );
 }
 
-function TierTable({ label, sectors, labelColor }: { label: string; sectors: SectorRotationScore[]; labelColor: string }) {
+function TierTable({ label, sectors, labelColor, subSectorScores }: { label: string; sectors: SectorRotationScore[]; labelColor: string; subSectorScores: SectorRotationScore[] }) {
+  // Build lookup: parent ETF → matching sub-sector scores
+  const childrenByParent = new Map<string, SectorRotationScore[]>();
+  for (const sub of subSectorScores) {
+    const parent = SUB_SECTOR_PARENT[sub.etf];
+    if (!parent) continue;
+    const list = childrenByParent.get(parent) ?? [];
+    list.push(sub);
+    childrenByParent.set(parent, list);
+  }
+
   if (sectors.length === 0) {
     return (
       <div>
@@ -624,30 +708,60 @@ function TierTable({ label, sectors, labelColor }: { label: string; sectors: Sec
             </tr>
           </thead>
           <tbody>
-            {sectors.map((s) => (
-              <tr key={s.etf} className="border-t border-[#1a1a1a]">
-                <td className="py-1.5 pr-3 text-white font-medium">{s.sector}</td>
-                <td className="py-1.5 pr-3 text-[#888]">{s.etf}</td>
-                <td className="py-1.5 pr-3">
-                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${quadrantColor(s.quadrant)}`}>
-                    {s.quadrant}
-                  </span>
-                </td>
-                <td className="py-1.5 pr-3 text-right text-[#ccc]">{s.compositeScore}</td>
-                <td className={`py-1.5 pr-3 text-right ${s.acceleration > 0 ? "text-green-400" : s.acceleration < 0 ? "text-red-400" : "text-[#666]"}`}>
-                  {s.acceleration > 0 ? "+" : ""}{s.acceleration.toFixed(2)}
-                </td>
-                <td className={`py-1.5 pr-3 text-right ${s.cmf20 > 0 ? "text-green-400" : s.cmf20 < 0 ? "text-red-400" : "text-[#666]"}`}>
-                  {s.cmf20.toFixed(3)}
-                </td>
-                <td className="py-1.5 pr-3 text-right text-[#ccc]">
-                  {s.breadthPct != null ? `${s.breadthPct.toFixed(0)}%` : "\u2014"}
-                </td>
-                <td className="py-1.5">
-                  <TradingActionBadge sector={s} />
-                </td>
-              </tr>
-            ))}
+            {sectors.map((s) => {
+              const children = childrenByParent.get(s.etf) ?? [];
+              return (
+                <Fragment key={s.etf}>
+                  <tr className="border-t border-[#1a1a1a]">
+                    <td className="py-1.5 pr-3 text-white font-medium">{s.sector}</td>
+                    <td className="py-1.5 pr-3 text-[#888]">{s.etf}</td>
+                    <td className="py-1.5 pr-3">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${quadrantColor(s.quadrant)}`}>
+                        {s.quadrant}
+                      </span>
+                    </td>
+                    <td className="py-1.5 pr-3 text-right text-[#ccc]">{s.compositeScore}</td>
+                    <td className={`py-1.5 pr-3 text-right ${s.acceleration > 0 ? "text-green-400" : s.acceleration < 0 ? "text-red-400" : "text-[#666]"}`}>
+                      {s.acceleration > 0 ? "+" : ""}{s.acceleration.toFixed(2)}
+                    </td>
+                    <td className={`py-1.5 pr-3 text-right ${s.cmf20 > 0 ? "text-green-400" : s.cmf20 < 0 ? "text-red-400" : "text-[#666]"}`}>
+                      {s.cmf20.toFixed(3)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right text-[#ccc]">
+                      {s.breadthPct != null ? `${s.breadthPct.toFixed(0)}%` : "\u2014"}
+                    </td>
+                    <td className="py-1.5">
+                      <TradingActionBadge sector={s} />
+                    </td>
+                  </tr>
+                  {children.map((c) => {
+                    const diverging = s.quadrant !== c.quadrant;
+                    return (
+                      <tr key={c.etf} className="border-t border-[#111]">
+                        <td className="py-1 pr-3 pl-4 text-[#999] text-[11px]">
+                          <span className="text-[#444] mr-1">{"\u2514"}</span>{c.sector}
+                        </td>
+                        <td className="py-1 pr-3 text-[#666] text-[11px]">{c.etf}</td>
+                        <td className="py-1 pr-3">
+                          <span className={`inline-flex rounded-full border px-1.5 py-0 text-[9px] font-medium ${quadrantColor(c.quadrant)}`}>
+                            {c.quadrant}
+                          </span>
+                          {diverging && (
+                            <span className="ml-1 text-[9px] text-amber-400" title="Sub-sector diverging from parent">!</span>
+                          )}
+                        </td>
+                        <td className="py-1 pr-3 text-right text-[#888] text-[11px]">{c.compositeScore}</td>
+                        <td className={`py-1 pr-3 text-right text-[11px] ${c.acceleration > 0 ? "text-green-400" : c.acceleration < 0 ? "text-red-400" : "text-[#666]"}`}>
+                          {c.acceleration > 0 ? "+" : ""}{c.acceleration.toFixed(2)}
+                        </td>
+                        <td className="py-1 pr-3" colSpan={2} />
+                        <td className="py-1" />
+                      </tr>
+                    );
+                  })}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
