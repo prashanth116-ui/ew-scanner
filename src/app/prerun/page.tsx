@@ -1009,6 +1009,7 @@ function PreRunPage() {
                   <option value="TIGHT_BASE">Tight Base</option>
                   <option value="VWAP_RECLAIM">VWAP Reclaim</option>
                   <option value="ORB_CANDIDATE">ORB Candidate</option>
+                  <option value="OVERSOLD_REVERSAL">Oversold Reversal</option>
                   <option value="TOO_EXTENDED">Too Extended</option>
                   <option value="AVOID_DISTRIBUTION">Avoid: Distribution</option>
                   <option value="AVOID_CHOPPY">Avoid: Choppy</option>
