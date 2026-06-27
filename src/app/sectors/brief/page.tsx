@@ -457,6 +457,17 @@ const SUB_SECTOR_PARENT: Record<string, string> = {
   AIQ: "XLK",   // AI & Robotics → Technology
 };
 
+const SUB_SECTOR_CONTEXT: Record<string, string> = {
+  KRE: "credit conditions tightening/loosening before big banks react",
+  XHB: "housing and rate-sensitive spending leading/lagging consumer discretionary",
+  XRT: "consumer spending accelerating/decelerating before broad retail moves",
+  IYT: "freight and transport demand signaling expansion or contraction",
+  ITA: "defense/aerospace spending outpacing/trailing broad industrials",
+  ARKX: "space and defense tech innovation gaining/losing momentum vs traditional industrials",
+  UFO: "space industry (launch, satellite, orbital) leading/lagging broad industrials",
+  AIQ: "AI outperforming/underperforming broad tech",
+};
+
 // ── Pre-Market Pulse ──
 
 function generateBiasSummary(bias: { score: number; checklist: ChecklistItem[] }): string {
@@ -659,7 +670,7 @@ function PreMarketPulseContent({
             );
           })}
         </div>
-        <p className="text-[10px] text-[#555] ml-12">Sub-sector quadrants — leading indicators that move before broad GICS sectors</p>
+        <p className="text-[10px] text-[#555] ml-12">Sub-sector quadrants — leading indicators that move before broad GICS sectors. Divergence from parent = early rotation signal.</p>
       </>)}
 
       {/* Data timestamp */}
@@ -748,7 +759,7 @@ function TierTable({ label, sectors, labelColor, subSectorScores }: { label: str
                             {c.quadrant}
                           </span>
                           {diverging && (
-                            <span className="ml-1 text-[9px] text-amber-400" title="Sub-sector diverging from parent">!</span>
+                            <span className="ml-1 text-[9px] text-amber-400" title={SUB_SECTOR_CONTEXT[c.etf] ? `${c.etf} vs ${SUB_SECTOR_PARENT[c.etf]} divergence \u2014 ${SUB_SECTOR_CONTEXT[c.etf]}` : "Sub-sector diverging from parent"}>!</span>
                           )}
                         </td>
                         <td className="py-1 pr-3 text-right text-[#888] text-[11px]">{c.compositeScore}</td>
