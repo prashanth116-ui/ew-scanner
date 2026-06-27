@@ -1,7 +1,7 @@
 /** Pre-Run export to Excel/CSV. */
 
-import type { PreRunResult, VCPResult } from "./types";
-import { MAX_SCORE, VCP_MAX_SCORE } from "./types";
+import type { PreRunResult, VCPResult, InstitutionalResult } from "./types";
+import { MAX_SCORE, VCP_MAX_SCORE, INST_MAX_SCORE } from "./types";
 
 export async function exportPreRunToExcel(results: PreRunResult[]): Promise<void> {
   const XLSX = await import("xlsx");
@@ -130,4 +130,46 @@ export async function exportVCPToExcel(results: VCPResult[]): Promise<void> {
   XLSX.utils.book_append_sheet(wb, ws, "VCP Breakout Scan");
 
   XLSX.writeFile(wb, `vcp-scan-${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+export async function exportInstitutionalToExcel(results: InstitutionalResult[]): Promise<void> {
+  const XLSX = await import("xlsx");
+
+  const rows = results.map((r) => {
+    const d = r.data;
+    const s = r.scores;
+    return {
+      Ticker: d.ticker,
+      Company: d.companyName,
+      Price: d.currentPrice?.toFixed(2) ?? "-",
+      "Market Cap": d.marketCap ? `$${(d.marketCap / 1e9).toFixed(1)}B` : "-",
+      Classification: r.classification,
+      "Entry Quality": r.entryQuality,
+      [`Composite (/${INST_MAX_SCORE})`]: s.compositeScore,
+      Institutional: s.institutionalScore,
+      Execution: s.executionScore,
+      Risk: s.riskScore,
+      Discipline: s.disciplineScore,
+      "Best Trigger": r.bestTrigger,
+      "Avoid Reason": r.avoidReason ?? "-",
+      "RS Accel SPY": d.instRsAccelVsSPY?.toFixed(1) ?? "-",
+      "RS Accel QQQ": d.instRsAccelVsQQQ?.toFixed(1) ?? "-",
+      "RS vs Sector": d.relativeStrength20d?.toFixed(1) ?? "-",
+      "Dist EMA20 ATR": d.instDistFromEma20Atr?.toFixed(1) ?? "-",
+      "ATR %": d.vcpAtrPct?.toFixed(2) ?? "-",
+      Beta: d.instBeta?.toFixed(2) ?? "-",
+      "Gap %": d.instGapPct?.toFixed(2) ?? "-",
+      "Higher Lows": d.higherLowsCount ?? "-",
+      "Dist Days": d.distributionDays20d ?? "-",
+      "Days to Earnings": d.daysToEarnings ?? "-",
+      "Avg $Vol": d.vcpAvgDollarVolume ? `$${(d.vcpAvgDollarVolume / 1e6).toFixed(0)}M` : "-",
+      Commentary: r.commentary.summary,
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Inst Acceleration Scan");
+
+  XLSX.writeFile(wb, `inst-scan-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }

@@ -1102,7 +1102,7 @@ async function fetchSectorETFReturn(sectorETF: string): Promise<number | null> {
 export async function prefetchSectorETFs(): Promise<void> {
   const etfs = [
     "SMH", "IGV", "XBI", "XLV", "XLF", "XLY", "XLC",
-    "XLI", "XLP", "XLE", "XLU", "XLRE", "XLB", "SPY",
+    "XLI", "XLP", "XLE", "XLU", "XLRE", "XLB", "SPY", "QQQ",
   ];
   const uncached = etfs.filter((e) => {
     const c = sectorChartCache.get(e);
@@ -1261,6 +1261,7 @@ export async function fetchPreRunData(
     fetchSectorETFReturn(sectorETF),         // J: Sector return
     fetchSECQuarterlyRevenue(ticker),        // D: Revenue acceleration
     fetchSectorETFReturn("SPY"),             // VCP: SPY 20d return (cache hit)
+    fetchSectorETFReturn("QQQ"),             // Institutional: QQQ 20d return (cache hit)
   ]);
 
   const summary = settled[0].status === "fulfilled" ? settled[0].value : null;
@@ -1278,6 +1279,7 @@ export async function fetchPreRunData(
   const sectorReturn20d = settled[7].status === "fulfilled" ? settled[7].value : null;
   const quarterlyRevenue = settled[8].status === "fulfilled" ? settled[8].value : null;
   const spyReturn20d = settled[9].status === "fulfilled" ? settled[9].value : null;
+  const qqqReturn20d = settled[10].status === "fulfilled" ? settled[10].value : null;
 
   if (!summary) return null;
 
@@ -1294,6 +1296,9 @@ export async function fetchPreRunData(
   const vcpSma200 = extractRaw(detail.twoHundredDayAverage);
   const vcpAvgVolume50d = extractRaw(detail.averageVolume);
   const vcpAvgVolume10d = extractRaw(detail.averageDailyVolume10Day);
+
+  // Institutional: Beta from summaryDetail
+  const instBeta = extractRaw(detail.beta);
 
   const currentPrice = extractRaw(price.regularMarketPrice);
   const high52w = extractRaw(detail.fiftyTwoWeekHigh);
@@ -1646,7 +1651,91 @@ export async function fetchPreRunData(
     distributionDays20d = calcDistributionDays(closes, volumes);
   }
 
-  // ── Data quality: count how many of the 10 API calls succeeded ──
+  // ── Institutional Acceleration fields ──
+  let instRsVsQQQ: number | null = null;
+  let instRsAccelVsSPY: number | null = null;
+  let instRsAccelVsQQQ: number | null = null;
+  let instGapPct: number | null = null;
+  let instDistFromEma20Atr: number | null = null;
+  let instAtrDollar: number | null = null;
+
+  // RS vs QQQ
+  if (stockReturn20d !== null && qqqReturn20d !== null) {
+    instRsVsQQQ = stockReturn20d - qqqReturn20d;
+  }
+
+  if (chart3mo && chart3mo.closes.length >= 25) {
+    const { closes, opens, highs, lows } = chart3mo;
+
+    // RS Acceleration: compare current RS (day 0) with RS 5 sessions ago
+    // Uses 20d return at two points to measure acceleration
+    const calcReturnAt = (arr: number[], endIdx: number, period: number): number | null => {
+      const startIdx = endIdx - period;
+      if (startIdx < 0 || endIdx >= arr.length) return null;
+      const start = arr[startIdx];
+      const end = arr[endIdx];
+      if (start <= 0) return null;
+      return ((end - start) / start) * 100;
+    };
+
+    const n = closes.length;
+    const stockRetNow = calcReturnAt(closes, n - 1, 20);
+    const stockRetPrev = calcReturnAt(closes, n - 6, 20); // 5 sessions ago
+
+    // Fetch SPY/QQQ closes from sector cache for acceleration
+    const spyCache = sectorChartCache.get("SPY");
+    const qqqCache = sectorChartCache.get("QQQ");
+
+    if (stockRetNow !== null && stockRetPrev !== null && spyCache) {
+      const spyCloses = spyCache.closes;
+      const spyN = spyCloses.length;
+      if (spyN >= 25) {
+        const spyRetNow = calcReturnAt(spyCloses, spyN - 1, 20);
+        const spyRetPrev = calcReturnAt(spyCloses, spyN - 6, 20);
+        if (spyRetNow !== null && spyRetPrev !== null) {
+          const rsNow = stockRetNow - spyRetNow;
+          const rsPrev = stockRetPrev - spyRetPrev;
+          instRsAccelVsSPY = rsNow - rsPrev;
+        }
+      }
+    }
+
+    if (stockRetNow !== null && stockRetPrev !== null && qqqCache) {
+      const qqqCloses = qqqCache.closes;
+      const qqqN = qqqCloses.length;
+      if (qqqN >= 25) {
+        const qqqRetNow = calcReturnAt(qqqCloses, qqqN - 1, 20);
+        const qqqRetPrev = calcReturnAt(qqqCloses, qqqN - 6, 20);
+        if (qqqRetNow !== null && qqqRetPrev !== null) {
+          const rsNow = stockRetNow - qqqRetNow;
+          const rsPrev = stockRetPrev - qqqRetPrev;
+          instRsAccelVsQQQ = rsNow - rsPrev;
+        }
+      }
+    }
+
+    // Gap %: (today open - prev close) / prev close * 100
+    if (opens.length >= 2) {
+      const lastOpen = opens[opens.length - 1];
+      const prevClose = closes[closes.length - 2];
+      if (prevClose > 0) {
+        instGapPct = ((lastOpen - prevClose) / prevClose) * 100;
+      }
+    }
+
+    // Distance from EMA20 in ATR units
+    const ema20Arr = calcEMA(closes, 20);
+    const lastEma20 = ema20Arr.length > 0 ? ema20Arr[ema20Arr.length - 1] : null;
+    const atrArr = calcATRArray(highs, lows, closes, 14);
+    const lastAtr = atrArr.length > 0 ? atrArr[atrArr.length - 1] : 0;
+    instAtrDollar = lastAtr > 0 ? lastAtr : null;
+
+    if (currentPrice !== null && lastEma20 !== null && lastAtr > 0) {
+      instDistFromEma20Atr = (currentPrice - lastEma20) / lastAtr;
+    }
+  }
+
+  // ── Data quality: count how many of the API calls succeeded ──
   let apiSuccessCount = 0;
   for (const r of settled) {
     if (r.status === "fulfilled" && r.value !== null) apiSuccessCount++;
@@ -1735,6 +1824,14 @@ export async function fetchPreRunData(
     vcpPivotHigh,
     vcpRelStrengthVsSPY,
     vcpAtrMultipleAbove50,
+    // Institutional Acceleration fields
+    instRsVsQQQ,
+    instRsAccelVsSPY,
+    instRsAccelVsQQQ,
+    instBeta,
+    instGapPct,
+    instDistFromEma20Atr,
+    instAtrDollar,
     lastUpdated: new Date().toISOString(),
   };
 }

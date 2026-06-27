@@ -4,7 +4,7 @@ export type PreRunVerdict = "PRIORITY" | "KEEP" | "WATCH" | "DISCARD";
 export type PreRunRisk = "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
 export type EmaTimeframe = "15m" | "1h" | "4h" | "12h" | "1d" | "1wk" | "1mo";
 
-export type VCPViewMode = "standard" | "vcp";
+export type VCPViewMode = "standard" | "vcp" | "institutional";
 export type VCPPhase = "FOCUS_LIST" | "WATCHLIST_CANDIDATE" | "EARLY_SETUP" | "IGNORE";
 
 export const ALL_EMA_TIMEFRAMES: readonly EmaTimeframe[] = ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"] as const;
@@ -114,6 +114,14 @@ export interface PreRunStockData {
   vcpPivotHigh: number | null;
   vcpRelStrengthVsSPY: number | null;
   vcpAtrMultipleAbove50: number | null;
+  // Institutional Acceleration fields
+  instRsVsQQQ: number | null;            // Stock 20d ret - QQQ 20d ret
+  instRsAccelVsSPY: number | null;        // 5-session change in RS vs SPY
+  instRsAccelVsQQQ: number | null;        // 5-session change in RS vs QQQ
+  instBeta: number | null;                // From Yahoo summaryDetail
+  instGapPct: number | null;              // (today open - prev close) / prev close * 100
+  instDistFromEma20Atr: number | null;    // (price - EMA20) / ATR(14)
+  instAtrDollar: number | null;           // ATR(14) in dollar terms
   lastUpdated: string;
 }
 
@@ -204,6 +212,73 @@ export interface VCPResult {
 }
 
 export const VCP_MAX_SCORE = 100;
+
+// ── Institutional Acceleration Scanner types ──
+
+export type InstitutionalClassification =
+  | "CONTINUATION_LEADER"
+  | "RECOVERY_LEADER"
+  | "FRESH_ROTATION"
+  | "INSTITUTIONAL_ACCUMULATION"
+  | "TIGHT_BASE"
+  | "VWAP_RECLAIM"
+  | "ORB_CANDIDATE"
+  | "TOO_EXTENDED"
+  | "AVOID_DISTRIBUTION"
+  | "AVOID_CHOPPY"
+  | "AVOID_LOW_QUALITY";
+
+export type InstitutionalEntryQuality = "HIGH" | "MODERATE" | "LOW";
+
+export type InstitutionalEntryTrigger =
+  | "breakout_above_pivot"
+  | "higher_low_hold"
+  | "ema_reclaim"
+  | "pullback_to_ema20"
+  | "gap_and_go"
+  | "range_breakout"
+  | "none";
+
+export interface InstitutionalGates {
+  priceAbove20: boolean;
+  mktCapAbove20b: boolean;
+  avgDollarVolAbove100m: boolean;
+  avgShareVolAbove1_5m: boolean;
+  allPass: boolean;
+}
+
+export interface InstitutionalScores {
+  institutionalScore: number;  // 0-100
+  executionScore: number;      // 0-100
+  riskScore: number;           // 0-100 (inverted: 100 = low risk)
+  disciplineScore: number;     // 0-100
+  compositeScore: number;      // weighted composite
+}
+
+export interface InstitutionalCommentary {
+  summary: string;
+  classificationReason: string;
+  institutionalDetail: string;
+  executionDetail: string;
+  riskDetail: string;
+  primaryTrigger: string;
+  secondaryTrigger: string;
+  invalidation: string;
+  whatImprovesTomorrow: string;
+}
+
+export interface InstitutionalResult {
+  data: PreRunStockData;
+  gates: InstitutionalGates;
+  scores: InstitutionalScores;
+  classification: InstitutionalClassification;
+  entryQuality: InstitutionalEntryQuality;
+  bestTrigger: InstitutionalEntryTrigger;
+  avoidReason: string | null;
+  commentary: InstitutionalCommentary;
+}
+
+export const INST_MAX_SCORE = 100;
 
 export interface PreRunWatchlistItem {
   id: string;
@@ -387,5 +462,12 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     filterObvDivergence: true,
     filterVpDivergence: true,
     multiTF: true,
+  },
+  {
+    name: "Inst. Acceleration",
+    shortName: "Inst",
+    description: "Large-cap institutional runners — RS acceleration, volume accumulation, structure analysis. Scores NOW, AVGO, NVDA-type setups.",
+    filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 0 },
+    viewMode: "institutional",
   },
 ];

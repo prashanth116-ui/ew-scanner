@@ -93,6 +93,13 @@ function makeVCPData(overrides: Partial<PreRunStockData> = {}): PreRunStockData 
     vcpPivotHigh: 185,
     vcpRelStrengthVsSPY: 8,
     vcpAtrMultipleAbove50: 3.2,
+    instRsVsQQQ: null,
+    instRsAccelVsSPY: null,
+    instRsAccelVsQQQ: null,
+    instBeta: null,
+    instGapPct: null,
+    instDistFromEma20Atr: null,
+    instAtrDollar: null,
     lastUpdated: new Date().toISOString(),
     ...overrides,
   };

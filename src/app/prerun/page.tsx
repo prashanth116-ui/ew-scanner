@@ -35,8 +35,10 @@ import type {
   VCPPhase,
   VCPScores,
   VCPRiskCalc,
+  InstitutionalResult,
+  InstitutionalClassification,
 } from "@/lib/prerun/types";
-import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES, VCP_MAX_SCORE } from "@/lib/prerun/types";
+import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES, VCP_MAX_SCORE, INST_MAX_SCORE } from "@/lib/prerun/types";
 import {
   type TFFilterValue, type TrendFilterValue, type BoolFilterValue, type VolFilterValue,
   type LeadingFilters,
@@ -56,8 +58,11 @@ import {
   loadMultiTFCache,
   saveVCPScanResults,
   loadVCPScanResultsWithDate,
+  saveInstitutionalScanResults,
+  loadInstitutionalScanResultsWithDate,
 } from "@/lib/prerun/storage";
-import { exportPreRunToExcel, exportVCPToExcel } from "@/lib/prerun/export";
+import { exportPreRunToExcel, exportVCPToExcel, exportInstitutionalToExcel } from "@/lib/prerun/export";
+import { InstitutionalResultCard } from "./institutional-card";
 import {
   getTickersForSector,
   getSectorBuckets,
@@ -89,6 +94,7 @@ const BATCH_DELAY = 500;
 type SortKey = "score" | "pctFromAth" | "shortFloat" | "earnings";
 type SortDir = "asc" | "desc";
 type VCPSortKey = "score" | "compression" | "atrPct" | "relStrength" | "dollarVolume" | "distFrom52wHigh";
+type InstSortKey = "composite" | "institutional" | "execution" | "risk" | "discipline" | "rsAccel" | "dollarVolume";
 
 const MARKET_CAP_OPTIONS = [
   { label: "Any", value: 0 },
@@ -146,6 +152,12 @@ function PreRunPage() {
   const [vcpMinScore, setVcpMinScore] = usePersistedFilter("ew-filter:prerun:vcpMinScore", 0);
   const [vcpPhaseFilter, setVcpPhaseFilter] = usePersistedFilter("ew-filter:prerun:vcpPhaseFilter", "All");
   const [vcpSortKey, setVcpSortKey] = usePersistedFilter<VCPSortKey>("ew-filter:prerun:vcpSortKey", "score");
+
+  // Institutional mode
+  const [instResults, setInstResults] = useState<InstitutionalResult[]>([]);
+  const [instMinScore, setInstMinScore] = usePersistedFilter("ew-filter:prerun:instMinScore", 0);
+  const [instClassFilter, setInstClassFilter] = usePersistedFilter("ew-filter:prerun:instClassFilter", "All");
+  const [instSortKey, setInstSortKey] = usePersistedFilter<InstSortKey>("ew-filter:prerun:instSortKey", "composite");
 
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
@@ -245,6 +257,17 @@ function PreRunPage() {
       if (vcpPersistent.results.length > 0) {
         setVcpResults(vcpPersistent.results);
         if (!loadedPersistentDate) loadedPersistentDate = vcpPersistent.date;
+      }
+    }
+    // Load Institutional cache (30-min TTL), fallback to persistent storage
+    const instCached = loadFromCache<InstitutionalResult[]>("ew-prerun-inst-v1", 30 * 60 * 1000);
+    if (instCached && instCached.length > 0) {
+      setInstResults(instCached);
+    } else {
+      const instPersistent = loadInstitutionalScanResultsWithDate();
+      if (instPersistent.results.length > 0) {
+        setInstResults(instPersistent.results);
+        if (!loadedPersistentDate) loadedPersistentDate = instPersistent.date;
       }
     }
     if (loadedPersistentDate) setPersistentScanDate(loadedPersistentDate);
@@ -453,6 +476,65 @@ function PreRunPage() {
     return { total: vcpFiltered.length, focus, watchlist, early };
   }, [vcpFiltered]);
 
+  // ── Institutional filter + sort ──
+  const instFiltered = useMemo(() => {
+    return instResults.filter((r) => {
+      if (instMinScore > 0 && r.scores.compositeScore < instMinScore) return false;
+      if (instClassFilter !== "All" && r.classification !== instClassFilter) return false;
+      if (filters.sectorBucket !== "All") {
+        const sector = getSectorForTicker(r.data.ticker);
+        if (sector !== filters.sectorBucket) return false;
+      }
+      if (filters.maxMarketCap > 0 && (r.data.marketCap ?? Infinity) > filters.maxMarketCap) return false;
+      return true;
+    });
+  }, [instResults, instMinScore, instClassFilter, filters.sectorBucket, filters.maxMarketCap]);
+
+  const instSorted = useMemo(() => {
+    const arr = [...instFiltered];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (instSortKey) {
+        case "composite":
+          cmp = a.scores.compositeScore - b.scores.compositeScore;
+          break;
+        case "institutional":
+          cmp = a.scores.institutionalScore - b.scores.institutionalScore;
+          break;
+        case "execution":
+          cmp = a.scores.executionScore - b.scores.executionScore;
+          break;
+        case "risk":
+          cmp = a.scores.riskScore - b.scores.riskScore;
+          break;
+        case "discipline":
+          cmp = a.scores.disciplineScore - b.scores.disciplineScore;
+          break;
+        case "rsAccel":
+          cmp = (a.data.instRsAccelVsSPY ?? 0) - (b.data.instRsAccelVsSPY ?? 0);
+          break;
+        case "dollarVolume":
+          cmp = (a.data.vcpAvgDollarVolume ?? 0) - (b.data.vcpAvgDollarVolume ?? 0);
+          break;
+      }
+      return -cmp; // always desc
+    });
+    return arr;
+  }, [instFiltered, instSortKey]);
+
+  const instStats = useMemo(() => {
+    const leaders = instFiltered.filter((r) =>
+      r.classification === "CONTINUATION_LEADER" || r.classification === "RECOVERY_LEADER" || r.classification === "FRESH_ROTATION"
+    ).length;
+    const actionable = instFiltered.filter((r) =>
+      r.entryQuality === "HIGH" || r.entryQuality === "MODERATE"
+    ).length;
+    const avoid = instFiltered.filter((r) =>
+      r.classification.startsWith("AVOID") || r.classification === "TOO_EXTENDED"
+    ).length;
+    return { total: instFiltered.length, leaders, actionable, avoid };
+  }, [instFiltered]);
+
   // Phase 2: Multi-TF M2 scan for candidate tickers
   const runMultiTFPhase2 = useCallback(async (candidates: PreRunResult[]) => {
     if (candidates.length === 0) return;
@@ -559,6 +641,7 @@ function PreRunPage() {
     setScanning(true);
     setRawResults([]);
     setVcpResults([]);
+    setInstResults([]);
     setScannedCount(0);
     if (showMultiTF) setMultiTFResults(new Map());
 
@@ -614,6 +697,8 @@ function PreRunPage() {
       setScannedCount(Math.min(i + BATCH_SIZE, tickers.length));
       if (viewMode === "vcp") {
         setVcpResults([...results] as unknown as VCPResult[]);
+      } else if (viewMode === "institutional") {
+        setInstResults([...results] as unknown as InstitutionalResult[]);
       } else {
         setRawResults((prev) => {
           const scannedTickers = new Set(results.map(r => r.data.ticker));
@@ -631,6 +716,9 @@ function PreRunPage() {
     if (viewMode === "vcp") {
       saveVCPScanResults(results as unknown as VCPResult[]);
       saveToCache("ew-prerun-vcp-v1", results);
+    } else if (viewMode === "institutional") {
+      saveInstitutionalScanResults(results as unknown as InstitutionalResult[]);
+      saveToCache("ew-prerun-inst-v1", results);
     } else {
       saveScanResults(results as PreRunResult[]);
       saveToCache("ew-prerun-scan-v1", results);
@@ -640,7 +728,7 @@ function PreRunPage() {
     setProgress("");
 
     // After scan results are finalized, record signals (standard mode only)
-    if (viewMode !== "vcp") {
+    if (viewMode !== "vcp" && viewMode !== "institutional") {
       const signals: ClientSignal[] = (results as PreRunResult[])
         .filter((r) => r.scores.finalScore >= 4)
         .map((r) => ({
@@ -655,7 +743,7 @@ function PreRunPage() {
     }
 
     // Phase 2: Multi-TF M2 scan for candidates that pass filters (standard only)
-    if (viewMode !== "vcp" && showMultiTF && !signal.aborted && results.length > 0) {
+    if (viewMode === "standard" && showMultiTF && !signal.aborted && results.length > 0) {
       // Filter candidates using current criteria filters
       const candidates = results.filter((r) => {
         if (r.scores.finalScore < minScore) return false;
@@ -820,6 +908,11 @@ function PreRunPage() {
     if (preset.viewMode === "vcp") {
       setVcpMinScore(preset.vcpMinScore ?? f.minScore);
     }
+    // Reset institutional filters when switching to institutional mode
+    if (preset.viewMode === "institutional") {
+      setInstMinScore(0);
+      setInstClassFilter("All");
+    }
   }, []);
 
   // Add to watchlist
@@ -854,11 +947,14 @@ function PreRunPage() {
     if (viewMode === "vcp") {
       if (vcpSorted.length === 0) return;
       exportVCPToExcel(vcpSorted);
+    } else if (viewMode === "institutional") {
+      if (instSorted.length === 0) return;
+      exportInstitutionalToExcel(instSorted);
     } else {
       if (sorted.length === 0) return;
       exportPreRunToExcel(sorted);
     }
-  }, [sorted, vcpSorted, viewMode]);
+  }, [sorted, vcpSorted, instSorted, viewMode]);
 
   const sectorBuckets = useMemo(() => getSectorBuckets(), []);
 
@@ -872,12 +968,107 @@ function PreRunPage() {
 
         {/* Filters */}
         <SidebarSection
-          title={viewMode === "vcp" ? "VCP Filters" : `Filters (${minPctFromAth}% ATH, ${minShortFloat}% SI${minScore > 0 ? `, ${minScore}+ score` : ""})`}
+          title={viewMode === "vcp" ? "VCP Filters" : viewMode === "institutional" ? "Inst. Filters" : `Filters (${minPctFromAth}% ATH, ${minShortFloat}% SI${minScore > 0 ? `, ${minScore}+ score` : ""})`}
           sectionKey="filters"
           collapsed={collapsed.has("filters")}
           onToggle={toggleSection}
         >
-          {viewMode === "vcp" ? (
+          {viewMode === "institutional" ? (
+            <div className="space-y-4">
+              {/* Min Composite Score */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Min Composite</span>
+                  <span className="text-white">{instMinScore === 0 ? "Any" : `${instMinScore}/${INST_MAX_SCORE}`}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={instMinScore}
+                  onChange={(e) => setInstMinScore(Number(e.target.value))}
+                  className="w-full accent-[#8b5cf6]"
+                />
+              </div>
+              {/* Classification Filter */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Classification</span>
+                </div>
+                <select
+                  value={instClassFilter}
+                  onChange={(e) => setInstClassFilter(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#8b5cf6] focus:outline-none"
+                >
+                  <option value="All">All Classifications</option>
+                  <option value="CONTINUATION_LEADER">Continuation Leader</option>
+                  <option value="RECOVERY_LEADER">Recovery Leader</option>
+                  <option value="FRESH_ROTATION">Fresh Rotation</option>
+                  <option value="INSTITUTIONAL_ACCUMULATION">Inst. Accumulation</option>
+                  <option value="TIGHT_BASE">Tight Base</option>
+                  <option value="VWAP_RECLAIM">VWAP Reclaim</option>
+                  <option value="ORB_CANDIDATE">ORB Candidate</option>
+                  <option value="TOO_EXTENDED">Too Extended</option>
+                  <option value="AVOID_DISTRIBUTION">Avoid: Distribution</option>
+                  <option value="AVOID_CHOPPY">Avoid: Choppy</option>
+                  <option value="AVOID_LOW_QUALITY">Avoid: Low Quality</option>
+                </select>
+              </div>
+              {/* Sector Bucket */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Sector</span>
+                </div>
+                <select
+                  value={sectorBucket}
+                  onChange={(e) => setSectorBucket(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#8b5cf6] focus:outline-none"
+                >
+                  <option value="All">All Sectors</option>
+                  {sectorBuckets.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Max Market Cap */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Max Market Cap</span>
+                </div>
+                <select
+                  value={maxMarketCap}
+                  onChange={(e) => setMaxMarketCap(Number(e.target.value))}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#8b5cf6] focus:outline-none"
+                >
+                  {MARKET_CAP_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Reset */}
+              <button
+                onClick={() => {
+                  setInstMinScore(0);
+                  setInstClassFilter("All");
+                  setMaxMarketCap(0);
+                  setSectorBucket("All");
+                  setViewMode("standard");
+                  setCriteriaFilters([]);
+                  setMinPctFromAth(DEFAULT_PRERUN_FILTERS.minPctFromAth);
+                  setMinShortFloat(DEFAULT_PRERUN_FILTERS.minShortFloat);
+                  setMinScore(DEFAULT_PRERUN_FILTERS.minScore);
+                }}
+                className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
+              >
+                Reset Inst. Filters
+              </button>
+            </div>
+          ) : viewMode === "vcp" ? (
             <div className="space-y-4">
               {/* Min VCP Score */}
               <div>
@@ -1364,6 +1555,31 @@ function PreRunPage() {
           </div>
         )}
 
+        {/* Summary bar — Institutional mode */}
+        {viewMode === "institutional" && instResults.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">Candidates</p>
+              <p className="text-lg font-bold text-white">
+                {instStats.total}
+                <span className="text-xs font-normal text-[#666] ml-1">/ {instResults.length}</span>
+              </p>
+            </div>
+            <div className="rounded-lg border border-emerald-500/20 bg-[#141414] px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wider text-emerald-400/60 mb-1">Leaders</p>
+              <p className="text-lg font-bold text-emerald-400">{instStats.leaders}</p>
+            </div>
+            <div className="rounded-lg border border-cyan-500/20 bg-[#141414] px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wider text-cyan-400/60 mb-1">Actionable</p>
+              <p className="text-lg font-bold text-cyan-400">{instStats.actionable}</p>
+            </div>
+            <div className="rounded-lg border border-red-500/20 bg-[#141414] px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wider text-red-400/60 mb-1">Avoid</p>
+              <p className="text-lg font-bold text-red-400">{instStats.avoid}</p>
+            </div>
+          </div>
+        )}
+
         {/* Summary bar — VCP mode */}
         {viewMode === "vcp" && vcpResults.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
@@ -1402,7 +1618,7 @@ function PreRunPage() {
         )}
 
         {/* Summary bar — Standard mode */}
-        {viewMode !== "vcp" && rawResults.length > 0 && (
+        {viewMode === "standard" && rawResults.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-3">
               <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">
@@ -1443,6 +1659,49 @@ function PreRunPage() {
               <p className="text-lg font-bold text-amber-400">
                 {stats.watch}
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Sort + Export row — Institutional mode */}
+        {viewMode === "institutional" && instSorted.length > 0 && (
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-[#666]">Sort:</span>
+              {(
+                [
+                  { key: "composite", label: "Composite" },
+                  { key: "institutional", label: "Inst" },
+                  { key: "execution", label: "Exec" },
+                  { key: "risk", label: "Risk" },
+                  { key: "discipline", label: "Disc" },
+                  { key: "rsAccel", label: "RS Accel" },
+                  { key: "dollarVolume", label: "$Vol" },
+                ] as { key: InstSortKey; label: string }[]
+              ).map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => setInstSortKey(s.key)}
+                  className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors ${
+                    instSortKey === s.key
+                      ? "bg-[#8b5cf6]/10 text-[#8b5cf6] border border-[#8b5cf6]/30"
+                      : "text-[#a0a0a0] hover:text-white border border-[#2a2a2a] hover:border-[#444]"
+                  }`}
+                >
+                  {s.label}
+                  {instSortKey === s.key && <ArrowUpDown className="h-3 w-3" />}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Export</span>
+              </button>
+              <CopyButton tickers={instSorted.map((r) => r.data.ticker)} />
             </div>
           </div>
         )}
@@ -1490,7 +1749,7 @@ function PreRunPage() {
         )}
 
         {/* Sort + Export row — Standard mode */}
-        {viewMode !== "vcp" && sorted.length > 0 && (
+        {viewMode === "standard" && sorted.length > 0 && (
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <span className="text-xs text-[#666]">Sort:</span>
@@ -1569,6 +1828,57 @@ function PreRunPage() {
           </div>
         )}
 
+        {/* Institutional Results */}
+        {viewMode === "institutional" && instSorted.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">
+            {instSorted.map((result, idx) => (
+              <InstitutionalResultCard
+                key={result.data.ticker}
+                result={result}
+                index={idx}
+                justAdded={addedTicker === result.data.ticker}
+              />
+            ))}
+          </div>
+        )}
+
+        {viewMode === "institutional" && instResults.length > 0 && instSorted.length === 0 && !scanning && (
+          <div className="flex flex-col items-center justify-center py-16 text-[#666]">
+            <Target className="h-12 w-12 mb-3 opacity-30" />
+            <p className="text-sm">No stocks matched institutional filters.</p>
+            <p className="text-xs mt-1">Try lowering Min Composite or changing Classification filter.</p>
+          </div>
+        )}
+
+        {viewMode === "institutional" && instResults.length === 0 && !scanning && (
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-12 text-center">
+            <Activity className="mx-auto h-12 w-12 text-[#333]" />
+            <h2 className="mt-4 text-lg font-semibold text-white">Inst. Acceleration Scanner</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
+              Scan for large-cap institutional runners with RS acceleration, volume accumulation, and structure analysis.
+              Scores 4 dimensions across 100 points with soft classification.
+            </p>
+            <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#8b5cf6]">{getTickersForSector("All").length}</p>
+                <p className="text-[10px] text-[#666]">Stocks</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#8b5cf6]">4</p>
+                <p className="text-[10px] text-[#666]">Score Dims</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#8b5cf6]">4</p>
+                <p className="text-[10px] text-[#666]">Hard Gates</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-[#8b5cf6]">11</p>
+                <p className="text-[10px] text-[#666]">Classes</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* VCP Results */}
         {viewMode === "vcp" && vcpSorted.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">
@@ -1624,7 +1934,7 @@ function PreRunPage() {
         )}
 
         {/* Multi-TF M2 Table */}
-        {viewMode !== "vcp" && showMultiTF && multiTFResults.size > 0 && (
+        {viewMode === "standard" && showMultiTF && multiTFResults.size > 0 && (
           <MultiTFTable
             results={multiTFResults}
             scanning={multiTFScanning}
@@ -1633,7 +1943,7 @@ function PreRunPage() {
         )}
 
         {/* Multi-TF Phase 2 progress */}
-        {viewMode !== "vcp" && multiTFScanning && (
+        {viewMode === "standard" && multiTFScanning && (
           <div className="mb-4">
             <ProgressBar
               current={0}
@@ -1645,7 +1955,7 @@ function PreRunPage() {
         )}
 
         {/* Standard Results */}
-        {viewMode !== "vcp" && sorted.length > 0 ? (
+        {viewMode === "standard" && sorted.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {sorted.map((result, idx) => (
               <ResultCard
@@ -1661,7 +1971,7 @@ function PreRunPage() {
               />
             ))}
           </div>
-        ) : viewMode !== "vcp" && rawResults.length > 0 && !scanning ? (
+        ) : viewMode === "standard" && rawResults.length > 0 && !scanning ? (
           <div className="flex flex-col items-center justify-center py-16 text-[#666]">
             <TrendingUp className="h-12 w-12 mb-3 opacity-30" />
             <p className="text-sm">
@@ -1671,7 +1981,7 @@ function PreRunPage() {
               Try lowering Min Score or Min % from ATH.
             </p>
           </div>
-        ) : viewMode !== "vcp" && !scanning ? (
+        ) : viewMode === "standard" && !scanning ? (
           <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-12 text-center">
             <TrendingUp className="mx-auto h-12 w-12 text-[#333]" />
             <h2 className="mt-4 text-lg font-semibold text-white">

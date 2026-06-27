@@ -91,6 +91,13 @@ function makeData(overrides: Partial<PreRunStockData> = {}): PreRunStockData {
     vcpPivotHigh: null,
     vcpRelStrengthVsSPY: null,
     vcpAtrMultipleAbove50: null,
+    instRsVsQQQ: null,
+    instRsAccelVsSPY: null,
+    instRsAccelVsQQQ: null,
+    instBeta: null,
+    instGapPct: null,
+    instDistFromEma20Atr: null,
+    instAtrDollar: null,
     lastUpdated: new Date().toISOString(),
     ...overrides,
   };
@@ -652,8 +659,8 @@ describe("skipGate1 behavior", () => {
 // ═══════════════════════════════════════════════════════════
 
 describe("Preset definitions", () => {
-  it("all 7 presets exist", () => {
-    expect(PRERUN_PRESETS).toHaveLength(7);
+  it("all 8 presets exist", () => {
+    expect(PRERUN_PRESETS).toHaveLength(8);
   });
 
   it("Pullback Buy has maxPctFromAth set", () => {

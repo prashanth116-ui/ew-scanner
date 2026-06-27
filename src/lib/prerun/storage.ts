@@ -15,6 +15,7 @@ import type {
   MultiTFM2Result,
   EmaTimeframe,
   VCPResult,
+  InstitutionalResult,
 } from "./types";
 
 const WATCHLIST_KEY = "ew-scanner-prerun-watchlist";
@@ -23,6 +24,7 @@ const HISTORY_KEY = "ew-scanner-prerun-history";
 const SCANS_KEY = "ew-scanner-prerun-scans";
 const SCAN_RESULTS_KEY = "ew-scanner-prerun-scan-results";
 const VCP_RESULTS_KEY = "ew-scanner-prerun-vcp-results";
+const INST_RESULTS_KEY = "ew-scanner-prerun-inst-results";
 const MAX_ALERTS = 200;
 const MAX_HISTORY = 500;
 const MAX_SCANS = 30;
@@ -321,6 +323,50 @@ export function saveVCPScanResults(results: VCPResult[]): void {
       results,
     };
     localStorage.setItem(VCP_RESULTS_KEY, JSON.stringify(cache));
+  } catch {
+    // Quota exceeded — silently skip
+  }
+}
+
+// ── Institutional Scan Results Cache ──
+
+interface InstitutionalResultsCache {
+  date: string;
+  results: InstitutionalResult[];
+}
+
+export function loadInstitutionalScanResults(): InstitutionalResult[] {
+  if (!isClient()) return [];
+  try {
+    const raw = localStorage.getItem(INST_RESULTS_KEY);
+    if (!raw) return [];
+    const cache = JSON.parse(raw) as InstitutionalResultsCache;
+    return cache.results ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export function loadInstitutionalScanResultsWithDate(): { results: InstitutionalResult[]; date: string | null } {
+  if (!isClient()) return { results: [], date: null };
+  try {
+    const raw = localStorage.getItem(INST_RESULTS_KEY);
+    if (!raw) return { results: [], date: null };
+    const cache = JSON.parse(raw) as InstitutionalResultsCache;
+    return { results: cache.results ?? [], date: cache.date ?? null };
+  } catch {
+    return { results: [], date: null };
+  }
+}
+
+export function saveInstitutionalScanResults(results: InstitutionalResult[]): void {
+  if (!isClient()) return;
+  try {
+    const cache: InstitutionalResultsCache = {
+      date: new Date().toISOString(),
+      results,
+    };
+    localStorage.setItem(INST_RESULTS_KEY, JSON.stringify(cache));
   } catch {
     // Quota exceeded — silently skip
   }
