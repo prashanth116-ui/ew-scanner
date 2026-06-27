@@ -28,6 +28,8 @@ function instClassBadge(c: InstitutionalClassification): { label: string; color:
       return { label: "VWAP Reclaim", color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/30" };
     case "ORB_CANDIDATE":
       return { label: "ORB Candidate", color: "text-sky-400 bg-sky-500/10 border-sky-500/30" };
+    case "OVERSOLD_REVERSAL":
+      return { label: "Oversold Reversal", color: "text-orange-400 bg-orange-500/10 border-orange-500/30" };
     case "TOO_EXTENDED":
       return { label: "Too Extended", color: "text-amber-400 bg-amber-500/10 border-amber-500/30" };
     case "AVOID_DISTRIBUTION":

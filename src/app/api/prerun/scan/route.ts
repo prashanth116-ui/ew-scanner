@@ -22,13 +22,20 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { tickers: string[]; emaTimeframe?: EmaTimeframe; sectorQuadrants?: Record<string, string>; viewMode?: VCPViewMode };
+    const body = (await request.json()) as { tickers: string[]; emaTimeframe?: EmaTimeframe; sectorQuadrants?: Record<string, string>; viewMode?: VCPViewMode; targetDate?: string };
     const tickers = validateTickers(body.tickers).slice(0, 1500);
     const emaTimeframe = body.emaTimeframe ?? "15m";
     const sectorQuadrants = body.sectorQuadrants ?? {};
     const viewMode = body.viewMode ?? "standard";
+    const targetDate = body.targetDate;
     if (!tickers.length) {
       return NextResponse.json({ error: "tickers array required (valid A-Z tickers)" }, { status: 400 });
+    }
+    if (targetDate) {
+      const d = new Date(targetDate);
+      if (isNaN(d.getTime())) {
+        return NextResponse.json({ error: "Invalid targetDate format (expected YYYY-MM-DD)" }, { status: 400 });
+      }
     }
 
     const results = [];
@@ -38,7 +45,7 @@ export async function POST(request: NextRequest) {
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
-          const data = await fetchPreRunData(ticker, emaTimeframe);
+          const data = await fetchPreRunData(ticker, emaTimeframe, targetDate);
           if (!data) return { ticker, failed: true as const };
           if (viewMode === "vcp") {
             return scoreVCP(data);
@@ -92,7 +99,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ results, count: results.length, viewMode, failedTickers: failedTickers.length > 0 ? failedTickers : undefined });
+    return NextResponse.json({ results, count: results.length, viewMode, targetDate, failedTickers: failedTickers.length > 0 ? failedTickers : undefined });
   } catch (err) {
     logError("api/prerun/scan", err);
     return NextResponse.json(

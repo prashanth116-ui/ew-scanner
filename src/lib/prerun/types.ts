@@ -223,6 +223,7 @@ export type InstitutionalClassification =
   | "TIGHT_BASE"
   | "VWAP_RECLAIM"
   | "ORB_CANDIDATE"
+  | "OVERSOLD_REVERSAL"
   | "TOO_EXTENDED"
   | "AVOID_DISTRIBUTION"
   | "AVOID_CHOPPY"

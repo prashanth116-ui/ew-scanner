@@ -178,6 +178,26 @@ export async function fetchYahooChart(
   };
 }
 
+/** Truncate chart arrays to include only data up to (and including) targetDate.
+ *  Returns null if no data exists before the target date. */
+function truncateChartToDate(
+  chart: { closes: number[]; opens: number[]; highs: number[]; lows: number[]; volumes: number[]; timestamps: number[] },
+  targetDate: string,
+): typeof chart | null {
+  const targetTs = new Date(targetDate + "T23:59:59Z").getTime() / 1000;
+  let endIdx = -1;
+  for (let i = chart.timestamps.length - 1; i >= 0; i--) {
+    if (chart.timestamps[i] <= targetTs) { endIdx = i; break; }
+  }
+  if (endIdx < 0) return null;
+  const s = endIdx + 1;
+  return {
+    closes: chart.closes.slice(0, s), opens: chart.opens.slice(0, s),
+    highs: chart.highs.slice(0, s), lows: chart.lows.slice(0, s),
+    volumes: chart.volumes.slice(0, s), timestamps: chart.timestamps.slice(0, s),
+  };
+}
+
 /** Fetch earnings calendar from Finnhub. */
 async function fetchFinnhubEarnings(
   ticker: string
@@ -1080,20 +1100,32 @@ export async function fetchBatchQuotes(
  * The sector-rotation module fetches 1y daily data with OHLCV; this caches only 3mo closes
  * for computing 20d sector returns (score J). Different granularity, different purpose.
  */
-const sectorChartCache = new Map<string, { closes: number[]; ts: number }>();
+const sectorChartCache = new Map<string, { closes: number[]; timestamps: number[]; ts: number }>();
 const SECTOR_CACHE_TTL = 30 * 60 * 1000; // 30 minutes (reduces score variance between runs)
 
-async function fetchSectorETFReturn(sectorETF: string): Promise<number | null> {
+/** Get truncated sector closes for a historical target date. */
+function getSectorClosesForDate(etf: string, targetDate: string): number[] | null {
+  const cached = sectorChartCache.get(etf);
+  if (!cached) return null;
+  const targetTs = new Date(targetDate + "T23:59:59Z").getTime() / 1000;
+  let endIdx = cached.timestamps.length - 1;
+  while (endIdx >= 0 && cached.timestamps[endIdx] > targetTs) endIdx--;
+  return endIdx < 0 ? null : cached.closes.slice(0, endIdx + 1);
+}
+
+async function fetchSectorETFReturn(sectorETF: string, targetDate?: string): Promise<number | null> {
   const cached = sectorChartCache.get(sectorETF);
   if (cached && Date.now() - cached.ts < SECTOR_CACHE_TTL) {
-    return calc20dReturn(cached.closes);
+    const closes = targetDate ? getSectorClosesForDate(sectorETF, targetDate) : cached.closes;
+    return closes ? calc20dReturn(closes) : null;
   }
 
   const chart = await fetchYahooChart(sectorETF, "3mo", "1d");
   if (!chart) return null;
 
-  sectorChartCache.set(sectorETF, { closes: chart.closes, ts: Date.now() });
-  return calc20dReturn(chart.closes);
+  sectorChartCache.set(sectorETF, { closes: chart.closes, timestamps: chart.timestamps, ts: Date.now() });
+  const closes = targetDate ? getSectorClosesForDate(sectorETF, targetDate) : chart.closes;
+  return closes ? calc20dReturn(closes) : null;
 }
 
 /** Pre-warm the sector ETF cache by fetching all 14 sector ETFs in parallel.
@@ -1116,7 +1148,7 @@ export async function prefetchSectorETFs(): Promise<void> {
   for (let i = 0; i < uncached.length; i++) {
     const r = results[i];
     if (r.status === "fulfilled" && r.value) {
-      sectorChartCache.set(uncached[i], { closes: r.value.closes, ts: Date.now() });
+      sectorChartCache.set(uncached[i], { closes: r.value.closes, timestamps: r.value.timestamps, ts: Date.now() });
     }
   }
 }
@@ -1233,10 +1265,13 @@ export function aggregate4hOHLC(
   return { opens: aO, highs: aH, lows: aL, closes: aC };
 }
 
-/** Main function: fetch all data for a single ticker. */
+/** Main function: fetch all data for a single ticker.
+ *  When targetDate is set (YYYY-MM-DD), chart arrays are truncated to that date
+ *  and price-derived fields are recomputed from historical data. */
 export async function fetchPreRunData(
   ticker: string,
   emaTimeframe: EmaTimeframe = "15m",
+  targetDate?: string,
 ): Promise<PreRunStockData | null> {
   // Fetch Yahoo summary + 3mo chart + 5y chart + Finnhub data in parallel
   // Use allSettled so a timeout on any source doesn't crash the entire ticker
@@ -1258,15 +1293,19 @@ export async function fetchPreRunData(
     fetchFinnhubInsiderTransactions(ticker), // H: Insider buying
     fetchFinnhubEarningsSurprises(ticker),   // D: Beat streak
     fetchYahooOptionsFlow(ticker),           // I: Options flow
-    fetchSectorETFReturn(sectorETF),         // J: Sector return
+    fetchSectorETFReturn(sectorETF, targetDate), // J: Sector return
     fetchSECQuarterlyRevenue(ticker),        // D: Revenue acceleration
-    fetchSectorETFReturn("SPY"),             // VCP: SPY 20d return (cache hit)
-    fetchSectorETFReturn("QQQ"),             // Institutional: QQQ 20d return (cache hit)
+    fetchSectorETFReturn("SPY", targetDate), // VCP: SPY 20d return (cache hit)
+    fetchSectorETFReturn("QQQ", targetDate), // Institutional: QQQ 20d return (cache hit)
   ]);
 
   const summary = settled[0].status === "fulfilled" ? settled[0].value : null;
-  const chart3mo = settled[1].status === "fulfilled" ? settled[1].value : null;
-  const chart5y = settled[2].status === "fulfilled" ? settled[2].value : null;
+  const chart3moRaw = settled[1].status === "fulfilled" ? settled[1].value : null;
+  const chart5yRaw = settled[2].status === "fulfilled" ? settled[2].value : null;
+
+  // Backdate: truncate chart arrays to target date
+  const chart3mo = (targetDate && chart3moRaw) ? truncateChartToDate(chart3moRaw, targetDate) : chart3moRaw;
+  const chart5y = (targetDate && chart5yRaw) ? truncateChartToDate(chart5yRaw, targetDate) : chart5yRaw;
   const finnhubEarnings = settled[3].status === "fulfilled" ? settled[3].value : null;
   const insiderResult = settled[4].status === "fulfilled" ? settled[4].value : { buys90d: 0, buys45d: 0 };
   const insiderBuys = insiderResult.buys90d;
@@ -1292,18 +1331,48 @@ export async function fetchPreRunData(
   const holders = (summary.majorHoldersBreakdown ?? {}) as Record<string, unknown>;
 
   // VCP: Extract SMA + volume data from summaryDetail
-  const vcpSma50 = extractRaw(detail.fiftyDayAverage);
+  let vcpSma50 = extractRaw(detail.fiftyDayAverage);
   const vcpSma200 = extractRaw(detail.twoHundredDayAverage);
-  const vcpAvgVolume50d = extractRaw(detail.averageVolume);
-  const vcpAvgVolume10d = extractRaw(detail.averageDailyVolume10Day);
+  let vcpAvgVolume50d = extractRaw(detail.averageVolume);
+  let vcpAvgVolume10d = extractRaw(detail.averageDailyVolume10Day);
 
   // Institutional: Beta from summaryDetail
   const instBeta = extractRaw(detail.beta);
 
-  const currentPrice = extractRaw(price.regularMarketPrice);
-  const high52w = extractRaw(detail.fiftyTwoWeekHigh);
-  const low52w = extractRaw(detail.fiftyTwoWeekLow);
-  const marketCap = extractRaw(price.marketCap);
+  let currentPrice = extractRaw(price.regularMarketPrice);
+  let high52w = extractRaw(detail.fiftyTwoWeekHigh);
+  let low52w = extractRaw(detail.fiftyTwoWeekLow);
+  let marketCap = extractRaw(price.marketCap);
+
+  // Backdate: override live-only fields with chart-computed values
+  if (targetDate && chart3mo && chart3mo.closes.length > 0) {
+    const livePrice = currentPrice;
+    currentPrice = chart3mo.closes[chart3mo.closes.length - 1];
+    // Approximate marketCap from historical price × current shares outstanding
+    if (livePrice && livePrice > 0 && marketCap) {
+      marketCap = (marketCap / livePrice) * currentPrice;
+    }
+  }
+  if (targetDate && chart5y) {
+    const targetTs = new Date(targetDate + "T23:59:59Z").getTime() / 1000;
+    const oneYearAgo = targetTs - 52 * 7 * 86400;
+    let h = -Infinity, l = Infinity;
+    for (let i = 0; i < chart5y.timestamps.length; i++) {
+      if (chart5y.timestamps[i] >= oneYearAgo) {
+        if (chart5y.highs[i] > h) h = chart5y.highs[i];
+        if (chart5y.lows[i] > 0 && chart5y.lows[i] < l) l = chart5y.lows[i];
+      }
+    }
+    if (h > -Infinity) high52w = h;
+    if (l < Infinity) low52w = l;
+  }
+  if (targetDate && chart3mo && chart3mo.closes.length >= 50) {
+    vcpSma50 = calcSMA(chart3mo.closes, 50);
+    vcpAvgVolume50d = chart3mo.volumes.slice(-50).reduce((a, b) => a + b, 0) / 50;
+    vcpAvgVolume10d = chart3mo.volumes.length >= 10
+      ? chart3mo.volumes.slice(-10).reduce((a, b) => a + b, 0) / 10
+      : vcpAvgVolume10d;
+  }
 
   // True ATH from 5y weekly highs (fallback to 52w high)
   let allTimeHigh = high52w;
@@ -1371,10 +1440,11 @@ export async function fetchPreRunData(
     nextEarningsDate = finnhubEarnings;
   }
 
-  // Days to earnings
+  // Days to earnings (use target date as reference when backdating)
   let daysToEarnings: number | null = null;
   if (nextEarningsDate) {
-    const diff = new Date(nextEarningsDate).getTime() - Date.now();
+    const refDate = targetDate ? new Date(targetDate).getTime() : Date.now();
+    const diff = new Date(nextEarningsDate).getTime() - refDate;
     daysToEarnings = Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
   }
 
@@ -1685,9 +1755,10 @@ export async function fetchPreRunData(
     // Fetch SPY/QQQ closes from sector cache for acceleration
     const spyCache = sectorChartCache.get("SPY");
     const qqqCache = sectorChartCache.get("QQQ");
+    const spyCloses = targetDate ? getSectorClosesForDate("SPY", targetDate) : spyCache?.closes ?? null;
+    const qqqCloses = targetDate ? getSectorClosesForDate("QQQ", targetDate) : qqqCache?.closes ?? null;
 
-    if (stockRetNow !== null && stockRetPrev !== null && spyCache) {
-      const spyCloses = spyCache.closes;
+    if (stockRetNow !== null && stockRetPrev !== null && spyCloses) {
       const spyN = spyCloses.length;
       if (spyN >= 25) {
         const spyRetNow = calcReturnAt(spyCloses, spyN - 1, 20);
@@ -1700,8 +1771,7 @@ export async function fetchPreRunData(
       }
     }
 
-    if (stockRetNow !== null && stockRetPrev !== null && qqqCache) {
-      const qqqCloses = qqqCache.closes;
+    if (stockRetNow !== null && stockRetPrev !== null && qqqCloses) {
       const qqqN = qqqCloses.length;
       if (qqqN >= 25) {
         const qqqRetNow = calcReturnAt(qqqCloses, qqqN - 1, 20);
@@ -1832,7 +1902,7 @@ export async function fetchPreRunData(
     instGapPct,
     instDistFromEma20Atr,
     instAtrDollar,
-    lastUpdated: new Date().toISOString(),
+    lastUpdated: targetDate ? new Date(targetDate + "T16:00:00-04:00").toISOString() : new Date().toISOString(),
   };
 }
 

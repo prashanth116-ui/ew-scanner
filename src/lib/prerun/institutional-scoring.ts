@@ -64,13 +64,13 @@ function scoreInstitutional(data: PreRunStockData): number {
   else if (rs20d >= 2) score += 4;
   else if (rs20d >= 0) score += 1;
 
-  // Volume Accumulation (0-10) — up/down volume ratio
+  // Volume Accumulation (0-12) — up/down volume ratio
   const avgUp = data.avgVolumeUpDays ?? 0;
   const avgDown = data.avgVolumeDownDays ?? 1;
   const volRatio = avgDown > 0 ? avgUp / avgDown : 1;
-  if (volRatio >= 1.8) score += 10;
-  else if (volRatio >= 1.4) score += 7;
-  else if (volRatio >= 1.1) score += 4;
+  if (volRatio >= 1.8) score += 12;
+  else if (volRatio >= 1.4) score += 9;
+  else if (volRatio >= 1.1) score += 5;
   else if (volRatio >= 1.0) score += 2;
 
   // OBV/Accumulation Trend (0-10)
@@ -120,16 +120,25 @@ function scoreInstitutional(data: PreRunStockData): number {
   else if (dq >= 60 && dollarVol >= 200_000_000) score += 3;
   else if (dq >= 40 && dollarVol >= 100_000_000) score += 1;
 
-  // Catalyst/Options (0-5)
+  // Catalyst/Options (0-3) — only fresh data (options flow)
   let catScore = 0;
   const pcr = data.putCallRatio ?? 1;
   if (pcr < 0.6) catScore += 2;
   else if (pcr < 0.8) catScore += 1;
   const callVol = data.callVolume ?? 0;
   if (callVol > 10000) catScore += 1;
-  if ((data.insiderBuys45d ?? 0) >= 2) catScore += 2;
-  else if ((data.insiderBuys45d ?? 0) >= 1) catScore += 1;
-  score += Math.min(catScore, 5);
+  score += Math.min(catScore, 3);
+
+  // Oversold Accumulation Bonus (0-8) — only for stocks below EMA20
+  const distEma = data.instDistFromEma20Atr ?? 0;
+  if (distEma < -0.5) {
+    let oversoldAccum = 0;
+    if (volRatio >= 1.2) oversoldAccum += 3;          // up-vol > down-vol while oversold
+    if (data.atrContracting === true) oversoldAccum += 2; // volatility compressing = bottoming
+    if (pcr < 0.6) oversoldAccum += 2;                // bullish options flow
+    if ((data.institutionalPct ?? 0) >= 70) oversoldAccum += 1; // institutional quality floor
+    score += Math.min(oversoldAccum, 8);
+  }
 
   return clamp(score, 0, 100);
 }
@@ -146,7 +155,9 @@ function scoreExecution(data: PreRunStockData): number {
   else if (distEma <= 1.5) score += 18;
   else if (distEma <= 2.5) score += 12;
   else if (distEma <= 3.5) score += 6;
-  else if (distEma < 0) score += 10; // below EMA20 — could be pullback entry
+  else if (distEma < 0 && distEma >= -1.5) score += 14; // mild oversold, accumulation zone
+  else if (distEma < -1.5 && distEma >= -3.0) score += 10; // deep oversold
+  else if (distEma < -3.0) score += 6; // extreme oversold, catching knife risk
 
   // Gap Size (0-15) — small = good
   const gap = Math.abs(data.instGapPct ?? 0);
@@ -241,6 +252,9 @@ function scoreRisk(data: PreRunStockData): number {
   else if (distEma <= 3.0) score += 6;
   else if (distEma <= 4.0) score += 3;
   else if (distEma < 0 && distEma >= -1.0) score += 12;
+  else if (distEma >= -2.0) score += 8;   // mild oversold
+  else if (distEma >= -3.0) score += 5;   // deep oversold
+  // distEma < -3.0 → 0 (catching knife)
 
   // Structure Quality (0-10)
   let structScore = 0;
@@ -281,17 +295,22 @@ function scoreDiscipline(data: PreRunStockData): number {
   }
 
   // Clear Invalidation (0-20) — distance to 50 SMA as natural stop
-  const dist50 = Math.abs(data.vcpDistFromSma50Pct ?? 100);
-  if (dist50 >= 2 && dist50 <= 5) score += 20;
-  else if (dist50 <= 8) score += 15;
-  else if (dist50 <= 12) score += 10;
-  else if (dist50 <= 15) score += 5;
+  const dist50raw = data.vcpDistFromSma50Pct ?? 100;
+  if (dist50raw >= 2 && dist50raw <= 5) score += 20;     // above SMA50, close = tight stop
+  else if (dist50raw >= 0 && dist50raw <= 8) score += 15; // above SMA50, moderate
+  else if (dist50raw >= -3 && dist50raw < 0) score += 12; // slightly below = reversal stop
+  else if (dist50raw >= -8 && dist50raw < -3) score += 8; // below SMA50 but not far
+  else if (dist50raw > 8 && dist50raw <= 12) score += 10; // above but extended
+  else if (dist50raw > 12 && dist50raw <= 15) score += 5; // far above
+  // < -8 or > 15 → 0 (no clear invalidation level)
 
   // Acceptable Extension (0-15)
   const distEma = data.instDistFromEma20Atr ?? 5;
   if (distEma >= 0 && distEma <= 1.5) score += 15;
   else if (distEma <= 2.5) score += 10;
   else if (distEma <= 3.5) score += 5;
+  else if (distEma < 0 && distEma >= -1.5) score += 10; // oversold = acceptable for reversal
+  else if (distEma >= -3.0) score += 5;                  // deep oversold
 
   // Liquidity Confidence (0-15)
   const dollarVol = data.vcpAvgDollarVolume ?? 0;
@@ -361,6 +380,19 @@ function classify(
   if (instScore >= 50 && execScore >= 50 && riskScore >= 50) return "ORB_CANDIDATE";
   if (distEma >= -1 && distEma <= 1 && hl >= 1) return "VWAP_RECLAIM";
 
+  // Oversold Reversal — deeply below EMAs with accumulation signals
+  if (distEma < -1.0 && dollarVol >= 500_000_000) {
+    const avgUp = data.avgVolumeUpDays ?? 0;
+    const avgDown = data.avgVolumeDownDays ?? 1;
+    const volRatio = avgDown > 0 ? avgUp / avgDown : 1;
+    let confirmations = 0;
+    if (volRatio >= 1.2) confirmations++;
+    if (data.atrContracting === true) confirmations++;
+    if ((data.putCallRatio ?? 1) < 0.6) confirmations++;
+    if ((data.institutionalPct ?? 0) >= 70) confirmations++;
+    if (confirmations >= 2) return "OVERSOLD_REVERSAL";
+  }
+
   return "AVOID_LOW_QUALITY";
 }
 
@@ -383,6 +415,10 @@ function determineBestTrigger(data: PreRunStockData): InstitutionalEntryTrigger 
   const gap = Math.abs(data.instGapPct ?? 0);
 
   // Priority order
+  // For deeply oversold, prioritize EMA reclaim
+  if (distEma < -1.0 && data.emaCrossoverWithin20d !== true) {
+    return "ema_reclaim";
+  }
   if (pivotHigh > 0 && price > 0 && ((pivotHigh - price) / price) * 100 <= 3) {
     return "breakout_above_pivot";
   }
@@ -484,7 +520,7 @@ function generateCommentary(
     ? `Close below 50 SMA ($${data.vcpSma50.toFixed(2)}) invalidates thesis — ${((data.currentPrice - data.vcpSma50) / data.currentPrice * 100).toFixed(1)}% risk.`
     : "Close below 50 SMA invalidates setup.";
 
-  const whatImprovesTomorrow = buildImprovements(data, scores);
+  const whatImprovesTomorrow = buildImprovements(data, scores, classification);
 
   return {
     summary,
@@ -512,6 +548,7 @@ function buildSummary(
     TIGHT_BASE: "Tight base formation near breakout pivot",
     VWAP_RECLAIM: "Reclaiming key moving averages with structure",
     ORB_CANDIDATE: "Balanced setup across all dimensions",
+    OVERSOLD_REVERSAL: "Oversold reversal candidate — accumulation while deeply below EMAs",
     TOO_EXTENDED: "Extended — wait for pullback before entry",
     AVOID_DISTRIBUTION: "Distribution detected — institutional selling likely",
     AVOID_CHOPPY: "Choppy price action — no directional edge",
@@ -537,6 +574,13 @@ function buildClassificationReason(classification: InstitutionalClassification, 
       return `Price near 20 EMA (${(data.instDistFromEma20Atr ?? 0).toFixed(1)} ATR) with ${data.higherLowsCount ?? 0} higher lows — rebuilding trend structure.`;
     case "ORB_CANDIDATE":
       return "Scores balanced across institutional, execution, risk, and discipline categories — well-rounded setup.";
+    case "OVERSOLD_REVERSAL":
+      return `Deeply oversold (${(data.instDistFromEma20Atr ?? 0).toFixed(1)} ATR below EMA20) but showing accumulation signals: ${[
+        (data.avgVolumeUpDays ?? 0) / Math.max(data.avgVolumeDownDays ?? 1, 1) >= 1.2 && "up-volume > down-volume",
+        data.atrContracting && "ATR contracting",
+        (data.putCallRatio ?? 1) < 0.6 && "bullish P/C ratio",
+        (data.institutionalPct ?? 0) >= 70 && "high institutional ownership",
+      ].filter(Boolean).join(", ")}. Coiled spring setup.`;
     case "TOO_EXTENDED":
       return `${(data.instDistFromEma20Atr ?? 0).toFixed(1)} ATR from 20 EMA and/or ${(data.vcpDistFromSma50Pct ?? 0).toFixed(1)}% from 50 SMA. Chasing at these levels carries elevated mean-reversion risk.`;
     default:
@@ -544,8 +588,12 @@ function buildClassificationReason(classification: InstitutionalClassification, 
   }
 }
 
-function buildImprovements(data: PreRunStockData, scores: InstitutionalScores): string {
+function buildImprovements(data: PreRunStockData, scores: InstitutionalScores, classification?: InstitutionalClassification): string {
   const items: string[] = [];
+  if (classification === "OVERSOLD_REVERSAL") {
+    items.push("EMA reclaim would confirm reversal");
+    items.push("Higher low formation would strengthen conviction");
+  }
   if (scores.executionScore < 60 && (data.instDistFromEma20Atr ?? 5) > 2) {
     items.push("Pullback toward 20 EMA would improve execution score");
   }
