@@ -1895,7 +1895,7 @@ export function getEquitySectors(): SectorDefinition[] {
   return SECTOR_UNIVERSE.filter((s) => s.category === "gics_sector");
 }
 
-/** Get sub-sector leading indicators (KRE, XHB, XRT, IYT, ITA, ARKX, UFO). */
+/** Get sub-sector leading indicators (KRE, XHB, XRT, IYT, ITA, ARKX, UFO, AIQ). */
 export function getSubSectors(): SectorDefinition[] {
   return SECTOR_UNIVERSE.filter((s) => s.category === "sub_sector");
 }

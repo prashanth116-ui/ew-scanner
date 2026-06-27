@@ -1011,7 +1011,7 @@ function BriefGuide() {
             <tbody className="text-[#ccc]">
               <tr className="border-b border-[#1a1a1a]">
                 <td className="py-2.5 pr-4 text-white font-medium">Sectors Dashboard</td>
-                <td className="py-2.5 pr-4">Raw data &mdash; 26 ETF scores (14 sectors + 7 sub-sectors + 5 cross-asset), quadrants, RRG chart, regime, correlations</td>
+                <td className="py-2.5 pr-4">Raw data &mdash; 27 ETF scores (14 sectors + 8 sub-sectors + 5 cross-asset), quadrants, RRG chart, regime, correlations</td>
                 <td className="py-2.5 text-[#888]">The spreadsheet</td>
               </tr>
               <tr className="border-b border-[#1a1a1a]">
