@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 import { compositeColor, compositeTextColor } from "@/lib/color-utils";
+import { subSectorCardContext } from "@/lib/sector-rotation/sub-sector-constants";
 import { CollapsiblePanel } from "./shared";
 import { quadrantColor } from "./helpers";
 
@@ -129,17 +130,6 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
 
 // ── Sub-Sector Leading Indicators Panel ──
 
-const SUB_SECTOR_CONTEXT: Record<string, string> = {
-  KRE: "vs XLF \u2014 tells you if credit conditions are tightening or loosening before big banks react",
-  XHB: "vs XLY \u2014 tells you if housing and rate-sensitive spending are leading or lagging consumer discretionary",
-  XRT: "vs XLY \u2014 tells you if consumer spending is accelerating or decelerating before broad retail moves",
-  IYT: "vs XLI \u2014 tells you if freight and transport demand is signaling economic expansion or contraction",
-  ITA: "vs XLI \u2014 tells you if defense/aerospace spending is outpacing or trailing broad industrials",
-  ARKX: "vs XLI \u2014 tells you if space and defense tech innovation is gaining or losing momentum vs traditional industrials",
-  UFO: "vs XLI \u2014 tells you if space industry (launch, satellite, orbital) is leading or lagging broad industrials",
-  AIQ: "vs XLK \u2014 tells you if AI is outperforming or underperforming broad tech",
-};
-
 export function SubSectorPanel({ scores, collapsed, onToggle }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
   if (scores.length === 0) return null;
 
@@ -156,8 +146,8 @@ export function SubSectorPanel({ scores, collapsed, onToggle }: { scores: Sector
               </span>
             </div>
             <p className="text-[10px] text-[#888] mb-2">{s.sector}</p>
-            {SUB_SECTOR_CONTEXT[s.etf] && (
-              <p className="text-[10px] text-[#888] mt-1">{SUB_SECTOR_CONTEXT[s.etf]}</p>
+            {subSectorCardContext(s.etf) && (
+              <p className="text-[10px] text-[#888] mt-1">{subSectorCardContext(s.etf)}</p>
             )}
             <div className="grid grid-cols-2 gap-y-1 text-[11px]">
               <span className="text-[#666]">Score</span>

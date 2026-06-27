@@ -18,6 +18,7 @@ import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 import type { FuturesSnapshot, InternalsSnapshot, ChecklistItem } from "@/lib/premarket/types";
 import { computeBiasScore } from "@/lib/premarket/scoring";
 import { loadHistory } from "@/lib/sector-rotation/history";
+import { SUB_SECTOR_PARENT, subSectorDivergenceTooltip } from "@/lib/sector-rotation/sub-sector-constants";
 import {
   computeMarketPosture,
   computeSectorTiers,
@@ -444,29 +445,7 @@ function PostureBanner({ posture }: { posture: PostureResult }) {
   );
 }
 
-// ── Sub-sector → parent GICS mapping ──
-
-const SUB_SECTOR_PARENT: Record<string, string> = {
-  KRE: "XLF",   // Regional Banks → Financials
-  XHB: "XLY",   // Homebuilders → Consumer Discretionary
-  IYT: "XLI",   // Transports → Industrials
-  XRT: "XLY",   // Retail → Consumer Discretionary
-  ITA: "XLI",   // Aerospace & Defense → Industrials
-  ARKX: "XLI",  // Space & Defense Innovation → Industrials
-  UFO: "XLI",   // Space → Industrials
-  AIQ: "XLK",   // AI & Robotics → Technology
-};
-
-const SUB_SECTOR_CONTEXT: Record<string, string> = {
-  KRE: "credit conditions tightening/loosening before big banks react",
-  XHB: "housing and rate-sensitive spending leading/lagging consumer discretionary",
-  XRT: "consumer spending accelerating/decelerating before broad retail moves",
-  IYT: "freight and transport demand signaling expansion or contraction",
-  ITA: "defense/aerospace spending outpacing/trailing broad industrials",
-  ARKX: "space and defense tech innovation gaining/losing momentum vs traditional industrials",
-  UFO: "space industry (launch, satellite, orbital) leading/lagging broad industrials",
-  AIQ: "AI outperforming/underperforming broad tech",
-};
+// SUB_SECTOR_PARENT and divergence helpers imported from @/lib/sector-rotation/sub-sector-constants
 
 // ── Pre-Market Pulse ──
 
@@ -759,7 +738,7 @@ function TierTable({ label, sectors, labelColor, subSectorScores }: { label: str
                             {c.quadrant}
                           </span>
                           {diverging && (
-                            <span className="ml-1 text-[9px] text-amber-400" title={SUB_SECTOR_CONTEXT[c.etf] ? `${c.etf} vs ${SUB_SECTOR_PARENT[c.etf]} divergence \u2014 ${SUB_SECTOR_CONTEXT[c.etf]}` : "Sub-sector diverging from parent"}>!</span>
+                            <span className="ml-1 text-[9px] text-amber-400" title={subSectorDivergenceTooltip(c.etf)}>!</span>
                           )}
                         </td>
                         <td className="py-1 pr-3 text-right text-[#888] text-[11px]">{c.compositeScore}</td>
