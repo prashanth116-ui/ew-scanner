@@ -454,6 +454,7 @@ const SUB_SECTOR_PARENT: Record<string, string> = {
   ITA: "XLI",   // Aerospace & Defense → Industrials
   ARKX: "XLI",  // Space & Defense Innovation → Industrials
   UFO: "XLI",   // Space → Industrials
+  AIQ: "XLK",   // AI & Robotics → Technology
 };
 
 // ── Pre-Market Pulse ──

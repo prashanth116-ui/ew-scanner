@@ -1738,6 +1738,85 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     ],
   },
 
+  {
+    id: "artificial-intelligence",
+    displayName: "AI & Robotics",
+    etf: "AIQ",
+    description: "Full AI value chain: chips, servers, networking, optics, power, software, robotics, defense AI",
+    category: "sub_sector",
+    stocks: [
+      // AI Chips
+      { symbol: "NVDA", name: "NVIDIA" },
+      { symbol: "AMD", name: "AMD" },
+      { symbol: "AVGO", name: "Broadcom" },
+      { symbol: "MRVL", name: "Marvell Technology" },
+      { symbol: "QCOM", name: "Qualcomm" },
+      { symbol: "INTC", name: "Intel" },
+      { symbol: "ARM", name: "Arm Holdings" },
+      { symbol: "MU", name: "Micron Technology" },
+      { symbol: "TSM", name: "TSMC" },
+      // AI Servers & Hardware
+      { symbol: "SMCI", name: "Super Micro Computer" },
+      { symbol: "DELL", name: "Dell Technologies" },
+      { symbol: "HPE", name: "Hewlett Packard Enterprise" },
+      { symbol: "VRT", name: "Vertiv Holdings" },
+      { symbol: "CRDO", name: "Credo Technology" },
+      // AI Networking
+      { symbol: "ANET", name: "Arista Networks" },
+      { symbol: "CSCO", name: "Cisco Systems" },
+      { symbol: "JNPR", name: "Juniper Networks" },
+      // AI Optics & Interconnect
+      { symbol: "COHR", name: "Coherent" },
+      { symbol: "LITE", name: "Lumentum Holdings" },
+      { symbol: "CIEN", name: "Ciena" },
+      { symbol: "FN", name: "Fabrinet" },
+      // AI Power & Infrastructure
+      { symbol: "VST", name: "Vistra" },
+      { symbol: "CEG", name: "Constellation Energy" },
+      { symbol: "NRG", name: "NRG Energy" },
+      { symbol: "OKLO", name: "Oklo" },
+      { symbol: "SMR", name: "NuScale Power" },
+      { symbol: "GEV", name: "GE Vernova" },
+      // AI Cloud / Hyperscalers
+      { symbol: "MSFT", name: "Microsoft" },
+      { symbol: "GOOGL", name: "Alphabet" },
+      { symbol: "META", name: "Meta Platforms" },
+      { symbol: "AMZN", name: "Amazon" },
+      { symbol: "ORCL", name: "Oracle" },
+      // AI Software & Platforms
+      { symbol: "PLTR", name: "Palantir Technologies" },
+      { symbol: "CRM", name: "Salesforce" },
+      { symbol: "NOW", name: "ServiceNow" },
+      { symbol: "SNOW", name: "Snowflake" },
+      { symbol: "AI", name: "C3.ai" },
+      { symbol: "PATH", name: "UiPath" },
+      { symbol: "DDOG", name: "Datadog" },
+      { symbol: "S", name: "SentinelOne" },
+      { symbol: "BBAI", name: "BigBear.ai" },
+      { symbol: "SOUN", name: "SoundHound AI" },
+      // Semi Equipment
+      { symbol: "ASML", name: "ASML Holding" },
+      { symbol: "AMAT", name: "Applied Materials" },
+      { symbol: "LRCX", name: "Lam Research" },
+      { symbol: "KLAC", name: "KLA" },
+      { symbol: "ONTO", name: "Onto Innovation" },
+      { symbol: "ENTG", name: "Entegris" },
+      // Defense AI
+      { symbol: "LMT", name: "Lockheed Martin" },
+      { symbol: "RTX", name: "RTX" },
+      { symbol: "NOC", name: "Northrop Grumman" },
+      { symbol: "LDOS", name: "Leidos Holdings" },
+      { symbol: "BAH", name: "Booz Allen Hamilton" },
+      // Robotics & Autonomous
+      { symbol: "ISRG", name: "Intuitive Surgical" },
+      { symbol: "TER", name: "Teradyne" },
+      { symbol: "ROK", name: "Rockwell Automation" },
+      // AI-Exposed Commodities (copper, uranium)
+      { symbol: "FCX", name: "Freeport-McMoRan" },
+      { symbol: "CCJ", name: "Cameco" },
+    ],
+  },
+
   // ── Cross-Asset Money Flow ETFs ──
 
   {
