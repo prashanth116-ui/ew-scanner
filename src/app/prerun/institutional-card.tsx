@@ -24,10 +24,10 @@ function instClassBadge(c: InstitutionalClassification): { label: string; color:
       return { label: "Inst. Accumulation", color: "text-purple-400 bg-purple-500/10 border-purple-500/30" };
     case "TIGHT_BASE":
       return { label: "Tight Base", color: "text-teal-400 bg-teal-500/10 border-teal-500/30" };
-    case "VWAP_RECLAIM":
-      return { label: "VWAP Reclaim", color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/30" };
-    case "ORB_CANDIDATE":
-      return { label: "ORB Candidate", color: "text-sky-400 bg-sky-500/10 border-sky-500/30" };
+    case "CONSTRUCTIVE_SETUP":
+      return { label: "Constructive", color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/30" };
+    case "NEUTRAL_HOLD":
+      return { label: "Neutral", color: "text-gray-400 bg-gray-500/10 border-gray-500/30" };
     case "OVERSOLD_REVERSAL":
       return { label: "Oversold Reversal", color: "text-orange-400 bg-orange-500/10 border-orange-500/30" };
     case "TOO_EXTENDED":

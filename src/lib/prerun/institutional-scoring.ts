@@ -349,7 +349,6 @@ function scoreDiscipline(data: PreRunStockData): number {
 
 function classify(
   data: PreRunStockData,
-  instScore: number,
   execScore: number,
   riskScore: number,
 ): InstitutionalClassification {
@@ -365,35 +364,53 @@ function classify(
   const sectorRet = data.sectorReturn20d ?? 0;
   const rs20d = data.relativeStrength20d ?? 0;
 
+  // Direct signals (replaces instScore gates)
+  const avgUp = data.avgVolumeUpDays ?? 0;
+  const avgDown = data.avgVolumeDownDays ?? 1;
+  const volRatio = avgDown > 0 ? avgUp / avgDown : 1;
+  const aboveEma21 = data.aboveEma21 === true;
+  const aboveEma50 = data.aboveEma50 === true;
+  const atrContracting = data.atrContracting === true;
+  const tightCloses = data.vcpTightCloses === true;
+
   // AVOID classes (priority order)
   if (distDays >= 6 || riskScore < 25) return "AVOID_DISTRIBUTION";
   if (hl === 0 && (data.atrContracting === false)) return "AVOID_CHOPPY";
   if (dq < 50 || dollarVol < 100_000_000) return "AVOID_LOW_QUALITY";
   if (distEma > 4 || dist50 > 15) return "TOO_EXTENDED";
 
-  // Positive classes
-  if (instScore >= 70 && rsAccelSPY > 4 && pctFromBase <= 7 && execScore >= 60) return "CONTINUATION_LEADER";
-  if (instScore >= 60 && rsAccelSPY > 3 && pctFromAth > 15) return "RECOVERY_LEADER";
+  // Positive classes — direct signal checks replace instScore gates
+  if (rsAccelSPY > 3 && pctFromBase <= 10 && execScore >= 55 && (volRatio >= 1.1 || hl >= 2)) return "CONTINUATION_LEADER";
+  if (rsAccelSPY > 2 && pctFromAth > 15 && (hl >= 1 || volRatio >= 1.2 || aboveEma21)) return "RECOVERY_LEADER";
   if (sectorRet > 3 && rs20d > 5) return "FRESH_ROTATION";
-  if ((data.obvDivergent === true || data.vpDivergenceBullish === true) && instScore >= 50) return "INSTITUTIONAL_ACCUMULATION";
-  if (data.atrContracting === true && data.vcpTightCloses === true && pctFromBase <= 5) return "TIGHT_BASE";
-  if (instScore >= 50 && execScore >= 50 && riskScore >= 50) return "ORB_CANDIDATE";
-  if (distEma >= -1 && distEma <= 1 && hl >= 1) return "VWAP_RECLAIM";
+  if ((data.obvDivergent === true || data.vpDivergenceBullish === true) &&
+      (hl >= 1 || volRatio >= 1.1 || aboveEma50 || distDays <= 3)) return "INSTITUTIONAL_ACCUMULATION";
+  if (atrContracting && tightCloses && pctFromBase <= 5) return "TIGHT_BASE";
+
+  // CONSTRUCTIVE_SETUP — require 3 of 5 constructive signals
+  {
+    let constructiveCount = 0;
+    if (hl >= 2) constructiveCount++;
+    if (aboveEma21) constructiveCount++;
+    if (aboveEma50) constructiveCount++;
+    if (volRatio >= 1.1) constructiveCount++;
+    if (atrContracting) constructiveCount++;
+    if (constructiveCount >= 3 && distEma >= -1.5 && distEma <= 2.5) {
+      return "CONSTRUCTIVE_SETUP";
+    }
+  }
 
   // Oversold Reversal — deeply below EMAs with accumulation signals
   if (distEma < -1.0 && dollarVol >= 500_000_000) {
-    const avgUp = data.avgVolumeUpDays ?? 0;
-    const avgDown = data.avgVolumeDownDays ?? 1;
-    const volRatio = avgDown > 0 ? avgUp / avgDown : 1;
     let confirmations = 0;
     if (volRatio >= 1.2) confirmations++;
-    if (data.atrContracting === true) confirmations++;
+    if (atrContracting) confirmations++;
     if ((data.putCallRatio ?? 1) < 0.6) confirmations++;
     if ((data.institutionalPct ?? 0) >= 70) confirmations++;
     if (confirmations >= 2) return "OVERSOLD_REVERSAL";
   }
 
-  return "AVOID_LOW_QUALITY";
+  return "NEUTRAL_HOLD";
 }
 
 // ── Entry Quality ──
@@ -546,9 +563,9 @@ function buildSummary(
     FRESH_ROTATION: "Sector rotation bringing fresh institutional interest",
     INSTITUTIONAL_ACCUMULATION: "Stealth accumulation — volume signals before price",
     TIGHT_BASE: "Tight base formation near breakout pivot",
-    VWAP_RECLAIM: "Reclaiming key moving averages with structure",
-    ORB_CANDIDATE: "Balanced setup across all dimensions",
+    CONSTRUCTIVE_SETUP: "Multiple constructive signals — building toward actionable setup",
     OVERSOLD_REVERSAL: "Oversold reversal candidate — accumulation while deeply below EMAs",
+    NEUTRAL_HOLD: "Passed quality filters but no strong pattern detected",
     TOO_EXTENDED: "Extended — wait for pullback before entry",
     AVOID_DISTRIBUTION: "Distribution detected — institutional selling likely",
     AVOID_CHOPPY: "Choppy price action — no directional edge",
@@ -570,10 +587,18 @@ function buildClassificationReason(classification: InstitutionalClassification, 
       return `Volume indicators (${[data.obvDivergent && "OBV divergence", data.vpDivergenceBullish && "VP divergence"].filter(Boolean).join(", ")}) suggest quiet institutional buying while price consolidates.`;
     case "TIGHT_BASE":
       return `Volatility contracting with tight closes near pivot ($${(data.vcpPivotHigh ?? 0).toFixed(2)}) — classic pre-breakout pattern.`;
-    case "VWAP_RECLAIM":
-      return `Price near 20 EMA (${(data.instDistFromEma20Atr ?? 0).toFixed(1)} ATR) with ${data.higherLowsCount ?? 0} higher lows — rebuilding trend structure.`;
-    case "ORB_CANDIDATE":
-      return "Scores balanced across institutional, execution, risk, and discipline categories — well-rounded setup.";
+    case "CONSTRUCTIVE_SETUP": {
+      const signals: string[] = [];
+      if ((data.higherLowsCount ?? 0) >= 2) signals.push("higher lows");
+      if (data.aboveEma21 === true) signals.push("above 21 EMA");
+      if (data.aboveEma50 === true) signals.push("above 50 EMA");
+      const vr = (data.avgVolumeDownDays ?? 1) > 0 ? (data.avgVolumeUpDays ?? 0) / (data.avgVolumeDownDays ?? 1) : 1;
+      if (vr >= 1.1) signals.push("positive volume ratio");
+      if (data.atrContracting === true) signals.push("ATR contracting");
+      return `${signals.length} constructive signals (${signals.join(", ")}) — building toward actionable setup near EMA zone.`;
+    }
+    case "NEUTRAL_HOLD":
+      return "Passed all avoid filters but no strong pattern detected. Monitor for RS acceleration, volume accumulation, or EMA reclaim.";
     case "OVERSOLD_REVERSAL":
       return `Deeply oversold (${(data.instDistFromEma20Atr ?? 0).toFixed(1)} ATR below EMA20) but showing accumulation signals: ${[
         (data.avgVolumeUpDays ?? 0) / Math.max(data.avgVolumeDownDays ?? 1, 1) >= 1.2 && "up-volume > down-volume",
@@ -593,6 +618,12 @@ function buildImprovements(data: PreRunStockData, scores: InstitutionalScores, c
   if (classification === "OVERSOLD_REVERSAL") {
     items.push("EMA reclaim would confirm reversal");
     items.push("Higher low formation would strengthen conviction");
+  }
+  if (classification === "CONSTRUCTIVE_SETUP") {
+    items.push("RS acceleration would upgrade to leader classification");
+  }
+  if (classification === "NEUTRAL_HOLD") {
+    items.push("Needs RS acceleration or volume divergence for actionable classification");
   }
   if (scores.executionScore < 60 && (data.instDistFromEma20Atr ?? 5) > 2) {
     items.push("Pullback toward 20 EMA would improve execution score");
@@ -638,7 +669,7 @@ export function scoreInstitutionalAcceleration(data: PreRunStockData): Instituti
     compositeScore,
   };
 
-  const classification = classify(data, institutionalScore, executionScore, riskScore);
+  const classification = classify(data, executionScore, riskScore);
   const entryQuality = determineEntryQuality(executionScore, riskScore);
   const bestTrigger = determineBestTrigger(data);
   const avoidReason = getAvoidReason(classification, data);
