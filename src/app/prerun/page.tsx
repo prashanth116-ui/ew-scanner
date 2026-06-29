@@ -1099,16 +1099,15 @@ function PreRunPage() {
           <PresetList presets={PRERUN_PRESETS} onSelect={applyPreset} />
         </SidebarSection>
 
-        {/* Filters */}
+        {/* Filters (hidden for institutional — inline filter bar used instead) */}
+        {viewMode !== "institutional" && (
         <SidebarSection
-          title={viewMode === "vcp" ? "VCP Filters" : viewMode === "institutional" ? "Inst. Filters" : `Filters (${minPctFromAth}% ATH, ${minShortFloat}% SI${minScore > 0 ? `, ${minScore}+ score` : ""})`}
+          title={viewMode === "vcp" ? "VCP Filters" : `Filters (${minPctFromAth}% ATH, ${minShortFloat}% SI${minScore > 0 ? `, ${minScore}+ score` : ""})`}
           sectionKey="filters"
           collapsed={collapsed.has("filters")}
           onToggle={toggleSection}
         >
-          {viewMode === "institutional" ? (
-            null
-          ) : viewMode === "vcp" ? (
+          {viewMode === "vcp" ? (
             <div className="space-y-4">
               {/* Min VCP Score */}
               <div>
@@ -1472,6 +1471,7 @@ function PreRunPage() {
             </div>
           )}
         </SidebarSection>
+        )}
 
         {/* Active criteria filters indicator */}
         {criteriaFilters.length > 0 && (
