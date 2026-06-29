@@ -283,5 +283,7 @@ export function useSectorData() {
     comparisonSummary,
     handleExport,
     watchlistTickers,
+    setScanResults,
+    setScanResultsDate,
   };
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { Loader2, RefreshCw, AlertTriangle } from "lucide-react";
+import { useMemo, useCallback } from "react";
+import { Loader2, RefreshCw, AlertTriangle, X } from "lucide-react";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { getEquitySectors, getSubSectors, getCrossAssetETFs } from "@/data/sector-universe";
@@ -18,6 +18,7 @@ import {
   LOADING_PHASES,
 } from "../_components";
 import { useSectorData } from "../_use-sector-data";
+import { useScanRefresh } from "../_use-scan-refresh";
 
 const ETF_COUNT = getEquitySectors().length + getSubSectors().length + getCrossAssetETFs().length;
 
@@ -40,7 +41,16 @@ export default function PicksPage() {
     stocksBySector,
     sortedSectors,
     comparisonMap,
+    setScanResults,
+    setScanResultsDate,
   } = useSectorData();
+
+  const handleScanComplete = useCallback((results: Parameters<typeof setScanResults>[0], date: string) => {
+    setScanResults(results);
+    setScanResultsDate(date);
+  }, [setScanResults, setScanResultsDate]);
+
+  const { scanning: scanRefreshing, progress: scanProgress, scannedCount, totalCount, refreshScan, cancelScan } = useScanRefresh(scanResultsDate, handleScanComplete);
 
   const [collapsedPanels, togglePanel] = useCollapsedPanels(PICKS_COLLAPSED_KEY);
 
@@ -136,6 +146,36 @@ export default function PicksPage() {
           );
           return <span className="text-[10px] font-normal text-[#555]">Scan: {Math.floor(ageHours)}h ago</span>;
         })() : <span className="text-[10px] font-normal text-[#555]">No scan data</span>}
+        actions={
+          <div className="flex items-center gap-2">
+            {scanRefreshing ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#2a2a2a]">
+                    <div
+                      className="h-full rounded-full bg-[#5ba3e6] transition-all duration-300"
+                      style={{ width: totalCount > 0 ? `${(scannedCount / totalCount) * 100}%` : "0%" }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-[#888] tabular-nums">{scanProgress}</span>
+                </div>
+                <button
+                  onClick={cancelScan}
+                  className="flex items-center gap-1 rounded-md border border-[#333] px-2 py-1 text-[10px] text-[#888] hover:bg-[#1a1a1a] hover:text-white"
+                >
+                  <X className="h-3 w-3" /> Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={refreshScan}
+                className="flex items-center gap-1 rounded-md border border-[#333] px-2 py-1 text-[10px] text-[#888] hover:bg-[#1a1a1a] hover:text-white"
+              >
+                <RefreshCw className="h-3 w-3" /> Refresh Scan
+              </button>
+            )}
+          </div>
+        }
       >
         <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} scanResultsDate={scanResultsDate} />
       </CollapsiblePanel>
