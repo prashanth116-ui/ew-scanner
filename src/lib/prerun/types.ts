@@ -229,6 +229,8 @@ export type InstitutionalClassification =
   | "AVOID_CHOPPY"
   | "AVOID_LOW_QUALITY";
 
+export type ShortlistTier = "SHORTLIST" | "WATCHLIST" | "SPECULATIVE" | null;
+
 export type InstitutionalEntryQuality = "HIGH" | "MODERATE" | "LOW";
 
 export type InstitutionalEntryTrigger =
@@ -277,6 +279,7 @@ export interface InstitutionalResult {
   bestTrigger: InstitutionalEntryTrigger;
   avoidReason: string | null;
   commentary: InstitutionalCommentary;
+  tier: ShortlistTier;
 }
 
 export const INST_MAX_SCORE = 100;

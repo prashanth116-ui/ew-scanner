@@ -1,12 +1,13 @@
 "use client";
 
 import { memo, useState } from "react";
-import { Check, X, ChevronDown, ChevronUp, ListPlus } from "lucide-react";
+import { Check, X, ChevronDown, ChevronUp, ListPlus, AlertTriangle } from "lucide-react";
 import type {
   InstitutionalResult,
   InstitutionalClassification,
   InstitutionalEntryQuality,
   InstitutionalEntryTrigger,
+  ShortlistTier,
 } from "@/lib/prerun/types";
 import { INST_MAX_SCORE } from "@/lib/prerun/types";
 
@@ -72,6 +73,19 @@ function triggerLabel(t: InstitutionalEntryTrigger): string {
   }
 }
 
+function tierBadge(tier: ShortlistTier): { label: string; color: string } | null {
+  switch (tier) {
+    case "SHORTLIST":
+      return { label: "Shortlist", color: "text-green-400 bg-green-500/10 border-green-500/30" };
+    case "WATCHLIST":
+      return { label: "Watchlist", color: "text-yellow-400 bg-yellow-500/10 border-yellow-500/30" };
+    case "SPECULATIVE":
+      return { label: "Speculative", color: "text-orange-400 bg-orange-500/10 border-orange-500/30" };
+    default:
+      return null;
+  }
+}
+
 function isAvoid(c: InstitutionalClassification): boolean {
   return c === "AVOID_DISTRIBUTION" || c === "AVOID_CHOPPY" || c === "AVOID_LOW_QUALITY" || c === "TOO_EXTENDED";
 }
@@ -95,6 +109,7 @@ export const InstitutionalResultCard = memo(function InstitutionalResultCard({
   const g = result.gates;
   const classBadge = instClassBadge(result.classification);
   const qualBadge = entryQualityBadge(result.entryQuality);
+  const tBadge = tierBadge(result.tier ?? null);
   const avoid = isAvoid(result.classification);
 
   const fmtNum = (v: number | null, decimals = 1) => v !== null ? v.toFixed(decimals) : "-";
@@ -134,6 +149,16 @@ export const InstitutionalResultCard = memo(function InstitutionalResultCard({
             <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${classBadge.color}`}>
               {classBadge.label}
             </span>
+            {tBadge && (
+              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${tBadge.color}`}>
+                {tBadge.label}
+                {result.tier === "SPECULATIVE" && (
+                  <span title="Low historical win rate — use extra caution">
+                    <AlertTriangle className="h-2.5 w-2.5" />
+                  </span>
+                )}
+              </span>
+            )}
             {!avoid && (
               <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold tracking-wide ${qualBadge.color}`}>
                 {qualBadge.label}

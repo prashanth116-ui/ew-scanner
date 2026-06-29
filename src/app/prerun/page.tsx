@@ -37,6 +37,7 @@ import type {
   VCPRiskCalc,
   InstitutionalResult,
   InstitutionalClassification,
+  ShortlistTier,
 } from "@/lib/prerun/types";
 import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES, VCP_MAX_SCORE, INST_MAX_SCORE } from "@/lib/prerun/types";
 import {
@@ -167,6 +168,7 @@ function PreRunPage() {
   const [instMinScore, setInstMinScore] = usePersistedFilter("ew-filter:prerun:instMinScore", 0);
   const [instClassFilter, setInstClassFilter] = usePersistedFilter("ew-filter:prerun:instClassFilter", "All");
   const [instSortKey, setInstSortKey] = usePersistedFilter<InstSortKey>("ew-filter:prerun:instSortKey", "composite");
+  const [instTierFilter, setInstTierFilter] = usePersistedFilter("ew-filter:prerun:instTierFilter", "SHORTLIST");
 
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
@@ -490,6 +492,13 @@ function PreRunPage() {
     return instResults.filter((r) => {
       if (instMinScore > 0 && r.scores.compositeScore < instMinScore) return false;
       if (instClassFilter !== "All" && r.classification !== instClassFilter) return false;
+      // Tier filter
+      const tier = r.tier ?? null;
+      if (instTierFilter === "SHORTLIST" && tier !== "SHORTLIST") return false;
+      if (instTierFilter === "WATCHLIST" && tier !== "WATCHLIST") return false;
+      if (instTierFilter === "SPECULATIVE" && tier !== "SPECULATIVE") return false;
+      if (instTierFilter === "NON_AVOID" && tier === null) return false;
+      // "" = All Tiers, no filtering
       if (filters.sectorBucket !== "All") {
         const sector = getSectorForTicker(r.data.ticker);
         if (sector !== filters.sectorBucket) return false;
@@ -497,7 +506,7 @@ function PreRunPage() {
       if (filters.maxMarketCap > 0 && (r.data.marketCap ?? Infinity) > filters.maxMarketCap) return false;
       return true;
     });
-  }, [instResults, instMinScore, instClassFilter, filters.sectorBucket, filters.maxMarketCap]);
+  }, [instResults, instMinScore, instClassFilter, instTierFilter, filters.sectorBucket, filters.maxMarketCap]);
 
   const instSorted = useMemo(() => {
     const arr = [...instFiltered];
@@ -541,8 +550,12 @@ function PreRunPage() {
     const avoid = instFiltered.filter((r) =>
       r.classification.startsWith("AVOID") || r.classification === "TOO_EXTENDED"
     ).length;
-    return { total: instFiltered.length, leaders, actionable, avoid };
-  }, [instFiltered]);
+    // Tier counts (from full unfiltered results for context)
+    const shortlist = instResults.filter((r) => (r.tier ?? null) === "SHORTLIST").length;
+    const watchlist = instResults.filter((r) => (r.tier ?? null) === "WATCHLIST").length;
+    const speculative = instResults.filter((r) => (r.tier ?? null) === "SPECULATIVE").length;
+    return { total: instFiltered.length, leaders, actionable, avoid, shortlist, watchlist, speculative };
+  }, [instFiltered, instResults]);
 
   // Phase 2: Multi-TF M2 scan for candidate tickers
   const runMultiTFPhase2 = useCallback(async (candidates: PreRunResult[]) => {
@@ -1101,6 +1114,23 @@ function PreRunPage() {
                   <option value="AVOID_DISTRIBUTION">Avoid: Distribution</option>
                   <option value="AVOID_CHOPPY">Avoid: Choppy</option>
                   <option value="AVOID_LOW_QUALITY">Avoid: Low Quality</option>
+                </select>
+              </div>
+              {/* Tier Filter */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">Tier</span>
+                </div>
+                <select
+                  value={instTierFilter}
+                  onChange={(e) => setInstTierFilter(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#8b5cf6] focus:outline-none"
+                >
+                  <option value="">All Tiers</option>
+                  <option value="SHORTLIST">Shortlist</option>
+                  <option value="WATCHLIST">Watchlist</option>
+                  <option value="SPECULATIVE">Speculative</option>
+                  <option value="NON_AVOID">All Actionable</option>
                 </select>
               </div>
               {/* Sector Bucket */}
@@ -1690,25 +1720,34 @@ function PreRunPage() {
 
         {/* Summary bar — Institutional mode */}
         {viewMode === "institutional" && instResults.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-3">
-              <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">Candidates</p>
-              <p className="text-lg font-bold text-white">
-                {instStats.total}
-                <span className="text-xs font-normal text-[#666] ml-1">/ {instResults.length}</span>
-              </p>
+          <div className="space-y-3 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-3">
+                <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">Candidates</p>
+                <p className="text-lg font-bold text-white">
+                  {instStats.total}
+                  <span className="text-xs font-normal text-[#666] ml-1">/ {instResults.length}</span>
+                </p>
+              </div>
+              <div className="rounded-lg border border-emerald-500/20 bg-[#141414] px-4 py-3">
+                <p className="text-[10px] uppercase tracking-wider text-emerald-400/60 mb-1">Leaders</p>
+                <p className="text-lg font-bold text-emerald-400">{instStats.leaders}</p>
+              </div>
+              <div className="rounded-lg border border-cyan-500/20 bg-[#141414] px-4 py-3">
+                <p className="text-[10px] uppercase tracking-wider text-cyan-400/60 mb-1">Actionable</p>
+                <p className="text-lg font-bold text-cyan-400">{instStats.actionable}</p>
+              </div>
+              <div className="rounded-lg border border-red-500/20 bg-[#141414] px-4 py-3">
+                <p className="text-[10px] uppercase tracking-wider text-red-400/60 mb-1">Avoid</p>
+                <p className="text-lg font-bold text-red-400">{instStats.avoid}</p>
+              </div>
             </div>
-            <div className="rounded-lg border border-emerald-500/20 bg-[#141414] px-4 py-3">
-              <p className="text-[10px] uppercase tracking-wider text-emerald-400/60 mb-1">Leaders</p>
-              <p className="text-lg font-bold text-emerald-400">{instStats.leaders}</p>
-            </div>
-            <div className="rounded-lg border border-cyan-500/20 bg-[#141414] px-4 py-3">
-              <p className="text-[10px] uppercase tracking-wider text-cyan-400/60 mb-1">Actionable</p>
-              <p className="text-lg font-bold text-cyan-400">{instStats.actionable}</p>
-            </div>
-            <div className="rounded-lg border border-red-500/20 bg-[#141414] px-4 py-3">
-              <p className="text-[10px] uppercase tracking-wider text-red-400/60 mb-1">Avoid</p>
-              <p className="text-lg font-bold text-red-400">{instStats.avoid}</p>
+            <div className="flex items-center gap-3 text-xs text-[#888]">
+              <span className="text-green-400 font-medium">{instStats.shortlist} Shortlist</span>
+              <span className="text-[#333]">|</span>
+              <span className="text-yellow-400 font-medium">{instStats.watchlist} Watchlist</span>
+              <span className="text-[#333]">|</span>
+              <span className="text-orange-400 font-medium">{instStats.speculative} Speculative</span>
             </div>
           </div>
         )}

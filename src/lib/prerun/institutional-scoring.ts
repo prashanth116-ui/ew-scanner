@@ -17,6 +17,7 @@ import type {
   InstitutionalCommentary,
   InstitutionalResult,
 } from "./types";
+import { computeTier } from "./tier";
 
 // ── Utility ──
 
@@ -674,6 +675,7 @@ export function scoreInstitutionalAcceleration(data: PreRunStockData): Instituti
   const bestTrigger = determineBestTrigger(data);
   const avoidReason = getAvoidReason(classification, data);
   const commentary = generateCommentary(data, classification, scores, bestTrigger);
+  const tier = computeTier(classification, compositeScore);
 
   return {
     data,
@@ -684,5 +686,6 @@ export function scoreInstitutionalAcceleration(data: PreRunStockData): Instituti
     bestTrigger,
     avoidReason,
     commentary,
+    tier,
   };
 }
