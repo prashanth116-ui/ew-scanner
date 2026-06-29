@@ -214,7 +214,7 @@ export async function GET(request: NextRequest) {
 
       // Incrementally persist nightly-full results every PERSIST_INTERVAL tickers
       if (pendingPersist.length >= PERSIST_INTERVAL) {
-        const batch = pendingPersist.map((r) => ({
+        const persistRecords = pendingPersist.map((r) => ({
           ticker: r.data.ticker,
           price: r.data.currentPrice ?? 0,
           score: r.scores.finalScore,
@@ -224,7 +224,11 @@ export async function GET(request: NextRequest) {
           rs20d: r.data.relativeStrength20d != null
             ? Math.round(r.data.relativeStrength20d * 100) / 100 : null,
         }));
-        nightlyPersisted += await recordNightlyScanBatch(batch).catch(() => 0);
+        const n = await recordNightlyScanBatch(persistRecords).catch((err) => {
+          console.error("[nightly] incremental persist error:", err);
+          return 0;
+        });
+        nightlyPersisted += n;
         pendingPersist = [];
       }
 
@@ -235,7 +239,7 @@ export async function GET(request: NextRequest) {
 
     // Flush remaining results
     if (pendingPersist.length > 0) {
-      const batch = pendingPersist.map((r) => ({
+      const flushRecords = pendingPersist.map((r) => ({
         ticker: r.data.ticker,
         price: r.data.currentPrice ?? 0,
         score: r.scores.finalScore,
@@ -245,7 +249,10 @@ export async function GET(request: NextRequest) {
         rs20d: r.data.relativeStrength20d != null
           ? Math.round(r.data.relativeStrength20d * 100) / 100 : null,
       }));
-      nightlyPersisted += await recordNightlyScanBatch(batch).catch(() => 0);
+      nightlyPersisted += await recordNightlyScanBatch(flushRecords).catch((err) => {
+        console.error("[nightly] flush persist error:", err);
+        return 0;
+      });
     }
 
     // Filter to qualifying candidates (gates pass + score >= 14)
