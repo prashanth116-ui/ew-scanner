@@ -190,6 +190,10 @@ export async function GET(request: NextRequest) {
     // Pre-warm sector ETF cache — avoids 14 serial fetches during scan
     await prefetchSectorETFs();
 
+    let nightlyPersisted = 0;
+    const PERSIST_INTERVAL = 50; // Persist every 50 tickers to survive timeouts
+    let pendingPersist: PreRunResult[] = [];
+
     for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
       const batch = tickers.slice(i, i + BATCH_SIZE);
 
@@ -204,12 +208,44 @@ export async function GET(request: NextRequest) {
       for (const r of settled) {
         if (r.status === "fulfilled" && r.value) {
           results.push(r.value);
+          pendingPersist.push(r.value);
         }
+      }
+
+      // Incrementally persist nightly-full results every PERSIST_INTERVAL tickers
+      if (pendingPersist.length >= PERSIST_INTERVAL) {
+        const batch = pendingPersist.map((r) => ({
+          ticker: r.data.ticker,
+          price: r.data.currentPrice ?? 0,
+          score: r.scores.finalScore,
+          verdict: r.verdict,
+          daysToEarnings: r.data.daysToEarnings ?? null,
+          nextEarningsDate: r.data.nextEarningsDate ?? null,
+          rs20d: r.data.relativeStrength20d != null
+            ? Math.round(r.data.relativeStrength20d * 100) / 100 : null,
+        }));
+        nightlyPersisted += await recordNightlyScanBatch(batch).catch(() => 0);
+        pendingPersist = [];
       }
 
       if (i + BATCH_SIZE < tickers.length) {
         await new Promise((r) => setTimeout(r, BATCH_DELAY));
       }
+    }
+
+    // Flush remaining results
+    if (pendingPersist.length > 0) {
+      const batch = pendingPersist.map((r) => ({
+        ticker: r.data.ticker,
+        price: r.data.currentPrice ?? 0,
+        score: r.scores.finalScore,
+        verdict: r.verdict,
+        daysToEarnings: r.data.daysToEarnings ?? null,
+        nextEarningsDate: r.data.nextEarningsDate ?? null,
+        rs20d: r.data.relativeStrength20d != null
+          ? Math.round(r.data.relativeStrength20d * 100) / 100 : null,
+      }));
+      nightlyPersisted += await recordNightlyScanBatch(batch).catch(() => 0);
     }
 
     // Filter to qualifying candidates (gates pass + score >= 14)
@@ -245,19 +281,6 @@ export async function GET(request: NextRequest) {
         ? Math.round(r.data.relativeStrength20d * 100) / 100 : null,
     }));
     await recordSignalBatch(signalRecords).catch(() => {});
-
-    // Persist ALL results (not just qualifying) for full-universe lookup from /api/prerun/latest
-    const nightlyRecords = results.map((r) => ({
-      ticker: r.data.ticker,
-      price: r.data.currentPrice ?? 0,
-      score: r.scores.finalScore,
-      verdict: r.verdict,
-      daysToEarnings: r.data.daysToEarnings ?? null,
-      nextEarningsDate: r.data.nextEarningsDate ?? null,
-      rs20d: r.data.relativeStrength20d != null
-        ? Math.round(r.data.relativeStrength20d * 100) / 100 : null,
-    }));
-    const nightlyPersisted = await recordNightlyScanBatch(nightlyRecords).catch(() => 0);
 
     // Promote qualifying discovered tickers (score >= 14, all gates pass, stocks only)
     const promotionCandidates: PromotionCandidate[] = qualifying
