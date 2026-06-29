@@ -172,6 +172,7 @@ function PreRunPage() {
   const [instEntryQualityFilter, setInstEntryQualityFilter] = usePersistedFilter("ew-filter:prerun:instEntryQuality", "All");
   const [instTriggerFilter, setInstTriggerFilter] = usePersistedFilter("ew-filter:prerun:instTrigger", "All");
   const [instRsAccelFilter, setInstRsAccelFilter] = usePersistedFilter("ew-filter:prerun:instRsAccel", "all");
+  const [instMinMarketCap, setInstMinMarketCap] = usePersistedFilter("ew-filter:prerun:instMinMarketCap", 0);
 
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
@@ -506,7 +507,8 @@ function PreRunPage() {
         const sector = getSectorForTicker(r.data.ticker);
         if (sector !== filters.sectorBucket) return false;
       }
-      if (filters.maxMarketCap > 0 && (r.data.marketCap ?? Infinity) > filters.maxMarketCap) return false;
+      // Min market cap (institutional: >$50B, >$100B etc.)
+      if (instMinMarketCap > 0 && (r.data.marketCap ?? 0) < instMinMarketCap) return false;
       // Entry quality filter
       if (instEntryQualityFilter !== "All" && r.entryQuality !== instEntryQualityFilter) return false;
       // Trigger filter
@@ -530,7 +532,7 @@ function PreRunPage() {
       if (filterVpDivergence && r.data.vpDivergenceBullish !== true) return false;
       return true;
     });
-  }, [instResults, instMinScore, instClassFilter, instTierFilter, filters.sectorBucket, filters.maxMarketCap, instEntryQualityFilter, instTriggerFilter, instRsAccelFilter, quadrantFilter, sectorQuadrants, filterObvDivergence, filterVpDivergence]);
+  }, [instResults, instMinScore, instClassFilter, instTierFilter, filters.sectorBucket, instMinMarketCap, instEntryQualityFilter, instTriggerFilter, instRsAccelFilter, quadrantFilter, sectorQuadrants, filterObvDivergence, filterVpDivergence]);
 
   const instSorted = useMemo(() => {
     const arr = [...instFiltered];
@@ -582,7 +584,7 @@ function PreRunPage() {
   }, [instFiltered, instResults]);
 
   const hasInstFilters = instMinScore > 0 || instClassFilter !== "All" ||
-    instTierFilter !== "SHORTLIST" || sectorBucket !== "All" || maxMarketCap > 0 ||
+    instTierFilter !== "SHORTLIST" || sectorBucket !== "All" || instMinMarketCap > 0 ||
     instEntryQualityFilter !== "All" || instTriggerFilter !== "All" || instRsAccelFilter !== "all" ||
     quadrantFilter !== "All" || filterObvDivergence || filterVpDivergence;
 
@@ -591,14 +593,14 @@ function PreRunPage() {
     setInstClassFilter("All");
     setInstTierFilter("SHORTLIST");
     setSectorBucket("All");
-    setMaxMarketCap(0);
+    setInstMinMarketCap(0);
     setInstEntryQualityFilter("All");
     setInstTriggerFilter("All");
     setInstRsAccelFilter("all");
     setQuadrantFilter("All");
     setFilterObvDivergence(false);
     setFilterVpDivergence(false);
-  }, [setInstMinScore, setInstClassFilter, setInstTierFilter, setSectorBucket, setMaxMarketCap, setInstEntryQualityFilter, setInstTriggerFilter, setInstRsAccelFilter, setQuadrantFilter, setFilterObvDivergence, setFilterVpDivergence]);
+  }, [setInstMinScore, setInstClassFilter, setInstTierFilter, setSectorBucket, setInstMinMarketCap, setInstEntryQualityFilter, setInstTriggerFilter, setInstRsAccelFilter, setQuadrantFilter, setFilterObvDivergence, setFilterVpDivergence]);
 
   // Phase 2: Multi-TF M2 scan for candidate tickers
   const runMultiTFPhase2 = useCallback(async (candidates: PreRunResult[]) => {
@@ -1059,6 +1061,7 @@ function PreRunPage() {
       setInstEntryQualityFilter("All");
       setInstTriggerFilter("All");
       setInstRsAccelFilter("all");
+      setInstMinMarketCap(0);
     }
   }, []);
 
@@ -1477,6 +1480,7 @@ function PreRunPage() {
                   setInstEntryQualityFilter("All");
                   setInstTriggerFilter("All");
                   setInstRsAccelFilter("all");
+                  setInstMinMarketCap(0);
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >
@@ -1729,14 +1733,13 @@ function PreRunPage() {
               <option value="All">All Sectors</option>
               {sectorBuckets.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <select value={maxMarketCap} onChange={(e) => setMaxMarketCap(Number(e.target.value))} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+            <select value={instMinMarketCap} onChange={(e) => setInstMinMarketCap(Number(e.target.value))} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
               <option value={0}>Any Cap</option>
-              <option value={500_000_000}>&lt;$500M</option>
-              <option value={1_000_000_000}>&lt;$1B</option>
-              <option value={5_000_000_000}>&lt;$5B</option>
-              <option value={10_000_000_000}>&lt;$10B</option>
-              <option value={20_000_000_000}>&lt;$20B</option>
-              <option value={50_000_000_000}>&lt;$50B</option>
+              <option value={50_000_000_000}>&gt;$50B</option>
+              <option value={100_000_000_000}>&gt;$100B</option>
+              <option value={200_000_000_000}>&gt;$200B</option>
+              <option value={500_000_000_000}>&gt;$500B</option>
+              <option value={1_000_000_000_000}>&gt;$1T</option>
             </select>
             <select value={instEntryQualityFilter} onChange={(e) => setInstEntryQualityFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
               <option value="All">All Entry</option>

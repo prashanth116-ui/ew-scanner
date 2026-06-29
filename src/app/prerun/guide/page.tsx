@@ -1256,7 +1256,7 @@ export default function PreRunGuidePage() {
                     { n: 2, filter: "Classification", def: "All", opts: "All + 12 classification types" },
                     { n: 3, filter: "Tier", def: "Shortlist", opts: "All Tiers, Shortlist, Watchlist, Speculative, All Actionable" },
                     { n: 4, filter: "Sector", def: "All", opts: "All + dynamic sector list" },
-                    { n: 5, filter: "Max Cap", def: "Any", opts: "Any, <$500M, <$1B, <$5B, <$10B, <$20B, <$50B" },
+                    { n: 5, filter: "Min Cap", def: "Any", opts: "Any, >$50B, >$100B, >$200B, >$500B, >$1T" },
                     { n: 6, filter: "Entry Quality", def: "All", opts: "All, HIGH, MOD, LOW" },
                     { n: 7, filter: "Trigger", def: "All", opts: "All + 7 trigger types" },
                     { n: 8, filter: "RS Accel", def: "All", opts: "All, Positive (>0), Strong (\u22652), Negative" },
