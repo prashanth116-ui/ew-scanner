@@ -4,7 +4,12 @@
  */
 
 import type { CryptoRotationResult } from "./types";
-import type { RotationTrackerResult } from "../sector-rotation/rotation-types";
+import { CRYPTO_UNIVERSE } from "@/data/crypto-sector-universe";
+
+// Sector name constants derived from the universe definition
+const SECTOR_NAMES = Object.fromEntries(
+  CRYPTO_UNIVERSE.map((s) => [s.id, s.displayName])
+) as Record<string, string>;
 
 export interface CryptoLeadingIndicator {
   name: string;
@@ -18,13 +23,12 @@ export interface CryptoLeadingIndicator {
  */
 export function computeCryptoLeadingIndicators(
   data: CryptoRotationResult,
-  rotationData: RotationTrackerResult | null
 ): CryptoLeadingIndicator[] {
   const indicators: CryptoLeadingIndicator[] = [];
   const sectorMap = new Map(data.sectors.map((s) => [s.sector, s]));
 
   // 1. Memecoin momentum — speculative euphoria indicator
-  const meme = sectorMap.get("Memecoins");
+  const meme = sectorMap.get(SECTOR_NAMES["meme"]);
   if (meme) {
     if (
       meme.acceleration > 2 &&
@@ -50,7 +54,7 @@ export function computeCryptoLeadingIndicators(
   }
 
   // 2. DeFi health — crypto liquidity indicator
-  const defi = sectorMap.get("DeFi");
+  const defi = sectorMap.get(SECTOR_NAMES["defi"]);
   if (defi) {
     if (
       defi.cmf20 > 0 &&
@@ -73,7 +77,7 @@ export function computeCryptoLeadingIndicators(
   }
 
   // 3. Infrastructure strength — developer activity proxy
-  const infra = sectorMap.get("Infrastructure");
+  const infra = sectorMap.get(SECTOR_NAMES["infra"]);
   if (infra) {
     if (infra.acceleration > 1 && infra.mansfieldRS > 0) {
       indicators.push({
@@ -86,7 +90,7 @@ export function computeCryptoLeadingIndicators(
   }
 
   // 4. Exchange token trend — exchange activity / volume leading indicator
-  const exchange = sectorMap.get("Exchange Tokens");
+  const exchange = sectorMap.get(SECTOR_NAMES["exchange"]);
   if (exchange) {
     if (
       exchange.acceleration > 0 &&
@@ -112,7 +116,7 @@ export function computeCryptoLeadingIndicators(
   }
 
   // 5. Gaming/Metaverse inflection — risk appetite indicator
-  const gaming = sectorMap.get("Gaming & Metaverse");
+  const gaming = sectorMap.get(SECTOR_NAMES["gaming"]);
   if (gaming) {
     if (
       gaming.quadrant === "IMPROVING" &&
@@ -128,8 +132,8 @@ export function computeCryptoLeadingIndicators(
   }
 
   // 6. L1 vs L2 divergence — scaling narrative indicator
-  const l1 = sectorMap.get("Layer 1");
-  const l2 = sectorMap.get("Layer 2 & Scaling");
+  const l1 = sectorMap.get(SECTOR_NAMES["layer-1"]);
+  const l2 = sectorMap.get(SECTOR_NAMES["layer-2"]);
   if (l1 && l2) {
     const l2Outperforming =
       l2.compositeScore > l1.compositeScore + 10 &&

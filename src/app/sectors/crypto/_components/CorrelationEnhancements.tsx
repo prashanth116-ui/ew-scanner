@@ -3,10 +3,7 @@
 import { useMemo } from "react";
 import type { CryptoRotationResult } from "@/lib/crypto-rotation/types";
 
-/** Strip quote currency suffix from crypto symbols. */
-function baseSymbol(sym: string): string {
-  return sym.replace(/-USD[T]?$/, "");
-}
+import { baseSymbol } from "@/lib/crypto-rotation/format";
 
 interface SectorCorrelationStats {
   sector: string;

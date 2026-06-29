@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import type { CryptoRotationResult } from "@/lib/crypto-rotation/types";
-import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
 import {
   computeCryptoLeadingIndicators,
   type CryptoLeadingIndicator,
@@ -41,14 +40,12 @@ const CONFIDENCE_STYLE: Record<string, string> = {
 
 export function LeadingIndicatorsPanel({
   data,
-  rotationData,
 }: {
   data: CryptoRotationResult;
-  rotationData: RotationTrackerResult | null;
 }) {
   const indicators = useMemo(
-    () => computeCryptoLeadingIndicators(data, rotationData),
-    [data, rotationData]
+    () => computeCryptoLeadingIndicators(data),
+    [data]
   );
 
   if (indicators.length === 0) {

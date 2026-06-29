@@ -4,10 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { CRYPTO_EVENTS, getBtcHalvingCountdown, type CryptoEvent } from "@/data/crypto-events";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 
-/** Strip quote currency suffix from crypto symbols. */
-function baseSymbol(sym: string): string {
-  return sym.replace(/-USD[T]?$/, "");
-}
+import { baseSymbol } from "@/lib/crypto-rotation/format";
 
 const CATEGORY_STYLE: Record<
   CryptoEvent["category"],
@@ -33,11 +30,20 @@ export function CryptoEventsPanel() {
 
   // Fetch macro events that impact crypto (FOMC, CPI, employment)
   useEffect(() => {
-    fetch("/api/macro-events")
+    const controller = new AbortController();
+    fetch("/api/macro-events", { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : []))
-      .then((events: CatalystCalendarEvent[]) => setMacroEvents(events))
-      .catch(() => setMacroEvents([]))
-      .finally(() => setMacroLoading(false));
+      .then((events: CatalystCalendarEvent[]) => {
+        if (!controller.signal.aborted) setMacroEvents(events);
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setMacroEvents([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setMacroLoading(false);
+      });
+    return () => controller.abort();
   }, []);
 
   // Combine crypto events + macro events, sorted by date
@@ -82,8 +88,9 @@ export function CryptoEventsPanel() {
     return combined;
   }, [macroEvents]);
 
-  // BTC halving countdown
-  const halving = useMemo(() => getBtcHalvingCountdown(), []);
+  // BTC halving countdown — recompute daily via date key
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const halving = useMemo(() => getBtcHalvingCountdown(), [todayKey]);
 
   return (
     <div className="space-y-4">

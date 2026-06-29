@@ -37,10 +37,7 @@ import {
   getTradingAction,
 } from "../../_components";
 
-/** Strip quote currency suffix from crypto symbols. */
-function baseSymbol(sym: string): string {
-  return sym.replace(/-USD[T]?$/, "");
-}
+import { baseSymbol } from "@/lib/crypto-rotation/format";
 
 // ── Posture Styles ──
 
@@ -212,7 +209,7 @@ export function CryptoBrief({
           )
         }
       >
-        <WhatChangedPanel whatChanged={whatChanged} />
+        <WhatChangedPanel whatChanged={whatChanged} totalChanges={totalChanges} />
       </CollapsiblePanel>
 
       {/* 4. Risk Flags */}
@@ -347,8 +344,10 @@ function PostureBanner({ posture }: { posture: PostureResult }) {
 
 function WhatChangedPanel({
   whatChanged,
+  totalChanges,
 }: {
   whatChanged: WhatChangedResult;
+  totalChanges: number;
 }) {
   if (whatChanged.noHistory) {
     return (
@@ -357,14 +356,6 @@ function WhatChangedPanel({
       </p>
     );
   }
-
-  const totalChanges =
-    (whatChanged.postureChange ? 1 : 0) +
-    whatChanged.quadrantTransitions.length +
-    whatChanged.tierChanges.length +
-    Math.min(whatChanged.scoreMovers.length, 3) +
-    whatChanged.trendFlips.length +
-    (whatChanged.dispersionChange ? 1 : 0);
 
   if (totalChanges === 0) {
     return (

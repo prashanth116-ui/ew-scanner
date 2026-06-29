@@ -51,7 +51,7 @@ function computeRealizedVol(closes: number[], period = 20): number {
   }
   if (logReturns.length < 5) return 0;
   const mean = logReturns.reduce((a, b) => a + b, 0) / logReturns.length;
-  const variance = logReturns.reduce((s, v) => s + (v - mean) ** 2, 0) / logReturns.length;
+  const variance = logReturns.reduce((s, v) => s + (v - mean) ** 2, 0) / (logReturns.length - 1);
   return Math.sqrt(variance) * Math.sqrt(365) * 100;
 }
 

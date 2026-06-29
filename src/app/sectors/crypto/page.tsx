@@ -41,10 +41,7 @@ import { CryptoHistoryChart } from "./_components/CryptoHistoryChart";
 import { LeadingIndicatorsPanel } from "./_components/LeadingIndicatorsPanel";
 import { CorrelationEnhancements } from "./_components/CorrelationEnhancements";
 
-/** Strip quote currency suffix (e.g., "-USD", "-USDT") from crypto symbols. */
-function baseSymbol(sym: string): string {
-  return sym.replace(/-USD[T]?$/, "");
-}
+import { baseSymbol } from "@/lib/crypto-rotation/format";
 
 // ── RRG Chart ──
 
@@ -118,7 +115,7 @@ function RRGChart({ sectors: rawSectors }: { sectors: SectorRotationScore[] }) {
         const color = quadrantDotColor(s.quadrant);
         const isHov = hovered === s.sector;
         return (
-          <g key={s.sector} onMouseEnter={() => setHovered(s.sector)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
+          <g key={s.sector} tabIndex={0} role="button" aria-label={`${s.sector} (${baseSymbol(s.etf)}): score ${s.compositeScore}, ${s.quadrant}`} onMouseEnter={() => setHovered(s.sector)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(s.sector)} onBlur={() => setHovered(null)} style={{ cursor: "pointer", outline: "none" }}>
             <circle cx={x} cy={y} r={isHov ? 7 : 5} fill={color} stroke={isHov ? "#fff" : "none"} strokeWidth={1.5} opacity={isHov ? 1 : 0.85} />
             {isHov ? (
               <>
@@ -260,14 +257,17 @@ function SectorDetail({ sector, tokens }: { sector: SectorRotationScore; tokens:
 
 /** Map the equity-compat regime format back to crypto-native CryptoRegimeData.
  *  The API inverts marketTrend→vixSlope for the equity UI, so we invert it back. */
-function mapCryptoRegime(regime: CryptoRotationResult["regime"]): CryptoRegimeData {
+function mapCryptoRegime(
+  regime: CryptoRotationResult["regime"],
+  btcDominance?: CryptoRotationResult["btcDominance"],
+): CryptoRegimeData {
   const rawRegime = regime?.regime ?? "MIXED";
   const mappedRegime = rawRegime === "INFLATIONARY" ? "MIXED" as const : rawRegime as "RISK_ON" | "RISK_OFF" | "MIXED";
   return {
     regime: mappedRegime,
     btcVolatility: regime?.vix ?? 0,
     marketTrend: regime?.vixSlope === "falling" ? "rising" : regime?.vixSlope === "rising" ? "falling" : "flat",
-    altSeasonSignal: false,
+    altSeasonSignal: btcDominance?.altSeasonSignal ?? false,
     favoredSectors: regime?.favoredSectors ?? [],
     avoidSectors: regime?.avoidSectors ?? [],
     regimeConfidence: "medium",
@@ -276,15 +276,16 @@ function mapCryptoRegime(regime: CryptoRotationResult["regime"]): CryptoRegimeDa
 
 // ── Entry Signals Panel ──
 
-function EntrySignalsPanel({ trackerData, regime }: {
+function EntrySignalsPanel({ trackerData, regime, btcDominance }: {
   trackerData: RotationTrackerResult | null;
   regime: CryptoRotationResult["regime"];
+  btcDominance?: CryptoRotationResult["btcDominance"];
 }) {
   if (!trackerData?.activeRotations || trackerData.activeRotations.length === 0) {
     return <p className="text-sm text-[#555]">No active rotation signals detected.</p>;
   }
 
-  const cryptoRegime = mapCryptoRegime(regime);
+  const cryptoRegime = mapCryptoRegime(regime, btcDominance);
 
   return (
     <div className="space-y-3">
@@ -392,7 +393,7 @@ function TokenPicksTable({ tokens }: { tokens: EnrichedStock[] }) {
 
 // ── Main Page ──
 
-const CRYPTO_LOADING_PHASES = ["Fetching BTC benchmark", "Fetching sector proxies", "Computing rotation scores", "Enriching token data"] as const;
+const CRYPTO_LOADING_PHASE_COUNT = 4;
 
 export default function CryptoRotationPage() {
   const [data, setData] = useState<CryptoRotationResult | null>(null);
@@ -474,7 +475,7 @@ export default function CryptoRotationPage() {
         <p className="mt-4 text-[#888]">Loading crypto rotation data...</p>
         <p className="mt-1 text-xs text-[#555]">10 sector proxies + ~70 token quotes via BTC benchmark</p>
         <div className="mt-2 flex justify-center gap-1.5">
-          {CRYPTO_LOADING_PHASES.map((_, i) => (
+          {Array.from({ length: CRYPTO_LOADING_PHASE_COUNT }, (_, i) => (
             <div key={i} className={`h-1.5 w-1.5 rounded-full bg-[#5ba3e6] animate-pulse`} style={{ animationDelay: `${i * 200}ms` }} />
           ))}
         </div>
@@ -624,7 +625,7 @@ export default function CryptoRotationPage() {
             : undefined
         }
       >
-        <EntrySignalsPanel trackerData={trackerData} regime={regime} />
+        <EntrySignalsPanel trackerData={trackerData} regime={regime} btcDominance={btcDom} />
       </CollapsiblePanel>
 
       {/* Sector Heatmap */}
@@ -710,7 +711,7 @@ export default function CryptoRotationPage() {
         onToggle={togglePanel}
         badge={<span className="text-xs text-[#666]">Crypto-native signals</span>}
       >
-        <LeadingIndicatorsPanel data={data} rotationData={trackerData} />
+        <LeadingIndicatorsPanel data={data} />
       </CollapsiblePanel>
 
       {/* Enhanced Correlations */}
