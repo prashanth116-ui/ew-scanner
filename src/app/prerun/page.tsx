@@ -169,6 +169,9 @@ function PreRunPage() {
   const [instClassFilter, setInstClassFilter] = usePersistedFilter("ew-filter:prerun:instClassFilter", "All");
   const [instSortKey, setInstSortKey] = usePersistedFilter<InstSortKey>("ew-filter:prerun:instSortKey", "composite");
   const [instTierFilter, setInstTierFilter] = usePersistedFilter("ew-filter:prerun:instTierFilter", "SHORTLIST");
+  const [instEntryQualityFilter, setInstEntryQualityFilter] = usePersistedFilter("ew-filter:prerun:instEntryQuality", "All");
+  const [instTriggerFilter, setInstTriggerFilter] = usePersistedFilter("ew-filter:prerun:instTrigger", "All");
+  const [instRsAccelFilter, setInstRsAccelFilter] = usePersistedFilter("ew-filter:prerun:instRsAccel", "all");
 
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
@@ -504,9 +507,20 @@ function PreRunPage() {
         if (sector !== filters.sectorBucket) return false;
       }
       if (filters.maxMarketCap > 0 && (r.data.marketCap ?? Infinity) > filters.maxMarketCap) return false;
+      // Entry quality filter
+      if (instEntryQualityFilter !== "All" && r.entryQuality !== instEntryQualityFilter) return false;
+      // Trigger filter
+      if (instTriggerFilter !== "All" && r.bestTrigger !== instTriggerFilter) return false;
+      // RS accel filter
+      if (instRsAccelFilter !== "all") {
+        const rs = r.data.instRsAccelVsSPY ?? 0;
+        if (instRsAccelFilter === "positive" && rs <= 0) return false;
+        if (instRsAccelFilter === "strong" && rs < 2) return false;
+        if (instRsAccelFilter === "negative" && rs >= 0) return false;
+      }
       return true;
     });
-  }, [instResults, instMinScore, instClassFilter, instTierFilter, filters.sectorBucket, filters.maxMarketCap]);
+  }, [instResults, instMinScore, instClassFilter, instTierFilter, filters.sectorBucket, filters.maxMarketCap, instEntryQualityFilter, instTriggerFilter, instRsAccelFilter]);
 
   const instSorted = useMemo(() => {
     const arr = [...instFiltered];
@@ -556,6 +570,21 @@ function PreRunPage() {
     const speculative = instResults.filter((r) => (r.tier ?? null) === "SPECULATIVE").length;
     return { total: instFiltered.length, leaders, actionable, avoid, shortlist, watchlist, speculative };
   }, [instFiltered, instResults]);
+
+  const hasInstFilters = instMinScore > 0 || instClassFilter !== "All" ||
+    instTierFilter !== "SHORTLIST" || sectorBucket !== "All" || maxMarketCap > 0 ||
+    instEntryQualityFilter !== "All" || instTriggerFilter !== "All" || instRsAccelFilter !== "all";
+
+  const resetInstFilters = useCallback(() => {
+    setInstMinScore(0);
+    setInstClassFilter("All");
+    setInstTierFilter("SHORTLIST");
+    setSectorBucket("All");
+    setMaxMarketCap(0);
+    setInstEntryQualityFilter("All");
+    setInstTriggerFilter("All");
+    setInstRsAccelFilter("all");
+  }, [setInstMinScore, setInstClassFilter, setInstTierFilter, setSectorBucket, setMaxMarketCap, setInstEntryQualityFilter, setInstTriggerFilter, setInstRsAccelFilter]);
 
   // Phase 2: Multi-TF M2 scan for candidate tickers
   const runMultiTFPhase2 = useCallback(async (candidates: PreRunResult[]) => {
@@ -1012,6 +1041,10 @@ function PreRunPage() {
     if (preset.viewMode === "institutional") {
       setInstMinScore(0);
       setInstClassFilter("All");
+      setInstTierFilter("SHORTLIST");
+      setInstEntryQualityFilter("All");
+      setInstTriggerFilter("All");
+      setInstRsAccelFilter("all");
     }
   }, []);
 
@@ -1074,118 +1107,7 @@ function PreRunPage() {
           onToggle={toggleSection}
         >
           {viewMode === "institutional" ? (
-            <div className="space-y-4">
-              {/* Min Composite Score */}
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#a0a0a0]">Min Composite</span>
-                  <span className="text-white">{instMinScore === 0 ? "Any" : `${instMinScore}/${INST_MAX_SCORE}`}</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={instMinScore}
-                  onChange={(e) => setInstMinScore(Number(e.target.value))}
-                  className="w-full accent-[#8b5cf6]"
-                />
-              </div>
-              {/* Classification Filter */}
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#a0a0a0]">Classification</span>
-                </div>
-                <select
-                  value={instClassFilter}
-                  onChange={(e) => setInstClassFilter(e.target.value)}
-                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#8b5cf6] focus:outline-none"
-                >
-                  <option value="All">All Classifications</option>
-                  <option value="CONTINUATION_LEADER">Continuation Leader</option>
-                  <option value="RECOVERY_LEADER">Recovery Leader</option>
-                  <option value="FRESH_ROTATION">Fresh Rotation</option>
-                  <option value="INSTITUTIONAL_ACCUMULATION">Inst. Accumulation</option>
-                  <option value="TIGHT_BASE">Tight Base</option>
-                  <option value="CONSTRUCTIVE_SETUP">Constructive Setup</option>
-                  <option value="OVERSOLD_REVERSAL">Oversold Reversal</option>
-                  <option value="NEUTRAL_HOLD">Neutral Hold</option>
-                  <option value="TOO_EXTENDED">Too Extended</option>
-                  <option value="AVOID_DISTRIBUTION">Avoid: Distribution</option>
-                  <option value="AVOID_CHOPPY">Avoid: Choppy</option>
-                  <option value="AVOID_LOW_QUALITY">Avoid: Low Quality</option>
-                </select>
-              </div>
-              {/* Tier Filter */}
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#a0a0a0]">Tier</span>
-                </div>
-                <select
-                  value={instTierFilter}
-                  onChange={(e) => setInstTierFilter(e.target.value)}
-                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#8b5cf6] focus:outline-none"
-                >
-                  <option value="">All Tiers</option>
-                  <option value="SHORTLIST">Shortlist</option>
-                  <option value="WATCHLIST">Watchlist</option>
-                  <option value="SPECULATIVE">Speculative</option>
-                  <option value="NON_AVOID">All Actionable</option>
-                </select>
-              </div>
-              {/* Sector Bucket */}
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#a0a0a0]">Sector</span>
-                </div>
-                <select
-                  value={sectorBucket}
-                  onChange={(e) => setSectorBucket(e.target.value)}
-                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#8b5cf6] focus:outline-none"
-                >
-                  <option value="All">All Sectors</option>
-                  {sectorBuckets.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {/* Max Market Cap */}
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#a0a0a0]">Max Market Cap</span>
-                </div>
-                <select
-                  value={maxMarketCap}
-                  onChange={(e) => setMaxMarketCap(Number(e.target.value))}
-                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#8b5cf6] focus:outline-none"
-                >
-                  {MARKET_CAP_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {/* Reset */}
-              <button
-                onClick={() => {
-                  setInstMinScore(0);
-                  setInstClassFilter("All");
-                  setMaxMarketCap(0);
-                  setSectorBucket("All");
-                  setViewMode("standard");
-                  setCriteriaFilters([]);
-                  setMinPctFromAth(DEFAULT_PRERUN_FILTERS.minPctFromAth);
-                  setMinShortFloat(DEFAULT_PRERUN_FILTERS.minShortFloat);
-                  setMinScore(DEFAULT_PRERUN_FILTERS.minScore);
-                }}
-                className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
-              >
-                Reset Inst. Filters
-              </button>
-            </div>
+            null
           ) : viewMode === "vcp" ? (
             <div className="space-y-4">
               {/* Min VCP Score */}
@@ -1538,6 +1460,10 @@ function PreRunPage() {
                   setFilterVpDivergence(false);
                   setShowTopPicks(false);
                   setScanMode("quick");
+                  setInstTierFilter("SHORTLIST");
+                  setInstEntryQualityFilter("All");
+                  setInstTriggerFilter("All");
+                  setInstRsAccelFilter("all");
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >
@@ -1749,6 +1675,81 @@ function PreRunPage() {
               <span className="text-[#333]">|</span>
               <span className="text-orange-400 font-medium">{instStats.speculative} Speculative</span>
             </div>
+          </div>
+        )}
+
+        {/* Inline filter bar — Institutional mode */}
+        {viewMode === "institutional" && instResults.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <select value={instMinScore} onChange={(e) => setInstMinScore(Number(e.target.value))} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value={0}>All Scores</option>
+              <option value={40}>40+</option>
+              <option value={50}>50+</option>
+              <option value={60}>60+</option>
+              <option value={70}>70+</option>
+              <option value={80}>80+</option>
+            </select>
+            <select value={instClassFilter} onChange={(e) => setInstClassFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="All">All Class</option>
+              <option value="CONTINUATION_LEADER">Cont. Leader</option>
+              <option value="RECOVERY_LEADER">Recovery Ldr</option>
+              <option value="FRESH_ROTATION">Fresh Rot.</option>
+              <option value="INSTITUTIONAL_ACCUMULATION">Inst. Accum.</option>
+              <option value="TIGHT_BASE">Tight Base</option>
+              <option value="CONSTRUCTIVE_SETUP">Constr. Setup</option>
+              <option value="OVERSOLD_REVERSAL">Oversold Rev.</option>
+              <option value="NEUTRAL_HOLD">Neutral Hold</option>
+              <option value="TOO_EXTENDED">Too Extended</option>
+              <option value="AVOID_DISTRIBUTION">Avoid: Dist.</option>
+              <option value="AVOID_CHOPPY">Avoid: Choppy</option>
+              <option value="AVOID_LOW_QUALITY">Avoid: Low Q</option>
+            </select>
+            <select value={instTierFilter} onChange={(e) => setInstTierFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="">All Tiers</option>
+              <option value="SHORTLIST">Shortlist</option>
+              <option value="WATCHLIST">Watchlist</option>
+              <option value="SPECULATIVE">Speculative</option>
+              <option value="NON_AVOID">All Actionable</option>
+            </select>
+            <select value={sectorBucket} onChange={(e) => setSectorBucket(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="All">All Sectors</option>
+              {sectorBuckets.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select value={maxMarketCap} onChange={(e) => setMaxMarketCap(Number(e.target.value))} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value={0}>Any Cap</option>
+              <option value={500_000_000}>&lt;$500M</option>
+              <option value={1_000_000_000}>&lt;$1B</option>
+              <option value={5_000_000_000}>&lt;$5B</option>
+              <option value={10_000_000_000}>&lt;$10B</option>
+              <option value={20_000_000_000}>&lt;$20B</option>
+              <option value={50_000_000_000}>&lt;$50B</option>
+            </select>
+            <select value={instEntryQualityFilter} onChange={(e) => setInstEntryQualityFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="All">All Entry</option>
+              <option value="HIGH">HIGH</option>
+              <option value="MODERATE">MOD</option>
+              <option value="LOW">LOW</option>
+            </select>
+            <select value={instTriggerFilter} onChange={(e) => setInstTriggerFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="All">All Triggers</option>
+              <option value="breakout_above_pivot">Breakout</option>
+              <option value="higher_low_hold">Higher Low</option>
+              <option value="ema_reclaim">EMA Reclaim</option>
+              <option value="pullback_to_ema20">PB to EMA20</option>
+              <option value="gap_and_go">Gap &amp; Go</option>
+              <option value="range_breakout">Range BO</option>
+              <option value="none">None</option>
+            </select>
+            <select value={instRsAccelFilter} onChange={(e) => setInstRsAccelFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="all">All RS</option>
+              <option value="positive">Positive (&gt;0)</option>
+              <option value="strong">Strong (&ge;2)</option>
+              <option value="negative">Negative</option>
+            </select>
+            <span className="text-[10px] text-[#666]">{instFiltered.length} / {instResults.length}</span>
+            {hasInstFilters && (
+              <button onClick={resetInstFilters} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#888] hover:text-white">Reset</button>
+            )}
           </div>
         )}
 
