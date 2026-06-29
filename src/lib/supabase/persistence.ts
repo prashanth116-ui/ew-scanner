@@ -101,6 +101,60 @@ export async function recordSignalBatch(records: SignalRecord[]): Promise<number
   }
 }
 
+/** Batch record ALL nightly scan results (not just qualifying) for full-universe persistence.
+ *  Uses mode='nightly-full' to distinguish from qualifying-only signals. */
+export async function recordNightlyScanBatch(
+  results: Array<{
+    ticker: string;
+    price: number;
+    score: number;
+    verdict: string;
+    daysToEarnings?: number | null;
+    nextEarningsDate?: string | null;
+    rs20d?: number | null;
+  }>
+): Promise<number> {
+  if (results.length === 0) return 0;
+
+  try {
+    const supabase = await createClient();
+    if (!supabase) return 0;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const records = results.map((r) => ({
+      scanner: "prerun" as const,
+      ticker: r.ticker,
+      signal_date: today,
+      price_at_signal: r.price,
+      mode: "nightly-full",
+      signal_strength: r.verdict,
+      score: r.score,
+      days_to_earnings: r.daysToEarnings ?? null,
+      next_earnings_date: r.nextEarningsDate ?? null,
+      relative_strength_20d: r.rs20d != null ? Math.round(r.rs20d * 100) / 100 : null,
+    }));
+
+    // Upsert in batches of 500 to avoid payload limits
+    let upserted = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = records.slice(i, i + 500);
+      const { data, error } = await supabase.from("signal_outcomes").upsert(batch, {
+        onConflict: "scanner,ticker,signal_date,mode",
+      }).select("id");
+
+      if (error) {
+        console.error("[persistence] recordNightlyScanBatch error:", error.message);
+      } else {
+        upserted += data?.length ?? 0;
+      }
+    }
+    return upserted;
+  } catch (err) {
+    console.error("[persistence] recordNightlyScanBatch exception:", err);
+    return 0;
+  }
+}
+
 /** Record SI% history for trend tracking. Upserts on (ticker, report_date). */
 export async function recordSIHistory(record: SIHistoryRecord): Promise<boolean> {
   try {

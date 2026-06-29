@@ -47,7 +47,7 @@ export async function fetchWithRetry(
 // 5-min TTL — keeps chart data warm across all confluence scan batches.
 // Chart data (weekly/monthly candles) doesn't change within a scan session.
 const _chartCache = new Map<string, { data: unknown; ts: number }>();
-const CHART_CACHE_TTL = 300_000; // 5 minutes
+const CHART_CACHE_TTL = 1_800_000; // 30 minutes — daily/weekly chart data is stable within this window
 
 /** Cache key for Yahoo chart requests. */
 function chartCacheKey(ticker: string, range: string, interval: string): string {

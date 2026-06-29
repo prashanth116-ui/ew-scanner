@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { validateTickers } from "@/lib/api-utils";
-import { fetchPreRunData } from "@/lib/prerun/data";
+import { fetchPreRunData, preFilterTickers } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
 import { scoreVCP } from "@/lib/prerun/vcp-scoring";
 import { scoreInstitutionalAcceleration } from "@/lib/prerun/institutional-scoring";
@@ -22,12 +22,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { tickers: string[]; emaTimeframe?: EmaTimeframe; sectorQuadrants?: Record<string, string>; viewMode?: VCPViewMode; targetDate?: string };
-    const tickers = validateTickers(body.tickers).slice(0, 1500);
+    const body = (await request.json()) as { tickers: string[]; emaTimeframe?: EmaTimeframe; sectorQuadrants?: Record<string, string>; viewMode?: VCPViewMode; targetDate?: string; preFilter?: boolean };
+    let tickers = validateTickers(body.tickers).slice(0, 1500);
     const emaTimeframe = body.emaTimeframe ?? "15m";
     const sectorQuadrants = body.sectorQuadrants ?? {};
     const viewMode = body.viewMode ?? "standard";
     const targetDate = body.targetDate;
+    const usePreFilter = body.preFilter ?? true;
     if (!tickers.length) {
       return NextResponse.json({ error: "tickers array required (valid A-Z tickers)" }, { status: 400 });
     }
@@ -36,6 +37,14 @@ export async function POST(request: NextRequest) {
       if (isNaN(d.getTime())) {
         return NextResponse.json({ error: "Invalid targetDate format (expected YYYY-MM-DD)" }, { status: 400 });
       }
+    }
+
+    // Pre-filter: eliminate penny stocks, delisted, and sub-$100M market cap
+    let preFilterSkipped = 0;
+    if (usePreFilter) {
+      const pf = await preFilterTickers(tickers);
+      preFilterSkipped = pf.skipped;
+      tickers = pf.passed;
     }
 
     const results = [];
@@ -99,7 +108,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ results, count: results.length, viewMode, targetDate, failedTickers: failedTickers.length > 0 ? failedTickers : undefined });
+    return NextResponse.json({ results, count: results.length, viewMode, targetDate, preFilterSkipped: preFilterSkipped > 0 ? preFilterSkipped : undefined, failedTickers: failedTickers.length > 0 ? failedTickers : undefined });
   } catch (err) {
     logError("api/prerun/scan", err);
     return NextResponse.json(

@@ -397,6 +397,76 @@ export async function fetchLatestPrerunSignals(): Promise<{
   }
 }
 
+/** Fetch the full nightly scan results (all tickers, not just qualifying). */
+export async function fetchLatestNightlyScan(): Promise<{
+  date: string | null;
+  signals: { ticker: string; verdict: string; score: number; price: number; daysToEarnings: number | null; nextEarningsDate: string | null; rs20d: number | null }[];
+}> {
+  try {
+    const supabase = await createClient();
+    if (!supabase) return { date: null, signals: [] };
+
+    // Get the most recent nightly-full scan date
+    const { data: latest, error: latestErr } = await supabase
+      .from("signal_outcomes")
+      .select("signal_date")
+      .eq("scanner", "prerun")
+      .eq("mode", "nightly-full")
+      .order("signal_date", { ascending: false })
+      .limit(1);
+
+    if (latestErr) {
+      console.error("[query] fetchLatestNightlyScan date error:", latestErr.message);
+      return { date: null, signals: [] };
+    }
+
+    const date = latest?.[0]?.signal_date ?? null;
+    if (!date) return { date: null, signals: [] };
+
+    // Fetch all signals for that date (paginate — could be 1,390+ rows)
+    const allRows: { ticker: string; signal_strength: string | null; score: number | null; price_at_signal: number; days_to_earnings: number | null; next_earnings_date: string | null; relative_strength_20d: number | null }[] = [];
+    let from = 0;
+    const pageSize = 1000;
+
+    while (true) {
+      const { data: rows, error: rowsErr } = await supabase
+        .from("signal_outcomes")
+        .select("ticker, signal_strength, score, price_at_signal, days_to_earnings, next_earnings_date, relative_strength_20d")
+        .eq("scanner", "prerun")
+        .eq("mode", "nightly-full")
+        .eq("signal_date", date)
+        .order("score", { ascending: false })
+        .range(from, from + pageSize - 1);
+
+      if (rowsErr) {
+        console.error("[query] fetchLatestNightlyScan rows error:", rowsErr.message);
+        break;
+      }
+
+      if (!rows || rows.length === 0) break;
+      allRows.push(...rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+
+    return {
+      date,
+      signals: allRows.map((r) => ({
+        ticker: r.ticker,
+        verdict: r.signal_strength ?? "WATCH",
+        score: r.score ?? 0,
+        price: r.price_at_signal,
+        daysToEarnings: r.days_to_earnings ?? null,
+        nextEarningsDate: r.next_earnings_date ?? null,
+        rs20d: r.relative_strength_20d ?? null,
+      })),
+    };
+  } catch (err) {
+    console.error("[query] fetchLatestNightlyScan exception:", err);
+    return { date: null, signals: [] };
+  }
+}
+
 /** Fetch last N sector history entries where sector entered a specific quadrant. */
 export async function fetchQuadrantEntries(
   sector: string,

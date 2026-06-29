@@ -33,7 +33,7 @@ function toNumOrNull(val: unknown): number | null {
 // Earnings calendar, insider buys, and beat streaks are stable for hours.
 // Eliminates ~4,173 redundant HTTP calls on repeated confluence scans.
 const _finnhubCache = new Map<string, { data: unknown; ts: number }>();
-const FINNHUB_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours — insider buys/earnings don't change intraday
+const FINNHUB_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours — earnings/insider data changes at most once per day
 
 function getFinnhubCached<T>(key: string): T | undefined {
   const entry = _finnhubCache.get(key);
@@ -411,10 +411,20 @@ async function getSecTickerMap(): Promise<Record<
   }
 }
 
+// ── SEC EDGAR revenue cache (7-day TTL) ──
+// Revenue data is quarterly — caching for 7 days eliminates ~1,000 slow SEC calls per scan.
+const _secRevenueCache = new Map<string, { data: { period: string; value: number }[] | null; ts: number }>();
+const SEC_REVENUE_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 /** Fetch quarterly revenue from SEC EDGAR XBRL API. */
 async function fetchSECQuarterlyRevenue(
   ticker: string
 ): Promise<{ period: string; value: number }[] | null> {
+  const cacheKey = ticker.toUpperCase();
+  const cached = _secRevenueCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < SEC_REVENUE_CACHE_TTL) return cached.data;
+  if (cached) _secRevenueCache.delete(cacheKey);
+
   try {
     // Step 1: Get CIK from cached SEC company tickers mapping
     const tickerMap = await getSecTickerMap();
@@ -483,15 +493,19 @@ async function fetchSECQuarterlyRevenue(
         .slice(-8);
 
       if (quarterly.length >= 2) {
-        return quarterly.map((q) => ({
+        const result = quarterly.map((q) => ({
           period: q.end,
           value: q.val,
         }));
+        _secRevenueCache.set(cacheKey, { data: result, ts: Date.now() });
+        return result;
       }
     }
 
+    _secRevenueCache.set(cacheKey, { data: null, ts: Date.now() });
     return null;
   } catch {
+    _secRevenueCache.set(cacheKey, { data: null, ts: Date.now() });
     return null;
   }
 }
@@ -1914,30 +1928,28 @@ export async function fetchPreRunData(
  */
 export async function preFilterTickers(
   tickers: string[],
-  minPctFromAth = 20,
-): Promise<string[]> {
+): Promise<{ passed: string[]; skipped: number }> {
   const quotes = await fetchBatchQuotes(tickers);
-  const passing: string[] = [];
+  const passed: string[] = [];
+  let skipped = 0;
 
   for (const ticker of tickers) {
     const q = quotes.get(ticker.toUpperCase());
     if (!q) {
       // No quote data — include it (don't silently drop; let full fetch decide)
-      passing.push(ticker);
+      passed.push(ticker);
       continue;
     }
-    // Quick gate checks from batch quote data
-    const price = q.price;
-    if (price <= 0) continue; // Delisted or zero price
 
-    // Estimate pctFromAth from 52w high if available
-    // BatchQuote doesn't have 52w high, but we can use price vs SMA200
-    // If price is above SMA200 and above SMA50, it's likely not 20%+ from ATH
-    // This is a conservative filter — we include borderline cases
-    passing.push(ticker);
+    const price = q.price;
+    if (price <= 0) { skipped++; continue; } // Delisted or zero price
+    if (price <= 2) { skipped++; continue; } // Penny stock
+    if (q.marketCap !== null && q.marketCap < 100_000_000) { skipped++; continue; } // Sub-$100M market cap
+
+    passed.push(ticker);
   }
 
-  return passing;
+  return { passed, skipped };
 }
 
 /**

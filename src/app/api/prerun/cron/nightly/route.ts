@@ -14,7 +14,7 @@ import { sendTelegramMessage } from "@/lib/ew-telegram";
 import type { PreRunResult } from "@/lib/prerun/types";
 import { MAX_SCORE } from "@/lib/prerun/types";
 import { calculateSectorRotation, formatSectorRotationTelegram } from "@/lib/sector-rotation/sector-rotation";
-import { recordSignalBatch } from "@/lib/supabase/persistence";
+import { recordSignalBatch, recordNightlyScanBatch } from "@/lib/supabase/persistence";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 1100; // Respect Finnhub 60/min rate limit
@@ -244,6 +244,19 @@ export async function GET(request: NextRequest) {
     }));
     await recordSignalBatch(signalRecords).catch(() => {});
 
+    // Persist ALL results (not just qualifying) for full-universe lookup from /api/prerun/latest
+    const nightlyRecords = results.map((r) => ({
+      ticker: r.data.ticker,
+      price: r.data.currentPrice ?? 0,
+      score: r.scores.finalScore,
+      verdict: r.verdict,
+      daysToEarnings: r.data.daysToEarnings ?? null,
+      nextEarningsDate: r.data.nextEarningsDate ?? null,
+      rs20d: r.data.relativeStrength20d != null
+        ? Math.round(r.data.relativeStrength20d * 100) / 100 : null,
+    }));
+    const nightlyPersisted = await recordNightlyScanBatch(nightlyRecords).catch(() => 0);
+
     // Promote qualifying discovered tickers (score >= 14, all gates pass, stocks only)
     const promotionCandidates: PromotionCandidate[] = qualifying
       .filter((r) => discoveredSymbols.has(r.data.ticker))
@@ -299,6 +312,7 @@ export async function GET(request: NextRequest) {
       purgedPromotions,
       activePromotions,
       mergedPromotedCount,
+      nightlyPersisted,
       results: qualifying,
     });
   } catch (err) {

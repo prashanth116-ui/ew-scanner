@@ -67,6 +67,9 @@ import {
   getTickersForSector,
   getSectorBuckets,
   getSectorForTicker,
+  getTopTickers,
+  getNextTickers,
+  getTotalTickerCount,
 } from "@/data/prerun-universe";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
@@ -143,6 +146,12 @@ function PreRunPage() {
 
   // Quadrant pre-scan filter
   const [quadrantFilter, setQuadrantFilter] = usePersistedFilter("ew-filter:prerun:quadrantFilter", "All");
+
+  // Quick Scan mode
+  type ScanMode = "quick" | "full";
+  const [scanMode, setScanMode] = usePersistedFilter<ScanMode>("ew-filter:prerun:scanMode", "quick");
+  const [scanOffset, setScanOffset] = useState(0);
+  const QUICK_SCAN_SIZE = 500;
 
   // VCP mode
   const [viewMode, setViewMode] = usePersistedFilter<VCPViewMode>("ew-filter:prerun:viewMode", "standard");
@@ -643,9 +652,13 @@ function PreRunPage() {
     setVcpResults([]);
     setInstResults([]);
     setScannedCount(0);
+    setScanOffset(0);
     if (showMultiTF) setMultiTFResults(new Map());
 
-    let tickers = getTickersForSector(sectorBucket);
+    // Quick scan: use ranked tickers (top 500), Full: use sector bucket
+    let tickers = sectorBucket === "All" && scanMode === "quick"
+      ? getTopTickers(QUICK_SCAN_SIZE)
+      : getTickersForSector(sectorBucket);
 
     // Pre-scan quadrant filter
     if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
@@ -727,6 +740,13 @@ function PreRunPage() {
     setScanning(false);
     setProgress("");
 
+    // Track how far into the universe we've scanned (for "Load More")
+    if (sectorBucket === "All" && scanMode === "quick") {
+      setScanOffset(QUICK_SCAN_SIZE);
+    } else {
+      setScanOffset(getTotalTickerCount()); // Full scan — no more to load
+    }
+
     // After scan results are finalized, record signals (standard mode only)
     if (viewMode !== "vcp" && viewMode !== "institutional") {
       const signals: ClientSignal[] = (results as PreRunResult[])
@@ -756,7 +776,74 @@ function PreRunPage() {
       });
       runMultiTFPhase2(candidates);
     }
-  }, [sectorBucket, emaTimeframe, showMultiTF, criteriaFilters, minScore, runMultiTFPhase2, sectorQuadrants, quadrantFilter, viewMode]);
+  }, [sectorBucket, emaTimeframe, showMultiTF, criteriaFilters, minScore, runMultiTFPhase2, sectorQuadrants, quadrantFilter, viewMode, scanMode]);
+
+  // Load More: scan the next batch of tickers and append results
+  const loadMoreTickers = useCallback(async () => {
+    const nextOffset = scanOffset + QUICK_SCAN_SIZE;
+    const totalAvailable = getTotalTickerCount();
+    if (nextOffset >= totalAvailable) return;
+
+    scanAbort.current?.abort();
+    const controller = new AbortController();
+    scanAbort.current = controller;
+    const signal = controller.signal;
+
+    const nextTickers = getNextTickers(nextOffset, QUICK_SCAN_SIZE);
+    if (nextTickers.length === 0) return;
+
+    setScanning(true);
+    setScannedCount(0);
+    setTotalCount(nextTickers.length);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newResults: any[] = [];
+
+    for (let i = 0; i < nextTickers.length; i += BATCH_SIZE) {
+      if (signal.aborted) break;
+      const batch = nextTickers.slice(i, i + BATCH_SIZE);
+      setProgress(`Scanning next batch: ${Math.min(i + BATCH_SIZE, nextTickers.length)}/${nextTickers.length}...`);
+
+      try {
+        const res = await fetch("/api/prerun/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tickers: batch, emaTimeframe, sectorQuadrants, viewMode }),
+          signal,
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json.results) newResults.push(...json.results);
+        }
+      } catch (err) {
+        if ((err as Error).name === "AbortError") break;
+      }
+
+      setScannedCount(Math.min(i + BATCH_SIZE, nextTickers.length));
+
+      if (i + BATCH_SIZE < nextTickers.length && !signal.aborted) {
+        await new Promise((r) => setTimeout(r, BATCH_DELAY));
+      }
+    }
+
+    // Append to existing results
+    if (viewMode === "vcp") {
+      setVcpResults((prev) => [...prev, ...(newResults as unknown as VCPResult[])]);
+    } else if (viewMode === "institutional") {
+      setInstResults((prev) => [...prev, ...(newResults as unknown as InstitutionalResult[])]);
+    } else {
+      setRawResults((prev) => {
+        const existingTickers = new Set(prev.map(r => r.data.ticker));
+        const unique = (newResults as PreRunResult[]).filter(r => !existingTickers.has(r.data.ticker));
+        return [...prev, ...unique];
+      });
+    }
+
+    setScanOffset(nextOffset);
+    setScanning(false);
+    setProgress("");
+  }, [scanOffset, emaTimeframe, sectorQuadrants, viewMode]);
 
   const cancelScan = useCallback(() => {
     scanAbort.current?.abort();
@@ -1420,6 +1507,7 @@ function PreRunPage() {
                   setFilterObvDivergence(false);
                   setFilterVpDivergence(false);
                   setShowTopPicks(false);
+                  setScanMode("quick");
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >
@@ -1461,10 +1549,54 @@ function PreRunPage() {
           </div>
         )}
 
+        {/* Scan Mode Toggle */}
+        {sectorBucket === "All" && (
+          <div className="flex items-center gap-1 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] p-0.5">
+            <button
+              onClick={() => setScanMode("quick")}
+              className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                scanMode === "quick"
+                  ? "bg-[#5ba3e6]/15 text-[#5ba3e6] border border-[#5ba3e6]/30"
+                  : "text-[#666] hover:text-white"
+              }`}
+            >
+              Quick {QUICK_SCAN_SIZE}
+            </button>
+            <button
+              onClick={() => setScanMode("full")}
+              className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                scanMode === "full"
+                  ? "bg-[#5ba3e6]/15 text-[#5ba3e6] border border-[#5ba3e6]/30"
+                  : "text-[#666] hover:text-white"
+              }`}
+            >
+              Full {getTotalTickerCount().toLocaleString()}
+            </button>
+          </div>
+        )}
+
         {/* Scan / Cancel */}
         <ScanButton scanning={scanning} onScan={runScan} onCancel={cancelScan} />
         {!scanning && rawResults.length > 0 && (
           <StalenessLabel cacheKey="ew-prerun-scan-v1" ttlMs={30 * 60 * 1000} onRefresh={runScan} />
+        )}
+
+        {/* Load More (after quick scan completes) */}
+        {!scanning && scanMode === "quick" && sectorBucket === "All" && scanOffset > 0 && scanOffset < getTotalTickerCount() && (
+          <div className="space-y-1">
+            <p className="text-[10px] text-[#666] text-center">
+              Showing {scanOffset}/{getTotalTickerCount()} tickers
+            </p>
+            <button
+              onClick={loadMoreTickers}
+              className="w-full rounded-md border border-[#5ba3e6]/30 bg-[#5ba3e6]/5 px-3 py-2 text-xs text-[#5ba3e6] hover:bg-[#5ba3e6]/10 transition-colors"
+            >
+              Scan Next {Math.min(QUICK_SCAN_SIZE, getTotalTickerCount() - scanOffset)}
+            </button>
+          </div>
+        )}
+        {!scanning && scanMode === "quick" && sectorBucket === "All" && scanOffset >= getTotalTickerCount() && scanOffset > 0 && (
+          <p className="text-[10px] text-[#666] text-center">All {getTotalTickerCount()} tickers scanned</p>
         )}
 
         {/* Ticker Search */}
@@ -1989,7 +2121,7 @@ function PreRunPage() {
               Ready to Scan
             </h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
-              Screen {getTickersForSector("All").length} stocks across {sectorBuckets.length} sectors
+              Screen {scanMode === "quick" ? `top ${QUICK_SCAN_SIZE}` : `all ${getTickersForSector("All").length}`} stocks across {sectorBuckets.length} sectors
               for multi-bagger setups. Scores 18 criteria through 3 hard gates with pattern matching.
             </p>
             <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
