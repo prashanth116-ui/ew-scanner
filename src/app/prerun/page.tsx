@@ -1702,10 +1702,12 @@ function PreRunPage() {
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-[10px] text-[#666] mr-0.5">Quick:</span>
             {([
-              { label: "High Conviction", apply: () => { resetInstFilters(); setInstTierFilter("SHORTLIST"); setInstEntryQualityFilter("HIGH"); setInstRsAccelFilter("positive"); } },
-              { label: "Fresh Momentum", apply: () => { resetInstFilters(); setInstClassFilter("FRESH_ROTATION"); setInstRsAccelFilter("strong"); } },
-              { label: "Sector Aligned", apply: () => { resetInstFilters(); setQuadrantFilter("LEADING,IMPROVING"); setFilterObvDivergence(true); } },
+              { label: "High Conviction", apply: () => { resetInstFilters(); setInstTierFilter("SHORTLIST"); setInstEntryQualityFilter("HIGH"); setInstRsAccelFilter("positive"); setInstMinScore(60); } },
+              { label: "Fresh Momentum", apply: () => { resetInstFilters(); setInstRsAccelFilter("strong"); setInstMinScore(50); setInstTierFilter("NON_AVOID"); } },
+              { label: "Sector Aligned", apply: () => { resetInstFilters(); setQuadrantFilter("LEADING,IMPROVING"); setFilterObvDivergence(true); setFilterVpDivergence(true); } },
               { label: "Pullback Entry", apply: () => { resetInstFilters(); setInstTriggerFilter("pullback_to_ema20"); setInstEntryQualityFilter("HIGH"); } },
+              { label: "Tight Base", apply: () => { resetInstFilters(); setInstClassFilter("TIGHT_BASE"); } },
+              { label: "Stealth Accum", apply: () => { resetInstFilters(); setFilterObvDivergence(true); setFilterVpDivergence(true); setInstTierFilter("NON_AVOID"); } },
             ] as { label: string; apply: () => void }[]).map((p) => (
               <button
                 key={p.label}
@@ -1753,6 +1755,9 @@ function PreRunPage() {
             </select>
             <select value={instMinMarketCap} onChange={(e) => setInstMinMarketCap(Number(e.target.value))} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
               <option value={0}>Any Cap</option>
+              <option value={1_000_000_000}>&gt;$1B</option>
+              <option value={10_000_000_000}>&gt;$10B</option>
+              <option value={20_000_000_000}>&gt;$20B</option>
               <option value={50_000_000_000}>&gt;$50B</option>
               <option value={100_000_000_000}>&gt;$100B</option>
               <option value={200_000_000_000}>&gt;$200B</option>

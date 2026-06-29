@@ -1256,7 +1256,7 @@ export default function PreRunGuidePage() {
                     { n: 2, filter: "Classification", def: "All", opts: "All + 12 classification types" },
                     { n: 3, filter: "Tier", def: "Shortlist", opts: "All Tiers, Shortlist, Watchlist, Speculative, All Actionable" },
                     { n: 4, filter: "Sector", def: "All", opts: "All + dynamic sector list" },
-                    { n: 5, filter: "Min Cap", def: "Any", opts: "Any, >$50B, >$100B, >$200B, >$500B, >$1T" },
+                    { n: 5, filter: "Min Cap", def: "Any", opts: "Any, >$1B, >$10B, >$20B, >$50B, >$100B, >$200B, >$500B, >$1T" },
                     { n: 6, filter: "Entry Quality", def: "All", opts: "All, HIGH, MOD, LOW" },
                     { n: 7, filter: "Trigger", def: "All", opts: "All + 7 trigger types" },
                     { n: 8, filter: "RS Accel", def: "All", opts: "All, Positive (>0), Strong (\u22652), Negative" },
@@ -1283,27 +1283,36 @@ export default function PreRunGuidePage() {
 
           {/* Best Selection Criteria */}
           <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
-            <p className="text-xs font-medium text-emerald-400 mb-2">Recommended Selection Criteria</p>
+            <p className="text-xs font-medium text-emerald-400 mb-2">Quick-Pick Presets (clickable above results)</p>
             <div className="space-y-2 text-xs text-[#a0a0a0]">
               <p>
-                <strong className="text-white">Best combo for actionable entries:</strong> Tier = <span className="text-green-400">Shortlist</span>,
-                Entry Quality = <span className="text-green-400">HIGH</span>, RS Accel = <span className="text-green-400">Positive</span>.
-                This gives the highest-conviction stocks with good entry timing and improving relative strength.
+                <strong className="text-white">High Conviction:</strong> Tier = <span className="text-green-400">Shortlist</span>,
+                Entry Quality = <span className="text-green-400">HIGH</span>, RS Accel = <span className="text-green-400">Positive</span>,
+                Score = <span className="text-green-400">60+</span>.
+                Highest-conviction stocks with good entry timing, improving RS, and strong composite score.
               </p>
               <p>
-                <strong className="text-white">Finding fresh momentum:</strong> Classification = <span className="text-cyan-400">Fresh Rotation</span> or{" "}
-                <span className="text-cyan-400">Continuation Leader</span> + RS Accel = <span className="text-cyan-400">Strong (\u22652)</span>.
-                Catches institutional money flowing into new names or doubling down on winners.
+                <strong className="text-white">Fresh Momentum:</strong> RS Accel = <span className="text-cyan-400">Strong (&ge;2)</span>,
+                Score = <span className="text-cyan-400">50+</span>, Tier = <span className="text-cyan-400">All Actionable</span>.
+                Catches institutional money accelerating into names across all actionable classifications.
               </p>
               <p>
-                <strong className="text-white">Sector-aligned picks:</strong> Use RRG Quadrant = <span className="text-amber-400">LEADING</span> or{" "}
-                <span className="text-amber-400">IMPROVING</span> to filter only stocks in sectors with favorable rotation.
-                Combine with OBV Div toggle for stealth accumulation confirmation.
+                <strong className="text-white">Sector Aligned:</strong> RRG Quadrant = <span className="text-amber-400">LEADING + IMPROVING</span>,
+                OBV Div = <span className="text-amber-400">ON</span>, VP Div = <span className="text-amber-400">ON</span>.
+                Stocks in favorable sector rotation with double volume divergence confirmation.
               </p>
               <p>
-                <strong className="text-white">Pullback entries:</strong> Trigger = <span className="text-purple-400">PB to EMA20</span> or{" "}
-                <span className="text-purple-400">Higher Low</span> + Entry Quality = HIGH/MOD. Best risk/reward when
-                buying dips in confirmed uptrends.
+                <strong className="text-white">Pullback Entry:</strong> Trigger = <span className="text-purple-400">PB to EMA20</span>,
+                Entry Quality = <span className="text-purple-400">HIGH</span>. Best risk/reward when buying dips in confirmed uptrends.
+              </p>
+              <p>
+                <strong className="text-white">Tight Base:</strong> Classification = <span className="text-blue-400">TIGHT_BASE</span>.
+                Low-volatility consolidation near highs &mdash; coiling for potential breakout move.
+              </p>
+              <p>
+                <strong className="text-white">Stealth Accum:</strong> OBV Div = <span className="text-indigo-400">ON</span>,
+                VP Div = <span className="text-indigo-400">ON</span>, Tier = <span className="text-indigo-400">All Actionable</span>.
+                Institutional buying when price is flat but both volume signals confirm accumulation.
               </p>
             </div>
           </div>
