@@ -16,6 +16,8 @@ import { MAX_SCORE } from "@/lib/prerun/types";
 import { calculateSectorRotation, formatSectorRotationTelegram } from "@/lib/sector-rotation/sector-rotation";
 import { recordSignalBatch, recordNightlyScanBatch } from "@/lib/supabase/persistence";
 
+export const maxDuration = 300; // 5 minutes — full scan of ~1,390 tickers needs ~3-4 min
+
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 1100; // Respect Finnhub 60/min rate limit
 
