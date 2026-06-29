@@ -15,6 +15,10 @@ export interface CryptoRegimeData {
   altSeasonSignal: boolean;
   favoredSectors: string[];
   avoidSectors: string[];
+  // Enhanced fields (V2)
+  btcDominanceTrend?: "rising" | "falling" | "flat";
+  totalMarketMomentum?: number; // 20d ROC of estimated total market cap proxy
+  regimeConfidence: "high" | "medium" | "low";
 }
 
 const REGIME_SECTOR_MAP: Record<CryptoRegime, { favored: string[]; avoid: string[] }> = {
@@ -52,11 +56,52 @@ function computeRealizedVol(closes: number[], period = 20): number {
 }
 
 /**
+ * Compute 20d rate of change from a price series.
+ */
+function computeROC(closes: number[], period = 20): number {
+  if (closes.length < period + 1) return 0;
+  const current = closes[closes.length - 1];
+  const past = closes[closes.length - 1 - period];
+  if (past <= 0) return 0;
+  return ((current - past) / past) * 100;
+}
+
+/**
+ * Estimate dominance trend from BTC closes vs total market cap proxy closes.
+ */
+function estimateDominanceTrend(
+  btcCloses: number[],
+  totalMarketCapCloses: number[]
+): "rising" | "falling" | "flat" {
+  if (btcCloses.length < 8 || totalMarketCapCloses.length < 8) return "flat";
+
+  // Use 7d ROC of BTC vs total to approximate dominance change
+  const btcLen = btcCloses.length;
+  const tmcLen = totalMarketCapCloses.length;
+  const btcROC7 = btcCloses[btcLen - 1] > 0 && btcCloses[btcLen - 8] > 0
+    ? ((btcCloses[btcLen - 1] / btcCloses[btcLen - 8]) - 1) * 100
+    : 0;
+  const tmcROC7 = totalMarketCapCloses[tmcLen - 1] > 0 && totalMarketCapCloses[tmcLen - 8] > 0
+    ? ((totalMarketCapCloses[tmcLen - 1] / totalMarketCapCloses[tmcLen - 8]) - 1) * 100
+    : 0;
+
+  // If BTC is outperforming total market, dominance is rising
+  const dominanceDelta = btcROC7 - tmcROC7;
+  if (dominanceDelta > 2) return "rising";
+  if (dominanceDelta < -2) return "falling";
+  return "flat";
+}
+
+/**
  * Classify crypto regime from BTC chart + proxy returns.
+ * Enhanced with optional dominance + total market cap data.
  */
 export function classifyCryptoRegime(
   btcCloses: number[],
-  proxyReturns20d: number[]
+  proxyReturns20d: number[],
+  // NEW optional params (backward compatible)
+  btcDominanceCloses?: number[],
+  totalMarketCapCloses?: number[],
 ): CryptoRegimeData {
   const btcVol = computeRealizedVol(btcCloses, 20);
 
@@ -68,22 +113,68 @@ export function classifyCryptoRegime(
   const marketTrend: "rising" | "falling" | "flat" =
     median > 3 ? "rising" : median < -3 ? "falling" : "flat";
 
-  // Regime classification
+  // BTC dominance trend (from optional data)
+  let btcDominanceTrend: "rising" | "falling" | "flat" | undefined;
+  if (btcDominanceCloses && btcDominanceCloses.length >= 8) {
+    // Direct dominance data
+    const domROC = computeROC(btcDominanceCloses, 7);
+    btcDominanceTrend = domROC > 2 ? "rising" : domROC < -2 ? "falling" : "flat";
+  } else if (totalMarketCapCloses && totalMarketCapCloses.length >= 8) {
+    // Estimate from BTC vs total market
+    btcDominanceTrend = estimateDominanceTrend(btcCloses, totalMarketCapCloses);
+  }
+
+  // Total market momentum (20d ROC)
+  let totalMarketMomentum: number | undefined;
+  if (totalMarketCapCloses && totalMarketCapCloses.length >= 21) {
+    totalMarketMomentum = Math.round(computeROC(totalMarketCapCloses, 20) * 10) / 10;
+  }
+
+  // Enhanced regime classification
   let regime: CryptoRegime;
-  if (btcVol < 60 && marketTrend === "rising") {
+  if (btcVol < 60 && marketTrend === "rising" && btcDominanceTrend !== "rising") {
+    // RISK_ON: low vol + rising market + dominance not rising (or unknown)
+    regime = "RISK_ON";
+  } else if (btcVol < 60 && marketTrend === "rising") {
+    // Low vol + rising but dominance rising — still RISK_ON but lower confidence
     regime = "RISK_ON";
   } else if (btcVol > 80 && marketTrend === "falling") {
+    regime = "RISK_OFF";
+  } else if (btcVol > 80 && btcDominanceTrend === "rising") {
+    // High vol + dominance rising = flight to BTC safety
     regime = "RISK_OFF";
   } else {
     regime = "MIXED";
   }
 
+  // Regime confidence
+  let regimeConfidence: "high" | "medium" | "low";
+  if (regime === "RISK_ON") {
+    const signals = [
+      btcVol < 50,
+      marketTrend === "rising",
+      btcDominanceTrend === "falling" || btcDominanceTrend === undefined,
+      (totalMarketMomentum ?? 0) > 5,
+    ].filter(Boolean).length;
+    regimeConfidence = signals >= 3 ? "high" : signals >= 2 ? "medium" : "low";
+  } else if (regime === "RISK_OFF") {
+    const signals = [
+      btcVol > 90,
+      marketTrend === "falling",
+      btcDominanceTrend === "rising",
+      (totalMarketMomentum ?? 0) < -5,
+    ].filter(Boolean).length;
+    regimeConfidence = signals >= 3 ? "high" : signals >= 2 ? "medium" : "low";
+  } else {
+    regimeConfidence = "low"; // MIXED is inherently uncertain
+  }
+
   // Alt-season signal: high dispersion among proxies + rising market
-  // (BTC dominance data not easily available from Yahoo, so use proxy dispersion)
   const dispersion = proxyReturns20d.length > 2
     ? Math.sqrt(proxyReturns20d.reduce((s, v) => s + (v - median) ** 2, 0) / proxyReturns20d.length)
     : 0;
-  const altSeasonSignal = dispersion > 8 && median > 0;
+  // Enhanced: also check dominance falling for alt-season confirmation
+  const altSeasonSignal = dispersion > 8 && median > 0 && btcDominanceTrend !== "rising";
 
   const sectorMap = REGIME_SECTOR_MAP[regime];
 
@@ -94,5 +185,8 @@ export function classifyCryptoRegime(
     altSeasonSignal,
     favoredSectors: sectorMap.favored,
     avoidSectors: sectorMap.avoid,
+    btcDominanceTrend,
+    totalMarketMomentum,
+    regimeConfidence,
   };
 }

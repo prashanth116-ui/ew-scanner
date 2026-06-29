@@ -47,6 +47,24 @@ function applyCryptoQualityGates(
       }
     }
 
+    // Gate 5: Liquidity depth proxy — volume-to-market-cap ratio
+    // Extremely illiquid tokens (vol/mcap < 0.001) are unreliable
+    if (s.marketCap != null && s.marketCap > 0) {
+      const volToMcap = dollarVolume / s.marketCap;
+      if (volToMcap < 0.001) {
+        reasons.push(`liquidity_depth=${(volToMcap * 100).toFixed(3)}% (<0.1%)`);
+      }
+    }
+
+    // Gate 6: Price stability (anti-rug check)
+    // If price is more than 50% below 200-SMA, flag as extreme decline
+    if (s.sma200 != null && s.sma200 > 0) {
+      const pctFrom200 = ((s.price - s.sma200) / s.sma200) * 100;
+      if (pctFrom200 < -50) {
+        reasons.push(`extreme_decline=${pctFrom200.toFixed(0)}% from 200MA`);
+      }
+    }
+
     // Skip: institutional ownership gate (unavailable for crypto)
     // Skip: ETF return correlation gate
 
@@ -62,7 +80,11 @@ function applyCryptoQualityGates(
 
 // ── Full enrichment pipeline (crypto) ──
 
-export function enrichCryptoTokens(stocks: StockInput[]): {
+export function enrichCryptoTokens(
+  stocks: StockInput[],
+  regimeFavoredSectors?: string[],
+  regimeAvoidSectors?: string[],
+): {
   passed: EnrichedStock[];
   rejected: RejectedStock[];
   pullbackWatch: PullbackWatchStock[];
@@ -73,7 +95,7 @@ export function enrichCryptoTokens(stocks: StockInput[]): {
   // Classify + score each passing token (reuse equity logic)
   const enriched: EnrichedStock[] = gated.map((s) => {
     const classified = classifyStock(s, s.sectorAcceleration);
-    const scored = scoreConviction(
+    let scored = scoreConviction(
       classified.category,
       classified.rsAccel,
       classified.volRatio,
@@ -82,6 +104,31 @@ export function enrichCryptoTokens(stocks: StockInput[]): {
       s.sectorComposite,
       s.sectorStealth
     );
+
+    // Regime alignment adjustment
+    if (regimeFavoredSectors || regimeAvoidSectors) {
+      let adjustedSignals = scored.convictionSignals;
+      if (regimeFavoredSectors?.includes(s.sector)) {
+        adjustedSignals += 1; // Regime-aligned boost
+      }
+      if (regimeAvoidSectors?.includes(s.sector)) {
+        adjustedSignals -= 1; // Regime headwind penalty
+      }
+
+      // Reclassify conviction based on adjusted signals
+      if (adjustedSignals !== scored.convictionSignals) {
+        const newConviction =
+          adjustedSignals >= 4
+            ? "HIGH" as const
+            : adjustedSignals >= 2
+            ? "MEDIUM" as const
+            : "WATCH" as const;
+        scored = {
+          conviction: newConviction,
+          convictionSignals: adjustedSignals,
+        };
+      }
+    }
 
     return {
       symbol: s.symbol,

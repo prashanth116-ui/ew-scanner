@@ -34,6 +34,12 @@ import {
   Sparkline,
   DataStalenessWarning,
 } from "../_components";
+import { CryptoBrief } from "./_components/CryptoBrief";
+import { CrossAssetPanel } from "./_components/CrossAssetPanel";
+import { CryptoEventsPanel } from "./_components/CryptoEventsPanel";
+import { CryptoHistoryChart } from "./_components/CryptoHistoryChart";
+import { LeadingIndicatorsPanel } from "./_components/LeadingIndicatorsPanel";
+import { CorrelationEnhancements } from "./_components/CorrelationEnhancements";
 
 /** Strip quote currency suffix (e.g., "-USD", "-USDT") from crypto symbols. */
 function baseSymbol(sym: string): string {
@@ -264,6 +270,7 @@ function mapCryptoRegime(regime: CryptoRotationResult["regime"]): CryptoRegimeDa
     altSeasonSignal: false,
     favoredSectors: regime?.favoredSectors ?? [],
     avoidSectors: regime?.avoidSectors ?? [],
+    regimeConfidence: "medium",
   };
 }
 
@@ -583,6 +590,28 @@ export default function CryptoRotationPage() {
         <p className="mt-1 text-xs text-[#888]">{data.rotationSummary}</p>
       </div>
 
+      {/* Crypto Brief (Synthesis Layer) */}
+      <CollapsiblePanel
+        id="crypto-brief"
+        title="Crypto Brief"
+        collapsed={collapsedPanels.has("crypto-brief")}
+        onToggle={togglePanel}
+        badge={<span className="text-xs text-[#666]">Posture + Tiers + Risks</span>}
+      >
+        <CryptoBrief data={data} rotationData={trackerData} />
+      </CollapsiblePanel>
+
+      {/* Cross-Asset Panel */}
+      <CollapsiblePanel
+        id="cross-asset"
+        title="Cross-Asset Context"
+        collapsed={collapsedPanels.has("cross-asset")}
+        onToggle={togglePanel}
+        badge={<span className="text-xs text-[#666]">Money flow signals</span>}
+      >
+        <CrossAssetPanel data={data} />
+      </CollapsiblePanel>
+
       {/* Entry Signals */}
       <CollapsiblePanel
         id="entry-signals"
@@ -671,6 +700,50 @@ export default function CryptoRotationPage() {
             );
           })}
         </div>
+      </CollapsiblePanel>
+
+      {/* Leading Indicators */}
+      <CollapsiblePanel
+        id="leading-indicators"
+        title="Leading Indicators"
+        collapsed={collapsedPanels.has("leading-indicators")}
+        onToggle={togglePanel}
+        badge={<span className="text-xs text-[#666]">Crypto-native signals</span>}
+      >
+        <LeadingIndicatorsPanel data={data} rotationData={trackerData} />
+      </CollapsiblePanel>
+
+      {/* Enhanced Correlations */}
+      <CollapsiblePanel
+        id="correlations"
+        title="Correlation Analysis"
+        collapsed={collapsedPanels.has("correlations")}
+        onToggle={togglePanel}
+        badge={<span className="text-xs text-[#666]">BTC correlation + diversifiers</span>}
+      >
+        <CorrelationEnhancements data={data} />
+      </CollapsiblePanel>
+
+      {/* Crypto Events */}
+      <CollapsiblePanel
+        id="crypto-events"
+        title="Upcoming Events"
+        collapsed={collapsedPanels.has("crypto-events")}
+        onToggle={togglePanel}
+        badge={<span className="text-xs text-[#666]">Protocol + macro</span>}
+      >
+        <CryptoEventsPanel />
+      </CollapsiblePanel>
+
+      {/* History Chart */}
+      <CollapsiblePanel
+        id="history-chart"
+        title="Sector History"
+        collapsed={collapsedPanels.has("history-chart")}
+        onToggle={togglePanel}
+        badge={<span className="text-xs text-[#666]">Composite score trends</span>}
+      >
+        <CryptoHistoryChart data={data} />
       </CollapsiblePanel>
 
       {/* Data Staleness Warning */}
