@@ -518,9 +518,19 @@ function PreRunPage() {
         if (instRsAccelFilter === "strong" && rs < 2) return false;
         if (instRsAccelFilter === "negative" && rs >= 0) return false;
       }
+      // RRG quadrant filter
+      if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
+        const sector = getSectorForTicker(r.data.ticker);
+        const quad = sector ? sectorQuadrants[sector] : undefined;
+        const allowedQuadrants = quadrantFilter.split(",");
+        if (!quad || !allowedQuadrants.includes(quad)) return false;
+      }
+      // Volume signal filters
+      if (filterObvDivergence && r.data.obvDivergent !== true) return false;
+      if (filterVpDivergence && r.data.vpDivergenceBullish !== true) return false;
       return true;
     });
-  }, [instResults, instMinScore, instClassFilter, instTierFilter, filters.sectorBucket, filters.maxMarketCap, instEntryQualityFilter, instTriggerFilter, instRsAccelFilter]);
+  }, [instResults, instMinScore, instClassFilter, instTierFilter, filters.sectorBucket, filters.maxMarketCap, instEntryQualityFilter, instTriggerFilter, instRsAccelFilter, quadrantFilter, sectorQuadrants, filterObvDivergence, filterVpDivergence]);
 
   const instSorted = useMemo(() => {
     const arr = [...instFiltered];
@@ -573,7 +583,8 @@ function PreRunPage() {
 
   const hasInstFilters = instMinScore > 0 || instClassFilter !== "All" ||
     instTierFilter !== "SHORTLIST" || sectorBucket !== "All" || maxMarketCap > 0 ||
-    instEntryQualityFilter !== "All" || instTriggerFilter !== "All" || instRsAccelFilter !== "all";
+    instEntryQualityFilter !== "All" || instTriggerFilter !== "All" || instRsAccelFilter !== "all" ||
+    quadrantFilter !== "All" || filterObvDivergence || filterVpDivergence;
 
   const resetInstFilters = useCallback(() => {
     setInstMinScore(0);
@@ -584,7 +595,10 @@ function PreRunPage() {
     setInstEntryQualityFilter("All");
     setInstTriggerFilter("All");
     setInstRsAccelFilter("all");
-  }, [setInstMinScore, setInstClassFilter, setInstTierFilter, setSectorBucket, setMaxMarketCap, setInstEntryQualityFilter, setInstTriggerFilter, setInstRsAccelFilter]);
+    setQuadrantFilter("All");
+    setFilterObvDivergence(false);
+    setFilterVpDivergence(false);
+  }, [setInstMinScore, setInstClassFilter, setInstTierFilter, setSectorBucket, setMaxMarketCap, setInstEntryQualityFilter, setInstTriggerFilter, setInstRsAccelFilter, setQuadrantFilter, setFilterObvDivergence, setFilterVpDivergence]);
 
   // Phase 2: Multi-TF M2 scan for candidate tickers
   const runMultiTFPhase2 = useCallback(async (candidates: PreRunResult[]) => {
@@ -1746,6 +1760,32 @@ function PreRunPage() {
               <option value="strong">Strong (&ge;2)</option>
               <option value="negative">Negative</option>
             </select>
+            <select value={quadrantFilter} onChange={(e) => setQuadrantFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="All">All Quadrants</option>
+              {RRG_QUADRANTS.map((q) => <option key={q} value={q}>{q}</option>)}
+            </select>
+            <button
+              onClick={() => setFilterObvDivergence((v: boolean) => !v)}
+              className={`rounded px-1.5 py-0.5 text-xs transition-colors ${
+                filterObvDivergence
+                  ? "bg-green-500/10 text-green-400 border border-green-500/30"
+                  : "border border-[#333] text-[#a0a0a0] hover:text-white"
+              }`}
+              title="OBV near 20-bar high while price is not (stealth accumulation)"
+            >
+              OBV Div
+            </button>
+            <button
+              onClick={() => setFilterVpDivergence((v: boolean) => !v)}
+              className={`rounded px-1.5 py-0.5 text-xs transition-colors ${
+                filterVpDivergence
+                  ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
+                  : "border border-[#333] text-[#a0a0a0] hover:text-white"
+              }`}
+              title="Price lower-low + volume-on-downs decreasing (seller exhaustion)"
+            >
+              VP Div
+            </button>
             <span className="text-[10px] text-[#666]">{instFiltered.length} / {instResults.length}</span>
             {hasInstFilters && (
               <button onClick={resetInstFilters} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#888] hover:text-white">Reset</button>
