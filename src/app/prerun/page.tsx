@@ -1698,7 +1698,25 @@ function PreRunPage() {
 
         {/* Inline filter bar — Institutional mode */}
         {viewMode === "institutional" && instResults.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="space-y-2 mb-4">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] text-[#666] mr-0.5">Quick:</span>
+            {([
+              { label: "High Conviction", apply: () => { resetInstFilters(); setInstTierFilter("SHORTLIST"); setInstEntryQualityFilter("HIGH"); setInstRsAccelFilter("positive"); } },
+              { label: "Fresh Momentum", apply: () => { resetInstFilters(); setInstClassFilter("FRESH_ROTATION"); setInstRsAccelFilter("strong"); } },
+              { label: "Sector Aligned", apply: () => { resetInstFilters(); setQuadrantFilter("LEADING,IMPROVING"); setFilterObvDivergence(true); } },
+              { label: "Pullback Entry", apply: () => { resetInstFilters(); setInstTriggerFilter("pullback_to_ema20"); setInstEntryQualityFilter("HIGH"); } },
+            ] as { label: string; apply: () => void }[]).map((p) => (
+              <button
+                key={p.label}
+                onClick={p.apply}
+                className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-[10px] text-[#a0a0a0] hover:text-white hover:border-[#555] transition-colors"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <select value={instMinScore} onChange={(e) => setInstMinScore(Number(e.target.value))} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
               <option value={0}>All Scores</option>
               <option value={40}>40+</option>
@@ -1793,6 +1811,7 @@ function PreRunPage() {
             {hasInstFilters && (
               <button onClick={resetInstFilters} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#888] hover:text-white">Reset</button>
             )}
+          </div>
           </div>
         )}
 
