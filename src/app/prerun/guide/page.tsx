@@ -790,6 +790,7 @@ export default function PreRunGuidePage() {
                   { name: "Stealth", ath: "20%", si: "Any", score: "11", use: "OBV or VP divergence + EMA timing (M2\u22651). Institutional buying while price stays flat." },
                   { name: "Aggressive Early", ath: "20%", si: "Any", score: "10", use: "Volume divergence + range coil + EMA timing (M2/N\u22651). Pre-breakout detection." },
                   { name: "VCP Breakout", ath: "Any", si: "Any", score: "65", use: "Institutional VCP mode: uptrend + compression + tight base near pivot (separate 0-100 engine)" },
+                  { name: "Inst. Acceleration", ath: "Any", si: "Any", score: "\u2014", use: "Large-cap institutional runners \u2014 RS acceleration, volume accumulation, structure analysis (separate 0-100 engine)" },
                 ].map((p) => (
                   <tr key={p.name} className="border-b border-[#2a2a2a]/50">
                     <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{p.name}</td>
@@ -1020,6 +1021,290 @@ export default function PreRunGuidePage() {
                   <p className="text-[10px] text-[#666]">{a.desc}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        </Section>
+
+        {/* Institutional Acceleration Scanner */}
+        <Section icon={Activity} title="Institutional Acceleration Scanner">
+          <p>
+            A separate view mode targeting <strong className="text-white">large-cap institutional-quality runners</strong> with
+            relative strength acceleration, volume accumulation, and clean price structure. Select the{" "}
+            <strong className="text-white">Inst. Acceleration</strong> preset to activate. Designed to identify
+            setups like NOW, AVGO, NVDA before they accelerate.
+          </p>
+
+          {/* Gates */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              4 Institutional Quality Gates (all must pass)
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Gate</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Rule</th>
+                    <th className="py-1.5 text-left font-medium">Threshold</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  {[
+                    { gate: "G1", rule: "Price above $20", threshold: "Price \u2265 $20" },
+                    { gate: "G2", rule: "Market cap", threshold: "Market cap \u2265 $20B" },
+                    { gate: "G3", rule: "Dollar volume liquidity", threshold: "Avg dollar volume \u2265 $100M/day" },
+                    { gate: "G4", rule: "Share volume liquidity", threshold: "Avg share volume \u2265 1.5M/day" },
+                  ].map((g) => (
+                    <tr key={g.gate} className="border-b border-[#2a2a2a]/50">
+                      <td className="py-1.5 pr-3 font-medium text-white">{g.gate}</td>
+                      <td className="py-1.5 pr-3">{g.rule}</td>
+                      <td className="py-1.5 text-[#5ba3e6]">{g.threshold}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-1.5 text-[10px] text-[#666]">
+              All gates must pass. If any gate fails, composite score is forced to 0. These gates ensure only
+              liquid, large-cap, institutional-grade stocks are scored.
+            </p>
+          </div>
+
+          {/* Scoring Categories */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              4 Scoring Categories (max 100 composite)
+            </h3>
+            <div className="space-y-3">
+              {[
+                {
+                  cat: "Institutional Score",
+                  color: "text-emerald-400",
+                  bg: "bg-emerald-500/10 border-emerald-500/20",
+                  details: [
+                    "RS acceleration vs SPY (5-session momentum change)",
+                    "RS acceleration vs QQQ",
+                    "Institutional ownership % (quarterly filings)",
+                    "Volume accumulation signals",
+                  ],
+                },
+                {
+                  cat: "Execution Score",
+                  color: "text-cyan-400",
+                  bg: "bg-cyan-500/10 border-cyan-500/20",
+                  details: [
+                    "Distance from EMA20 in ATR units (proximity = better)",
+                    "Gap % analysis (overnight institutional activity)",
+                    "Entry trigger quality and proximity",
+                  ],
+                },
+                {
+                  cat: "Risk Score",
+                  color: "text-rose-400",
+                  bg: "bg-rose-500/10 border-rose-500/20",
+                  details: [
+                    "Beta (lower beta = lower risk = higher score)",
+                    "ATR in dollar terms (position sizing feasibility)",
+                    "Inverted: 100 = lowest risk, 0 = highest risk",
+                  ],
+                },
+                {
+                  cat: "Discipline Score",
+                  color: "text-amber-400",
+                  bg: "bg-amber-500/10 border-amber-500/20",
+                  details: [
+                    "Price structure quality (higher lows, trend integrity)",
+                    "EMA alignment and reclaim signals",
+                    "Range coil / tight base formation",
+                  ],
+                },
+              ].map((c) => (
+                <div key={c.cat} className={`rounded-lg border ${c.bg} px-4 py-3`}>
+                  <span className={`text-sm font-bold ${c.color}`}>{c.cat}</span>
+                  <ul className="mt-1.5 space-y-0.5">
+                    {c.details.map((d, i) => (
+                      <li key={i} className="text-xs text-[#a0a0a0]">{d}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Classification */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              12 Classifications
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Classification</th>
+                    <th className="py-1.5 text-left font-medium">Description</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  {[
+                    { name: "Continuation Leader", desc: "Strong trend + RS acceleration + institutional flow. Best-in-class momentum." },
+                    { name: "Recovery Leader", desc: "Recovering from pullback with improving RS and accumulation." },
+                    { name: "Fresh Rotation", desc: "New institutional money rotating in. Early-stage acceleration." },
+                    { name: "Inst. Accumulation", desc: "Volume signals institutional buying. Structure forming for breakout." },
+                    { name: "Tight Base", desc: "Low volatility consolidation near highs. Coiling for potential move." },
+                    { name: "Constructive Setup", desc: "Positive structure building but not yet fully confirmed." },
+                    { name: "Oversold Reversal", desc: "Oversold bounce with improving indicators." },
+                    { name: "Neutral Hold", desc: "No clear edge. Not actionable, not avoidable." },
+                    { name: "Too Extended", desc: "Overbought / too far from support for new entries." },
+                    { name: "Avoid: Distribution", desc: "Institutional selling pressure detected." },
+                    { name: "Avoid: Choppy", desc: "No trend, erratic price action." },
+                    { name: "Avoid: Low Quality", desc: "Poor structure, weak RS, no accumulation signals." },
+                  ].map((c) => (
+                    <tr key={c.name} className="border-b border-[#2a2a2a]/50">
+                      <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{c.name}</td>
+                      <td className="py-1.5">{c.desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Tier System */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              Shortlist Tier System
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="rounded-md border border-green-500/20 bg-green-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-green-400">SHORTLIST</p>
+                <p className="text-xs text-[#c0c0c0]">Top-tier actionable</p>
+              </div>
+              <div className="rounded-md border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-yellow-400">WATCHLIST</p>
+                <p className="text-xs text-[#c0c0c0]">Monitor for improvement</p>
+              </div>
+              <div className="rounded-md border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-orange-400">SPECULATIVE</p>
+                <p className="text-xs text-[#c0c0c0]">Higher risk, early stage</p>
+              </div>
+              <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-red-400">AVOID</p>
+                <p className="text-xs text-[#c0c0c0]">No tier (distribution/choppy)</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Entry Quality + Triggers */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              Entry Quality &amp; Triggers
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-medium text-white mb-1.5">Entry Quality</p>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="rounded bg-green-500/20 px-1.5 py-0.5 text-[10px] font-bold text-green-400">HIGH</span>
+                    <span className="text-[#a0a0a0]">Strong setup, immediate entry potential</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">MOD</span>
+                    <span className="text-[#a0a0a0]">Decent setup, needs confirmation</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-400">LOW</span>
+                    <span className="text-[#a0a0a0]">Poor entry timing, wait for pullback</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-white mb-1.5">Entry Triggers</p>
+                <div className="space-y-1 text-xs text-[#a0a0a0]">
+                  <p><span className="text-white">Breakout</span> &mdash; Price above pivot high</p>
+                  <p><span className="text-white">Higher Low</span> &mdash; Holding above prior swing low</p>
+                  <p><span className="text-white">EMA Reclaim</span> &mdash; Reclaimed key EMA from below</p>
+                  <p><span className="text-white">PB to EMA20</span> &mdash; Pullback to 20 EMA support</p>
+                  <p><span className="text-white">Gap &amp; Go</span> &mdash; Gap up with continuation</p>
+                  <p><span className="text-white">Range BO</span> &mdash; Breaking out of consolidation range</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Inline Filters */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              Inline Filter Bar (11 Controls)
+            </h3>
+            <p className="text-xs text-[#a0a0a0] mb-2">
+              Filters appear inline above the results grid (no sidebar filters in this mode). All filters
+              combine with AND logic. Filters persist across page reloads via localStorage.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">#</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Filter</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Default</th>
+                    <th className="py-1.5 text-left font-medium">Options</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  {[
+                    { n: 1, filter: "Min Score", def: "All", opts: "All, 40+, 50+, 60+, 70+, 80+" },
+                    { n: 2, filter: "Classification", def: "All", opts: "All + 12 classification types" },
+                    { n: 3, filter: "Tier", def: "Shortlist", opts: "All Tiers, Shortlist, Watchlist, Speculative, All Actionable" },
+                    { n: 4, filter: "Sector", def: "All", opts: "All + dynamic sector list" },
+                    { n: 5, filter: "Max Cap", def: "Any", opts: "Any, <$500M, <$1B, <$5B, <$10B, <$20B, <$50B" },
+                    { n: 6, filter: "Entry Quality", def: "All", opts: "All, HIGH, MOD, LOW" },
+                    { n: 7, filter: "Trigger", def: "All", opts: "All + 7 trigger types" },
+                    { n: 8, filter: "RS Accel", def: "All", opts: "All, Positive (>0), Strong (\u22652), Negative" },
+                    { n: 9, filter: "RRG Quadrant", def: "All", opts: "All, LEADING, IMPROVING, WEAKENING, LAGGING" },
+                    { n: 10, filter: "OBV Div", def: "Off", opts: "Toggle: stealth accumulation (OBV near high, price not)" },
+                    { n: 11, filter: "VP Div", def: "Off", opts: "Toggle: seller exhaustion (lower lows + declining sell vol)" },
+                  ].map((r) => (
+                    <tr key={r.n} className="border-b border-[#2a2a2a]/50">
+                      <td className="py-1.5 pr-3 text-[#5ba3e6]">{r.n}</td>
+                      <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{r.filter}</td>
+                      <td className="py-1.5 pr-3">{r.def}</td>
+                      <td className="py-1.5">{r.opts}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-1.5 text-[10px] text-[#666]">
+              RRG Quadrant requires sector rotation data from{" "}
+              <Link href="/sectors" className="underline hover:text-[#5ba3e6]">/sectors</Link>.
+              The Reset button appears when any filter is non-default and resets all to defaults while staying in institutional mode.
+            </p>
+          </div>
+
+          {/* Best Selection Criteria */}
+          <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+            <p className="text-xs font-medium text-emerald-400 mb-2">Recommended Selection Criteria</p>
+            <div className="space-y-2 text-xs text-[#a0a0a0]">
+              <p>
+                <strong className="text-white">Best combo for actionable entries:</strong> Tier = <span className="text-green-400">Shortlist</span>,
+                Entry Quality = <span className="text-green-400">HIGH</span>, RS Accel = <span className="text-green-400">Positive</span>.
+                This gives the highest-conviction stocks with good entry timing and improving relative strength.
+              </p>
+              <p>
+                <strong className="text-white">Finding fresh momentum:</strong> Classification = <span className="text-cyan-400">Fresh Rotation</span> or{" "}
+                <span className="text-cyan-400">Continuation Leader</span> + RS Accel = <span className="text-cyan-400">Strong (\u22652)</span>.
+                Catches institutional money flowing into new names or doubling down on winners.
+              </p>
+              <p>
+                <strong className="text-white">Sector-aligned picks:</strong> Use RRG Quadrant = <span className="text-amber-400">LEADING</span> or{" "}
+                <span className="text-amber-400">IMPROVING</span> to filter only stocks in sectors with favorable rotation.
+                Combine with OBV Div toggle for stealth accumulation confirmation.
+              </p>
+              <p>
+                <strong className="text-white">Pullback entries:</strong> Trigger = <span className="text-purple-400">PB to EMA20</span> or{" "}
+                <span className="text-purple-400">Higher Low</span> + Entry Quality = HIGH/MOD. Best risk/reward when
+                buying dips in confirmed uptrends.
+              </p>
             </div>
           </div>
         </Section>
