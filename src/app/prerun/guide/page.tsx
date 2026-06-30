@@ -1259,7 +1259,7 @@ export default function PreRunGuidePage() {
                     { n: 5, filter: "Min Cap", def: "Any", opts: "Any, >$1B, >$10B, >$20B, >$50B, >$100B, >$200B, >$500B, >$1T" },
                     { n: 6, filter: "Entry Quality", def: "All", opts: "All, HIGH, MOD, LOW" },
                     { n: 7, filter: "Trigger", def: "All", opts: "All + 7 trigger types" },
-                    { n: 8, filter: "RS Accel", def: "All", opts: "All, Positive (>0), Strong (\u22652), Negative" },
+                    { n: 8, filter: "RS Accel", def: "All", opts: "All, Positive (>0), Strong (\u22652), Negative, Improving (\u2191), Fast Improving (\u2191\u2191)" },
                     { n: 9, filter: "RRG Quadrant", def: "All", opts: "All, LEADING, IMPROVING, WEAKENING, LAGGING" },
                     { n: 10, filter: "OBV Div", def: "Off", opts: "Toggle: stealth accumulation (OBV near high, price not)" },
                     { n: 11, filter: "VP Div", def: "Off", opts: "Toggle: seller exhaustion (lower lows + declining sell vol)" },
@@ -1313,6 +1313,12 @@ export default function PreRunGuidePage() {
                 <strong className="text-white">Stealth Accum:</strong> OBV Div = <span className="text-indigo-400">ON</span>,
                 VP Div = <span className="text-indigo-400">ON</span>, Tier = <span className="text-indigo-400">All Actionable</span>.
                 Institutional buying when price is flat but both volume signals confirm accumulation.
+              </p>
+              <p>
+                <strong className="text-white">Emerging Momentum:</strong> RS Accel = <span className="text-orange-400">Improving (&uarr;)</span>,
+                Score = <span className="text-orange-400">40+</span>, Tier = <span className="text-orange-400">All</span>.
+                Catches stocks where RS acceleration is trending positive day over day &mdash; the trajectory is improving even if the current value is still negative.
+                Designed to detect setups like TSLA approaching institutional quality before they arrive.
               </p>
             </div>
           </div>

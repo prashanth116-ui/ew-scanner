@@ -402,9 +402,18 @@ function PreRunPage() {
         if (signals < 2) return false;
         if ((r.data.dataQuality ?? 0) < 70) return false;
       }
+      // RS acceleration filter (cross-view)
+      if (instRsAccelFilter !== "all") {
+        const rs = r.data.instRsAccelVsSPY ?? 0;
+        if (instRsAccelFilter === "positive" && rs <= 0) return false;
+        if (instRsAccelFilter === "strong" && rs < 2) return false;
+        if (instRsAccelFilter === "negative" && rs >= 0) return false;
+        if (instRsAccelFilter === "improving" && (r.data.instRsAccelTrend ?? 0) <= 0) return false;
+        if (instRsAccelFilter === "fast_improving" && (r.data.instRsAccelTrend ?? 0) < 2) return false;
+      }
       return true;
     });
-  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate1, skipGate3, quadrantFilter, sectorQuadrants, filterObvDivergence, filterVpDivergence, showTopPicks]);
+  }, [rawResults, filters, criteriaFilters, getCriterionScore, skipGate1, skipGate3, quadrantFilter, sectorQuadrants, filterObvDivergence, filterVpDivergence, showTopPicks, instRsAccelFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -450,9 +459,18 @@ function PreRunPage() {
         if (sector !== filters.sectorBucket) return false;
       }
       if (filters.maxMarketCap > 0 && (r.data.marketCap ?? Infinity) > filters.maxMarketCap) return false;
+      // RS acceleration filter (cross-view)
+      if (instRsAccelFilter !== "all") {
+        const rs = r.data.instRsAccelVsSPY ?? 0;
+        if (instRsAccelFilter === "positive" && rs <= 0) return false;
+        if (instRsAccelFilter === "strong" && rs < 2) return false;
+        if (instRsAccelFilter === "negative" && rs >= 0) return false;
+        if (instRsAccelFilter === "improving" && (r.data.instRsAccelTrend ?? 0) <= 0) return false;
+        if (instRsAccelFilter === "fast_improving" && (r.data.instRsAccelTrend ?? 0) < 2) return false;
+      }
       return true;
     });
-  }, [vcpResults, vcpMinScore, vcpPhaseFilter, filters.sectorBucket, filters.maxMarketCap]);
+  }, [vcpResults, vcpMinScore, vcpPhaseFilter, filters.sectorBucket, filters.maxMarketCap, instRsAccelFilter]);
 
   const vcpSorted = useMemo(() => {
     const arr = [...vcpFiltered];
@@ -519,6 +537,8 @@ function PreRunPage() {
         if (instRsAccelFilter === "positive" && rs <= 0) return false;
         if (instRsAccelFilter === "strong" && rs < 2) return false;
         if (instRsAccelFilter === "negative" && rs >= 0) return false;
+        if (instRsAccelFilter === "improving" && (r.data.instRsAccelTrend ?? 0) <= 0) return false;
+        if (instRsAccelFilter === "fast_improving" && (r.data.instRsAccelTrend ?? 0) < 2) return false;
       }
       // RRG quadrant filter
       if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
@@ -1049,6 +1069,7 @@ function PreRunPage() {
     setFilterObvDivergence(preset.filterObvDivergence ?? false);
     setFilterVpDivergence(preset.filterVpDivergence ?? false);
     setShowTopPicks(false);
+    setInstRsAccelFilter("all");
     // Sync VCP min score from preset when in VCP mode
     if (preset.viewMode === "vcp") {
       setVcpMinScore(preset.vcpMinScore ?? f.minScore);
@@ -1060,7 +1081,6 @@ function PreRunPage() {
       setInstTierFilter("SHORTLIST");
       setInstEntryQualityFilter("All");
       setInstTriggerFilter("All");
-      setInstRsAccelFilter("all");
       setInstMinMarketCap(0);
     }
   }, []);
@@ -1193,6 +1213,25 @@ function PreRunPage() {
                   ))}
                 </select>
               </div>
+              {/* RS Acceleration */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">RS Acceleration</span>
+                  <span className="text-white">{instRsAccelFilter === "all" ? "Any" : instRsAccelFilter === "positive" ? ">0" : instRsAccelFilter === "strong" ? "\u22652" : instRsAccelFilter === "negative" ? "<0" : instRsAccelFilter === "improving" ? "\u2191" : "\u2191\u2191"}</span>
+                </div>
+                <select
+                  value={instRsAccelFilter}
+                  onChange={(e) => setInstRsAccelFilter(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#10b981] focus:outline-none"
+                >
+                  <option value="all">All RS</option>
+                  <option value="positive">Positive (&gt;0)</option>
+                  <option value="strong">Strong (&ge;2)</option>
+                  <option value="negative">Negative</option>
+                  <option value="improving">Improving (&uarr;)</option>
+                  <option value="fast_improving">Fast Improving (&uarr;&uarr;)</option>
+                </select>
+              </div>
               {/* Account Size */}
               <div>
                 <div className="flex justify-between text-xs mb-1">
@@ -1238,6 +1277,7 @@ function PreRunPage() {
                   setMinScore(DEFAULT_PRERUN_FILTERS.minScore);
                   setFilterObvDivergence(false);
                   setFilterVpDivergence(false);
+                  setInstRsAccelFilter("all");
                 }}
                 className="w-full rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#666] hover:text-white hover:border-[#444] transition-colors mt-2"
               >
@@ -1370,6 +1410,25 @@ function PreRunPage() {
                     Visit /sectors to populate rotation data.
                   </p>
                 )}
+              </div>
+              {/* RS Acceleration */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#a0a0a0]">RS Acceleration</span>
+                  <span className="text-white">{instRsAccelFilter === "all" ? "Any" : instRsAccelFilter === "positive" ? ">0" : instRsAccelFilter === "strong" ? "\u22652" : instRsAccelFilter === "negative" ? "<0" : instRsAccelFilter === "improving" ? "\u2191" : "\u2191\u2191"}</span>
+                </div>
+                <select
+                  value={instRsAccelFilter}
+                  onChange={(e) => setInstRsAccelFilter(e.target.value)}
+                  className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#5ba3e6] focus:outline-none"
+                >
+                  <option value="all">All RS</option>
+                  <option value="positive">Positive (&gt;0)</option>
+                  <option value="strong">Strong (&ge;2)</option>
+                  <option value="negative">Negative</option>
+                  <option value="improving">Improving (&uarr;)</option>
+                  <option value="fast_improving">Fast Improving (&uarr;&uarr;)</option>
+                </select>
               </div>
               {/* Earnings Within */}
               <div>
@@ -1708,6 +1767,7 @@ function PreRunPage() {
               { label: "Pullback Entry", apply: () => { resetInstFilters(); setInstTriggerFilter("pullback_to_ema20"); setInstEntryQualityFilter("HIGH"); } },
               { label: "Tight Base", apply: () => { resetInstFilters(); setInstClassFilter("TIGHT_BASE"); } },
               { label: "Stealth Accum", apply: () => { resetInstFilters(); setFilterObvDivergence(true); setFilterVpDivergence(true); setInstTierFilter("NON_AVOID"); } },
+              { label: "Emerging Momentum", apply: () => { resetInstFilters(); setInstRsAccelFilter("improving"); setInstMinScore(40); setInstTierFilter("ALL"); } },
             ] as { label: string; apply: () => void }[]).map((p) => (
               <button
                 key={p.label}
@@ -1785,6 +1845,8 @@ function PreRunPage() {
               <option value="positive">Positive (&gt;0)</option>
               <option value="strong">Strong (&ge;2)</option>
               <option value="negative">Negative</option>
+              <option value="improving">Improving (&uarr;)</option>
+              <option value="fast_improving">Fast Improving (&uarr;&uarr;)</option>
             </select>
             <select value={quadrantFilter} onChange={(e) => setQuadrantFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
               <option value="All">All Quadrants</option>
@@ -2427,6 +2489,22 @@ const ResultCard = memo(function ResultCard({
         </div>
       )}
 
+      {/* RS acceleration badges */}
+      {(d.instRsAccelVsSPY !== null || d.instRsAccelTrend !== null) && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {d.instRsAccelVsSPY !== null && (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${(d.instRsAccelVsSPY ?? 0) > 3 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : (d.instRsAccelVsSPY ?? 0) > 0 ? "border-[#333] bg-[#1a1a1a] text-white" : "border-red-500/20 bg-red-500/10 text-red-400"}`} title={`RS Accel vs SPY: 5-session change in relative strength\nRS Accel vs QQQ: ${d.instRsAccelVsQQQ !== null ? d.instRsAccelVsQQQ.toFixed(1) : "-"}`}>
+              RS {d.instRsAccelVsSPY >= 0 ? "+" : ""}{d.instRsAccelVsSPY.toFixed(1)}
+            </span>
+          )}
+          {d.instRsAccelTrend !== null && (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${(d.instRsAccelTrend ?? 0) > 2 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : (d.instRsAccelTrend ?? 0) > 0 ? "border-amber-500/20 bg-amber-500/10 text-amber-400" : "border-[#333] bg-[#1a1a1a] text-[#666]"}`} title="RS Accel Trend: slope of RS accel over last 3 sessions (positive = improving)">
+              {(d.instRsAccelTrend ?? 0) > 0 ? "\u2191" : (d.instRsAccelTrend ?? 0) < 0 ? "\u2193" : "\u2192"}{Math.abs(d.instRsAccelTrend).toFixed(1)}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Pattern match badge */}
       {result.patternMatch && (
         <div className="mb-3 flex items-center gap-1.5 rounded-md border border-[#5ba3e6]/20 bg-[#5ba3e6]/5 px-2.5 py-1.5">
@@ -2810,6 +2888,22 @@ const VCPResultCard = memo(function VCPResultCard({
           </span>
         ))}
       </div>
+
+      {/* RS acceleration badges */}
+      {(d.instRsAccelVsSPY !== null || d.instRsAccelTrend !== null) && (
+        <div className="mb-3 flex flex-wrap items-center gap-1">
+          {d.instRsAccelVsSPY !== null && (
+            <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-medium border ${(d.instRsAccelVsSPY ?? 0) > 3 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : (d.instRsAccelVsSPY ?? 0) > 0 ? "border-[#333] bg-[#1a1a1a] text-white" : "border-red-500/20 bg-red-500/10 text-red-400"}`} title={`RS Accel vs SPY: ${d.instRsAccelVsSPY.toFixed(1)} | vs QQQ: ${d.instRsAccelVsQQQ?.toFixed(1) ?? "-"}`}>
+              RS {d.instRsAccelVsSPY >= 0 ? "+" : ""}{d.instRsAccelVsSPY.toFixed(1)}
+            </span>
+          )}
+          {d.instRsAccelTrend !== null && (
+            <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-medium border ${(d.instRsAccelTrend ?? 0) > 2 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : (d.instRsAccelTrend ?? 0) > 0 ? "border-amber-500/20 bg-amber-500/10 text-amber-400" : "border-[#333] bg-[#0f0f0f] text-[#444]"}`} title="RS Accel Trend: slope over last 3 sessions">
+              {(d.instRsAccelTrend ?? 0) > 0 ? "\u2191" : (d.instRsAccelTrend ?? 0) < 0 ? "\u2193" : "\u2192"}{Math.abs(d.instRsAccelTrend).toFixed(1)}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="flex items-center gap-2 mt-auto pt-1">

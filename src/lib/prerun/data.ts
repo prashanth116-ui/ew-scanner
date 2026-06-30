@@ -1739,6 +1739,7 @@ export async function fetchPreRunData(
   let instRsVsQQQ: number | null = null;
   let instRsAccelVsSPY: number | null = null;
   let instRsAccelVsQQQ: number | null = null;
+  let instRsAccelTrend: number | null = null;
   let instGapPct: number | null = null;
   let instDistFromEma20Atr: number | null = null;
   let instAtrDollar: number | null = null;
@@ -1781,6 +1782,27 @@ export async function fetchPreRunData(
           const rsNow = stockRetNow - spyRetNow;
           const rsPrev = stockRetPrev - spyRetPrev;
           instRsAccelVsSPY = rsNow - rsPrev;
+        }
+
+        // RS Accel Trend: compute accel at offsets 0, -1, -2, -3 sessions
+        // then derive slope (newest - oldest) / (count - 1)
+        const accelSeries: number[] = [];
+        for (let offset = 0; offset <= 3; offset++) {
+          const sRetNow = calcReturnAt(closes, n - 1 - offset, 20);
+          const sRetPrev = calcReturnAt(closes, n - 6 - offset, 20);
+          const spRetNow = calcReturnAt(spyCloses, spyN - 1 - offset, 20);
+          const spRetPrev = calcReturnAt(spyCloses, spyN - 6 - offset, 20);
+          if (sRetNow !== null && sRetPrev !== null && spRetNow !== null && spRetPrev !== null) {
+            const rsN = sRetNow - spRetNow;
+            const rsP = sRetPrev - spRetPrev;
+            accelSeries.push(rsN - rsP);
+          }
+        }
+        if (accelSeries.length >= 3) {
+          // Series is ordered [today, -1d, -2d, -3d]: newest first
+          const newest = accelSeries[0];
+          const oldest = accelSeries[accelSeries.length - 1];
+          instRsAccelTrend = (newest - oldest) / (accelSeries.length - 1);
         }
       }
     }
@@ -1912,6 +1934,7 @@ export async function fetchPreRunData(
     instRsVsQQQ,
     instRsAccelVsSPY,
     instRsAccelVsQQQ,
+    instRsAccelTrend,
     instBeta,
     instGapPct,
     instDistFromEma20Atr,

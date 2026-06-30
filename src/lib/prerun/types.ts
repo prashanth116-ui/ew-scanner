@@ -118,6 +118,7 @@ export interface PreRunStockData {
   instRsVsQQQ: number | null;            // Stock 20d ret - QQQ 20d ret
   instRsAccelVsSPY: number | null;        // 5-session change in RS vs SPY
   instRsAccelVsQQQ: number | null;        // 5-session change in RS vs QQQ
+  instRsAccelTrend: number | null;        // Slope of RS accel over last 3 sessions (positive = improving)
   instBeta: number | null;                // From Yahoo summaryDetail
   instGapPct: number | null;              // (today open - prev close) / prev close * 100
   instDistFromEma20Atr: number | null;    // (price - EMA20) / ATR(14)

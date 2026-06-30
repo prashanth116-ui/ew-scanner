@@ -96,6 +96,7 @@ function makeVCPData(overrides: Partial<PreRunStockData> = {}): PreRunStockData 
     instRsVsQQQ: null,
     instRsAccelVsSPY: null,
     instRsAccelVsQQQ: null,
+    instRsAccelTrend: null,
     instBeta: null,
     instGapPct: null,
     instDistFromEma20Atr: null,

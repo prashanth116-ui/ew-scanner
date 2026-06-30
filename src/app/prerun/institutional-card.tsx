@@ -234,8 +234,10 @@ export const InstitutionalResultCard = memo(function InstitutionalResultCard({
           </p>
         </div>
         <div>
-          <span className="text-[#555]">RS Sector</span>
-          <p className="text-white font-medium">{fmtNum(d.relativeStrength20d)}</p>
+          <span className="text-[#555]">RS Trend</span>
+          <p className={`font-medium ${(d.instRsAccelTrend ?? 0) > 2 ? "text-emerald-400" : (d.instRsAccelTrend ?? 0) > 0 ? "text-white" : "text-red-400"}`}>
+            {d.instRsAccelTrend !== null ? `${d.instRsAccelTrend >= 0 ? "+" : ""}${d.instRsAccelTrend.toFixed(1)}` : "-"}
+          </p>
         </div>
         <div>
           <span className="text-[#555]">Dist EMA20</span>
