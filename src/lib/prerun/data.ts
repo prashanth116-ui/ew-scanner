@@ -1806,6 +1806,7 @@ export async function fetchPreRunData(
   let avgDownDayBodyPrev: number | null = null;
   let accumulationDayCount: number | null = null;
   let atrRatio5v20: number | null = null;
+  let volumeRecent5d: number[] | null = null;
 
   if (chart3mo && chart3mo.closes.length >= 20) {
     const { closes, opens, highs, lows, volumes } = chart3mo;
@@ -1816,6 +1817,10 @@ export async function fetchPreRunData(
     accumulationDayCount = calcAccumulationDays(closes, volumes);
     const squeeze = calcVolatilitySqueeze(highs, lows, closes);
     atrRatio5v20 = squeeze.atrRatio;
+    // Last 5 daily volumes for trend display
+    if (volumes.length >= 5) {
+      volumeRecent5d = volumes.slice(-5);
+    }
   }
 
   // ── Institutional Acceleration fields ──
@@ -2028,6 +2033,7 @@ export async function fetchPreRunData(
     avgDownDayBodyPrev,
     accumulationDayCount,
     atrRatio5v20,
+    volumeRecent5d,
     lastUpdated: targetDate ? new Date(targetDate + "T16:00:00-04:00").toISOString() : new Date().toISOString(),
   };
 }

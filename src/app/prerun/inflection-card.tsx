@@ -68,7 +68,7 @@ export const InflectionResultCard = memo(function InflectionResultCard({
     { label: "Vol Compress", score: s.volatilityCompression, key: "VC" },
     { label: "Buyer Emerge", score: s.buyerEmergence, key: "BE" },
     { label: "Rel Strength", score: s.relativeStrength, key: "RS" },
-    { label: "Liquidity", score: s.liquidityAuction, key: "LA" },
+    { label: "Auction", score: s.liquidityAuction, key: "LA" },
     { label: "Inst Particip", score: s.institutionalParticipation, key: "IP" },
   ];
 
@@ -201,6 +201,54 @@ export const InflectionResultCard = memo(function InflectionResultCard({
           <p className="text-white font-medium">
             {result.invalidationLevel !== null ? `$${result.invalidationLevel.toFixed(2)}` : "-"}
           </p>
+        </div>
+      </div>
+
+      {/* Trend Micro-Data row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1.5 mb-3 text-[10px] rounded border border-[#222] bg-[#0f0f0f] px-2.5 py-2">
+        <div>
+          <span className="text-[#555]">RS Accel SPY</span>
+          <p className={`font-medium ${(d.instRsAccelVsSPY ?? 0) > 0 ? "text-emerald-400" : (d.instRsAccelVsSPY ?? 0) < -2 ? "text-red-400" : "text-amber-400"}`}>
+            {d.instRsAccelVsSPY !== null ? `${d.instRsAccelVsSPY >= 0 ? "+" : ""}${d.instRsAccelVsSPY.toFixed(2)}` : "-"}
+          </p>
+        </div>
+        <div>
+          <span className="text-[#555]">RS Accel QQQ</span>
+          <p className={`font-medium ${(d.instRsAccelVsQQQ ?? 0) > 0 ? "text-emerald-400" : (d.instRsAccelVsQQQ ?? 0) < -2 ? "text-red-400" : "text-amber-400"}`}>
+            {d.instRsAccelVsQQQ !== null ? `${d.instRsAccelVsQQQ >= 0 ? "+" : ""}${d.instRsAccelVsQQQ.toFixed(2)}` : "-"}
+          </p>
+        </div>
+        <div>
+          <span className="text-[#555]">RS Trend</span>
+          <p className={`font-medium ${(d.instRsAccelTrend ?? 0) > 0 ? "text-emerald-400" : (d.instRsAccelTrend ?? 0) < 0 ? "text-red-400" : "text-white"}`}>
+            {d.instRsAccelTrend !== null
+              ? `${d.instRsAccelTrend > 0 ? "\u2191" : d.instRsAccelTrend < 0 ? "\u2193" : "\u2192"} ${Math.abs(d.instRsAccelTrend).toFixed(2)}`
+              : "-"}
+          </p>
+        </div>
+        <div>
+          <span className="text-[#555]">Vol 5d</span>
+          {d.volumeRecent5d ? (
+            <div className="flex items-end gap-px h-4 mt-0.5">
+              {d.volumeRecent5d.map((v, i) => {
+                const max = Math.max(...d.volumeRecent5d!);
+                const pct = max > 0 ? (v / max) * 100 : 0;
+                const isLast = i === d.volumeRecent5d!.length - 1;
+                const isGrowing = i > 0 && v > d.volumeRecent5d![i - 1];
+                return (
+                  <div
+                    key={i}
+                    className={`w-2 rounded-sm ${isLast ? (isGrowing ? "bg-emerald-400" : "bg-red-400") : "bg-[#444]"}`}
+                    style={{ height: `${Math.max(pct, 10)}%` }}
+                    title={`${(v / 1e6).toFixed(1)}M`}
+                  />
+                );
+              })}
+              <span className="ml-1 text-[9px] text-[#666]">{(d.volumeRecent5d[d.volumeRecent5d.length - 1] / 1e6).toFixed(0)}M</span>
+            </div>
+          ) : (
+            <p className="text-white font-medium">-</p>
+          )}
         </div>
       </div>
 

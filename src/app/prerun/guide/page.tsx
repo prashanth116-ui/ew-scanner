@@ -2074,6 +2074,40 @@ export default function PreRunGuidePage() {
             </div>
           </div>
 
+          {/* Score Interpretation */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              Score Interpretation &amp; Action Guide
+            </h3>
+            <div className="overflow-hidden rounded border border-[#2a2a2a]">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] bg-[#0f0f0f]">
+                    <th className="px-3 py-1.5 text-left font-semibold text-[#c0c0c0]">Score</th>
+                    <th className="px-3 py-1.5 text-left font-semibold text-[#c0c0c0]">Interpretation</th>
+                    <th className="px-3 py-1.5 text-left font-semibold text-[#c0c0c0]">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#a0a0a0]">
+                  {[
+                    { range: "0\u201340", label: "Distribution", action: "Ignore or look for shorts", color: "text-red-400" },
+                    { range: "40\u201360", label: "Neutral", action: "Watch only", color: "text-amber-400" },
+                    { range: "60\u201370", label: "Early Accumulation", action: "Build a watchlist; no full-size entry", color: "text-yellow-400" },
+                    { range: "70\u201380", label: "Inflection", action: "Probe with a starter position", color: "text-cyan-400" },
+                    { range: "80\u201390", label: "Institutional Trend", action: "Add on pullbacks and manage the trade", color: "text-blue-400" },
+                    { range: "90\u2013100", label: "Strong Trend in Force", action: "Hold until behavior changes", color: "text-emerald-400" },
+                  ].map((row) => (
+                    <tr key={row.range} className="border-b border-[#2a2a2a]/50">
+                      <td className={`px-3 py-1.5 font-bold ${row.color}`}>{row.range}</td>
+                      <td className="px-3 py-1.5 font-medium text-white">{row.label}</td>
+                      <td className="px-3 py-1.5">{row.action}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* Evidence System */}
           <div className="mt-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">

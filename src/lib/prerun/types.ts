@@ -129,6 +129,7 @@ export interface PreRunStockData {
   avgDownDayBodyPrev: number | null;      // Avg body % on down days (bars 11-20, comparison)
   accumulationDayCount: number | null;    // Up days with above-avg volume (last 20)
   atrRatio5v20: number | null;            // ATR(5) / ATR(20) ratio
+  volumeRecent5d: number[] | null;        // Last 5 daily volumes (oldest→newest) for trend display
   lastUpdated: string;
 }
 

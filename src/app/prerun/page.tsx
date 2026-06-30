@@ -2404,6 +2404,33 @@ function PreRunPage() {
           </div>
         )}
 
+        {/* Inflection Score Guide (collapsible) */}
+        {viewMode === "inflection" && inflectionSorted.length > 0 && (
+          <details className="mb-4 rounded-lg border border-[#2a2a2a] bg-[#141414]">
+            <summary className="cursor-pointer px-4 py-2 text-xs font-medium text-[#888] hover:text-white select-none flex items-center gap-1.5">
+              <span className="text-[10px]">&#9662;</span> Score Guide
+            </summary>
+            <div className="px-4 pb-3 pt-1">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                {[
+                  { range: "0\u201340", label: "Distribution", action: "Ignore / shorts", color: "text-red-400 border-red-500/20 bg-red-500/5" },
+                  { range: "40\u201360", label: "Neutral", action: "Watch only", color: "text-amber-400 border-amber-500/20 bg-amber-500/5" },
+                  { range: "60\u201370", label: "Early Accum", action: "Watchlist, no entry", color: "text-yellow-400 border-yellow-500/20 bg-yellow-500/5" },
+                  { range: "70\u201380", label: "Inflection", action: "Starter position", color: "text-cyan-400 border-cyan-500/20 bg-cyan-500/5" },
+                  { range: "80\u201390", label: "Inst. Trend", action: "Add on pullbacks", color: "text-blue-400 border-blue-500/20 bg-blue-500/5" },
+                  { range: "90\u2013100", label: "Strong Trend", action: "Hold until change", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/5" },
+                ].map((g) => (
+                  <div key={g.range} className={`rounded border px-2 py-1.5 text-center ${g.color}`}>
+                    <p className="text-[11px] font-bold">{g.range}</p>
+                    <p className="text-[9px] font-medium">{g.label}</p>
+                    <p className="text-[8px] mt-0.5 opacity-70">{g.action}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </details>
+        )}
+
         {/* Inflection Results */}
         {viewMode === "inflection" && inflectionSorted.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">

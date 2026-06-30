@@ -106,6 +106,7 @@ function makeVCPData(overrides: Partial<PreRunStockData> = {}): PreRunStockData 
     avgDownDayBodyPrev: null,
     accumulationDayCount: null,
     atrRatio5v20: null,
+    volumeRecent5d: null,
     lastUpdated: new Date().toISOString(),
     ...overrides,
   };
