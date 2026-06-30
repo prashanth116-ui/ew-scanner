@@ -410,6 +410,7 @@ function PreRunPage() {
         if (instRsAccelFilter === "negative" && rs >= 0) return false;
         if (instRsAccelFilter === "improving" && (r.data.instRsAccelTrend ?? 0) <= 0) return false;
         if (instRsAccelFilter === "fast_improving" && (r.data.instRsAccelTrend ?? 0) < 2) return false;
+        if (instRsAccelFilter === "fading" && (rs <= 0 || (r.data.instRsAccelTrend ?? 0) >= 0)) return false;
       }
       return true;
     });
@@ -467,6 +468,7 @@ function PreRunPage() {
         if (instRsAccelFilter === "negative" && rs >= 0) return false;
         if (instRsAccelFilter === "improving" && (r.data.instRsAccelTrend ?? 0) <= 0) return false;
         if (instRsAccelFilter === "fast_improving" && (r.data.instRsAccelTrend ?? 0) < 2) return false;
+        if (instRsAccelFilter === "fading" && (rs <= 0 || (r.data.instRsAccelTrend ?? 0) >= 0)) return false;
       }
       return true;
     });
@@ -539,6 +541,7 @@ function PreRunPage() {
         if (instRsAccelFilter === "negative" && rs >= 0) return false;
         if (instRsAccelFilter === "improving" && (r.data.instRsAccelTrend ?? 0) <= 0) return false;
         if (instRsAccelFilter === "fast_improving" && (r.data.instRsAccelTrend ?? 0) < 2) return false;
+        if (instRsAccelFilter === "fading" && (rs <= 0 || (r.data.instRsAccelTrend ?? 0) >= 0)) return false;
       }
       // RRG quadrant filter
       if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
@@ -1217,7 +1220,7 @@ function PreRunPage() {
               <div>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-[#a0a0a0]">RS Acceleration</span>
-                  <span className="text-white">{instRsAccelFilter === "all" ? "Any" : instRsAccelFilter === "positive" ? ">0" : instRsAccelFilter === "strong" ? "\u22652" : instRsAccelFilter === "negative" ? "<0" : instRsAccelFilter === "improving" ? "\u2191" : "\u2191\u2191"}</span>
+                  <span className="text-white">{instRsAccelFilter === "all" ? "Any" : instRsAccelFilter === "positive" ? ">0" : instRsAccelFilter === "strong" ? "\u22652" : instRsAccelFilter === "negative" ? "<0" : instRsAccelFilter === "improving" ? "\u2191" : instRsAccelFilter === "fast_improving" ? "\u2191\u2191" : "\u2193"}</span>
                 </div>
                 <select
                   value={instRsAccelFilter}
@@ -1230,6 +1233,7 @@ function PreRunPage() {
                   <option value="negative">Negative</option>
                   <option value="improving">Improving (&uarr;)</option>
                   <option value="fast_improving">Fast Improving (&uarr;&uarr;)</option>
+                  <option value="fading">Fading (&gt;0 + &darr;)</option>
                 </select>
               </div>
               {/* Account Size */}
@@ -1415,7 +1419,7 @@ function PreRunPage() {
               <div>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-[#a0a0a0]">RS Acceleration</span>
-                  <span className="text-white">{instRsAccelFilter === "all" ? "Any" : instRsAccelFilter === "positive" ? ">0" : instRsAccelFilter === "strong" ? "\u22652" : instRsAccelFilter === "negative" ? "<0" : instRsAccelFilter === "improving" ? "\u2191" : "\u2191\u2191"}</span>
+                  <span className="text-white">{instRsAccelFilter === "all" ? "Any" : instRsAccelFilter === "positive" ? ">0" : instRsAccelFilter === "strong" ? "\u22652" : instRsAccelFilter === "negative" ? "<0" : instRsAccelFilter === "improving" ? "\u2191" : instRsAccelFilter === "fast_improving" ? "\u2191\u2191" : "\u2193"}</span>
                 </div>
                 <select
                   value={instRsAccelFilter}
@@ -1428,6 +1432,7 @@ function PreRunPage() {
                   <option value="negative">Negative</option>
                   <option value="improving">Improving (&uarr;)</option>
                   <option value="fast_improving">Fast Improving (&uarr;&uarr;)</option>
+                  <option value="fading">Fading (&gt;0 + &darr;)</option>
                 </select>
               </div>
               {/* Earnings Within */}
