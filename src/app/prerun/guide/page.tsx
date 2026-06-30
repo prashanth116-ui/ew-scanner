@@ -1281,6 +1281,74 @@ export default function PreRunGuidePage() {
             </p>
           </div>
 
+          {/* RS Acceleration Filter Guide */}
+          <div className="mt-4 rounded-lg border border-[#5ba3e6]/20 bg-[#5ba3e6]/5 px-4 py-3">
+            <p className="text-xs font-medium text-[#5ba3e6] mb-2">RS Acceleration Filter &mdash; How to Read It</p>
+            <p className="text-[10px] text-[#888] mb-3">
+              The RS Accel dropdown combines two measurements: <strong className="text-[#c0c0c0]">RS Accel</strong> (is the stock outperforming SPY right now?) and <strong className="text-[#c0c0c0]">RS Trend</strong> (is that outperformance getting better or worse day over day?). Each option targets a different stage of the momentum lifecycle.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[10px]">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#888]">
+                    <th className="py-1.5 text-left font-medium">Filter</th>
+                    <th className="py-1.5 text-left font-medium">RS Value</th>
+                    <th className="py-1.5 text-left font-medium">RS Trend</th>
+                    <th className="py-1.5 text-left font-medium">What It Means</th>
+                    <th className="py-1.5 text-left font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Positive (&gt;0)</td>
+                    <td className="py-1.5 pr-2 text-green-400">&gt; 0</td>
+                    <td className="py-1.5 pr-2 text-[#888]">any</td>
+                    <td className="py-1.5 pr-2">Currently outperforming SPY. Trend could be rising or fading.</td>
+                    <td className="py-1.5">Baseline filter &mdash; stock has relative strength</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Strong (&ge;2)</td>
+                    <td className="py-1.5 pr-2 text-emerald-400">&ge; 2</td>
+                    <td className="py-1.5 pr-2 text-[#888]">any</td>
+                    <td className="py-1.5 pr-2">Significantly outperforming SPY. Institutional-grade momentum.</td>
+                    <td className="py-1.5">High-conviction entries, confirmed leaders</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Negative</td>
+                    <td className="py-1.5 pr-2 text-red-400">&lt; 0</td>
+                    <td className="py-1.5 pr-2 text-[#888]">any</td>
+                    <td className="py-1.5 pr-2">Underperforming SPY. Lagging the market.</td>
+                    <td className="py-1.5">Avoid unless trend is improving (see Improving)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Improving (&uarr;)</td>
+                    <td className="py-1.5 pr-2 text-[#888]">any</td>
+                    <td className="py-1.5 pr-2 text-amber-400">&gt; 0</td>
+                    <td className="py-1.5 pr-2">RS is getting better day over day. The trajectory is positive even if RS is still negative (e.g. TSLA: RS &minus;0.16 but trend +2.7).</td>
+                    <td className="py-1.5">Early detection &mdash; catch stocks approaching leadership</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Fast Improving (&uarr;&uarr;)</td>
+                    <td className="py-1.5 pr-2 text-[#888]">any</td>
+                    <td className="py-1.5 pr-2 text-emerald-400">&ge; 2</td>
+                    <td className="py-1.5 pr-2">RS improving rapidly. Aggressive acceleration toward outperformance.</td>
+                    <td className="py-1.5">Strongest emerging momentum &mdash; rotation target</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Fading (&gt;0 + &darr;)</td>
+                    <td className="py-1.5 pr-2 text-green-400">&gt; 0</td>
+                    <td className="py-1.5 pr-2 text-red-400">&lt; 0</td>
+                    <td className="py-1.5 pr-2">Still outperforming SPY but losing momentum. RS is positive today but deteriorating session over session.</td>
+                    <td className="py-1.5">Early warning &mdash; tighten stops, avoid new entries</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-[10px] text-[#666]">
+              <strong className="text-[#888]">Momentum lifecycle:</strong> Improving &rarr; Fast Improving &rarr; Positive &rarr; Strong &rarr; Fading &rarr; Negative. The filter lets you target any stage. Badge on each card shows both values: <span className="text-white">RS +1.3</span> (current) and <span className="text-amber-400">&uarr;2.7</span> (trend).
+            </p>
+          </div>
+
           {/* Best Selection Criteria */}
           <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
             <p className="text-xs font-medium text-emerald-400 mb-2">Quick-Pick Presets (clickable above results)</p>
