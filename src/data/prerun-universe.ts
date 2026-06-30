@@ -5,6 +5,7 @@
 
 import { SQUEEZE_UNIVERSE } from "./squeeze-universe";
 import { getSectorForSymbol, getSectorETFForSymbol } from "./sector-universe";
+import { getTickerTier } from "./index-tiers";
 
 /** Build SCAN_UNIVERSE: { sectorName → ticker[] }, "Other" last. */
 const SCAN_UNIVERSE: Record<string, string[]> = (() => {
@@ -17,7 +18,7 @@ const SCAN_UNIVERSE: Record<string, string[]> = (() => {
   for (const k of Object.keys(buckets).sort((a, b) =>
     a === "Other" ? 1 : b === "Other" ? -1 : a.localeCompare(b)
   )) {
-    sorted[k] = buckets[k].sort();
+    sorted[k] = buckets[k].sort((a, b) => getTickerTier(a) - getTickerTier(b) || a.localeCompare(b));
   }
   return sorted;
 })();
