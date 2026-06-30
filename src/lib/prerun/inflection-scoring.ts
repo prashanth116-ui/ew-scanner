@@ -94,50 +94,60 @@ function scoreSellerExhaustion(data: PreRunStockData): { score: number; evidence
 }
 
 // ── 2. Volatility Compression (0-100) ──
+// All thresholds are RELATIVE to the stock's own history, not absolute.
+// A $400 TSLA with 4.5% ATR compressing to 3.8% scores the same as
+// a $25 stock with 1.5% ATR compressing to 1.2%.
 
 function scoreVolatilityCompression(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
   let score = 0;
   const evidence: string[] = [];
   const caution: string[] = [];
 
-  // ATR ratio 5/20 (0-20) — lower = more compressed
+  // ATR ratio 5/20 (0-25) — lower = more compressed relative to own history
+  // This is already fully relative: ATR(5) / ATR(20) for the same stock
   const atrRatio = data.atrRatio5v20 ?? 1.0;
-  if (atrRatio <= 0.5) { score += 20; evidence.push("Extreme volatility compression (ATR ratio)"); }
-  else if (atrRatio <= 0.7) { score += 16; evidence.push("Strong volatility squeeze"); }
-  else if (atrRatio <= 0.85) { score += 10; evidence.push("Volatility contracting"); }
-  else if (atrRatio <= 1.0) { score += 5; }
+  if (atrRatio <= 0.5) { score += 25; evidence.push("Extreme volatility compression (ATR ratio " + atrRatio.toFixed(2) + ")"); }
+  else if (atrRatio <= 0.65) { score += 20; evidence.push("Strong volatility squeeze (ATR ratio " + atrRatio.toFixed(2) + ")"); }
+  else if (atrRatio <= 0.8) { score += 14; evidence.push("Volatility contracting"); }
+  else if (atrRatio <= 0.95) { score += 8; evidence.push("Mild compression"); }
+  else if (atrRatio <= 1.05) { score += 3; }
   else { caution.push("Volatility expanding — no compression"); }
 
-  // Range nesting: 5d < 10d < 20d (0-20)
+  // Range contraction ratio: 5d/20d and 10d/20d (0-25)
+  // Measures how much the recent range has contracted vs the wider base — fully relative
   const r5 = data.vcpRange5d ?? 100;
   const r10 = data.vcpRange10d ?? 100;
   const r20 = data.vcpRange20d ?? 100;
-  if (r5 < r10 && r10 < r20 && r5 < 3) { score += 20; evidence.push("Tight nested ranges — classic compression"); }
-  else if (r5 < r10 && r10 < r20) { score += 14; evidence.push("Ranges nesting (5d < 10d < 20d)"); }
-  else if (r5 < r10) { score += 8; }
+  const rangeRatio5v20 = r20 > 0 ? r5 / r20 : 1;
+  const rangeRatio10v20 = r20 > 0 ? r10 / r20 : 1;
 
-  // Tight closes (0/15)
+  if (r5 < r10 && r10 < r20 && rangeRatio5v20 <= 0.35) {
+    score += 25; evidence.push("Tight nested ranges contracting sharply (5d/20d: " + (rangeRatio5v20 * 100).toFixed(0) + "%)");
+  } else if (r5 < r10 && r10 < r20 && rangeRatio5v20 <= 0.55) {
+    score += 20; evidence.push("Nested ranges contracting (5d/20d: " + (rangeRatio5v20 * 100).toFixed(0) + "%)");
+  } else if (r5 < r10 && r10 < r20) {
+    score += 14; evidence.push("Ranges nesting (5d < 10d < 20d)");
+  } else if (rangeRatio5v20 <= 0.55) {
+    score += 10; evidence.push("5d range contracted vs 20d");
+  } else if (r5 < r10) {
+    score += 5;
+  }
+
+  // Tight closes (0/15) — already relative (spread as % of price)
   if (data.vcpTightCloses === true) { score += 15; evidence.push("Tight cluster of closes — coiling"); }
 
-  // Inside bars (0-15)
+  // Inside bars (0-15) — purely structural, no absolute thresholds
   const insideBars = data.vcpInsideBarCount ?? 0;
   if (insideBars >= 3) { score += 15; evidence.push(`${insideBars} inside bars — extreme compression`); }
   else if (insideBars >= 2) { score += 10; evidence.push(`${insideBars} inside bars`); }
   else if (insideBars >= 1) { score += 5; }
 
-  // ATR % of price (0-15) — lower = tighter
-  const atrPct = data.vcpAtrPct ?? 5;
-  if (atrPct <= 1.0) { score += 15; evidence.push("Very low ATR% — compressed range"); }
-  else if (atrPct <= 1.5) { score += 12; }
-  else if (atrPct <= 2.5) { score += 7; }
-  else if (atrPct <= 3.5) { score += 3; }
-  else { caution.push("High ATR% — no compression"); }
-
-  // Dry volume days (0-15)
+  // Dry volume days (0-20) — relative: compares to stock's own avg volume
   const dryDays = data.vcpDryVolumeDays ?? 0;
-  if (dryDays >= 5) { score += 15; evidence.push("Multiple dry volume days — volume drying up"); }
-  else if (dryDays >= 3) { score += 10; evidence.push("Volume declining into base"); }
-  else if (dryDays >= 2) { score += 5; }
+  if (dryDays >= 5) { score += 20; evidence.push("Multiple dry volume days — volume drying up"); }
+  else if (dryDays >= 3) { score += 14; evidence.push("Volume declining into base"); }
+  else if (dryDays >= 2) { score += 8; }
+  else if (dryDays >= 1) { score += 3; }
 
   return { score: clamp(score, 0, 100), evidence, caution };
 }
@@ -193,38 +203,58 @@ function scoreBuyerEmergence(data: PreRunStockData): { score: number; evidence: 
 }
 
 // ── 4. Relative Strength (0-100) ──
+// At inflection points, absolute RS is often negative (stock was in a downtrend).
+// The key signal is RS *improving* — the trajectory matters more than the level.
 
 function scoreRelativeStrength(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
   let score = 0;
   const evidence: string[] = [];
   const caution: string[] = [];
 
-  // RS vs SPY (0-30)
+  // RS vs SPY — absolute level (0-25)
   const rsSpy = data.vcpRelStrengthVsSPY ?? 0;
-  if (rsSpy >= 10) { score += 30; evidence.push(`Outperforming SPY by ${rsSpy.toFixed(1)}pp — strong RS`); }
-  else if (rsSpy >= 5) { score += 22; evidence.push(`Outperforming SPY by ${rsSpy.toFixed(1)}pp`); }
+  if (rsSpy >= 10) { score += 25; evidence.push(`Outperforming SPY by ${rsSpy.toFixed(1)}pp — strong RS`); }
+  else if (rsSpy >= 5) { score += 20; evidence.push(`Outperforming SPY by ${rsSpy.toFixed(1)}pp`); }
   else if (rsSpy >= 2) { score += 14; }
-  else if (rsSpy >= 0) { score += 6; }
+  else if (rsSpy >= 0) { score += 8; }
+  else if (rsSpy >= -5) { score += 3; }
   else { caution.push(`Underperforming SPY by ${Math.abs(rsSpy).toFixed(1)}pp`); }
 
-  // RS vs sector (0-25)
+  // RS vs sector — absolute level (0-20)
   const rsSector = data.relativeStrength20d ?? 0;
-  if (rsSector >= 8) { score += 25; evidence.push(`Leading sector by ${rsSector.toFixed(1)}pp`); }
-  else if (rsSector >= 4) { score += 18; evidence.push(`Outperforming sector by ${rsSector.toFixed(1)}pp`); }
+  if (rsSector >= 8) { score += 20; evidence.push(`Leading sector by ${rsSector.toFixed(1)}pp`); }
+  else if (rsSector >= 4) { score += 15; evidence.push(`Outperforming sector by ${rsSector.toFixed(1)}pp`); }
   else if (rsSector >= 1) { score += 10; }
-  else if (rsSector >= 0) { score += 4; }
+  else if (rsSector >= 0) { score += 5; }
+  else if (rsSector >= -3) { score += 2; }
   else { caution.push("Lagging sector peers"); }
 
-  // RS acceleration (0-25)
+  // RS acceleration / trajectory (0-30) — MOST IMPORTANT for inflection detection
+  // At bottoms, RS starts improving before it turns positive.
+  // A stock going from -15% to -8% RS is improving even though RS is still negative.
   const rsAccel = data.instRsAccelVsSPY ?? 0;
-  if (rsAccel >= 5) { score += 25; evidence.push("RS accelerating sharply"); }
-  else if (rsAccel >= 3) { score += 18; evidence.push("RS acceleration positive"); }
-  else if (rsAccel >= 1) { score += 10; }
-  else if (rsAccel >= 0) { score += 4; }
+  const rsAccelTrend = data.instRsAccelTrend ?? 0;
+
+  if (rsAccel >= 5) {
+    score += 25; evidence.push("RS accelerating sharply vs SPY");
+  } else if (rsAccel >= 3) {
+    score += 20; evidence.push("RS acceleration positive");
+  } else if (rsAccel >= 1) {
+    score += 14; evidence.push("RS improving vs SPY");
+  } else if (rsAccelTrend > 0 && rsAccel > -1) {
+    // RS still negative but trajectory is positive — early inflection signal
+    score += 10; evidence.push("RS trajectory improving (early signal)");
+  } else if (rsAccelTrend > 0) {
+    score += 5;
+  }
+
+  // Bonus: RS trend direction confirms trajectory (0-5)
+  if (rsAccelTrend >= 2) { score += 5; evidence.push("RS acceleration trending higher day over day"); }
+  else if (rsAccelTrend >= 0.5) { score += 3; }
 
   // Holds in market weakness (0-20) — outperforming sector when sector is weak
   const sectorRet = data.sectorReturn20d ?? 0;
-  if (sectorRet < 0 && rsSector > 3) {
+  if (sectorRet < -3 && rsSector > 3) {
     score += 20;
     evidence.push("Holding strong while sector weakens — relative leader");
   } else if (sectorRet < 0 && rsSector > 0) {
@@ -278,11 +308,12 @@ function scoreLiquidityAuction(data: PreRunStockData): { score: number; evidence
   else if (ft >= 0.5) { score += 8; }
   else if (ft >= 0.2) { score += 4; }
 
-  // Tight range proxy — ATR% as confirmation (0-15)
-  const atrPct = data.vcpAtrPct ?? 5;
-  if (atrPct <= 1.5) { score += 15; }
-  else if (atrPct <= 2.5) { score += 10; }
-  else if (atrPct <= 3.5) { score += 5; }
+  // Auction quality proxy — ATR contracting relative to own history (0-15)
+  // Uses ATR ratio (already relative) instead of absolute ATR%
+  const atrRatio = data.atrRatio5v20 ?? 1.0;
+  if (atrRatio <= 0.65) { score += 15; evidence.push("Orderly auction — volatility contracting"); }
+  else if (atrRatio <= 0.85) { score += 10; }
+  else if (atrRatio <= 1.0) { score += 5; }
 
   return { score: clamp(score, 0, 100), evidence, caution };
 }
@@ -352,12 +383,19 @@ function classifyStage(
 
   // EARLY_ACCUMULATION: buyers clearly emerging with strength
   if (be >= 60 && rs >= 50 && se >= 40) return "EARLY_ACCUMULATION";
+  // Alt path: very strong buyer emergence compensates for weaker RS at inflection points
+  if (be >= 65 && rs >= 30 && se >= 45) return "EARLY_ACCUMULATION";
 
   // INFLECTION: sellers exhausted + compressed + buyers starting
-  if (se >= 50 && vc >= 50 && be >= 35) return "INFLECTION";
+  if (se >= 50 && vc >= 40 && be >= 35) return "INFLECTION";
+  // Alt path: very strong exhaustion + emerging buyers even without full compression
+  if (se >= 60 && be >= 40 && vc >= 20) return "INFLECTION";
 
-  // SELLER_EXHAUSTION: selling pressure declining but no buyers yet
-  if (se >= 45 && vc >= 30) return "SELLER_EXHAUSTION";
+  // SELLER_EXHAUSTION: selling pressure declining — compression may still be developing
+  // At this stage, range may not have contracted yet. SE is the primary signal.
+  if (se >= 45 && vc >= 15) return "SELLER_EXHAUSTION";
+  // Alt path: very strong exhaustion signals alone
+  if (se >= 55) return "SELLER_EXHAUSTION";
 
   // DISTRIBUTION: default
   return "DISTRIBUTION";

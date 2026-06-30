@@ -155,6 +155,9 @@ function PreRunPage() {
   // Quadrant pre-scan filter
   const [quadrantFilter, setQuadrantFilter] = usePersistedFilter("ew-filter:prerun:quadrantFilter", "All");
 
+  // Active preset tracking (persisted so it survives page reloads)
+  const [activePresetName, setActivePresetName] = usePersistedFilter("ew-filter:prerun:activePreset", "");
+
   // Quick Scan mode
   type ScanMode = "quick" | "full";
   const [scanMode, setScanMode] = usePersistedFilter<ScanMode>("ew-filter:prerun:scanMode", "quick");
@@ -185,7 +188,7 @@ function PreRunPage() {
   const [inflectionResults, setInflectionResults] = useState<InflectionResult[]>([]);
   const [inflectionMinScore, setInflectionMinScore] = usePersistedFilter("ew-filter:prerun:inflectionMinScore", 0);
   const [inflectionStageFilter, setInflectionStageFilter] = usePersistedFilter("ew-filter:prerun:inflectionStageFilter", "All");
-  const [inflectionTradeReadFilter, setInflectionTradeReadFilter] = usePersistedFilter("ew-filter:prerun:inflectionTradeReadFilter", "All");
+  const [inflectionTradeReadFilter, setInflectionTradeReadFilter] = usePersistedFilter("ew-filter:prerun:inflectionTradeReadFilter", "Actionable");
   const [inflectionSortKey, setInflectionSortKey] = usePersistedFilter<InflectionSortKey>("ew-filter:prerun:inflectionSortKey", "overall");
 
   // Criteria-level filters (from presets like Stage 1→2)
@@ -637,10 +640,28 @@ function PreRunPage() {
     return inflectionResults.filter((r) => {
       if (inflectionMinScore > 0 && r.scores.overallScore < inflectionMinScore) return false;
       if (inflectionStageFilter !== "All" && r.stage !== inflectionStageFilter) return false;
-      if (inflectionTradeReadFilter !== "All" && r.tradeRead !== inflectionTradeReadFilter) return false;
+      if (inflectionTradeReadFilter === "Actionable" && r.tradeRead === "AVOID") return false;
+      if (inflectionTradeReadFilter !== "All" && inflectionTradeReadFilter !== "Actionable" && r.tradeRead !== inflectionTradeReadFilter) return false;
+      // RS accel filter (shared with institutional mode)
+      if (instRsAccelFilter !== "all") {
+        const rs = r.data.instRsAccelVsSPY ?? 0;
+        if (instRsAccelFilter === "positive" && rs <= 0) return false;
+        if (instRsAccelFilter === "strong" && rs < 2) return false;
+        if (instRsAccelFilter === "negative" && rs >= 0) return false;
+        if (instRsAccelFilter === "improving" && (r.data.instRsAccelTrend ?? 0) <= 0) return false;
+        if (instRsAccelFilter === "fast_improving" && (r.data.instRsAccelTrend ?? 0) < 2) return false;
+        if (instRsAccelFilter === "fading" && (rs <= 0 || (r.data.instRsAccelTrend ?? 0) >= 0)) return false;
+      }
+      // RRG quadrant filter (shared with institutional mode)
+      if (quadrantFilter !== "All" && Object.keys(sectorQuadrants).length > 0) {
+        const sector = getSectorForTicker(r.data.ticker);
+        const quad = sector ? sectorQuadrants[sector] : undefined;
+        const allowedQuadrants = quadrantFilter.split(",");
+        if (!quad || !allowedQuadrants.includes(quad)) return false;
+      }
       return true;
     });
-  }, [inflectionResults, inflectionMinScore, inflectionStageFilter, inflectionTradeReadFilter]);
+  }, [inflectionResults, inflectionMinScore, inflectionStageFilter, inflectionTradeReadFilter, instRsAccelFilter, quadrantFilter, sectorQuadrants]);
 
   const inflectionSorted = useMemo(() => {
     const arr = [...inflectionFiltered];
@@ -1127,6 +1148,7 @@ function PreRunPage() {
 
   // Preset
   const applyPreset = useCallback((preset: typeof PRERUN_PRESETS[number]) => {
+    setActivePresetName(preset.name);
     const f = { ...DEFAULT_PRERUN_FILTERS, ...preset.filters };
     setMinPctFromAth(f.minPctFromAth);
     setMaxPctFromAth(f.maxPctFromAth);
@@ -1164,7 +1186,7 @@ function PreRunPage() {
     if (preset.viewMode === "inflection") {
       setInflectionMinScore(0);
       setInflectionStageFilter("All");
-      setInflectionTradeReadFilter("All");
+      setInflectionTradeReadFilter("Actionable");
     }
   }, []);
 
@@ -1219,7 +1241,7 @@ function PreRunPage() {
       <SidebarShell open={sidebarOpen} onToggle={setSidebarOpen}>
         {/* Quick Presets */}
         <SidebarSection title="Quick Presets" sectionKey="presets" collapsed={collapsed.has("presets")} onToggle={toggleSection}>
-          <PresetList presets={PRERUN_PRESETS} onSelect={applyPreset} />
+          <PresetList presets={PRERUN_PRESETS} onSelect={applyPreset} activePresetName={activePresetName} />
         </SidebarSection>
 
         {/* Filters (hidden for institutional/inflection — inline filter bar used instead) */}
@@ -2258,11 +2280,25 @@ function PreRunPage() {
               <option value="DISTRIBUTION">Distribution</option>
             </select>
             <select value={inflectionTradeReadFilter} onChange={(e) => setInflectionTradeReadFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="Actionable">Actionable (no Avoid)</option>
               <option value="All">All Trade Reads</option>
               <option value="STARTER_POSITION_CANDIDATE">Starter Position</option>
               <option value="ADD_ON_CONFIRMATION">Add on Confirm</option>
               <option value="WATCH">Watch</option>
               <option value="AVOID">Avoid</option>
+            </select>
+            <select value={instRsAccelFilter} onChange={(e) => setInstRsAccelFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="all">All RS</option>
+              <option value="positive">&#9650; Positive</option>
+              <option value="strong">&#9650;&#9650; Strong</option>
+              <option value="negative">&#9660; Negative</option>
+              <option value="improving">&#8599; Improving</option>
+              <option value="fast_improving">&#8648; Accelerating</option>
+              <option value="fading">&#9650;&#8600; Fading</option>
+            </select>
+            <select value={quadrantFilter} onChange={(e) => setQuadrantFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="All">All Quadrants</option>
+              {RRG_QUADRANTS.map((q) => <option key={q} value={q}>{q}</option>)}
             </select>
           </div>
         )}

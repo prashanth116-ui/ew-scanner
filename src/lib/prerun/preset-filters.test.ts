@@ -665,8 +665,8 @@ describe("skipGate1 behavior", () => {
 // ═══════════════════════════════════════════════════════════
 
 describe("Preset definitions", () => {
-  it("all 8 presets exist", () => {
-    expect(PRERUN_PRESETS).toHaveLength(8);
+  it("all 9 presets exist", () => {
+    expect(PRERUN_PRESETS).toHaveLength(9);
   });
 
   it("Pullback Buy has maxPctFromAth set", () => {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookOpen, AlertTriangle, TrendingUp, Zap, Target, Shield, Layers, ChevronDown, ChevronUp, ClipboardList, Database, Sparkles, Activity } from "lucide-react";
+import { BookOpen, AlertTriangle, TrendingUp, Zap, Target, Shield, Layers, ChevronDown, ChevronUp, ClipboardList, Database, Sparkles, Activity, BarChart3 } from "lucide-react";
 
 function Section({
   icon: Icon,
@@ -768,34 +768,44 @@ export default function PreRunGuidePage() {
         {/* Presets */}
         <Section icon={Target} title="Presets at a Glance">
           <p>
-            Presets configure filters and criteria thresholds in one click. Select a preset from the sidebar to apply.
+            Presets configure filters, criteria thresholds, and view modes in one click.
+            Select a preset from the sidebar to apply. Each preset is designed for a specific
+            market behavior pattern &mdash; choose the one that matches your current thesis.
           </p>
+
+          {/* Summary Table */}
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-[#2a2a2a] text-[#666]">
                   <th className="py-1.5 pr-3 text-left font-medium">Preset</th>
-                  <th className="py-1.5 pr-3 text-right font-medium">ATH%</th>
-                  <th className="py-1.5 pr-3 text-right font-medium">SI%</th>
+                  <th className="py-1.5 pr-3 text-left font-medium">View Mode</th>
                   <th className="py-1.5 pr-3 text-right font-medium">Score</th>
                   <th className="py-1.5 text-left font-medium">Best For</th>
                 </tr>
               </thead>
               <tbody className="text-[#c0c0c0]">
                 {[
-                  { name: "SNDK", ath: "40%", si: "15%", score: "18", use: "Classic multi-bagger: deep base + high SI. Catches early base formation." },
-                  { name: "Early Mover", ath: "25%", si: "Any", score: "14", use: "Stage 1\u21922: EMA timing + higher lows + volume accumulation (M2/L/F\u22651). Multi-TF enabled." },
-                  { name: "Pullback Buy", ath: "20\u201340%", si: "Any", score: "15", use: "20-40% pullback with higher lows + M2 timing + volume confirmation (M2/F/L\u22651)" },
-                  { name: "Leading", ath: "Any*", si: "Any", score: "12", use: "RRG LEADING/IMPROVING sectors with EMA confirmation (M\u22651). Skips ATH + base gates." },
-                  { name: "Stealth", ath: "20%", si: "Any", score: "11", use: "OBV or VP divergence + EMA timing (M2\u22651). Institutional buying while price stays flat." },
-                  { name: "Aggressive Early", ath: "20%", si: "Any", score: "10", use: "Volume divergence + range coil + EMA timing (M2/N\u22651). Pre-breakout detection." },
-                  { name: "VCP Breakout", ath: "Any", si: "Any", score: "65", use: "Institutional VCP mode: uptrend + compression + tight base near pivot (separate 0-100 engine)" },
-                  { name: "Inst. Acceleration", ath: "Any", si: "Any", score: "\u2014", use: "Large-cap institutional runners \u2014 RS acceleration, volume accumulation, structure analysis (separate 0-100 engine)" },
+                  { name: "SNDK Pattern", mode: "Standard", score: "\u226518", use: "Classic multi-bagger: deep base + high short interest" },
+                  { name: "Early Mover", mode: "Standard", score: "\u226514", use: "Stage 1\u21922 breakout with EMA timing + structure" },
+                  { name: "Pullback Buy", mode: "Standard", score: "\u226515", use: "Buying 20-40% pullbacks with confirmed structure" },
+                  { name: "Leading Sector", mode: "Standard", score: "\u226512", use: "Sector leaders near ATH in favorable rotation" },
+                  { name: "Stealth Accum.", mode: "Standard", score: "\u226511", use: "Hidden institutional buying via volume divergence" },
+                  { name: "Aggressive Early", mode: "Standard", score: "\u226510", use: "Pre-breakout detection 1-2 weeks ahead" },
+                  { name: "VCP Breakout", mode: "VCP", score: "\u226565", use: "Tight volatility contraction near breakout pivot" },
+                  { name: "Inst. Acceleration", mode: "Institutional", score: "\u2014", use: "Large-cap RS acceleration + volume accumulation" },
+                  { name: "Inflection Engine", mode: "Inflection", score: "\u2014", use: "State transitions: exhaustion \u2192 compression \u2192 emergence" },
                 ].map((p) => (
                   <tr key={p.name} className="border-b border-[#2a2a2a]/50">
                     <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{p.name}</td>
-                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{p.ath}</td>
-                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{p.si}</td>
+                    <td className="py-1.5 pr-3">
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                        p.mode === "Standard" ? "bg-[#5ba3e6]/10 text-[#5ba3e6]" :
+                        p.mode === "VCP" ? "bg-purple-500/10 text-purple-400" :
+                        p.mode === "Institutional" ? "bg-emerald-500/10 text-emerald-400" :
+                        "bg-amber-500/10 text-amber-400"
+                      }`}>{p.mode}</span>
+                    </td>
                     <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{p.score}</td>
                     <td className="py-1.5">{p.use}</td>
                   </tr>
@@ -803,11 +813,428 @@ export default function PreRunGuidePage() {
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-xs text-[#666]">
-            <strong className="text-[#a0a0a0]">Default filters:</strong> 20% from ATH, score &ge;11.
-            Presets override only the values shown &mdash; unspecified filters use defaults.
-            <br />
-            <strong className="text-[#a0a0a0]">*Leading preset:</strong> Skips Gate 1 (ATH distance) and Gate 3 (base forming) to include sector leaders near all-time highs. Uses totalScore instead of finalScore since gates are bypassed. Requires <Link href="/sectors" className="underline hover:text-[#5ba3e6]">/sectors</Link> data for RRG quadrant filtering.
+
+          {/* Detailed Preset Cards */}
+          <div className="mt-5 space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6]">
+              Detailed Preset Guide
+            </h3>
+
+            {/* SNDK Pattern */}
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="rounded bg-[#5ba3e6]/20 px-2 py-0.5 text-xs font-bold text-[#5ba3e6]">1</span>
+                <span className="text-sm font-bold text-white">SNDK Pattern</span>
+                <span className="ml-auto rounded bg-green-500/20 px-2 py-0.5 text-[10px] font-medium text-green-400">RECOMMENDED</span>
+              </div>
+              <p className="text-xs text-[#a0a0a0] mb-3">
+                Named after the SanDisk acquisition pattern. Targets stocks &ge;40% below ATH with high short interest (&ge;15%),
+                forming bases that create multi-bagger potential when short squeezes combine with fundamental catalysts.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Min ATH%</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">40%</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Min SI%</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">15%</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Min Score</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">18</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">View Mode</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">Standard</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <p className="font-medium text-white">Best conditions for results:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-[#a0a0a0]">
+                  <li>Look for stocks with SI &gt;20% and weeksInBase &gt;13 for the strongest setups</li>
+                  <li>Combine with criteria <strong className="text-white">B &ge;2</strong> (short interest) + <strong className="text-white">D &ge;2</strong> (earnings inflection) for highest conviction</li>
+                  <li>OBV divergence active = institutional accumulation before squeeze</li>
+                  <li>Best results when overall market is recovering from correction (rising tide lifts squeezed names)</li>
+                  <li>Pair with EMA timing (M2 &ge;1) to time entries &mdash; SNDK pattern identifies <em>what</em>, M2 tells you <em>when</em></li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Early Mover */}
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="rounded bg-[#5ba3e6]/20 px-2 py-0.5 text-xs font-bold text-[#5ba3e6]">2</span>
+                <span className="text-sm font-bold text-white">Early Mover</span>
+              </div>
+              <p className="text-xs text-[#a0a0a0] mb-3">
+                Catches Stage 1&rarr;2 transitions: stocks forming bases that are starting to show signs of accumulation
+                and structural improvement. Uses multi-timeframe EMA analysis to confirm timing.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Min ATH%</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">25%</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Min Score</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">14</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Criteria</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">M2/L/F &ge;1</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Multi-TF</p>
+                  <p className="text-xs font-bold text-green-400">ON</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <p className="font-medium text-white">Best conditions for results:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-[#a0a0a0]">
+                  <li>Requires all three criteria: <strong className="text-white">M2 &ge;1</strong> (EMA timing), <strong className="text-white">L &ge;1</strong> (higher lows), <strong className="text-white">F &ge;1</strong> (volume accumulation)</li>
+                  <li>Multi-TF mode checks 7 timeframes (15m to 1mo) &mdash; look for alignment across 2+ timeframes for strongest signals</li>
+                  <li>Higher confidence when <strong className="text-white">K &ge;1</strong> (within 10% of base high) showing breakout proximity</li>
+                  <li>Works best in sector rotation environments where money flows from strong sectors into laggard recoveries</li>
+                  <li>Filter by sector to find rotation targets: stocks in sectors transitioning from LAGGING to IMPROVING on RRG</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Pullback Buy */}
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="rounded bg-[#5ba3e6]/20 px-2 py-0.5 text-xs font-bold text-[#5ba3e6]">3</span>
+                <span className="text-sm font-bold text-white">Pullback Buy</span>
+              </div>
+              <p className="text-xs text-[#a0a0a0] mb-3">
+                Identifies stocks that have pulled back 20-40% from ATH but are building constructive bases with higher lows.
+                Best risk/reward comes from buying confirmed pullbacks before they reverse back toward highs.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">ATH Range</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">20-40%</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Min Score</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">15</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Criteria</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">M2/F/L &ge;1</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Multi-TF</p>
+                  <p className="text-xs font-bold text-green-400">ON</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <p className="font-medium text-white">Best conditions for results:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-[#a0a0a0]">
+                  <li>Uses <strong className="text-white">maxPctFromAth: 40</strong> to exclude stocks in freefall (&gt;40% down) &mdash; only catches orderly pullbacks</li>
+                  <li>Strongest setups show <strong className="text-white">L = 2</strong> (3 consecutive higher lows) + <strong className="text-white">N &ge;1</strong> (range coiling / ATR contracting)</li>
+                  <li>Add <strong className="text-white">O &ge;1</strong> (failed breakdown recovery) for high-probability reversals</li>
+                  <li>Works best after broad market selloffs (VIX spike &rarr; calm) when quality names are temporarily discounted</li>
+                  <li>Check the sector momentum modifier: pullbacks in strong sectors (+1 modifier) recover faster than weak sectors (-1)</li>
+                  <li>Combine with Stealth Accum preset &mdash; overlap = highest conviction pullback entries</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Leading Sector Scan */}
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="rounded bg-[#5ba3e6]/20 px-2 py-0.5 text-xs font-bold text-[#5ba3e6]">4</span>
+                <span className="text-sm font-bold text-white">Leading Sector Scan</span>
+              </div>
+              <p className="text-xs text-[#a0a0a0] mb-3">
+                Finds stocks in RRG LEADING or IMPROVING sectors with confirmed EMA alignment. Skips Gate 1 (ATH distance)
+                and Gate 3 (base forming) to include sector leaders near or at all-time highs.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Min Score</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">12</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Criteria</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">M &ge;1</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">RRG Filter</p>
+                  <p className="text-xs font-bold text-green-400">LEADING + IMPROVING</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Gates Skipped</p>
+                  <p className="text-xs font-bold text-amber-400">G1, G3</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <p className="font-medium text-white">Best conditions for results:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-[#a0a0a0]">
+                  <li>Requires <Link href="/sectors" className="underline hover:text-[#5ba3e6]">/sectors</Link> data for RRG quadrant filtering &mdash; run sector scan first</li>
+                  <li>Uses <strong className="text-white">totalScore</strong> instead of finalScore since gates are bypassed (leaders near ATH would fail Gate 1)</li>
+                  <li>Add <strong className="text-white">J &ge;1</strong> (relative strength vs sector) to find stocks outperforming their already-strong sector</li>
+                  <li>Works best when 3+ sectors are in LEADING/IMPROVING quadrants (trending market, not choppy)</li>
+                  <li>Sort results by relative strength (J) to identify the strongest names in the strongest sectors</li>
+                  <li>Best paired with VCP Breakout scan on the same names &mdash; leaders near ATH often form VCP patterns before continuation</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Stealth Accumulation */}
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="rounded bg-[#5ba3e6]/20 px-2 py-0.5 text-xs font-bold text-[#5ba3e6]">5</span>
+                <span className="text-sm font-bold text-white">Stealth Accumulation</span>
+              </div>
+              <p className="text-xs text-[#a0a0a0] mb-3">
+                Detects institutional buying before price reacts. Uses OBV-price divergence (OBV near highs while price stays flat)
+                and volume-price divergence (lower price lows with declining sell volume). Smart money accumulating before breakout.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Min Score</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">11</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Criteria</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">M2 &ge;1</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">OBV Div</p>
+                  <p className="text-xs font-bold text-green-400">ON</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">VP Div</p>
+                  <p className="text-xs font-bold text-green-400">ON</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <p className="font-medium text-white">Best conditions for results:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-[#a0a0a0]">
+                  <li>Both divergence filters are OR logic &mdash; a stock passes if OBV <em>or</em> VP divergence is present</li>
+                  <li>Highest conviction when <strong className="text-white">both</strong> OBV + VP divergences are active simultaneously (double confirmation)</li>
+                  <li>Look for <strong className="text-white">F &ge;2</strong> (volume accumulation with divergence bonus) &mdash; confirms the volume signal programmatically</li>
+                  <li>Stocks scoring well here often show up in Early Mover 1-2 weeks later when price catches up to volume</li>
+                  <li>Works best in sideways/consolidation markets where institutional accumulation is hidden by flat price action</li>
+                  <li>Cross-reference with insider buying (<strong className="text-white">H &ge;1</strong>) &mdash; insiders + volume divergence = strong signal</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Aggressive Early */}
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="rounded bg-[#5ba3e6]/20 px-2 py-0.5 text-xs font-bold text-[#5ba3e6]">6</span>
+                <span className="text-sm font-bold text-white">Aggressive Early</span>
+              </div>
+              <p className="text-xs text-[#a0a0a0] mb-3">
+                Lowest score threshold (10) with the most filters active. Catches setups 1-2 weeks before breakout
+                by combining volume divergence, range coiling, and EMA timing. Higher false-positive rate but earlier detection.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Min Score</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">10</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Criteria</p>
+                  <p className="text-xs font-bold text-[#5ba3e6]">M2/N &ge;1</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Divergences</p>
+                  <p className="text-xs font-bold text-green-400">OBV + VP ON</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Multi-TF</p>
+                  <p className="text-xs font-bold text-green-400">ON</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <p className="font-medium text-white">Best conditions for results:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-[#a0a0a0]">
+                  <li>Requires <strong className="text-white">M2 &ge;1</strong> (EMA timing) + <strong className="text-white">N &ge;1</strong> (range coil/ATR contracting) &mdash; the coiling is the key signal</li>
+                  <li>Highest confidence when <strong className="text-white">N = 2</strong> (tight closes near range top + ATR contracting simultaneously)</li>
+                  <li>Lower score threshold means more results &mdash; manually prioritize stocks where multiple criteria score &ge;2</li>
+                  <li>Use as an &ldquo;early warning&rdquo; list: stocks that appear here should be checked against Pullback Buy or Early Mover in later weeks</li>
+                  <li>Best in a market transitioning from downtrend to uptrend (bottom-fishing with structure confirmation)</li>
+                  <li>Position size smaller on these setups (earlier = less confirmed = more risk)</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* VCP Breakout */}
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="rounded bg-purple-500/20 px-2 py-0.5 text-xs font-bold text-purple-400">7</span>
+                <span className="text-sm font-bold text-white">Inst. VCP Breakout</span>
+                <span className="ml-auto rounded bg-purple-500/20 px-2 py-0.5 text-[10px] font-medium text-purple-400">VCP MODE</span>
+              </div>
+              <p className="text-xs text-[#a0a0a0] mb-3">
+                Switches to a separate 0-100 scoring engine targeting institutional-quality stocks in confirmed
+                uptrends forming tight volatility contractions near breakout pivots. Opposite profile from standard mode:
+                strong stocks near highs, not beaten-down bases.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Min VCP Score</p>
+                  <p className="text-xs font-bold text-purple-400">65</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">6 Gates</p>
+                  <p className="text-xs font-bold text-purple-400">All must pass</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">5 Categories</p>
+                  <p className="text-xs font-bold text-purple-400">Trend/Vol/Comp/RS/Risk</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Risk Calc</p>
+                  <p className="text-xs font-bold text-green-400">Built-in</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <p className="font-medium text-white">Best conditions for results:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-[#a0a0a0]">
+                  <li>Score &ge;85 = <strong className="text-white">FOCUS LIST</strong>, 75-84 = Watchlist, 65-74 = Early Setup</li>
+                  <li>Strongest setups: <strong className="text-white">Compression &ge;20</strong> (all 5 compression signals firing) + <strong className="text-white">Trend &ge;20</strong></li>
+                  <li>Look for &ldquo;VCP Compression&rdquo; + &ldquo;Dry Volume&rdquo; badges together &mdash; the classic Minervini pattern</li>
+                  <li>Use the built-in risk calculator: set your account size and risk %, get exact entry/stop/target levels</li>
+                  <li>Works best in trending markets where institutional money is flowing &mdash; poor results in bear markets</li>
+                  <li>Pair with the Inst. Acceleration preset: find VCPs in stocks that the institutional scanner also flags as accumulating</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Inst. Acceleration */}
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-400">8</span>
+                <span className="text-sm font-bold text-white">Inst. Acceleration</span>
+                <span className="ml-auto rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">INSTITUTIONAL MODE</span>
+              </div>
+              <p className="text-xs text-[#a0a0a0] mb-3">
+                Targets large-cap institutional runners using RS acceleration, volume accumulation, and price structure analysis.
+                Designed for names like NOW, AVGO, NVDA &mdash; stocks with institutional-grade liquidity showing momentum acceleration.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">4 Gates</p>
+                  <p className="text-xs font-bold text-emerald-400">$20+/20B+/$100M+/1.5M+</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">4 Scores</p>
+                  <p className="text-xs font-bold text-emerald-400">Inst/Exec/Risk/Disc</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">12 Classes</p>
+                  <p className="text-xs font-bold text-emerald-400">Auto-classified</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">11 Filters</p>
+                  <p className="text-xs font-bold text-emerald-400">Inline filter bar</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <p className="font-medium text-white">Best conditions for results:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-[#a0a0a0]">
+                  <li>Use the <strong className="text-white">High Conviction</strong> quick-pick: Tier=Shortlist, Entry=HIGH, RS Accel=Positive, Score=60+</li>
+                  <li>For early detection: <strong className="text-white">Emerging Momentum</strong> filter (RS Accel = Improving) catches stocks before they become leaders</li>
+                  <li>Classification <strong className="text-white">CONTINUATION_LEADER</strong> = strongest trending stocks; <strong className="text-white">FRESH_ROTATION</strong> = early institutional money flow</li>
+                  <li>Enable both <strong className="text-white">OBV Div + VP Div</strong> toggles for stealth accumulation detection</li>
+                  <li>Works best in trending markets with clear sector rotation (not choppy, not V-bottom)</li>
+                  <li>Combine RRG quadrant filter (LEADING) with RS Accel (Strong) for the narrowest, highest-conviction list</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Inflection Engine */}
+            <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-400">9</span>
+                <span className="text-sm font-bold text-white">Inflection Engine</span>
+                <span className="ml-auto rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-400">INFLECTION MODE</span>
+              </div>
+              <p className="text-xs text-[#a0a0a0] mb-3">
+                Detects state transitions &mdash; the moment a stock flips from distribution to accumulation. Scores 6 behavioral
+                categories and classifies each stock&apos;s current stage. Designed to catch inflection points before directional moves.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">3 Gates</p>
+                  <p className="text-xs font-bold text-amber-400">$5+/$10M+/$500M+</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">6 Categories</p>
+                  <p className="text-xs font-bold text-amber-400">SE/VC/BE/RS/LA/IP</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">5 Stages</p>
+                  <p className="text-xs font-bold text-amber-400">Auto-classified</p>
+                </div>
+                <div className="rounded bg-[#1a1a1a] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-[#666]">Trade Read</p>
+                  <p className="text-xs font-bold text-amber-400">4 levels</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <p className="font-medium text-white">Best conditions for results:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-[#a0a0a0]">
+                  <li>Filter to stage <strong className="text-white">INFLECTION</strong> or <strong className="text-white">EARLY_ACCUMULATION</strong> for actionable setups</li>
+                  <li>Trade Read = <strong className="text-white">STARTER_POSITION_CANDIDATE</strong> = safest entries; <strong className="text-white">ADD_ON_CONFIRMATION</strong> = scale into existing positions</li>
+                  <li>Look for <strong className="text-white">Buyer Emergence &ge;60</strong> + <strong className="text-white">Seller Exhaustion &ge;50</strong> = classic inflection signature</li>
+                  <li>Avoid stocks flagged with <strong className="text-white">Extension Risk</strong> (too close to ATH or too far from EMA20)</li>
+                  <li>Primary signals (overall &ge;70 + correct stage + no extension risk) are the highest-quality inflection alerts</li>
+                  <li>Works best for catching bottoming patterns &mdash; best results after sector or broad market corrections</li>
+                  <li>Backtest your signals at <Link href="/backtest/inflection-engine" className="underline hover:text-[#5ba3e6]">/backtest/inflection-engine</Link> before committing capital</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* When to Use Which Preset */}
+          <div className="mt-5 rounded-lg border border-[#5ba3e6]/20 bg-[#5ba3e6]/5 px-4 py-3">
+            <p className="text-xs font-medium text-[#5ba3e6] mb-2">When to Use Which Preset</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Market Condition</th>
+                    <th className="py-1.5 text-left font-medium">Recommended Presets</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Strong uptrend</td>
+                    <td className="py-1.5">Leading Sector &rarr; VCP Breakout &rarr; Inst. Acceleration</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Recovering from pullback</td>
+                    <td className="py-1.5">Pullback Buy &rarr; Inflection Engine &rarr; Early Mover</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Sideways / choppy</td>
+                    <td className="py-1.5">Stealth Accum. &rarr; Aggressive Early &rarr; Inflection Engine</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Bear market / capitulation</td>
+                    <td className="py-1.5">SNDK Pattern &rarr; Inflection Engine (SELLER_EXHAUSTION stage)</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">Sector rotation active</td>
+                    <td className="py-1.5">Leading Sector &rarr; Inst. Acceleration (Fresh Rotation class)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <p className="mt-3 text-xs text-[#666]">
+            <strong className="text-[#a0a0a0]">Workflow tip:</strong> Run 2-3 presets per session &mdash;
+            one for confirmed setups (VCP, Institutional) and one for early detection (Early Mover, Stealth, Inflection).
+            Stocks that appear in multiple presets simultaneously are the highest-conviction opportunities.
           </p>
         </Section>
 
@@ -1389,6 +1816,300 @@ export default function PreRunGuidePage() {
                 Designed to detect setups like TSLA approaching institutional quality before they arrive.
               </p>
             </div>
+          </div>
+        </Section>
+
+        {/* Inflection Engine */}
+        <Section icon={BarChart3} title="Inflection Engine Scanner">
+          <p>
+            A separate view mode that detects <strong className="text-white">state transitions</strong> &mdash;
+            the moment a stock flips from distribution to accumulation. Unlike the standard scanner (which finds
+            beaten-down bases) or VCP (which finds tight contractions), the Inflection Engine scores 6 behavioral
+            categories to identify <em>where</em> a stock is in its market cycle and whether a directional move
+            is imminent. Select the <strong className="text-white">Inflection Engine</strong> preset to activate.
+          </p>
+
+          {/* Gates */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              3 Quality Gates (all must pass)
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Gate</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Rule</th>
+                    <th className="py-1.5 text-left font-medium">Threshold</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  {[
+                    { gate: "G1", rule: "Price above $5", threshold: "Price \u2265 $5" },
+                    { gate: "G2", rule: "Dollar volume liquidity", threshold: "Avg dollar volume \u2265 $10M/day" },
+                    { gate: "G3", rule: "Market capitalization", threshold: "Market cap \u2265 $500M" },
+                  ].map((g) => (
+                    <tr key={g.gate} className="border-b border-[#2a2a2a]/50">
+                      <td className="py-1.5 pr-3 font-medium text-white">{g.gate}</td>
+                      <td className="py-1.5 pr-3">{g.rule}</td>
+                      <td className="py-1.5 text-[#5ba3e6]">{g.threshold}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-1.5 text-[10px] text-[#666]">
+              Gates are lighter than Institutional (no $20+ price, no $20B cap requirement) because inflection
+              points occur across the cap spectrum. If any gate fails, overall score is forced to 0.
+            </p>
+          </div>
+
+          {/* Scoring Categories */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              6 Scoring Categories (max 100 weighted composite)
+            </h3>
+            <div className="space-y-3">
+              {[
+                {
+                  cat: "Seller Exhaustion",
+                  abbr: "SE",
+                  weight: "20%",
+                  max: 100,
+                  color: "text-red-400",
+                  bg: "bg-red-500/10 border-red-500/20",
+                  details: [
+                    "Down-volume declining: up/down vol ratio \u22651.5x = 20 pts, \u22651.2x = 14 pts",
+                    "RSI recovery from 30-45 range: RSI 30-35 = 20 pts (peak exhaustion), 35-45 = 14 pts",
+                    "Near 52-week low: within 10% = 15 pts, within 20% = 10 pts",
+                    "Volume-price divergence (VP): bullish divergence active = 15 pts",
+                    "Failed breakdown recovery: broke below + recovered = 15 pts, wick test = 8 pts",
+                    "Down-day bodies shrinking: current < previous avg = 15 pts, declining = 10 pts",
+                  ],
+                },
+                {
+                  cat: "Volatility Compression",
+                  abbr: "VC",
+                  weight: "15%",
+                  max: 100,
+                  color: "text-purple-400",
+                  bg: "bg-purple-500/10 border-purple-500/20",
+                  details: [
+                    "ATR ratio 5/20: ratio <0.7 = 20 pts, <0.85 = 14 pts (volatility squeezing)",
+                    "Range nesting: 5d < 10d < 20d = 20 pts, partial nesting = 10 pts",
+                    "Tight closes: last 5 candles close spread < 1.5% = 15 pts",
+                    "Inside bars: 3+ in last 5 bars = 15 pts, 2 = 10 pts",
+                    "ATR% below threshold: <1.5% = 15 pts, <2.5% = 10 pts",
+                    "Dry volume days: 5+ days below 60% avg vol = 15 pts, 3+ = 10 pts",
+                  ],
+                },
+                {
+                  cat: "Buyer Emergence",
+                  abbr: "BE",
+                  weight: "25%",
+                  max: 100,
+                  color: "text-emerald-400",
+                  bg: "bg-emerald-500/10 border-emerald-500/20",
+                  details: [
+                    "Up/down volume ratio: \u22651.5x = 20 pts, \u22651.2x = 14 pts (buyers taking control)",
+                    "OBV divergence: OBV near 20-bar high while price is not = 15 pts",
+                    "Higher lows count: 3 consecutive = 20 pts, 2 = 14 pts",
+                    "EMA reclaim: above both 21+50 EMA = 15 pts, one EMA = 8 pts",
+                    "Accumulation days: 8+ up-days with above-avg volume = 15 pts",
+                    "Breakout proximity: <5% from base high = 15 pts, <10% = 10 pts",
+                  ],
+                },
+                {
+                  cat: "Relative Strength",
+                  abbr: "RS",
+                  weight: "15%",
+                  max: 100,
+                  color: "text-cyan-400",
+                  bg: "bg-cyan-500/10 border-cyan-500/20",
+                  details: [
+                    "RS vs SPY: >10% outperformance = 30 pts, >5% = 22 pts, >0% = 12 pts",
+                    "RS vs sector ETF: >5% vs sector = 25 pts, >0% = 15 pts",
+                    "RS acceleration: improving 5-session change = 25 pts",
+                    "Holds in weakness: stock up while sector/market down = 20 pts",
+                  ],
+                },
+                {
+                  cat: "Liquidity / Auction",
+                  abbr: "LA",
+                  weight: "10%",
+                  max: 100,
+                  color: "text-blue-400",
+                  bg: "bg-blue-500/10 border-blue-500/20",
+                  details: [
+                    "Dollar volume: $200M+/day = 25 pts, $100M+ = 18 pts, $50M+ = 12 pts",
+                    "Average volume: 5M+ shares/day = 20 pts, 2M+ = 14 pts",
+                    "Volume consistency: 10d/50d vol ratio near 1 = 20 pts (stable participation)",
+                    "Float turnover: >1x turnover in 20d = 20 pts, >0.5x = 12 pts",
+                    "Tight range proxy: ATR% <2% = 15 pts (orderly auction)",
+                  ],
+                },
+                {
+                  cat: "Institutional Participation",
+                  abbr: "IP",
+                  weight: "15%",
+                  max: 100,
+                  color: "text-amber-400",
+                  bg: "bg-amber-500/10 border-amber-500/20",
+                  details: [
+                    "OBV divergence: stealth accumulation detected = 20 pts",
+                    "Distribution days: 0 in last 20d = 20 pts, \u22642 = 14 pts",
+                    "Institutional ownership: 40-70% = 15 pts (room to grow), <40% = 10 pts",
+                    "Insider buying: 2+ buys in 45d = 15 pts, 1 buy in 90d = 8 pts",
+                    "Float turnover: institutional-level churn = 15 pts",
+                    "Block trade proxy: high vol + narrow spread days = 15 pts",
+                  ],
+                },
+              ].map((c) => (
+                <div key={c.cat} className={`rounded-lg border ${c.bg} px-4 py-3`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-bold ${c.color}`}>{c.cat}</span>
+                      <span className="rounded bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] font-bold text-[#666]">{c.abbr}</span>
+                    </div>
+                    <span className="text-xs text-[#666]">weight: {c.weight}</span>
+                  </div>
+                  <ul className="space-y-0.5">
+                    {c.details.map((d, i) => (
+                      <li key={i} className="text-xs text-[#a0a0a0]">{d}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] text-[#666]">
+              <strong className="text-[#a0a0a0]">Weighted composite:</strong>{" "}
+              Overall = SE&times;0.20 + VC&times;0.15 + BE&times;0.25 + RS&times;0.15 + LA&times;0.10 + IP&times;0.15.
+              Buyer Emergence has the highest weight (25%) because it&apos;s the most predictive of near-term direction.
+            </p>
+          </div>
+
+          {/* Stage Classification */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              5-Stage Classification
+            </h3>
+            <p className="text-xs text-[#a0a0a0] mb-2">
+              Each stock is classified into one of 5 stages based on its category scores. Stages follow a natural market cycle progression.
+            </p>
+            <div className="space-y-2">
+              {[
+                { stage: "DISTRIBUTION", color: "text-red-400", border: "border-red-500/20 bg-red-500/5",
+                  rule: "Default (no other stage criteria met)",
+                  desc: "Active selling pressure. Institutional distribution detected. Avoid new entries.",
+                },
+                { stage: "SELLER_EXHAUSTION", color: "text-orange-400", border: "border-orange-500/20 bg-orange-500/5",
+                  rule: "SE \u226545, VC \u226530",
+                  desc: "Selling is slowing. Volume declining, range contracting. Watch for transition. Not yet actionable.",
+                },
+                { stage: "INFLECTION", color: "text-amber-400", border: "border-amber-500/20 bg-amber-500/5",
+                  rule: "SE \u226550, VC \u226550, BE \u226535",
+                  desc: "Critical transition point. Sellers exhausted + volatility compressed + early buyer signals. Starter positions if score \u226570.",
+                },
+                { stage: "EARLY_ACCUMULATION", color: "text-emerald-400", border: "border-emerald-500/20 bg-emerald-500/5",
+                  rule: "BE \u226560, RS \u226550, SE \u226540",
+                  desc: "Buyers in control. Higher lows forming, volume confirming. Add-on positions if BE \u226575.",
+                },
+                { stage: "EXPANSION", color: "text-cyan-400", border: "border-cyan-500/20 bg-cyan-500/5",
+                  rule: "pctFromAth <10%, RS \u226560",
+                  desc: "Full breakout. Near all-time highs with strong relative strength. Ride existing positions, don\u2019t chase.",
+                },
+              ].map((s) => (
+                <div key={s.stage} className={`rounded-md border ${s.border} px-3 py-2`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-xs font-bold ${s.color}`}>{s.stage}</span>
+                    <span className="text-[10px] text-[#666]">{s.rule}</span>
+                  </div>
+                  <p className="text-xs text-[#a0a0a0]">{s.desc}</p>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] text-[#666]">
+              Stages are evaluated top-to-bottom: EXPANSION first, then EARLY_ACCUMULATION, INFLECTION,
+              SELLER_EXHAUSTION, and finally DISTRIBUTION as default. A stock matches the first stage whose
+              criteria it meets.
+            </p>
+          </div>
+
+          {/* Trade Read */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              Trade Read &amp; Signal Rules
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+              <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-red-400">AVOID</p>
+                <p className="text-[10px] text-[#c0c0c0]">Distribution or extension risk</p>
+              </div>
+              <div className="rounded-md border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-orange-400">WATCH</p>
+                <p className="text-[10px] text-[#c0c0c0]">Seller exhaustion, not ready</p>
+              </div>
+              <div className="rounded-md border border-green-500/20 bg-green-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-green-400">STARTER</p>
+                <p className="text-[10px] text-[#c0c0c0]">Inflection (70+) or Early Accum (65+)</p>
+              </div>
+              <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-cyan-400">ADD ON</p>
+                <p className="text-[10px] text-[#c0c0c0]">Early Accum + BE &ge;75</p>
+              </div>
+            </div>
+            <div className="space-y-2 text-xs text-[#a0a0a0]">
+              <p>
+                <strong className="text-white">Primary Signal:</strong> Overall &ge;70, stage = Inflection or Early Accumulation,
+                trade read = Starter Position, no extension risk. These are the highest-quality inflection alerts.
+              </p>
+              <p>
+                <strong className="text-white">Stronger Signal:</strong> Overall &ge;80, BE &ge;75, SE &ge;70, RS &ge;70,
+                no extension risk. Rare, high-conviction signals that combine all behavioral confirmations.
+              </p>
+              <p>
+                <strong className="text-white">Extension Risk:</strong> Flagged when stock is within 5% of ATH or &gt;3 ATR
+                above EMA20. Extended stocks can still score well but are poor entries &mdash; wait for a pullback.
+              </p>
+            </div>
+          </div>
+
+          {/* Evidence System */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5ba3e6] mb-2">
+              Evidence System
+            </h3>
+            <p className="text-xs text-[#a0a0a0] mb-2">
+              Each inflection card displays evidence pills showing the specific signals that contributed to the score.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded border border-green-500/20 bg-[#141414] px-3 py-2">
+                <p className="text-xs font-medium text-green-400 mb-1">Bullish Evidence (green)</p>
+                <p className="text-[10px] text-[#666]">
+                  Positive signals: declining sell volume, RSI recovering, OBV divergence, higher lows,
+                  accumulation days, failing breakdowns holding, insider buying.
+                </p>
+              </div>
+              <div className="rounded border border-amber-500/20 bg-[#141414] px-3 py-2">
+                <p className="text-xs font-medium text-amber-400 mb-1">Caution Evidence (amber)</p>
+                <p className="text-[10px] text-[#666]">
+                  Warning signals: selling volume dominant, no higher lows, distribution days present,
+                  below key EMAs, low institutional ownership, extension risk.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Backtest */}
+          <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+            <p className="text-xs font-medium text-emerald-400 mb-2">Backtest Your Signals</p>
+            <p className="text-xs text-[#a0a0a0]">
+              The inflection engine includes a dedicated backtest page at{" "}
+              <Link href="/backtest/inflection-engine" className="underline hover:text-[#5ba3e6]">/backtest/inflection-engine</Link>.
+              Input up to 50 tickers, select a date range (30/90/180 days), set a minimum score threshold, and see
+              forward returns (1d/2d/3d/5d/10d), win rates, max favorable/adverse excursion, and target hit rates
+              (+3/5/8/10% and -3/5/8%). Validate signal quality before committing capital.
+            </p>
           </div>
         </Section>
 
