@@ -152,7 +152,7 @@ function PreRunPage() {
   type ScanMode = "quick" | "full";
   const [scanMode, setScanMode] = usePersistedFilter<ScanMode>("ew-filter:prerun:scanMode", "quick");
   const [scanOffset, setScanOffset] = useState(0);
-  const QUICK_SCAN_SIZE = 500;
+  const QUICK_SCAN_SIZE = 600;
 
   // VCP mode
   const [viewMode, setViewMode] = usePersistedFilter<VCPViewMode>("ew-filter:prerun:viewMode", "standard");

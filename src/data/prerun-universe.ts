@@ -28,28 +28,41 @@ export { SCAN_UNIVERSE };
 const _allTickers: string[] = Object.values(SCAN_UNIVERSE).flat().sort();
 
 /**
- * Ranked tickers: round-robin interleave from each sector bucket so the first N
- * tickers contain proportional representation from every sector.
- * This ensures Quick Scan (top 500) covers all sectors, not just alphabetically early ones.
+ * Ranked tickers: priority round-robin interleave — processes each tier fully
+ * before moving to the next. Within each tier, round-robin across sectors ensures
+ * proportional sector representation. This guarantees all S&P 500 (tier 1) stocks
+ * appear before any tier 2/3 stocks in the ranked list.
  */
 const _rankedTickers: string[] = (() => {
   const sectorKeys = Object.keys(SCAN_UNIVERSE).filter((k) => k !== "Other");
   const otherKey = Object.keys(SCAN_UNIVERSE).find((k) => k === "Other");
-  const iterators = sectorKeys.map((k) => [...SCAN_UNIVERSE[k]]);
-  if (otherKey) iterators.push([...SCAN_UNIVERSE[otherKey]]);
+  const allKeys = otherKey ? [...sectorKeys, otherKey] : [...sectorKeys];
 
+  // Split each sector's tickers into per-tier buckets
+  const tierBuckets: Record<number, string[][]> = { 1: [], 2: [], 3: [] };
+  for (const k of allKeys) {
+    const tickers = SCAN_UNIVERSE[k];
+    tierBuckets[1].push(tickers.filter((t) => getTickerTier(t) === 1));
+    tierBuckets[2].push(tickers.filter((t) => getTickerTier(t) === 2));
+    tierBuckets[3].push(tickers.filter((t) => getTickerTier(t) === 3));
+  }
+
+  // Round-robin within each tier, then concatenate tiers
   const result: string[] = [];
-  let hasMore = true;
-  let idx = 0;
-  while (hasMore) {
-    hasMore = false;
-    for (const arr of iterators) {
-      if (idx < arr.length) {
-        result.push(arr[idx]);
-        hasMore = true;
+  for (const tier of [1, 2, 3]) {
+    const iterators = tierBuckets[tier];
+    let hasMore = true;
+    let idx = 0;
+    while (hasMore) {
+      hasMore = false;
+      for (const arr of iterators) {
+        if (idx < arr.length) {
+          result.push(arr[idx]);
+          hasMore = true;
+        }
       }
+      idx++;
     }
-    idx++;
   }
   return result;
 })();
