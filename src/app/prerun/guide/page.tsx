@@ -2090,12 +2090,12 @@ export default function PreRunGuidePage() {
                 </thead>
                 <tbody className="text-[#a0a0a0]">
                   {[
-                    { range: "0\u201340", label: "Distribution", action: "Ignore or look for shorts", color: "text-red-400" },
-                    { range: "40\u201360", label: "Neutral", action: "Watch only", color: "text-amber-400" },
-                    { range: "60\u201370", label: "Early Accumulation", action: "Build a watchlist; no full-size entry", color: "text-yellow-400" },
-                    { range: "70\u201380", label: "Inflection", action: "Probe with a starter position", color: "text-cyan-400" },
-                    { range: "80\u201390", label: "Institutional Trend", action: "Add on pullbacks and manage the trade", color: "text-blue-400" },
-                    { range: "90\u2013100", label: "Strong Trend in Force", action: "Hold until behavior changes", color: "text-emerald-400" },
+                    { range: "0\u201325", label: "Distribution", action: "Ignore or look for shorts", color: "text-red-400" },
+                    { range: "25\u201340", label: "Neutral", action: "Watch only", color: "text-amber-400" },
+                    { range: "40\u201350", label: "Seller Exhaustion", action: "Build a watchlist; patience needed", color: "text-yellow-400" },
+                    { range: "50\u201360", label: "Inflection", action: "Probe with a starter position", color: "text-cyan-400" },
+                    { range: "60\u201375", label: "Early Accumulation", action: "Add on pullbacks and manage the trade", color: "text-blue-400" },
+                    { range: "75+", label: "Strong Accumulation", action: "Hold until behavior changes", color: "text-emerald-400" },
                   ].map((row) => (
                     <tr key={row.range} className="border-b border-[#2a2a2a]/50">
                       <td className={`px-3 py-1.5 font-bold ${row.color}`}>{row.range}</td>

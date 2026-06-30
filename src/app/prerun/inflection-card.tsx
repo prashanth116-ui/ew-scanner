@@ -40,9 +40,9 @@ function tradeReadBadge(tr: InflectionTradeRead): { label: string; color: string
 }
 
 function scoreBarColor(score: number): string {
-  if (score >= 70) return "bg-emerald-500";
-  if (score >= 50) return "bg-cyan-500";
-  if (score >= 35) return "bg-amber-500";
+  if (score >= 55) return "bg-emerald-500";
+  if (score >= 40) return "bg-cyan-500";
+  if (score >= 25) return "bg-amber-500";
   return "bg-red-500";
 }
 
