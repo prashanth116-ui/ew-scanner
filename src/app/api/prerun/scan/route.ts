@@ -6,6 +6,7 @@ import { fetchPreRunData, preFilterTickers } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
 import { scoreVCP } from "@/lib/prerun/vcp-scoring";
 import { scoreInstitutionalAcceleration } from "@/lib/prerun/institutional-scoring";
+import { scoreInflection } from "@/lib/prerun/inflection-scoring";
 import { getSectorForTicker } from "@/data/prerun-universe";
 import type { EmaTimeframe, VCPViewMode } from "@/lib/prerun/types";
 
@@ -62,6 +63,9 @@ export async function POST(request: NextRequest) {
           if (viewMode === "institutional") {
             return scoreInstitutionalAcceleration(data);
           }
+          if (viewMode === "inflection") {
+            return scoreInflection(data);
+          }
           const sector = getSectorForTicker(ticker);
           const quadrant = sector ? sectorQuadrants[sector] ?? null : null;
           return autoScorePreRun(data, quadrant);
@@ -98,6 +102,12 @@ export async function POST(request: NextRequest) {
       results.sort((a, b) => {
         const aScore = "compositeScore" in a.scores ? (a.scores as { compositeScore: number }).compositeScore : 0;
         const bScore = "compositeScore" in b.scores ? (b.scores as { compositeScore: number }).compositeScore : 0;
+        return bScore - aScore;
+      });
+    } else if (viewMode === "inflection") {
+      results.sort((a, b) => {
+        const aScore = "overallScore" in a.scores ? (a.scores as { overallScore: number }).overallScore : 0;
+        const bScore = "overallScore" in b.scores ? (b.scores as { overallScore: number }).overallScore : 0;
         return bScore - aScore;
       });
     } else {

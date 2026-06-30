@@ -1,7 +1,7 @@
 /** Pre-Run export to Excel/CSV. */
 
-import type { PreRunResult, VCPResult, InstitutionalResult } from "./types";
-import { MAX_SCORE, VCP_MAX_SCORE, INST_MAX_SCORE } from "./types";
+import type { PreRunResult, VCPResult, InstitutionalResult, InflectionResult } from "./types";
+import { MAX_SCORE, VCP_MAX_SCORE, INST_MAX_SCORE, INFLECTION_MAX_SCORE } from "./types";
 
 export async function exportPreRunToExcel(results: PreRunResult[]): Promise<void> {
   const XLSX = await import("xlsx");
@@ -172,4 +172,45 @@ export async function exportInstitutionalToExcel(results: InstitutionalResult[])
   XLSX.utils.book_append_sheet(wb, ws, "Inst Acceleration Scan");
 
   XLSX.writeFile(wb, `inst-scan-${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+export async function exportInflectionToExcel(results: InflectionResult[]): Promise<void> {
+  const XLSX = await import("xlsx");
+
+  const rows = results.map((r) => {
+    const d = r.data;
+    const s = r.scores;
+    return {
+      Ticker: d.ticker,
+      Company: d.companyName,
+      Price: d.currentPrice?.toFixed(2) ?? "-",
+      "Market Cap": d.marketCap ? `$${(d.marketCap / 1e9).toFixed(1)}B` : "-",
+      [`Overall (/${INFLECTION_MAX_SCORE})`]: s.overallScore,
+      "Seller Exhaust": s.sellerExhaustion,
+      "Vol Compress": s.volatilityCompression,
+      "Buyer Emerge": s.buyerEmergence,
+      "Rel Strength": s.relativeStrength,
+      "Liquidity": s.liquidityAuction,
+      "Inst Particip": s.institutionalParticipation,
+      Stage: r.stage,
+      "Trade Read": r.tradeRead,
+      "Extension Risk": r.extensionRisk ? "YES" : "NO",
+      "Primary Signal": r.isPrimarySignal ? "YES" : "NO",
+      "Stronger Signal": r.isStrongerSignal ? "YES" : "NO",
+      "Invalidation": r.invalidationLevel?.toFixed(2) ?? "-",
+      "RSI(14)": d.rsi14?.toFixed(1) ?? "-",
+      "% From ATH": d.pctFromAth?.toFixed(1) ?? "-",
+      "Higher Lows": d.higherLowsCount ?? "-",
+      "Accum Days": d.accumulationDayCount ?? "-",
+      "ATR Ratio": d.atrRatio5v20?.toFixed(2) ?? "-",
+      "Bullish Evidence": r.bullishEvidence.join("; "),
+      "Caution Evidence": r.cautionEvidence.join("; "),
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Inflection Engine Scan");
+
+  XLSX.writeFile(wb, `inflection-scan-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }

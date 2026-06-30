@@ -4,7 +4,7 @@ export type PreRunVerdict = "PRIORITY" | "KEEP" | "WATCH" | "DISCARD";
 export type PreRunRisk = "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
 export type EmaTimeframe = "15m" | "1h" | "4h" | "12h" | "1d" | "1wk" | "1mo";
 
-export type VCPViewMode = "standard" | "vcp" | "institutional";
+export type VCPViewMode = "standard" | "vcp" | "institutional" | "inflection";
 export type VCPPhase = "FOCUS_LIST" | "WATCHLIST_CANDIDATE" | "EARLY_SETUP" | "IGNORE";
 
 export const ALL_EMA_TIMEFRAMES: readonly EmaTimeframe[] = ["15m", "1h", "4h", "12h", "1d", "1wk", "1mo"] as const;
@@ -123,6 +123,12 @@ export interface PreRunStockData {
   instGapPct: number | null;              // (today open - prev close) / prev close * 100
   instDistFromEma20Atr: number | null;    // (price - EMA20) / ATR(14)
   instAtrDollar: number | null;           // ATR(14) in dollar terms
+  // Inflection Engine fields
+  rsi14: number | null;                   // Standard Wilder RSI(14)
+  avgDownDayBody: number | null;          // Avg body % on down days (last 10 bars)
+  avgDownDayBodyPrev: number | null;      // Avg body % on down days (bars 11-20, comparison)
+  accumulationDayCount: number | null;    // Up days with above-avg volume (last 20)
+  atrRatio5v20: number | null;            // ATR(5) / ATR(20) ratio
   lastUpdated: string;
 }
 
@@ -284,6 +290,44 @@ export interface InstitutionalResult {
 }
 
 export const INST_MAX_SCORE = 100;
+
+// ── Inflection Engine types ──
+
+export type InflectionStage = "DISTRIBUTION" | "SELLER_EXHAUSTION" | "INFLECTION" | "EARLY_ACCUMULATION" | "EXPANSION";
+export type InflectionTradeRead = "AVOID" | "WATCH" | "STARTER_POSITION_CANDIDATE" | "ADD_ON_CONFIRMATION";
+
+export interface InflectionScores {
+  sellerExhaustion: number;           // 0-100
+  volatilityCompression: number;      // 0-100
+  buyerEmergence: number;             // 0-100
+  relativeStrength: number;           // 0-100
+  liquidityAuction: number;           // 0-100
+  institutionalParticipation: number; // 0-100
+  overallScore: number;               // 0-100 weighted composite
+}
+
+export interface InflectionGates {
+  priceAbove5: boolean;
+  avgDollarVolAbove10m: boolean;
+  mktCapAbove500m: boolean;
+  allPass: boolean;
+}
+
+export interface InflectionResult {
+  data: PreRunStockData;
+  gates: InflectionGates;
+  scores: InflectionScores;
+  stage: InflectionStage;
+  tradeRead: InflectionTradeRead;
+  extensionRisk: boolean;
+  bullishEvidence: string[];
+  cautionEvidence: string[];
+  invalidationLevel: number | null;
+  isPrimarySignal: boolean;
+  isStrongerSignal: boolean;
+}
+
+export const INFLECTION_MAX_SCORE = 100;
 
 export interface PreRunWatchlistItem {
   id: string;
@@ -474,5 +518,12 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     description: "Large-cap institutional runners — RS acceleration, volume accumulation, structure analysis. Scores NOW, AVGO, NVDA-type setups.",
     filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 0 },
     viewMode: "institutional",
+  },
+  {
+    name: "Inflection Engine",
+    shortName: "Inflection",
+    description: "Detects state transitions — seller exhaustion, compression, buyer emergence. Identifies stocks at inflection points before moves.",
+    filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 0 },
+    viewMode: "inflection",
   },
 ];

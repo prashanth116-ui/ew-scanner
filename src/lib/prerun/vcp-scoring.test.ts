@@ -101,6 +101,11 @@ function makeVCPData(overrides: Partial<PreRunStockData> = {}): PreRunStockData 
     instGapPct: null,
     instDistFromEma20Atr: null,
     instAtrDollar: null,
+    rsi14: null,
+    avgDownDayBody: null,
+    avgDownDayBodyPrev: null,
+    accumulationDayCount: null,
+    atrRatio5v20: null,
     lastUpdated: new Date().toISOString(),
     ...overrides,
   };

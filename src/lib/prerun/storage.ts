@@ -16,6 +16,7 @@ import type {
   EmaTimeframe,
   VCPResult,
   InstitutionalResult,
+  InflectionResult,
 } from "./types";
 
 const WATCHLIST_KEY = "ew-scanner-prerun-watchlist";
@@ -25,6 +26,7 @@ const SCANS_KEY = "ew-scanner-prerun-scans";
 const SCAN_RESULTS_KEY = "ew-scanner-prerun-scan-results";
 const VCP_RESULTS_KEY = "ew-scanner-prerun-vcp-results";
 const INST_RESULTS_KEY = "ew-scanner-prerun-inst-results";
+const INFLECTION_RESULTS_KEY = "ew-scanner-prerun-inflection-results";
 const MAX_ALERTS = 200;
 const MAX_HISTORY = 500;
 const MAX_SCANS = 30;
@@ -367,6 +369,50 @@ export function saveInstitutionalScanResults(results: InstitutionalResult[]): vo
       results,
     };
     localStorage.setItem(INST_RESULTS_KEY, JSON.stringify(cache));
+  } catch {
+    // Quota exceeded — silently skip
+  }
+}
+
+// ── Inflection Scan Results Cache ──
+
+interface InflectionResultsCache {
+  date: string;
+  results: InflectionResult[];
+}
+
+export function loadInflectionScanResults(): InflectionResult[] {
+  if (!isClient()) return [];
+  try {
+    const raw = localStorage.getItem(INFLECTION_RESULTS_KEY);
+    if (!raw) return [];
+    const cache = JSON.parse(raw) as InflectionResultsCache;
+    return cache.results ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export function loadInflectionScanResultsWithDate(): { results: InflectionResult[]; date: string | null } {
+  if (!isClient()) return { results: [], date: null };
+  try {
+    const raw = localStorage.getItem(INFLECTION_RESULTS_KEY);
+    if (!raw) return { results: [], date: null };
+    const cache = JSON.parse(raw) as InflectionResultsCache;
+    return { results: cache.results ?? [], date: cache.date ?? null };
+  } catch {
+    return { results: [], date: null };
+  }
+}
+
+export function saveInflectionScanResults(results: InflectionResult[]): void {
+  if (!isClient()) return;
+  try {
+    const cache: InflectionResultsCache = {
+      date: new Date().toISOString(),
+      results,
+    };
+    localStorage.setItem(INFLECTION_RESULTS_KEY, JSON.stringify(cache));
   } catch {
     // Quota exceeded — silently skip
   }

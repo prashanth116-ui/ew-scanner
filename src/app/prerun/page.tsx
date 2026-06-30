@@ -38,8 +38,11 @@ import type {
   InstitutionalResult,
   InstitutionalClassification,
   ShortlistTier,
+  InflectionResult,
+  InflectionStage,
+  InflectionTradeRead,
 } from "@/lib/prerun/types";
-import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES, VCP_MAX_SCORE, INST_MAX_SCORE } from "@/lib/prerun/types";
+import { DEFAULT_PRERUN_FILTERS, PRERUN_PRESETS, MAX_SCORE, ALL_EMA_TIMEFRAMES, VCP_MAX_SCORE, INST_MAX_SCORE, INFLECTION_MAX_SCORE } from "@/lib/prerun/types";
 import {
   type TFFilterValue, type TrendFilterValue, type BoolFilterValue, type VolFilterValue,
   type LeadingFilters,
@@ -61,9 +64,12 @@ import {
   loadVCPScanResultsWithDate,
   saveInstitutionalScanResults,
   loadInstitutionalScanResultsWithDate,
+  saveInflectionScanResults,
+  loadInflectionScanResultsWithDate,
 } from "@/lib/prerun/storage";
-import { exportPreRunToExcel, exportVCPToExcel, exportInstitutionalToExcel } from "@/lib/prerun/export";
+import { exportPreRunToExcel, exportVCPToExcel, exportInstitutionalToExcel, exportInflectionToExcel } from "@/lib/prerun/export";
 import { InstitutionalResultCard } from "./institutional-card";
+import { InflectionResultCard } from "./inflection-card";
 import {
   getTickersForSector,
   getSectorBuckets,
@@ -99,6 +105,7 @@ type SortKey = "score" | "pctFromAth" | "shortFloat" | "earnings";
 type SortDir = "asc" | "desc";
 type VCPSortKey = "score" | "compression" | "atrPct" | "relStrength" | "dollarVolume" | "distFrom52wHigh";
 type InstSortKey = "composite" | "institutional" | "execution" | "risk" | "discipline" | "rsAccel" | "dollarVolume";
+type InflectionSortKey = "overall" | "sellerExhaustion" | "volatilityCompression" | "buyerEmergence" | "relativeStrength" | "liquidityAuction" | "institutionalParticipation";
 
 const MARKET_CAP_OPTIONS = [
   { label: "Any", value: 0 },
@@ -173,6 +180,13 @@ function PreRunPage() {
   const [instTriggerFilter, setInstTriggerFilter] = usePersistedFilter("ew-filter:prerun:instTrigger", "All");
   const [instRsAccelFilter, setInstRsAccelFilter] = usePersistedFilter("ew-filter:prerun:instRsAccel", "all");
   const [instMinMarketCap, setInstMinMarketCap] = usePersistedFilter("ew-filter:prerun:instMinMarketCap", 0);
+
+  // Inflection mode
+  const [inflectionResults, setInflectionResults] = useState<InflectionResult[]>([]);
+  const [inflectionMinScore, setInflectionMinScore] = usePersistedFilter("ew-filter:prerun:inflectionMinScore", 0);
+  const [inflectionStageFilter, setInflectionStageFilter] = usePersistedFilter("ew-filter:prerun:inflectionStageFilter", "All");
+  const [inflectionTradeReadFilter, setInflectionTradeReadFilter] = usePersistedFilter("ew-filter:prerun:inflectionTradeReadFilter", "All");
+  const [inflectionSortKey, setInflectionSortKey] = usePersistedFilter<InflectionSortKey>("ew-filter:prerun:inflectionSortKey", "overall");
 
   // Criteria-level filters (from presets like Stage 1→2)
   const [criteriaFilters, setCriteriaFilters] = useState<PreRunCriteriaFilter[]>([]);
@@ -283,6 +297,17 @@ function PreRunPage() {
       if (instPersistent.results.length > 0) {
         setInstResults(instPersistent.results);
         if (!loadedPersistentDate) loadedPersistentDate = instPersistent.date;
+      }
+    }
+    // Load Inflection cache (30-min TTL), fallback to persistent storage
+    const inflCached = loadFromCache<InflectionResult[]>("ew-prerun-inflection-v1", 30 * 60 * 1000);
+    if (inflCached && inflCached.length > 0) {
+      setInflectionResults(inflCached);
+    } else {
+      const inflPersistent = loadInflectionScanResultsWithDate();
+      if (inflPersistent.results.length > 0) {
+        setInflectionResults(inflPersistent.results);
+        if (!loadedPersistentDate) loadedPersistentDate = inflPersistent.date;
       }
     }
     if (loadedPersistentDate) setPersistentScanDate(loadedPersistentDate);
@@ -606,6 +631,43 @@ function PreRunPage() {
     return { total: instFiltered.length, leaders, actionable, avoid, shortlist, watchlist, speculative };
   }, [instFiltered, instResults]);
 
+  // ── Inflection filtering / sorting ──
+
+  const inflectionFiltered = useMemo(() => {
+    return inflectionResults.filter((r) => {
+      if (inflectionMinScore > 0 && r.scores.overallScore < inflectionMinScore) return false;
+      if (inflectionStageFilter !== "All" && r.stage !== inflectionStageFilter) return false;
+      if (inflectionTradeReadFilter !== "All" && r.tradeRead !== inflectionTradeReadFilter) return false;
+      return true;
+    });
+  }, [inflectionResults, inflectionMinScore, inflectionStageFilter, inflectionTradeReadFilter]);
+
+  const inflectionSorted = useMemo(() => {
+    const arr = [...inflectionFiltered];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (inflectionSortKey) {
+        case "overall": cmp = a.scores.overallScore - b.scores.overallScore; break;
+        case "sellerExhaustion": cmp = a.scores.sellerExhaustion - b.scores.sellerExhaustion; break;
+        case "volatilityCompression": cmp = a.scores.volatilityCompression - b.scores.volatilityCompression; break;
+        case "buyerEmergence": cmp = a.scores.buyerEmergence - b.scores.buyerEmergence; break;
+        case "relativeStrength": cmp = a.scores.relativeStrength - b.scores.relativeStrength; break;
+        case "liquidityAuction": cmp = a.scores.liquidityAuction - b.scores.liquidityAuction; break;
+        case "institutionalParticipation": cmp = a.scores.institutionalParticipation - b.scores.institutionalParticipation; break;
+      }
+      return -cmp;
+    });
+    return arr;
+  }, [inflectionFiltered, inflectionSortKey]);
+
+  const inflectionStats = useMemo(() => {
+    const inflection = inflectionFiltered.filter((r) => r.stage === "INFLECTION").length;
+    const earlyAccum = inflectionFiltered.filter((r) => r.stage === "EARLY_ACCUMULATION").length;
+    const signals = inflectionFiltered.filter((r) => r.isPrimarySignal).length;
+    const avoid = inflectionFiltered.filter((r) => r.tradeRead === "AVOID").length;
+    return { total: inflectionFiltered.length, inflection, earlyAccum, signals, avoid };
+  }, [inflectionFiltered]);
+
   const hasInstFilters = instMinScore > 0 || instClassFilter !== "All" ||
     instTierFilter !== "SHORTLIST" || sectorBucket !== "All" || instMinMarketCap > 0 ||
     instEntryQualityFilter !== "All" || instTriggerFilter !== "All" || instRsAccelFilter !== "all" ||
@@ -732,6 +794,7 @@ function PreRunPage() {
     setRawResults([]);
     setVcpResults([]);
     setInstResults([]);
+    setInflectionResults([]);
     setScannedCount(0);
     setScanOffset(0);
     if (showMultiTF) setMultiTFResults(new Map());
@@ -793,6 +856,8 @@ function PreRunPage() {
         setVcpResults([...results] as unknown as VCPResult[]);
       } else if (viewMode === "institutional") {
         setInstResults([...results] as unknown as InstitutionalResult[]);
+      } else if (viewMode === "inflection") {
+        setInflectionResults([...results] as unknown as InflectionResult[]);
       } else {
         setRawResults((prev) => {
           const scannedTickers = new Set(results.map(r => r.data.ticker));
@@ -813,6 +878,9 @@ function PreRunPage() {
     } else if (viewMode === "institutional") {
       saveInstitutionalScanResults(results as unknown as InstitutionalResult[]);
       saveToCache("ew-prerun-inst-v1", results);
+    } else if (viewMode === "inflection") {
+      saveInflectionScanResults(results as unknown as InflectionResult[]);
+      saveToCache("ew-prerun-inflection-v1", results);
     } else {
       saveScanResults(results as PreRunResult[]);
       saveToCache("ew-prerun-scan-v1", results);
@@ -829,7 +897,7 @@ function PreRunPage() {
     }
 
     // After scan results are finalized, record signals (standard mode only)
-    if (viewMode !== "vcp" && viewMode !== "institutional") {
+    if (viewMode !== "vcp" && viewMode !== "institutional" && viewMode !== "inflection") {
       const signals: ClientSignal[] = (results as PreRunResult[])
         .filter((r) => r.scores.finalScore >= 4)
         .map((r) => ({
@@ -913,6 +981,12 @@ function PreRunPage() {
       setVcpResults((prev) => [...prev, ...(newResults as unknown as VCPResult[])]);
     } else if (viewMode === "institutional") {
       setInstResults((prev) => [...prev, ...(newResults as unknown as InstitutionalResult[])]);
+    } else if (viewMode === "inflection") {
+      setInflectionResults((prev) => {
+        const existingTickers = new Set(prev.map(r => r.data.ticker));
+        const unique = (newResults as unknown as InflectionResult[]).filter(r => !existingTickers.has(r.data.ticker));
+        return [...prev, ...unique];
+      });
     } else {
       setRawResults((prev) => {
         const existingTickers = new Set(prev.map(r => r.data.ticker));
@@ -1086,6 +1160,12 @@ function PreRunPage() {
       setInstTriggerFilter("All");
       setInstMinMarketCap(0);
     }
+    // Reset inflection filters when switching to inflection mode
+    if (preset.viewMode === "inflection") {
+      setInflectionMinScore(0);
+      setInflectionStageFilter("All");
+      setInflectionTradeReadFilter("All");
+    }
   }, []);
 
   // Add to watchlist
@@ -1123,11 +1203,14 @@ function PreRunPage() {
     } else if (viewMode === "institutional") {
       if (instSorted.length === 0) return;
       exportInstitutionalToExcel(instSorted);
+    } else if (viewMode === "inflection") {
+      if (inflectionSorted.length === 0) return;
+      exportInflectionToExcel(inflectionSorted);
     } else {
       if (sorted.length === 0) return;
       exportPreRunToExcel(sorted);
     }
-  }, [sorted, vcpSorted, instSorted, viewMode]);
+  }, [sorted, vcpSorted, instSorted, inflectionSorted, viewMode]);
 
   const sectorBuckets = useMemo(() => getSectorBuckets(), []);
 
@@ -1139,8 +1222,8 @@ function PreRunPage() {
           <PresetList presets={PRERUN_PRESETS} onSelect={applyPreset} />
         </SidebarSection>
 
-        {/* Filters (hidden for institutional — inline filter bar used instead) */}
-        {viewMode !== "institutional" && (
+        {/* Filters (hidden for institutional/inflection — inline filter bar used instead) */}
+        {viewMode !== "institutional" && viewMode !== "inflection" && (
         <SidebarSection
           title={viewMode === "vcp" ? "VCP Filters" : `Filters (${minPctFromAth}% ATH, ${minShortFloat}% SI${minScore > 0 ? `, ${minScore}+ score` : ""})`}
           sectionKey="filters"
@@ -2128,6 +2211,105 @@ function PreRunPage() {
           </div>
         )}
 
+        {/* Summary bar — Inflection mode */}
+        {viewMode === "inflection" && inflectionResults.length > 0 && (
+          <div className="space-y-3 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-3">
+                <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">Candidates</p>
+                <p className="text-lg font-bold text-white">
+                  {inflectionStats.total}
+                  <span className="text-xs font-normal text-[#666] ml-1">/ {inflectionResults.length}</span>
+                </p>
+              </div>
+              <div className="rounded-lg border border-purple-500/20 bg-[#141414] px-4 py-3">
+                <p className="text-[10px] uppercase tracking-wider text-purple-400/60 mb-1">Inflection</p>
+                <p className="text-lg font-bold text-purple-400">{inflectionStats.inflection}</p>
+              </div>
+              <div className="rounded-lg border border-cyan-500/20 bg-[#141414] px-4 py-3">
+                <p className="text-[10px] uppercase tracking-wider text-cyan-400/60 mb-1">Early Accum</p>
+                <p className="text-lg font-bold text-cyan-400">{inflectionStats.earlyAccum}</p>
+              </div>
+              <div className="rounded-lg border border-emerald-500/20 bg-[#141414] px-4 py-3">
+                <p className="text-[10px] uppercase tracking-wider text-emerald-400/60 mb-1">Signals</p>
+                <p className="text-lg font-bold text-emerald-400">{inflectionStats.signals}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Inline filter bar — Inflection mode */}
+        {viewMode === "inflection" && inflectionResults.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <select value={inflectionMinScore} onChange={(e) => setInflectionMinScore(Number(e.target.value))} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value={0}>All Scores</option>
+              <option value={40}>40+</option>
+              <option value={50}>50+</option>
+              <option value={60}>60+</option>
+              <option value={70}>70+</option>
+              <option value={80}>80+</option>
+            </select>
+            <select value={inflectionStageFilter} onChange={(e) => setInflectionStageFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="All">All Stages</option>
+              <option value="INFLECTION">Inflection</option>
+              <option value="EARLY_ACCUMULATION">Early Accum.</option>
+              <option value="SELLER_EXHAUSTION">Seller Exhaust.</option>
+              <option value="EXPANSION">Expansion</option>
+              <option value="DISTRIBUTION">Distribution</option>
+            </select>
+            <select value={inflectionTradeReadFilter} onChange={(e) => setInflectionTradeReadFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
+              <option value="All">All Trade Reads</option>
+              <option value="STARTER_POSITION_CANDIDATE">Starter Position</option>
+              <option value="ADD_ON_CONFIRMATION">Add on Confirm</option>
+              <option value="WATCH">Watch</option>
+              <option value="AVOID">Avoid</option>
+            </select>
+          </div>
+        )}
+
+        {/* Sort + Export row — Inflection mode */}
+        {viewMode === "inflection" && inflectionSorted.length > 0 && (
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-[#666]">Sort:</span>
+              {(
+                [
+                  { key: "overall", label: "Overall" },
+                  { key: "sellerExhaustion", label: "SE" },
+                  { key: "volatilityCompression", label: "VC" },
+                  { key: "buyerEmergence", label: "BE" },
+                  { key: "relativeStrength", label: "RS" },
+                  { key: "liquidityAuction", label: "LA" },
+                  { key: "institutionalParticipation", label: "IP" },
+                ] as { key: InflectionSortKey; label: string }[]
+              ).map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => setInflectionSortKey(s.key)}
+                  className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors ${
+                    inflectionSortKey === s.key
+                      ? "bg-purple-500/10 text-purple-400 border border-purple-500/30"
+                      : "text-[#a0a0a0] hover:text-white border border-[#2a2a2a] hover:border-[#444]"
+                  }`}
+                >
+                  {s.label}
+                  {inflectionSortKey === s.key && <ArrowUpDown className="h-3 w-3" />}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Export</span>
+              </button>
+              <CopyButton tickers={inflectionSorted.map((r) => r.data.ticker)} />
+            </div>
+          </div>
+        )}
+
         {/* Errors */}
         {addError && (
           <div className="mb-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
@@ -2181,6 +2363,56 @@ function PreRunPage() {
               <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
                 <p className="text-2xl font-bold text-[#8b5cf6]">11</p>
                 <p className="text-[10px] text-[#666]">Classes</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Inflection Results */}
+        {viewMode === "inflection" && inflectionSorted.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">
+            {inflectionSorted.map((result, idx) => (
+              <InflectionResultCard
+                key={result.data.ticker}
+                result={result}
+                index={idx}
+              />
+            ))}
+          </div>
+        )}
+
+        {viewMode === "inflection" && inflectionResults.length > 0 && inflectionSorted.length === 0 && !scanning && (
+          <div className="flex flex-col items-center justify-center py-16 text-[#666]">
+            <Target className="h-12 w-12 mb-3 opacity-30" />
+            <p className="text-sm">No stocks matched inflection filters.</p>
+            <p className="text-xs mt-1">Try lowering Min Score or changing Stage filter.</p>
+          </div>
+        )}
+
+        {viewMode === "inflection" && inflectionResults.length === 0 && !scanning && (
+          <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-12 text-center">
+            <Activity className="mx-auto h-12 w-12 text-[#333]" />
+            <h2 className="mt-4 text-lg font-semibold text-white">Inflection Engine</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-[#a0a0a0]">
+              Detects state transitions — seller exhaustion, volatility compression, buyer emergence.
+              Identifies stocks at inflection points before directional moves.
+            </p>
+            <div className="mx-auto mt-6 grid max-w-lg grid-cols-4 gap-3">
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-purple-400">{getTickersForSector("All").length}</p>
+                <p className="text-[10px] text-[#666]">Stocks</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-purple-400">6</p>
+                <p className="text-[10px] text-[#666]">Score Dims</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-purple-400">3</p>
+                <p className="text-[10px] text-[#666]">Gates</p>
+              </div>
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#262626] p-3">
+                <p className="text-2xl font-bold text-purple-400">5</p>
+                <p className="text-[10px] text-[#666]">Stages</p>
               </div>
             </div>
           </div>

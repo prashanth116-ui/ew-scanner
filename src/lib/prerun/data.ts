@@ -932,6 +932,71 @@ function calcVPDivergence(closes: number[], opens: number[], volumes: number[], 
   return prevDownVol > 0 && currDownVol < prevDownVol * 0.70; // Volume decreased 30%+
 }
 
+/** Calculate Wilder RSI(14) from closes array. */
+export function calcRSI(closes: number[], period = 14): number | null {
+  if (closes.length < period + 1) return null;
+  let avgGain = 0;
+  let avgLoss = 0;
+  // Seed with first `period` changes
+  for (let i = 1; i <= period; i++) {
+    const delta = closes[i] - closes[i - 1];
+    if (delta > 0) avgGain += delta;
+    else avgLoss -= delta;
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  // Smooth through remaining bars
+  for (let i = period + 1; i < closes.length; i++) {
+    const delta = closes[i] - closes[i - 1];
+    avgGain = (avgGain * (period - 1) + (delta > 0 ? delta : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (delta < 0 ? -delta : 0)) / period;
+  }
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - 100 / (1 + rs);
+}
+
+/** Calculate avg down-day body size as % of price for two windows: last 10 bars and bars 11-20.
+ *  Returns { recent, prev } where lower recent vs prev = sellers weakening. */
+function calcDownDayBodies(
+  closes: number[], opens: number[], price: number,
+): { recent: number | null; prev: number | null } {
+  if (closes.length < 20 || price <= 0) return { recent: null, prev: null };
+  const calcWindow = (start: number, end: number): number | null => {
+    let sum = 0;
+    let count = 0;
+    for (let i = start; i < end; i++) {
+      if (closes[i] < opens[i]) { // down day
+        sum += Math.abs(closes[i] - opens[i]) / price * 100;
+        count++;
+      }
+    }
+    return count > 0 ? sum / count : 0;
+  };
+  const n = closes.length;
+  return {
+    recent: calcWindow(n - 10, n),
+    prev: calcWindow(n - 20, n - 10),
+  };
+}
+
+/** Count accumulation days in last 20 bars: up days with above-avg volume.
+ *  Mirror of calcDistributionDays but for bullish accumulation. */
+function calcAccumulationDays(closes: number[], volumes: number[]): number {
+  if (closes.length < 21) return 0;
+  const n = 20;
+  const recentCloses = closes.slice(-n - 1);
+  const recentVols = volumes.slice(-n);
+  const avgVol = recentVols.reduce((a, b) => a + b, 0) / n;
+  let count = 0;
+  for (let i = 0; i < n; i++) {
+    const priceUp = recentCloses[i + 1] > recentCloses[i];
+    const highVol = recentVols[i] > avgVol;
+    if (priceUp && highVol) count++;
+  }
+  return count;
+}
+
 /** Count distribution days in last 20 bars.
  *  A distribution day = price closes down AND volume > 20-bar average volume.
  *  Zero distribution days = stealth strength; high count = institutional selling. */
@@ -1735,6 +1800,24 @@ export async function fetchPreRunData(
     distributionDays20d = calcDistributionDays(closes, volumes);
   }
 
+  // ── Inflection Engine fields ──
+  let rsi14: number | null = null;
+  let avgDownDayBody: number | null = null;
+  let avgDownDayBodyPrev: number | null = null;
+  let accumulationDayCount: number | null = null;
+  let atrRatio5v20: number | null = null;
+
+  if (chart3mo && chart3mo.closes.length >= 20) {
+    const { closes, opens, highs, lows, volumes } = chart3mo;
+    rsi14 = calcRSI(closes, 14);
+    const bodies = calcDownDayBodies(closes, opens, currentPrice ?? closes[closes.length - 1]);
+    avgDownDayBody = bodies.recent;
+    avgDownDayBodyPrev = bodies.prev;
+    accumulationDayCount = calcAccumulationDays(closes, volumes);
+    const squeeze = calcVolatilitySqueeze(highs, lows, closes);
+    atrRatio5v20 = squeeze.atrRatio;
+  }
+
   // ── Institutional Acceleration fields ──
   let instRsVsQQQ: number | null = null;
   let instRsAccelVsSPY: number | null = null;
@@ -1939,6 +2022,12 @@ export async function fetchPreRunData(
     instGapPct,
     instDistFromEma20Atr,
     instAtrDollar,
+    // Inflection Engine fields
+    rsi14,
+    avgDownDayBody,
+    avgDownDayBodyPrev,
+    accumulationDayCount,
+    atrRatio5v20,
     lastUpdated: targetDate ? new Date(targetDate + "T16:00:00-04:00").toISOString() : new Date().toISOString(),
   };
 }
