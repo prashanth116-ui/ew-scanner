@@ -1259,7 +1259,7 @@ export default function PreRunGuidePage() {
                     { n: 5, filter: "Min Cap", def: "Any", opts: "Any, >$1B, >$10B, >$20B, >$50B, >$100B, >$200B, >$500B, >$1T" },
                     { n: 6, filter: "Entry Quality", def: "All", opts: "All, HIGH, MOD, LOW" },
                     { n: 7, filter: "Trigger", def: "All", opts: "All + 7 trigger types" },
-                    { n: 8, filter: "RS Accel", def: "All", opts: "All, Positive (>0), Strong (\u22652), Negative, Improving (\u2191), Fast Improving (\u2191\u2191), Fading (>0 + \u2193)" },
+                    { n: 8, filter: "RS Accel", def: "All", opts: "All, \u25b2 Positive, \u25b2\u25b2 Strong, \u25bc Negative, \u2197 Improving, \u21c8 Accelerating, \u25b2\u2198 Fading" },
                     { n: 9, filter: "RRG Quadrant", def: "All", opts: "All, LEADING, IMPROVING, WEAKENING, LAGGING" },
                     { n: 10, filter: "OBV Div", def: "Off", opts: "Toggle: stealth accumulation (OBV near high, price not)" },
                     { n: 11, filter: "VP Div", def: "Off", opts: "Toggle: seller exhaustion (lower lows + declining sell vol)" },
@@ -1300,42 +1300,42 @@ export default function PreRunGuidePage() {
                 </thead>
                 <tbody className="text-[#c0c0c0]">
                   <tr className="border-b border-[#2a2a2a]/50">
-                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Positive (&gt;0)</td>
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">&#9650; Positive</td>
                     <td className="py-1.5 pr-2 text-green-400">&gt; 0</td>
                     <td className="py-1.5 pr-2 text-[#888]">any</td>
                     <td className="py-1.5 pr-2">Currently outperforming SPY. Trend could be rising or fading.</td>
                     <td className="py-1.5">Baseline filter &mdash; stock has relative strength</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
-                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Strong (&ge;2)</td>
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">&#9650;&#9650; Strong</td>
                     <td className="py-1.5 pr-2 text-emerald-400">&ge; 2</td>
                     <td className="py-1.5 pr-2 text-[#888]">any</td>
                     <td className="py-1.5 pr-2">Significantly outperforming SPY. Institutional-grade momentum.</td>
                     <td className="py-1.5">High-conviction entries, confirmed leaders</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
-                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Negative</td>
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">&#9660; Negative</td>
                     <td className="py-1.5 pr-2 text-red-400">&lt; 0</td>
                     <td className="py-1.5 pr-2 text-[#888]">any</td>
                     <td className="py-1.5 pr-2">Underperforming SPY. Lagging the market.</td>
-                    <td className="py-1.5">Avoid unless trend is improving (see Improving)</td>
+                    <td className="py-1.5">Avoid unless trend is improving (see &#8599; Improving)</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
-                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Improving (&uarr;)</td>
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">&#8599; Improving</td>
                     <td className="py-1.5 pr-2 text-[#888]">any</td>
                     <td className="py-1.5 pr-2 text-amber-400">&gt; 0</td>
                     <td className="py-1.5 pr-2">RS is getting better day over day. The trajectory is positive even if RS is still negative (e.g. TSLA: RS &minus;0.16 but trend +2.7).</td>
                     <td className="py-1.5">Early detection &mdash; catch stocks approaching leadership</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
-                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Fast Improving (&uarr;&uarr;)</td>
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">&#8648; Accelerating</td>
                     <td className="py-1.5 pr-2 text-[#888]">any</td>
                     <td className="py-1.5 pr-2 text-emerald-400">&ge; 2</td>
                     <td className="py-1.5 pr-2">RS improving rapidly. Aggressive acceleration toward outperformance.</td>
                     <td className="py-1.5">Strongest emerging momentum &mdash; rotation target</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
-                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">Fading (&gt;0 + &darr;)</td>
+                    <td className="py-1.5 pr-2 font-medium text-white whitespace-nowrap">&#9650;&#8600; Fading</td>
                     <td className="py-1.5 pr-2 text-green-400">&gt; 0</td>
                     <td className="py-1.5 pr-2 text-red-400">&lt; 0</td>
                     <td className="py-1.5 pr-2">Still outperforming SPY but losing momentum. RS is positive today but deteriorating session over session.</td>
@@ -1345,7 +1345,7 @@ export default function PreRunGuidePage() {
               </table>
             </div>
             <p className="mt-2 text-[10px] text-[#666]">
-              <strong className="text-[#888]">Momentum lifecycle:</strong> Improving &rarr; Fast Improving &rarr; Positive &rarr; Strong &rarr; Fading &rarr; Negative. The filter lets you target any stage. Badge on each card shows both values: <span className="text-white">RS +1.3</span> (current) and <span className="text-amber-400">&uarr;2.7</span> (trend).
+              <strong className="text-[#888]">Momentum lifecycle:</strong> &#8599; Improving &rarr; &#8648; Accelerating &rarr; &#9650; Positive &rarr; &#9650;&#9650; Strong &rarr; &#9650;&#8600; Fading &rarr; &#9660; Negative. The &#9650;/&#9660; symbols indicate <em>current value</em> (snapshot), while &#8599;/&#8600;/&#8648; indicate <em>trend direction</em> (trajectory). Badge on each card shows both: <span className="text-white">RS +1.3</span> (value) and <span className="text-amber-400">&uarr;2.7</span> (trend).
             </p>
           </div>
 

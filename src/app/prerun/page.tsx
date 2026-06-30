@@ -1228,12 +1228,12 @@ function PreRunPage() {
                   className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#10b981] focus:outline-none"
                 >
                   <option value="all">All RS</option>
-                  <option value="positive">Positive (&gt;0)</option>
-                  <option value="strong">Strong (&ge;2)</option>
-                  <option value="negative">Negative</option>
-                  <option value="improving">Improving (&uarr;)</option>
-                  <option value="fast_improving">Fast Improving (&uarr;&uarr;)</option>
-                  <option value="fading">Fading (&gt;0 + &darr;)</option>
+                  <option value="positive">&#9650; Positive</option>
+                  <option value="strong">&#9650;&#9650; Strong</option>
+                  <option value="negative">&#9660; Negative</option>
+                  <option value="improving">&#8599; Improving</option>
+                  <option value="fast_improving">&#8648; Accelerating</option>
+                  <option value="fading">&#9650;&#8600; Fading</option>
                 </select>
               </div>
               {/* Account Size */}
@@ -1427,12 +1427,12 @@ function PreRunPage() {
                   className="w-full rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-sm text-white focus:border-[#5ba3e6] focus:outline-none"
                 >
                   <option value="all">All RS</option>
-                  <option value="positive">Positive (&gt;0)</option>
-                  <option value="strong">Strong (&ge;2)</option>
-                  <option value="negative">Negative</option>
-                  <option value="improving">Improving (&uarr;)</option>
-                  <option value="fast_improving">Fast Improving (&uarr;&uarr;)</option>
-                  <option value="fading">Fading (&gt;0 + &darr;)</option>
+                  <option value="positive">&#9650; Positive</option>
+                  <option value="strong">&#9650;&#9650; Strong</option>
+                  <option value="negative">&#9660; Negative</option>
+                  <option value="improving">&#8599; Improving</option>
+                  <option value="fast_improving">&#8648; Accelerating</option>
+                  <option value="fading">&#9650;&#8600; Fading</option>
                 </select>
               </div>
               {/* Earnings Within */}
@@ -1847,11 +1847,11 @@ function PreRunPage() {
             </select>
             <select value={instRsAccelFilter} onChange={(e) => setInstRsAccelFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
               <option value="all">All RS</option>
-              <option value="positive">Positive (&gt;0)</option>
-              <option value="strong">Strong (&ge;2)</option>
-              <option value="negative">Negative</option>
-              <option value="improving">Improving (&uarr;)</option>
-              <option value="fast_improving">Fast Improving (&uarr;&uarr;)</option>
+              <option value="positive">&#9650; Positive</option>
+              <option value="strong">&#9650;&#9650; Strong</option>
+              <option value="negative">&#9660; Negative</option>
+              <option value="improving">&#8599; Improving</option>
+              <option value="fast_improving">&#8648; Accelerating</option>
             </select>
             <select value={quadrantFilter} onChange={(e) => setQuadrantFilter(e.target.value)} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]">
               <option value="All">All Quadrants</option>
