@@ -2725,9 +2725,9 @@ const ResultCard = memo(function ResultCard({
           </div>
           <p className="text-xs text-[#a0a0a0] truncate mt-0.5">{d.companyName}</p>
         </div>
-        {d.currentPrice !== null && (
+        {d.currentPrice != null && (
           <p className="text-sm font-medium text-white shrink-0 ml-2">
-            ${d.currentPrice.toFixed(2)}
+            ${Number(d.currentPrice).toFixed(2)}
           </p>
         )}
       </div>
@@ -2738,14 +2738,14 @@ const ResultCard = memo(function ResultCard({
         <div className="text-center">
           <p className="text-[10px] uppercase tracking-wider text-[#666] mb-0.5">% from ATH</p>
           <p className="text-lg font-bold text-white">
-            {d.pctFromAth !== null ? `${d.pctFromAth.toFixed(0)}%` : "-"}
+            {d.pctFromAth != null ? `${Number(d.pctFromAth).toFixed(0)}%` : "-"}
           </p>
         </div>
         {/* Short Float */}
         <div className="text-center">
           <p className="text-[10px] uppercase tracking-wider text-[#666] mb-0.5">Short Float</p>
           <p className="text-lg font-bold text-white">
-            {d.shortFloat !== null ? `${d.shortFloat.toFixed(1)}%` : "-"}
+            {d.shortFloat != null ? `${Number(d.shortFloat).toFixed(1)}%` : "-"}
           </p>
         </div>
         {/* Days to Earnings */}
@@ -2828,14 +2828,14 @@ const ResultCard = memo(function ResultCard({
       {/* RS acceleration badges */}
       {(d.instRsAccelVsSPY !== null || d.instRsAccelTrend !== null) && (
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          {d.instRsAccelVsSPY !== null && (
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${(d.instRsAccelVsSPY ?? 0) > 3 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : (d.instRsAccelVsSPY ?? 0) > 0 ? "border-[#333] bg-[#1a1a1a] text-white" : "border-red-500/20 bg-red-500/10 text-red-400"}`} title={`RS Accel vs SPY: 5-session change in relative strength\nRS Accel vs QQQ: ${d.instRsAccelVsQQQ !== null ? d.instRsAccelVsQQQ.toFixed(1) : "-"}`}>
-              RS {d.instRsAccelVsSPY >= 0 ? "+" : ""}{d.instRsAccelVsSPY.toFixed(1)}
+          {d.instRsAccelVsSPY != null && (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${(d.instRsAccelVsSPY ?? 0) > 3 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : (d.instRsAccelVsSPY ?? 0) > 0 ? "border-[#333] bg-[#1a1a1a] text-white" : "border-red-500/20 bg-red-500/10 text-red-400"}`} title={`RS Accel vs SPY: 5-session change in relative strength\nRS Accel vs QQQ: ${d.instRsAccelVsQQQ != null ? Number(d.instRsAccelVsQQQ).toFixed(1) : "-"}`}>
+              RS {d.instRsAccelVsSPY >= 0 ? "+" : ""}{Number(d.instRsAccelVsSPY).toFixed(1)}
             </span>
           )}
-          {d.instRsAccelTrend !== null && (
+          {d.instRsAccelTrend != null && (
             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${(d.instRsAccelTrend ?? 0) > 2 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : (d.instRsAccelTrend ?? 0) > 0 ? "border-amber-500/20 bg-amber-500/10 text-amber-400" : "border-[#333] bg-[#1a1a1a] text-[#666]"}`} title="RS Accel Trend: slope of RS accel over last 3 sessions (positive = improving)">
-              {(d.instRsAccelTrend ?? 0) > 0 ? "\u2191" : (d.instRsAccelTrend ?? 0) < 0 ? "\u2193" : "\u2192"}{Math.abs(d.instRsAccelTrend).toFixed(1)}
+              {(d.instRsAccelTrend ?? 0) > 0 ? "\u2191" : (d.instRsAccelTrend ?? 0) < 0 ? "\u2193" : "\u2192"}{Math.abs(Number(d.instRsAccelTrend)).toFixed(1)}
             </span>
           )}
         </div>
@@ -3052,10 +3052,10 @@ const VCPResultCard = memo(function VCPResultCard({
     { label: "Below 10 SMA", active: d.currentPrice !== null && d.vcpSma10 !== null && d.currentPrice < d.vcpSma10 },
   ];
 
-  const fmtNum = (v: number | null, decimals = 1) => v !== null ? v.toFixed(decimals) : "-";
-  const fmtDollar = (v: number | null) => v !== null ? `$${v.toFixed(2)}` : "-";
-  const fmtVol = (v: number | null) => {
-    if (v === null) return "-";
+  const fmtNum = (v: number | null | undefined, decimals = 1) => v != null ? Number(v).toFixed(decimals) : "-";
+  const fmtDollar = (v: number | null | undefined) => v != null ? `$${Number(v).toFixed(2)}` : "-";
+  const fmtVol = (v: number | null | undefined) => {
+    if (v == null) return "-";
     if (v >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(1)}B`;
     if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(0)}M`;
     return `$${(v / 1_000).toFixed(0)}K`;
@@ -3077,8 +3077,8 @@ const VCPResultCard = memo(function VCPResultCard({
           </div>
           <p className="text-xs text-[#a0a0a0] truncate mt-0.5">{d.companyName}</p>
         </div>
-        {d.currentPrice !== null && (
-          <p className="text-sm font-medium text-white shrink-0 ml-2">${d.currentPrice.toFixed(2)}</p>
+        {d.currentPrice != null && (
+          <p className="text-sm font-medium text-white shrink-0 ml-2">${Number(d.currentPrice).toFixed(2)}</p>
         )}
       </div>
 
@@ -3201,8 +3201,8 @@ const VCPResultCard = memo(function VCPResultCard({
             <div><span className="text-[#555]">6R</span><p className="text-emerald-400">{fmtDollar(risk.target6R)}</p></div>
             <div><span className="text-[#555]">10R</span><p className="text-emerald-400">{fmtDollar(risk.target10R)}</p></div>
           </div>
-          {risk.sma10Exit !== null && (
-            <p className="text-[9px] text-[#555] mt-1">10 SMA Exit: ${risk.sma10Exit.toFixed(2)}</p>
+          {risk.sma10Exit != null && (
+            <p className="text-[9px] text-[#555] mt-1">10 SMA Exit: ${Number(risk.sma10Exit).toFixed(2)}</p>
           )}
         </div>
       )}
@@ -3226,16 +3226,16 @@ const VCPResultCard = memo(function VCPResultCard({
       </div>
 
       {/* RS acceleration badges */}
-      {(d.instRsAccelVsSPY !== null || d.instRsAccelTrend !== null) && (
+      {(d.instRsAccelVsSPY != null || d.instRsAccelTrend != null) && (
         <div className="mb-3 flex flex-wrap items-center gap-1">
-          {d.instRsAccelVsSPY !== null && (
-            <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-medium border ${(d.instRsAccelVsSPY ?? 0) > 3 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : (d.instRsAccelVsSPY ?? 0) > 0 ? "border-[#333] bg-[#1a1a1a] text-white" : "border-red-500/20 bg-red-500/10 text-red-400"}`} title={`RS Accel vs SPY: ${d.instRsAccelVsSPY.toFixed(1)} | vs QQQ: ${d.instRsAccelVsQQQ?.toFixed(1) ?? "-"}`}>
-              RS {d.instRsAccelVsSPY >= 0 ? "+" : ""}{d.instRsAccelVsSPY.toFixed(1)}
+          {d.instRsAccelVsSPY != null && (
+            <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-medium border ${(d.instRsAccelVsSPY ?? 0) > 3 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : (d.instRsAccelVsSPY ?? 0) > 0 ? "border-[#333] bg-[#1a1a1a] text-white" : "border-red-500/20 bg-red-500/10 text-red-400"}`} title={`RS Accel vs SPY: ${Number(d.instRsAccelVsSPY).toFixed(1)} | vs QQQ: ${d.instRsAccelVsQQQ != null ? Number(d.instRsAccelVsQQQ).toFixed(1) : "-"}`}>
+              RS {d.instRsAccelVsSPY >= 0 ? "+" : ""}{Number(d.instRsAccelVsSPY).toFixed(1)}
             </span>
           )}
-          {d.instRsAccelTrend !== null && (
+          {d.instRsAccelTrend != null && (
             <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-medium border ${(d.instRsAccelTrend ?? 0) > 2 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : (d.instRsAccelTrend ?? 0) > 0 ? "border-amber-500/20 bg-amber-500/10 text-amber-400" : "border-[#333] bg-[#0f0f0f] text-[#444]"}`} title="RS Accel Trend: slope over last 3 sessions">
-              {(d.instRsAccelTrend ?? 0) > 0 ? "\u2191" : (d.instRsAccelTrend ?? 0) < 0 ? "\u2193" : "\u2192"}{Math.abs(d.instRsAccelTrend).toFixed(1)}
+              {(d.instRsAccelTrend ?? 0) > 0 ? "\u2191" : (d.instRsAccelTrend ?? 0) < 0 ? "\u2193" : "\u2192"}{Math.abs(Number(d.instRsAccelTrend)).toFixed(1)}
             </span>
           )}
         </div>
