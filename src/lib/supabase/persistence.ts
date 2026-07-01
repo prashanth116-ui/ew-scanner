@@ -457,3 +457,134 @@ export async function getStaleInstitutionalSymbols(maxAgeDays: number): Promise<
     return [];
   }
 }
+
+// ── Inflection Daily Scan ──
+
+export interface InflectionDailyRecord {
+  scan_date: string;         // YYYY-MM-DD
+  ticker: string;
+  company_name: string;
+  price: number;
+  overall_score: number;
+  se_score: number;
+  vc_score: number;
+  be_score: number;
+  rs_score: number;
+  la_score: number;
+  ip_score: number;
+  stage: string;
+  trade_read: string;
+  extension_risk: boolean;
+  is_primary: boolean;
+  is_stronger: boolean;
+  bullish_evidence: string[];
+  caution_evidence: string[];
+  invalidation: number | null;
+}
+
+/** Batch upsert inflection daily scan results. Upserts 500 at a time on (scan_date, ticker). */
+export async function upsertInflectionDaily(records: InflectionDailyRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertInflectionDaily: no admin client");
+      return 0;
+    }
+
+    let upserted = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = records.slice(i, i + 500);
+      const { data, error } = await supabase
+        .from("inflection_daily")
+        .upsert(batch, { onConflict: "scan_date,ticker" })
+        .select("id");
+
+      if (error) {
+        console.error("[persistence] upsertInflectionDaily error:", error.message);
+      } else {
+        upserted += data?.length ?? 0;
+      }
+    }
+    return upserted;
+  } catch (err) {
+    console.error("[persistence] upsertInflectionDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete inflection_daily rows older than retentionDays. */
+export async function purgeOldInflectionDaily(retentionDays = 14): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("inflection_daily")
+      .delete()
+      .lt("scan_date", cutoffStr)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] purgeOldInflectionDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] purgeOldInflectionDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Load inflection daily results for a given date. */
+export async function loadInflectionDaily(date: string): Promise<InflectionDailyRecord[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("inflection_daily")
+      .select("*")
+      .eq("scan_date", date)
+      .order("overall_score", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadInflectionDaily error:", error.message);
+      return [];
+    }
+    return (data ?? []) as InflectionDailyRecord[];
+  } catch (err) {
+    console.error("[persistence] loadInflectionDaily exception:", err);
+    return [];
+  }
+}
+
+/** Load available scan dates (up to limit, most recent first). */
+export async function loadInflectionDailyDates(limit = 14): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("inflection_daily")
+      .select("scan_date")
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadInflectionDailyDates error:", error.message);
+      return [];
+    }
+
+    // Dedupe and limit
+    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
+    return unique.slice(0, limit);
+  } catch (err) {
+    console.error("[persistence] loadInflectionDailyDates exception:", err);
+    return [];
+  }
+}
