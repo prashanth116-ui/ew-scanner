@@ -87,8 +87,8 @@ const PRESET_LABELS: Record<Preset, string> = {
 const PRESET_DESCRIPTIONS: Record<Preset, string> = {
   sndk: "40%+ from ATH, 15%+ SI, score 18+",
   early_mover: "25%+ from ATH, EMA timing + higher lows + volume",
-  pullback: "20-40% pullback with structure confirmation",
-  leading: "Leading/Improving sectors with EMA confirmation",
+  pullback: "Up to 40% pullback, 2/3 confirmation (EMA timing + higher lows + volume)",
+  leading: "Leading/Improving sectors, score 15+, EMA + relative strength",
   stealth: "OBV/VP divergence + EMA timing",
   early_plus: "Pre-breakout: volume divergence + range coil",
 };

@@ -36,8 +36,8 @@ function computePresetFlags(
   return {
     sndk: pctFromAth >= 40 && shortFloat >= 15 && s.finalScore >= 18,
     early_mover: pctFromAth >= 25 && s.finalScore >= 14 && s.scoreM2 >= 1 && s.scoreL >= 1 && s.scoreF >= 1,
-    pullback: pctFromAth <= 40 && s.finalScore >= 15 && s.scoreM2 >= 1 && s.scoreF >= 1 && s.scoreL >= 1,
-    leading: s.totalScore >= 12 && s.scoreM >= 1 && (quadrant === "LEADING" || quadrant === "IMPROVING"),
+    pullback: pctFromAth <= 40 && s.finalScore >= 15 && [s.scoreM2 >= 1, s.scoreF >= 1, s.scoreL >= 1].filter(Boolean).length >= 2,
+    leading: s.totalScore >= 15 && s.scoreM >= 1 && s.scoreJ >= 1 && (quadrant === "LEADING" || quadrant === "IMPROVING"),
     stealth: s.finalScore >= 11 && s.scoreM2 >= 1 && (d.obvDivergent === true || d.vpDivergenceBullish === true),
     early_plus: s.finalScore >= 10 && s.scoreM2 >= 1 && s.scoreN >= 1 && (d.obvDivergent === true || d.vpDivergenceBullish === true),
   };
