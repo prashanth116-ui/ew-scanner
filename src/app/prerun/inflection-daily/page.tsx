@@ -13,8 +13,11 @@ import {
   Zap,
   Shield,
   TrendingDown,
+  Copy,
+  Check,
 } from "lucide-react";
 import Link from "next/link";
+import { TableErrorBoundary } from "@/components/table-error-boundary";
 
 // ── Types ──
 
@@ -300,6 +303,7 @@ export default function InflectionDailyPage() {
   const [sortAsc, setSortAsc] = useState(false);
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
   const [showDropped, setShowDropped] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Load available dates on mount
   useEffect(() => {
@@ -363,6 +367,12 @@ export default function InflectionDailyPage() {
       return field;
     });
   }, []);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(results.map((r) => r.ticker).join(", "));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [results]);
 
   // Filter and sort results
   const filtered = useMemo(() => {
@@ -639,8 +649,15 @@ export default function InflectionDailyPage() {
           </button>
         ))}
 
-        {/* CSV export */}
-        <div className="ml-auto">
+        {/* Copy + CSV export */}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border border-[#2a2a2a] transition-colors"
+          >
+            {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+            {copied ? "Copied" : "Copy"}
+          </button>
           <button
             onClick={() => exportCSV(filtered, selectedDate ?? "", streaks, deltas)}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border border-[#2a2a2a] transition-colors"
@@ -667,6 +684,7 @@ export default function InflectionDailyPage() {
 
       {/* Table */}
       {!loadingResults && filtered.length > 0 && (
+        <TableErrorBoundary>
         <div className="rounded-lg border border-[#2a2a2a] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -830,6 +848,7 @@ export default function InflectionDailyPage() {
             </table>
           </div>
         </div>
+        </TableErrorBoundary>
       )}
 
       {/* Footer */}

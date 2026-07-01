@@ -14,6 +14,7 @@ import {
   Check,
 } from "lucide-react";
 import Link from "next/link";
+import { TableErrorBoundary } from "@/components/table-error-boundary";
 
 // ── Types ──
 
@@ -388,6 +389,7 @@ export default function InstitutionalDailyPage() {
       {!loadingResults && filtered.length === 0 && <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-8 text-center"><p className="text-[#a0a0a0]">No results match the current filters.</p></div>}
 
       {!loadingResults && filtered.length > 0 && (
+        <TableErrorBoundary>
         <div className="rounded-lg border border-[#2a2a2a] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -450,6 +452,7 @@ export default function InstitutionalDailyPage() {
             </table>
           </div>
         </div>
+        </TableErrorBoundary>
       )}
 
       <div className="mt-6 text-center text-[10px] text-[#444]">

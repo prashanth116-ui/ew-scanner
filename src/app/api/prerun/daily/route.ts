@@ -59,13 +59,24 @@ export async function GET(request: NextRequest) {
   const datesForStreaks = allDates.slice(currentIdx);
   const multiDayRows = await loadPreRunDailyMulti(datesForStreaks);
 
+  // Build lookup: date → ticker → row (for O(1) access)
+  const rowByDateTicker = new Map<string, Map<string, (typeof multiDayRows)[number]>>();
+  for (const r of multiDayRows) {
+    let tickerMap = rowByDateTicker.get(r.scan_date);
+    if (!tickerMap) {
+      tickerMap = new Map();
+      rowByDateTicker.set(r.scan_date, tickerMap);
+    }
+    tickerMap.set(r.ticker, r);
+  }
+
   // Build per-ticker streak: consecutive days appearing (ending at selected date)
   const streaks: Record<string, number> = {};
   const currentTickers = new Set(results.map((r) => r.ticker));
   for (const ticker of currentTickers) {
     let streak = 0;
     for (const d of datesForStreaks) {
-      const row = multiDayRows.find((r) => r.scan_date === d && r.ticker === ticker);
+      const row = rowByDateTicker.get(d)?.get(ticker);
       if (row) {
         // If preset filter active, check that the ticker qualified for this preset on that date
         if (flagKey) {

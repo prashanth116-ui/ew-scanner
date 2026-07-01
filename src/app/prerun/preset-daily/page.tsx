@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, Fragment, Component, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import {
   Loader2,
   Calendar,
@@ -15,6 +15,8 @@ import {
   Layers,
 } from "lucide-react";
 import Link from "next/link";
+import { fmtNum } from "@/lib/daily-format";
+import { TableErrorBoundary } from "@/components/table-error-boundary";
 
 // ── Types ──
 
@@ -90,48 +92,6 @@ const PRESET_DESCRIPTIONS: Record<Preset, string> = {
   stealth: "OBV/VP divergence + EMA timing",
   early_plus: "Pre-breakout: volume divergence + range coil",
 };
-
-// ── Error Boundary ──
-
-class TableErrorBoundary extends Component<
-  { children: ReactNode },
-  { error: Error | null }
-> {
-  constructor(props: { children: ReactNode }) {
-    super(props);
-    this.state = { error: null };
-  }
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-  render() {
-    if (this.state.error) {
-      return (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/[0.05] p-6 text-center">
-          <p className="text-red-400 font-semibold mb-2">Render error</p>
-          <p className="text-[#a0a0a0] text-xs font-mono">{this.state.error.message}</p>
-          <p className="text-[#666] text-[10px] mt-2 font-mono whitespace-pre-wrap">{this.state.error.stack?.slice(0, 500)}</p>
-          <button
-            onClick={() => this.setState({ error: null })}
-            className="mt-3 px-3 py-1 rounded text-xs bg-[#2a2a2a] text-white hover:bg-[#3a3a3a]"
-          >
-            Retry
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-// ── Safe number formatting ──
-
-function fmtNum(v: unknown, decimals: number): string {
-  if (v == null) return "-";
-  const n = Number(v);
-  if (isNaN(n)) return "-";
-  return n.toFixed(decimals);
-}
 
 // ── Helpers ──
 

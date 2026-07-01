@@ -14,6 +14,8 @@ import {
   Check,
 } from "lucide-react";
 import Link from "next/link";
+import { fmtNum } from "@/lib/daily-format";
+import { TableErrorBoundary } from "@/components/table-error-boundary";
 
 // ── Types ──
 
@@ -152,10 +154,10 @@ function ExpandedVCP({ row }: { row: VCPDailyRow }) {
             <div>
               <p className="text-[9px] uppercase tracking-wider text-[#555] mb-1.5">Trade Setup</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
-                <span className="text-[#555]">Entry</span><span className="text-white font-medium">${Number(row.entry).toFixed(2)}</span>
-                <span className="text-[#555]">Stop</span><span className="text-red-400 font-medium">${Number(row.stop).toFixed(2)}</span>
-                <span className="text-[#555]">Target 2R</span><span className="text-emerald-400 font-medium">${Number(row.target_2r).toFixed(2)}</span>
-                <span className="text-[#555]">Target 3R</span><span className="text-emerald-400 font-medium">${Number(row.target_3r).toFixed(2)}</span>
+                <span className="text-[#555]">Entry</span><span className="text-white font-medium">${fmtNum(row.entry, 2)}</span>
+                {row.stop != null && <><span className="text-[#555]">Stop</span><span className="text-red-400 font-medium">${fmtNum(row.stop, 2)}</span></>}
+                {row.target_2r != null && <><span className="text-[#555]">Target 2R</span><span className="text-emerald-400 font-medium">${fmtNum(row.target_2r, 2)}</span></>}
+                {row.target_3r != null && <><span className="text-[#555]">Target 3R</span><span className="text-emerald-400 font-medium">${fmtNum(row.target_3r, 2)}</span></>}
                 {row.sma10_exit !== null && (
                   <><span className="text-[#555]">SMA10 Exit</span><span className="text-amber-400 font-medium">${Number(row.sma10_exit).toFixed(2)}</span></>
                 )}
@@ -380,6 +382,7 @@ export default function VCPDailyPage() {
       {!loadingResults && filtered.length === 0 && <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-8 text-center"><p className="text-[#a0a0a0]">No results match the current filters.</p></div>}
 
       {!loadingResults && filtered.length > 0 && (
+        <TableErrorBoundary>
         <div className="rounded-lg border border-[#2a2a2a] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -441,6 +444,7 @@ export default function VCPDailyPage() {
             </table>
           </div>
         </div>
+        </TableErrorBoundary>
       )}
 
       <div className="mt-6 text-center text-[10px] text-[#444]">

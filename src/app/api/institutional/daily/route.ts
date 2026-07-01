@@ -40,13 +40,24 @@ export async function GET(request: NextRequest) {
   const datesForStreaks = allDates.slice(currentIdx);
   const multiDayRows = await loadInstitutionalDailyMulti(datesForStreaks);
 
+  // Build lookup: date → Set<ticker> for O(1) access
+  const tickersByDate = new Map<string, Set<string>>();
+  for (const r of multiDayRows) {
+    let s = tickersByDate.get(r.scan_date);
+    if (!s) {
+      s = new Set();
+      tickersByDate.set(r.scan_date, s);
+    }
+    s.add(r.ticker);
+  }
+
   // Build per-ticker streak
   const streaks: Record<string, number> = {};
   const currentTickers = new Set(results.map((r) => r.ticker));
   for (const ticker of currentTickers) {
     let streak = 0;
     for (const d of datesForStreaks) {
-      if (multiDayRows.some((r) => r.scan_date === d && r.ticker === ticker)) {
+      if (tickersByDate.get(d)?.has(ticker)) {
         streak++;
       } else {
         break;

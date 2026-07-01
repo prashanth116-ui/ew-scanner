@@ -37,6 +37,9 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/prerun/watchlist", label: "Watchlist" },
     { href: "/prerun/history", label: "History" },
     { href: "/prerun/preset-daily", label: "Daily" },
+    { href: "/prerun/inflection-daily", label: "Inflection" },
+    { href: "/prerun/vcp-daily", label: "VCP" },
+    { href: "/prerun/institutional-daily", label: "Institutional" },
   ],
   sectors: [
     { href: "/sectors/brief", label: "Brief" },
