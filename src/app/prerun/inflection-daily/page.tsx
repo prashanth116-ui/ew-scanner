@@ -1,20 +1,18 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import {
   Loader2,
   Calendar,
   Download,
   Filter,
+  Search,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
   ArrowUpDown,
   Zap,
   Shield,
-  ChevronDown,
-  ChevronUp,
-  AlertTriangle,
-  Check,
-  X,
-  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -44,7 +42,7 @@ interface InflectionDailyRow {
 
 type TradeReadFilter = "ALL" | "STARTER_POSITION_CANDIDATE" | "ADD_ON_CONFIRMATION" | "WATCH";
 type StageFilter = "ALL" | "INFLECTION" | "EARLY_ACCUMULATION" | "EXPANSION" | "SELLER_EXHAUSTION";
-type SortField = "overall_score" | "se_score" | "vc_score" | "be_score" | "rs_score" | "stage" | "ticker";
+type SortField = "overall_score" | "se_score" | "vc_score" | "be_score" | "rs_score" | "la_score" | "ip_score" | "stage" | "ticker" | "price" | "trade_read";
 
 // ── Helpers ──
 
@@ -87,7 +85,7 @@ function tradeReadLabel(tr: TradeReadFilter): string {
 
 function stageLabel(s: StageFilter): string {
   switch (s) {
-    case "ALL": return "All";
+    case "ALL": return "All Stages";
     case "INFLECTION": return "Inflection";
     case "EARLY_ACCUMULATION": return "Early Accum.";
     case "EXPANSION": return "Expansion";
@@ -102,6 +100,13 @@ function scoreBarColor(score: number): string {
   return "bg-red-500";
 }
 
+function scoreTextColor(score: number): string {
+  if (score >= 55) return "text-emerald-400";
+  if (score >= 40) return "text-cyan-400";
+  if (score >= 25) return "text-amber-400";
+  return "text-red-400";
+}
+
 const STAGE_ORDER: Record<string, number> = {
   EXPANSION: 0,
   EARLY_ACCUMULATION: 1,
@@ -110,9 +115,32 @@ const STAGE_ORDER: Record<string, number> = {
   DISTRIBUTION: 4,
 };
 
+const TRADE_READ_ORDER: Record<string, number> = {
+  STARTER_POSITION_CANDIDATE: 0,
+  ADD_ON_CONFIRMATION: 1,
+  WATCH: 2,
+  AVOID: 3,
+};
+
 function formatDatePill(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00Z");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// ── Inline Score Bar ──
+
+function MiniScoreBar({ score }: { score: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="w-10 h-1.5 bg-[#0f0f0f] rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full ${scoreBarColor(score)}`}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+      <span className={`text-[10px] font-medium tabular-nums ${scoreTextColor(score)}`}>{score}</span>
+    </div>
+  );
 }
 
 // ── CSV Export ──
@@ -153,154 +181,87 @@ function exportCSV(results: InflectionDailyRow[], date: string) {
   URL.revokeObjectURL(url);
 }
 
-// ── Result Card ──
+// ── Expanded Row Detail ──
 
-function ResultCard({
-  row,
-  isNew,
-  index,
-}: {
-  row: InflectionDailyRow;
-  isNew: boolean;
-  index: number;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const sBadge = stageBadge(row.stage);
-  const trBadge = tradeReadBadge(row.trade_read);
-
-  const scoreBars = [
-    { label: "Seller Exhaust", score: row.se_score, key: "SE" },
-    { label: "Vol Compress", score: row.vc_score, key: "VC" },
-    { label: "Buyer Emerge", score: row.be_score, key: "BE" },
-    { label: "Rel Strength", score: row.rs_score, key: "RS" },
-    { label: "Auction", score: row.la_score, key: "LA" },
-    { label: "Inst Particip", score: row.ip_score, key: "IP" },
-  ];
+function ExpandedEvidence({ row }: { row: InflectionDailyRow }) {
+  const bullish = row.bullish_evidence ?? [];
+  const caution = row.caution_evidence ?? [];
 
   return (
-    <div
-      className="ew-card-in rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4 hover:border-[#3a3a3a] transition-colors flex flex-col"
-      style={{ animationDelay: `${index * 30}ms` }}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-base font-bold text-white">{row.ticker}</h3>
-            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sBadge.color}`}>
-              {sBadge.label}
-            </span>
-            <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold tracking-wide ${trBadge.color}`}>
-              {trBadge.label}
-            </span>
-            {row.is_primary && (
-              <span className="inline-flex items-center gap-0.5 rounded-full border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-purple-400">
-                <Zap className="h-2.5 w-2.5" /> Signal
-              </span>
-            )}
-            {row.is_stronger && (
-              <span className="inline-flex items-center gap-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
-                <Shield className="h-2.5 w-2.5" /> Strong
-              </span>
-            )}
-            {isNew && (
-              <span className="inline-flex items-center gap-0.5 rounded-full border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[9px] font-bold text-green-400 uppercase tracking-wider">
-                <Sparkles className="h-2.5 w-2.5" /> New
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-[#a0a0a0] truncate mt-0.5">{row.company_name}</p>
-        </div>
-        <p className="text-sm font-medium text-white shrink-0 ml-2">
-          ${Number(row.price).toFixed(2)}
-        </p>
-      </div>
-
-      {/* Overall score bar */}
-      <div className="mb-3">
-        <div className="flex items-center justify-between text-xs mb-1">
-          <span className="text-[#a0a0a0]">Overall</span>
-          <span className="font-medium text-white">{row.overall_score}/100</span>
-        </div>
-        <div className="h-2 bg-[#0f0f0f] rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${scoreBarColor(row.overall_score)}`}
-            style={{ width: `${Math.min(100, row.overall_score)}%` }}
-          />
-        </div>
-      </div>
-
-      {/* 6 category score bars */}
-      <div className="space-y-1.5 mb-3">
-        {scoreBars.map((bar) => (
-          <div key={bar.key} className="flex items-center gap-2">
-            <span className="text-[9px] text-[#666] w-20 text-right shrink-0">{bar.label}</span>
-            <div className="flex-1 h-1.5 bg-[#0f0f0f] rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full ${scoreBarColor(bar.score)}`}
-                style={{ width: `${bar.score}%` }}
-              />
+    <tr>
+      <td colSpan={14} className="px-3 py-3 bg-[#111]">
+        <div className="flex flex-wrap gap-4">
+          {bullish.length > 0 && (
+            <div className="flex-1 min-w-[200px]">
+              <p className="text-[9px] uppercase tracking-wider text-emerald-500/60 mb-1.5">Bullish Evidence</p>
+              <div className="flex flex-wrap gap-1">
+                {bullish.map((ev, i) => (
+                  <span key={i} className="rounded px-1.5 py-0.5 text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    {ev}
+                  </span>
+                ))}
+              </div>
             </div>
-            <span className="text-[9px] text-[#a0a0a0] w-6 shrink-0">{bar.score}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Key metrics */}
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-3 text-[10px]">
-        <div>
-          <span className="text-[#555]">Extension Risk</span>
-          <p className={row.extension_risk ? "text-orange-400 font-medium" : "text-white"}>
-            {row.extension_risk ? "Yes" : "No"}
-          </p>
+          )}
+          {caution.length > 0 && (
+            <div className="flex-1 min-w-[200px]">
+              <p className="text-[9px] uppercase tracking-wider text-amber-500/60 mb-1.5">Caution</p>
+              <div className="flex flex-wrap gap-1">
+                {caution.map((ev, i) => (
+                  <span key={i} className="rounded px-1.5 py-0.5 text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    {ev}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {bullish.length === 0 && caution.length === 0 && (
+            <p className="text-[10px] text-[#555]">No evidence details available.</p>
+          )}
+          {row.invalidation !== null && (
+            <div className="shrink-0">
+              <p className="text-[9px] uppercase tracking-wider text-[#555] mb-1">Invalidation</p>
+              <p className="text-xs font-medium text-white">${Number(row.invalidation).toFixed(2)}</p>
+            </div>
+          )}
         </div>
-        <div>
-          <span className="text-[#555]">Invalidation</span>
-          <p className="text-white font-medium">
-            {row.invalidation !== null ? `$${Number(row.invalidation).toFixed(2)}` : "-"}
-          </p>
-        </div>
-      </div>
+      </td>
+    </tr>
+  );
+}
 
-      {/* Evidence pills */}
-      <div className="space-y-1.5 mb-3">
-        {(row.bullish_evidence ?? []).length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {(row.bullish_evidence ?? []).slice(0, expanded ? undefined : 3).map((ev, i) => (
-              <span key={i} className="rounded px-1.5 py-0.5 text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                {ev}
-              </span>
-            ))}
-            {!expanded && (row.bullish_evidence ?? []).length > 3 && (
-              <span className="text-[9px] text-[#666]">+{(row.bullish_evidence ?? []).length - 3} more</span>
-            )}
-          </div>
-        )}
-        {(row.caution_evidence ?? []).length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {(row.caution_evidence ?? []).slice(0, expanded ? undefined : 2).map((ev, i) => (
-              <span key={i} className="rounded px-1.5 py-0.5 text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                {ev}
-              </span>
-            ))}
-            {!expanded && (row.caution_evidence ?? []).length > 2 && (
-              <span className="text-[9px] text-[#666]">+{(row.caution_evidence ?? []).length - 2} more</span>
-            )}
-          </div>
-        )}
-      </div>
+// ── Sortable Column Header ──
 
-      {/* Expand toggle */}
-      <div className="mt-auto pt-2 border-t border-[#1f1f1f]">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-1 text-[10px] text-[#666] hover:text-white transition-colors"
-        >
-          {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          {expanded ? "Less" : "All evidence"}
-        </button>
-      </div>
-    </div>
+function SortHeader({
+  field,
+  label,
+  currentSort,
+  sortAsc,
+  onSort,
+  className,
+}: {
+  field: SortField;
+  label: string;
+  currentSort: SortField;
+  sortAsc: boolean;
+  onSort: (f: SortField) => void;
+  className?: string;
+}) {
+  const active = currentSort === field;
+  return (
+    <th
+      onClick={() => onSort(field)}
+      className={`px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors whitespace-nowrap ${
+        active ? "text-white" : "text-[#666] hover:text-[#a0a0a0]"
+      } ${className ?? ""}`}
+    >
+      <span className="inline-flex items-center gap-0.5">
+        {label}
+        {active && (
+          <span className="text-[8px]">{sortAsc ? "\u25B2" : "\u25BC"}</span>
+        )}
+      </span>
+    </th>
   );
 }
 
@@ -315,8 +276,11 @@ export default function InflectionDailyPage() {
   const [loadingResults, setLoadingResults] = useState(false);
   const [tradeReadFilter, setTradeReadFilter] = useState<TradeReadFilter>("ALL");
   const [stageFilter, setStageFilter] = useState<StageFilter>("ALL");
+  const [minScore, setMinScore] = useState(0);
+  const [tickerSearch, setTickerSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("overall_score");
   const [sortAsc, setSortAsc] = useState(false);
+  const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
   // Load available dates on mount
   useEffect(() => {
@@ -350,6 +314,7 @@ export default function InflectionDailyPage() {
         const json = await res.json();
         if (!cancelled) {
           setResults(json.results ?? []);
+          setExpandedTicker(null);
         }
       } catch {
         if (!cancelled) setResults([]);
@@ -411,13 +376,26 @@ export default function InflectionDailyPage() {
     if (stageFilter !== "ALL") {
       rows = rows.filter((r) => r.stage === stageFilter);
     }
+    if (minScore > 0) {
+      rows = rows.filter((r) => r.overall_score >= minScore);
+    }
+    if (tickerSearch.trim()) {
+      const q = tickerSearch.trim().toUpperCase();
+      rows = rows.filter(
+        (r) => r.ticker.includes(q) || (r.company_name ?? "").toUpperCase().includes(q)
+      );
+    }
 
     const sorted = [...rows].sort((a, b) => {
       let cmp: number;
       if (sortField === "stage") {
         cmp = (STAGE_ORDER[a.stage] ?? 99) - (STAGE_ORDER[b.stage] ?? 99);
+      } else if (sortField === "trade_read") {
+        cmp = (TRADE_READ_ORDER[a.trade_read] ?? 99) - (TRADE_READ_ORDER[b.trade_read] ?? 99);
       } else if (sortField === "ticker") {
         cmp = a.ticker.localeCompare(b.ticker);
+      } else if (sortField === "price") {
+        cmp = Number(b.price) - Number(a.price);
       } else {
         cmp = (b[sortField] ?? 0) - (a[sortField] ?? 0);
       }
@@ -425,13 +403,13 @@ export default function InflectionDailyPage() {
     });
 
     return sorted;
-  }, [results, tradeReadFilter, stageFilter, sortField, sortAsc]);
+  }, [results, tradeReadFilter, stageFilter, minScore, tickerSearch, sortField, sortAsc]);
 
   // Summary counts
   const starterCount = results.filter((r) => r.trade_read === "STARTER_POSITION_CANDIDATE").length;
   const addOnCount = results.filter((r) => r.trade_read === "ADD_ON_CONFIRMATION").length;
   const watchCount = results.filter((r) => r.trade_read === "WATCH").length;
-  const newTodayCount = results.filter((r) => !prevDayTickers.has(r.ticker)).length;
+  const newTodayCount = prevDayTickers.size > 0 ? results.filter((r) => !prevDayTickers.has(r.ticker)).length : 0;
 
   if (loading) {
     return (
@@ -461,7 +439,7 @@ export default function InflectionDailyPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6">
+    <div className="max-w-[1400px] mx-auto p-4 sm:p-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
         <div>
@@ -508,7 +486,7 @@ export default function InflectionDailyPage() {
         <span className="text-amber-400">
           <strong>{watchCount}</strong> Watch
         </span>
-        {prevDayTickers.size > 0 && newTodayCount > 0 && (
+        {newTodayCount > 0 && (
           <>
             <span className="text-[#333]">|</span>
             <span className="text-green-400">
@@ -517,19 +495,45 @@ export default function InflectionDailyPage() {
             </span>
           </>
         )}
-        <div className="ml-auto">
-          <button
-            onClick={() => exportCSV(filtered, selectedDate ?? "")}
-            className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border border-[#2a2a2a] transition-colors"
-          >
-            <Download className="h-3 w-3" />
-            CSV
-          </button>
-        </div>
+        {filtered.length !== results.length && (
+          <>
+            <span className="text-[#333]">|</span>
+            <span className="text-[#a0a0a0]">
+              Showing <strong className="text-white">{filtered.length}</strong>
+            </span>
+          </>
+        )}
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap mb-5">
+      {/* Filters row */}
+      <div className="flex items-center gap-3 flex-wrap mb-4">
+        {/* Ticker search */}
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-[#555]" />
+          <input
+            type="text"
+            value={tickerSearch}
+            onChange={(e) => setTickerSearch(e.target.value)}
+            placeholder="Search ticker..."
+            className="w-36 rounded border border-[#333] bg-[#1a1a1a] pl-7 pr-2 py-1 text-xs text-white placeholder-[#555] focus:border-[#555] focus:outline-none"
+          />
+        </div>
+
+        {/* Min score */}
+        <select
+          value={minScore}
+          onChange={(e) => setMinScore(Number(e.target.value))}
+          className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#a0a0a0] focus:outline-none"
+        >
+          <option value={0}>All Scores</option>
+          <option value={30}>30+</option>
+          <option value={40}>40+</option>
+          <option value={50}>50+</option>
+          <option value={60}>60+</option>
+        </select>
+
+        <span className="text-[#333]">|</span>
+
         {/* Trade Read filter */}
         <div className="flex items-center gap-1">
           <Filter className="h-3 w-3 text-[#555]" />
@@ -565,31 +569,15 @@ export default function InflectionDailyPage() {
           </button>
         ))}
 
-        <span className="text-[#333]">|</span>
-
-        {/* Sort */}
-        <div className="flex items-center gap-1">
-          <ArrowUpDown className="h-3 w-3 text-[#555]" />
-          {([
-            { field: "overall_score" as SortField, label: "Score" },
-            { field: "se_score" as SortField, label: "SE" },
-            { field: "be_score" as SortField, label: "BE" },
-            { field: "rs_score" as SortField, label: "RS" },
-            { field: "stage" as SortField, label: "Stage" },
-          ]).map(({ field, label }) => (
-            <button
-              key={field}
-              onClick={() => handleSort(field)}
-              className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                sortField === field
-                  ? "bg-white/10 text-white border border-white/20"
-                  : "text-[#666] hover:text-white"
-              }`}
-            >
-              {label}
-              {sortField === field && (sortAsc ? " \u2191" : " \u2193")}
-            </button>
-          ))}
+        {/* CSV export */}
+        <div className="ml-auto">
+          <button
+            onClick={() => exportCSV(filtered, selectedDate ?? "")}
+            className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border border-[#2a2a2a] transition-colors"
+          >
+            <Download className="h-3 w-3" />
+            CSV
+          </button>
         </div>
       </div>
 
@@ -600,28 +588,152 @@ export default function InflectionDailyPage() {
         </div>
       )}
 
-      {/* Results grid */}
+      {/* Empty state */}
       {!loadingResults && filtered.length === 0 && (
         <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-8 text-center">
           <p className="text-[#a0a0a0]">No results match the current filters.</p>
         </div>
       )}
 
+      {/* Table */}
       {!loadingResults && filtered.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((row, i) => (
-            <ResultCard
-              key={row.ticker}
-              row={row}
-              isNew={prevDayTickers.size > 0 && !prevDayTickers.has(row.ticker)}
-              index={i}
-            />
-          ))}
+        <div className="rounded-lg border border-[#2a2a2a] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-[#111] border-b border-[#2a2a2a] sticky top-0 z-10">
+                  <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666] w-8"></th>
+                  <SortHeader field="ticker" label="Ticker" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666]">Company</th>
+                  <SortHeader field="price" label="Price" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="overall_score" label="Score" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="se_score" label="SE" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="vc_score" label="VC" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="be_score" label="BE" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="rs_score" label="RS" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="la_score" label="LA" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="ip_score" label="IP" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="stage" label="Stage" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="trade_read" label="Read" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666]">Flags</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((row) => {
+                  const isNew = prevDayTickers.size > 0 && !prevDayTickers.has(row.ticker);
+                  const isExpanded = expandedTicker === row.ticker;
+                  const sBadge = stageBadge(row.stage);
+                  const trBadge = tradeReadBadge(row.trade_read);
+
+                  return (
+                    <Fragment key={row.ticker}>
+                      <tr
+                        onClick={() => setExpandedTicker(isExpanded ? null : row.ticker)}
+                        className={`border-b border-[#1a1a1a] cursor-pointer transition-colors ${
+                          isExpanded ? "bg-[#161616]" : "hover:bg-[#141414]"
+                        } ${isNew ? "bg-green-500/[0.03]" : ""}`}
+                      >
+                        {/* Expand indicator */}
+                        <td className="px-2 py-2 text-[#444]">
+                          {isExpanded ? (
+                            <ChevronUp className="h-3 w-3" />
+                          ) : (
+                            <ChevronDown className="h-3 w-3" />
+                          )}
+                        </td>
+
+                        {/* Ticker */}
+                        <td className="px-2 py-2 font-bold text-white whitespace-nowrap">
+                          {row.ticker}
+                        </td>
+
+                        {/* Company */}
+                        <td className="px-2 py-2 text-[#a0a0a0] max-w-[160px] truncate">
+                          {row.company_name}
+                        </td>
+
+                        {/* Price */}
+                        <td className="px-2 py-2 text-white tabular-nums whitespace-nowrap">
+                          ${Number(row.price).toFixed(2)}
+                        </td>
+
+                        {/* Overall Score */}
+                        <td className="px-2 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-12 h-2 bg-[#0f0f0f] rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${scoreBarColor(row.overall_score)}`}
+                                style={{ width: `${row.overall_score}%` }}
+                              />
+                            </div>
+                            <span className={`text-[11px] font-bold tabular-nums ${scoreTextColor(row.overall_score)}`}>
+                              {row.overall_score}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Sub-scores */}
+                        <td className="px-2 py-2"><MiniScoreBar score={row.se_score} /></td>
+                        <td className="px-2 py-2"><MiniScoreBar score={row.vc_score} /></td>
+                        <td className="px-2 py-2"><MiniScoreBar score={row.be_score} /></td>
+                        <td className="px-2 py-2"><MiniScoreBar score={row.rs_score} /></td>
+                        <td className="px-2 py-2"><MiniScoreBar score={row.la_score} /></td>
+                        <td className="px-2 py-2"><MiniScoreBar score={row.ip_score} /></td>
+
+                        {/* Stage */}
+                        <td className="px-2 py-2">
+                          <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold tracking-wide whitespace-nowrap ${sBadge.color}`}>
+                            {sBadge.label}
+                          </span>
+                        </td>
+
+                        {/* Trade Read */}
+                        <td className="px-2 py-2">
+                          <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold tracking-wide whitespace-nowrap ${trBadge.color}`}>
+                            {trBadge.label}
+                          </span>
+                        </td>
+
+                        {/* Flags */}
+                        <td className="px-2 py-2">
+                          <div className="flex items-center gap-1">
+                            {row.is_primary && (
+                              <span title="Primary Signal" className="inline-flex items-center rounded border border-purple-500/30 bg-purple-500/10 px-1 py-0.5 text-[8px] font-semibold text-purple-400">
+                                <Zap className="h-2.5 w-2.5" />
+                              </span>
+                            )}
+                            {row.is_stronger && (
+                              <span title="Stronger Signal" className="inline-flex items-center rounded border border-emerald-500/30 bg-emerald-500/10 px-1 py-0.5 text-[8px] font-semibold text-emerald-400">
+                                <Shield className="h-2.5 w-2.5" />
+                              </span>
+                            )}
+                            {isNew && (
+                              <span title="New Today" className="inline-flex items-center rounded border border-green-500/30 bg-green-500/10 px-1 py-0.5 text-[8px] font-bold text-green-400">
+                                NEW
+                              </span>
+                            )}
+                            {row.extension_risk && (
+                              <span title="Extension Risk" className="inline-flex items-center rounded border border-orange-500/30 bg-orange-500/10 px-1 py-0.5 text-[8px] font-semibold text-orange-400">
+                                EXT
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Expanded evidence */}
+                      {isExpanded && <ExpandedEvidence row={row} />}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {/* Footer */}
-      <div className="mt-8 text-center text-[10px] text-[#444]">
+      <div className="mt-6 text-center text-[10px] text-[#444]">
         Scan runs at 9:45 PM ET Mon-Fri | Universe: S&P 500 + Nasdaq-100 (~560 tickers) | 14-day retention
       </div>
     </div>
