@@ -12,6 +12,7 @@ import {
   TrendingDown,
   Copy,
   Check,
+  Layers,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -56,6 +57,12 @@ interface PreRunDailyRow {
   vp_divergence_bullish: boolean;
   higher_lows_count: number | null;
   rrg_quadrant: string | null;
+  is_sndk: boolean;
+  is_early_mover: boolean;
+  is_pullback: boolean;
+  is_leading: boolean;
+  is_stealth: boolean;
+  is_early_plus: boolean;
 }
 
 interface DroppedTicker {
@@ -276,6 +283,7 @@ export default function PreRunPresetDailyPage() {
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
   const [showDropped, setShowDropped] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [allResults, setAllResults] = useState<PreRunDailyRow[]>([]);
 
   useEffect(() => {
     async function init() {
@@ -293,6 +301,23 @@ export default function PreRunPresetDailyPage() {
     }
     init();
   }, []);
+
+  // Fetch all results (unfiltered) for overlap computation
+  useEffect(() => {
+    if (!selectedDate) return;
+    let cancelled = false;
+    async function loadAll() {
+      try {
+        const res = await fetch(`/api/prerun/daily?date=${selectedDate}`);
+        const json = await res.json();
+        if (!cancelled) setAllResults(json.results ?? []);
+      } catch {
+        if (!cancelled) setAllResults([]);
+      }
+    }
+    loadAll();
+    return () => { cancelled = true; };
+  }, [selectedDate]);
 
   useEffect(() => {
     if (!selectedDate) return;
@@ -379,6 +404,24 @@ export default function PreRunPresetDailyPage() {
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   }, [results]);
 
+  const overlapTickers = useMemo(() => {
+    const PRESET_KEYS: { key: keyof PreRunDailyRow; label: string }[] = [
+      { key: "is_sndk", label: "SNDK" },
+      { key: "is_early_mover", label: "Early Mover" },
+      { key: "is_pullback", label: "Pullback" },
+      { key: "is_leading", label: "Leading" },
+      { key: "is_stealth", label: "Stealth" },
+      { key: "is_early_plus", label: "Early+" },
+    ];
+    return allResults
+      .map((r) => {
+        const matched = PRESET_KEYS.filter((p) => r[p.key] === true);
+        return { ticker: r.ticker, score: r.final_score, presets: matched.map((p) => p.label), count: matched.length };
+      })
+      .filter((r) => r.count >= 3)
+      .sort((a, b) => b.count - a.count || b.score - a.score);
+  }, [allResults]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -433,6 +476,27 @@ export default function PreRunPresetDailyPage() {
       </div>
 
       <p className="text-[10px] text-[#555] mb-4">{PRESET_DESCRIPTIONS[preset]}</p>
+
+      {/* Multi-Preset Overlap */}
+      {overlapTickers.length > 0 && (
+        <div className="mb-4 rounded-lg border border-purple-500/20 bg-purple-500/[0.03] p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Layers className="h-3.5 w-3.5 text-purple-400" />
+            <p className="text-[10px] uppercase tracking-wider text-purple-400/80 font-semibold">
+              Multi-Preset Overlap ({overlapTickers.length})
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {overlapTickers.map((t) => (
+              <div key={t.ticker} className="inline-flex items-center gap-1.5 rounded border border-purple-500/20 bg-purple-500/10 px-2.5 py-1">
+                <span className="text-xs font-bold text-white">{t.ticker}</span>
+                <span className={`text-[10px] font-bold tabular-nums ${scoreColor(t.score)}`}>{t.score}</span>
+                <span className="text-[9px] text-purple-300/60">{t.presets.join(" · ")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Date tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-5 scrollbar-hide">

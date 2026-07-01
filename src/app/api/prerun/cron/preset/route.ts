@@ -184,6 +184,29 @@ function formatTelegramSummary(
     lines.push("");
   }
 
+  // Multi-preset overlap: tickers in 3+ presets
+  const overlap = records
+    .map((r) => {
+      const presets: string[] = [];
+      if (r.is_sndk) presets.push("SNDK");
+      if (r.is_early_mover) presets.push("EM");
+      if (r.is_pullback) presets.push("PB");
+      if (r.is_leading) presets.push("LD");
+      if (r.is_stealth) presets.push("ST");
+      if (r.is_early_plus) presets.push("E+");
+      return { ticker: r.ticker, score: r.final_score, presets, count: presets.length };
+    })
+    .filter((r) => r.count >= 3)
+    .sort((a, b) => b.count - a.count || b.score - a.score);
+
+  if (overlap.length > 0) {
+    lines.push(`<b>Multi-Preset Overlap (${overlap.length}):</b>`);
+    for (const o of overlap) {
+      lines.push(`* ${o.ticker} ${o.score} | ${o.presets.join(",")}`);
+    }
+    lines.push("");
+  }
+
   if (newTickers.length > 0) {
     lines.push(
       `<b>New today:</b> ${newTickers.slice(0, 10).join(", ")}${newTickers.length > 10 ? ` (+${newTickers.length - 10} more)` : ""}`
