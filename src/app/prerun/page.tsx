@@ -2258,13 +2258,6 @@ function PreRunPage() {
                 <p className="text-lg font-bold text-emerald-400">{inflectionStats.signals}</p>
               </div>
             </div>
-            <Link
-              href="/prerun/inflection-daily"
-              className="inline-flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#141414] px-3 py-2 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
-            >
-              <Calendar className="h-3.5 w-3.5" />
-              Daily Results
-            </Link>
           </div>
         )}
 
@@ -2342,6 +2335,13 @@ function PreRunPage() {
               ))}
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                href="/prerun/inflection-daily"
+                className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Daily Results</span>
+              </Link>
               <button
                 onClick={handleExport}
                 className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
