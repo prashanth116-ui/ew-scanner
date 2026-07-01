@@ -229,7 +229,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const startTime = Date.now();
-    const TIME_LIMIT_MS = 260_000; // 260s — leave 40s for flush + purge + telegram
+    const TIME_LIMIT_MS = 240_000; // 240s — leave 60s for flush + purge + telegram
 
     // Build universe: SP500 + NDX100 + SP400 (deduplicated)
     const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...SP400_MEMBERS])];
