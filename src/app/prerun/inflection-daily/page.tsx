@@ -10,9 +10,9 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
-  ArrowUpDown,
   Zap,
   Shield,
+  TrendingDown,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -22,6 +22,7 @@ interface InflectionDailyRow {
   scan_date: string;
   ticker: string;
   company_name: string;
+  sector: string;
   price: number;
   overall_score: number;
   se_score: number;
@@ -40,9 +41,14 @@ interface InflectionDailyRow {
   invalidation: number | null;
 }
 
+interface DroppedTicker {
+  ticker: string;
+  prev_score: number;
+}
+
 type TradeReadFilter = "ALL" | "STARTER_POSITION_CANDIDATE" | "ADD_ON_CONFIRMATION" | "WATCH";
 type StageFilter = "ALL" | "INFLECTION" | "EARLY_ACCUMULATION" | "EXPANSION" | "SELLER_EXHAUSTION";
-type SortField = "overall_score" | "se_score" | "vc_score" | "be_score" | "rs_score" | "la_score" | "ip_score" | "stage" | "ticker" | "price" | "trade_read";
+type SortField = "overall_score" | "se_score" | "vc_score" | "be_score" | "rs_score" | "la_score" | "ip_score" | "stage" | "ticker" | "price" | "trade_read" | "sector" | "streak" | "delta";
 
 // ── Helpers ──
 
@@ -127,6 +133,12 @@ function formatDatePill(dateStr: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function streakColor(streak: number): string {
+  if (streak >= 5) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
+  if (streak >= 3) return "text-cyan-400 bg-cyan-500/10 border-cyan-500/30";
+  return "text-[#666] bg-[#1a1a1a] border-[#2a2a2a]";
+}
+
 // ── Inline Score Bar ──
 
 function MiniScoreBar({ score }: { score: number }) {
@@ -145,17 +157,21 @@ function MiniScoreBar({ score }: { score: number }) {
 
 // ── CSV Export ──
 
-function exportCSV(results: InflectionDailyRow[], date: string) {
+function exportCSV(results: InflectionDailyRow[], date: string, streaks: Record<string, number>, deltas: Record<string, number>) {
   const headers = [
-    "Ticker", "Company", "Price", "Score", "SE", "VC", "BE", "RS", "LA", "IP",
+    "Ticker", "Company", "Sector", "Price", "Score", "Delta", "Streak",
+    "SE", "VC", "BE", "RS", "LA", "IP",
     "Stage", "Trade Read", "Extension Risk", "Primary Signal", "Stronger Signal",
     "Invalidation", "Bullish Evidence", "Caution Evidence",
   ];
   const rows = results.map((r) => [
     r.ticker,
     `"${(r.company_name ?? "").replace(/"/g, '""')}"`,
+    r.sector ?? "",
     r.price,
     r.overall_score,
+    deltas[r.ticker] ?? "",
+    streaks[r.ticker] ?? 1,
     r.se_score,
     r.vc_score,
     r.be_score,
@@ -189,7 +205,7 @@ function ExpandedEvidence({ row }: { row: InflectionDailyRow }) {
 
   return (
     <tr>
-      <td colSpan={14} className="px-3 py-3 bg-[#111]">
+      <td colSpan={17} className="px-3 py-3 bg-[#111]">
         <div className="flex flex-wrap gap-4">
           {bullish.length > 0 && (
             <div className="flex-1 min-w-[200px]">
@@ -271,7 +287,9 @@ export default function InflectionDailyPage() {
   const [dates, setDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [results, setResults] = useState<InflectionDailyRow[]>([]);
-  const [prevDayTickers, setPrevDayTickers] = useState<Set<string>>(new Set());
+  const [streaks, setStreaks] = useState<Record<string, number>>({});
+  const [deltas, setDeltas] = useState<Record<string, number>>({});
+  const [dropped, setDropped] = useState<DroppedTicker[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
   const [tradeReadFilter, setTradeReadFilter] = useState<TradeReadFilter>("ALL");
@@ -281,6 +299,7 @@ export default function InflectionDailyPage() {
   const [sortField, setSortField] = useState<SortField>("overall_score");
   const [sortAsc, setSortAsc] = useState(false);
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
+  const [showDropped, setShowDropped] = useState(false);
 
   // Load available dates on mount
   useEffect(() => {
@@ -302,7 +321,7 @@ export default function InflectionDailyPage() {
     init();
   }, []);
 
-  // Load results when date changes
+  // Load results + enrichment when date changes
   useEffect(() => {
     if (!selectedDate) return;
     let cancelled = false;
@@ -314,10 +333,18 @@ export default function InflectionDailyPage() {
         const json = await res.json();
         if (!cancelled) {
           setResults(json.results ?? []);
+          setStreaks(json.streaks ?? {});
+          setDeltas(json.deltas ?? {});
+          setDropped(json.dropped ?? []);
           setExpandedTicker(null);
         }
       } catch {
-        if (!cancelled) setResults([]);
+        if (!cancelled) {
+          setResults([]);
+          setStreaks({});
+          setDeltas({});
+          setDropped([]);
+        }
       } finally {
         if (!cancelled) setLoadingResults(false);
       }
@@ -325,35 +352,6 @@ export default function InflectionDailyPage() {
     load();
     return () => { cancelled = true; };
   }, [selectedDate]);
-
-  // Load previous day's tickers for "new today" badges
-  useEffect(() => {
-    if (!selectedDate || dates.length < 2) {
-      setPrevDayTickers(new Set());
-      return;
-    }
-    const currentIdx = dates.indexOf(selectedDate);
-    const prevDate = currentIdx >= 0 && currentIdx < dates.length - 1 ? dates[currentIdx + 1] : null;
-    if (!prevDate) {
-      setPrevDayTickers(new Set());
-      return;
-    }
-
-    let cancelled = false;
-    async function loadPrev() {
-      try {
-        const res = await fetch(`/api/inflection/daily?date=${prevDate}`);
-        const json = await res.json();
-        if (!cancelled) {
-          setPrevDayTickers(new Set((json.results ?? []).map((r: InflectionDailyRow) => r.ticker)));
-        }
-      } catch {
-        if (!cancelled) setPrevDayTickers(new Set());
-      }
-    }
-    loadPrev();
-    return () => { cancelled = true; };
-  }, [selectedDate, dates]);
 
   const handleSort = useCallback((field: SortField) => {
     setSortField((prev) => {
@@ -382,7 +380,7 @@ export default function InflectionDailyPage() {
     if (tickerSearch.trim()) {
       const q = tickerSearch.trim().toUpperCase();
       rows = rows.filter(
-        (r) => r.ticker.includes(q) || (r.company_name ?? "").toUpperCase().includes(q)
+        (r) => r.ticker.includes(q) || (r.company_name ?? "").toUpperCase().includes(q) || (r.sector ?? "").toUpperCase().includes(q)
       );
     }
 
@@ -394,8 +392,14 @@ export default function InflectionDailyPage() {
         cmp = (TRADE_READ_ORDER[a.trade_read] ?? 99) - (TRADE_READ_ORDER[b.trade_read] ?? 99);
       } else if (sortField === "ticker") {
         cmp = a.ticker.localeCompare(b.ticker);
+      } else if (sortField === "sector") {
+        cmp = (a.sector ?? "").localeCompare(b.sector ?? "");
       } else if (sortField === "price") {
         cmp = Number(b.price) - Number(a.price);
+      } else if (sortField === "streak") {
+        cmp = (streaks[b.ticker] ?? 1) - (streaks[a.ticker] ?? 1);
+      } else if (sortField === "delta") {
+        cmp = (deltas[b.ticker] ?? 0) - (deltas[a.ticker] ?? 0);
       } else {
         cmp = (b[sortField] ?? 0) - (a[sortField] ?? 0);
       }
@@ -403,13 +407,23 @@ export default function InflectionDailyPage() {
     });
 
     return sorted;
-  }, [results, tradeReadFilter, stageFilter, minScore, tickerSearch, sortField, sortAsc]);
+  }, [results, tradeReadFilter, stageFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas]);
 
   // Summary counts
   const starterCount = results.filter((r) => r.trade_read === "STARTER_POSITION_CANDIDATE").length;
   const addOnCount = results.filter((r) => r.trade_read === "ADD_ON_CONFIRMATION").length;
   const watchCount = results.filter((r) => r.trade_read === "WATCH").length;
-  const newTodayCount = prevDayTickers.size > 0 ? results.filter((r) => !prevDayTickers.has(r.ticker)).length : 0;
+  const newTodayCount = Object.values(streaks).filter((s) => s === 1).length;
+
+  // Sector summary for results
+  const sectorCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of results) {
+      const s = r.sector || "Other";
+      counts[s] = (counts[s] ?? 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [results]);
 
   if (loading) {
     return (
@@ -439,7 +453,7 @@ export default function InflectionDailyPage() {
   }
 
   return (
-    <div className="max-w-[1400px] mx-auto p-4 sm:p-6">
+    <div className="max-w-[1500px] mx-auto p-4 sm:p-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
         <div>
@@ -491,8 +505,20 @@ export default function InflectionDailyPage() {
             <span className="text-[#333]">|</span>
             <span className="text-green-400">
               <Sparkles className="h-3 w-3 inline mr-0.5" />
-              <strong>{newTodayCount}</strong> new today
+              <strong>{newTodayCount}</strong> new
             </span>
+          </>
+        )}
+        {dropped.length > 0 && (
+          <>
+            <span className="text-[#333]">|</span>
+            <button
+              onClick={() => setShowDropped(!showDropped)}
+              className="text-red-400 hover:text-red-300 transition-colors"
+            >
+              <TrendingDown className="h-3 w-3 inline mr-0.5" />
+              <strong>{dropped.length}</strong> dropped
+            </button>
           </>
         )}
         {filtered.length !== results.length && (
@@ -505,6 +531,50 @@ export default function InflectionDailyPage() {
         )}
       </div>
 
+      {/* Dropped today section */}
+      {showDropped && dropped.length > 0 && (
+        <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/[0.03] p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] uppercase tracking-wider text-red-400/60 font-semibold">
+              Dropped from previous day ({dropped.length})
+            </p>
+            <button onClick={() => setShowDropped(false)} className="text-[10px] text-[#666] hover:text-white">
+              Hide
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {dropped.map((d) => (
+              <span
+                key={d.ticker}
+                className="inline-flex items-center gap-1 rounded border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400"
+              >
+                {d.ticker}
+                <span className="text-red-500/50">{d.prev_score}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sector summary pills */}
+      {sectorCounts.length > 0 && !loadingResults && (
+        <div className="flex items-center gap-1.5 flex-wrap mb-4">
+          <span className="text-[10px] text-[#555] mr-1">Sectors:</span>
+          {sectorCounts.slice(0, 8).map(([sector, count]) => (
+            <button
+              key={sector}
+              onClick={() => setTickerSearch(sector)}
+              className="rounded border border-[#2a2a2a] bg-[#141414] px-2 py-0.5 text-[10px] text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+            >
+              {sector} <strong className="text-white">{count}</strong>
+            </button>
+          ))}
+          {sectorCounts.length > 8 && (
+            <span className="text-[10px] text-[#555]">+{sectorCounts.length - 8} more</span>
+          )}
+        </div>
+      )}
+
       {/* Filters row */}
       <div className="flex items-center gap-3 flex-wrap mb-4">
         {/* Ticker search */}
@@ -514,8 +584,8 @@ export default function InflectionDailyPage() {
             type="text"
             value={tickerSearch}
             onChange={(e) => setTickerSearch(e.target.value)}
-            placeholder="Search ticker..."
-            className="w-36 rounded border border-[#333] bg-[#1a1a1a] pl-7 pr-2 py-1 text-xs text-white placeholder-[#555] focus:border-[#555] focus:outline-none"
+            placeholder="Ticker / sector..."
+            className="w-40 rounded border border-[#333] bg-[#1a1a1a] pl-7 pr-2 py-1 text-xs text-white placeholder-[#555] focus:border-[#555] focus:outline-none"
           />
         </div>
 
@@ -572,7 +642,7 @@ export default function InflectionDailyPage() {
         {/* CSV export */}
         <div className="ml-auto">
           <button
-            onClick={() => exportCSV(filtered, selectedDate ?? "")}
+            onClick={() => exportCSV(filtered, selectedDate ?? "", streaks, deltas)}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border border-[#2a2a2a] transition-colors"
           >
             <Download className="h-3 w-3" />
@@ -605,8 +675,11 @@ export default function InflectionDailyPage() {
                   <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666] w-8"></th>
                   <SortHeader field="ticker" label="Ticker" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666]">Company</th>
+                  <SortHeader field="sector" label="Sector" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="price" label="Price" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="overall_score" label="Score" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="delta" label="+/-" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="streak" label="Days" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="se_score" label="SE" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="vc_score" label="VC" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="be_score" label="BE" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
@@ -620,7 +693,9 @@ export default function InflectionDailyPage() {
               </thead>
               <tbody>
                 {filtered.map((row) => {
-                  const isNew = prevDayTickers.size > 0 && !prevDayTickers.has(row.ticker);
+                  const streak = streaks[row.ticker] ?? 1;
+                  const delta = deltas[row.ticker];
+                  const isNew = streak === 1;
                   const isExpanded = expandedTicker === row.ticker;
                   const sBadge = stageBadge(row.stage);
                   const trBadge = tradeReadBadge(row.trade_read);
@@ -648,8 +723,13 @@ export default function InflectionDailyPage() {
                         </td>
 
                         {/* Company */}
-                        <td className="px-2 py-2 text-[#a0a0a0] max-w-[160px] truncate">
+                        <td className="px-2 py-2 text-[#a0a0a0] max-w-[140px] truncate">
                           {row.company_name}
+                        </td>
+
+                        {/* Sector */}
+                        <td className="px-2 py-2 text-[#777] max-w-[100px] truncate text-[10px]">
+                          {row.sector || "-"}
                         </td>
 
                         {/* Price */}
@@ -670,6 +750,26 @@ export default function InflectionDailyPage() {
                               {row.overall_score}
                             </span>
                           </div>
+                        </td>
+
+                        {/* Delta */}
+                        <td className="px-2 py-2 tabular-nums whitespace-nowrap">
+                          {delta !== undefined ? (
+                            <span className={`text-[10px] font-medium ${
+                              delta > 0 ? "text-emerald-400" : delta < 0 ? "text-red-400" : "text-[#555]"
+                            }`}>
+                              {delta > 0 ? "+" : ""}{delta}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-[#333]">-</span>
+                          )}
+                        </td>
+
+                        {/* Streak */}
+                        <td className="px-2 py-2">
+                          <span className={`inline-flex items-center justify-center rounded border px-1.5 py-0.5 text-[9px] font-bold tabular-nums min-w-[24px] ${streakColor(streak)}`}>
+                            {streak}d
+                          </span>
                         </td>
 
                         {/* Sub-scores */}

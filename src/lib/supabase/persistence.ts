@@ -464,6 +464,7 @@ export interface InflectionDailyRecord {
   scan_date: string;         // YYYY-MM-DD
   ticker: string;
   company_name: string;
+  sector: string;
   price: number;
   overall_score: number;
   se_score: number;
@@ -585,6 +586,34 @@ export async function loadInflectionDailyDates(limit = 14): Promise<string[]> {
     return unique.slice(0, limit);
   } catch (err) {
     console.error("[persistence] loadInflectionDailyDates exception:", err);
+    return [];
+  }
+}
+
+/** Load inflection daily results for multiple dates (for streak/delta computation).
+ *  Returns only ticker, scan_date, overall_score to keep payload small. */
+export async function loadInflectionDailyMulti(
+  dates: string[]
+): Promise<Array<{ scan_date: string; ticker: string; overall_score: number }>> {
+  if (dates.length === 0) return [];
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("inflection_daily")
+      .select("scan_date, ticker, overall_score")
+      .in("scan_date", dates)
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadInflectionDailyMulti error:", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; overall_score: number }>;
+  } catch (err) {
+    console.error("[persistence] loadInflectionDailyMulti exception:", err);
     return [];
   }
 }

@@ -3,6 +3,7 @@ import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { scoreInflection } from "@/lib/prerun/inflection-scoring";
 import { SP500_MEMBERS, NDX100_MEMBERS } from "@/data/index-tiers";
+import { getSectorForTicker } from "@/data/prerun-universe";
 import { sendTelegramMessage } from "@/lib/ew-telegram";
 import {
   upsertInflectionDaily,
@@ -103,6 +104,7 @@ function resultToRecord(r: InflectionResult, scanDate: string): InflectionDailyR
     scan_date: scanDate,
     ticker: r.data.ticker,
     company_name: r.data.companyName,
+    sector: getSectorForTicker(r.data.ticker),
     price: r.data.currentPrice ?? 0,
     overall_score: r.scores.overallScore,
     se_score: r.scores.sellerExhaustion,
