@@ -655,7 +655,7 @@ function classifyStage(
 }
 
 // ── Trade Read ──
-// Fix 5: STARTER threshold lowered from 70 to 55, reflecting actual achievable ranges.
+// Thresholds calibrated to actual score distribution (top stocks score 48-55).
 
 function determineTradeRead(
   stage: InflectionStage,
@@ -666,8 +666,8 @@ function determineTradeRead(
   if (stage === "DISTRIBUTION" || extensionRisk) return "AVOID";
   if (stage === "SELLER_EXHAUSTION") return "WATCH";
   if (stage === "EARLY_ACCUMULATION" && be >= 60) return "ADD_ON_CONFIRMATION";
-  if (stage === "INFLECTION" && overall >= 55) return "STARTER_POSITION_CANDIDATE";
-  if (stage === "EARLY_ACCUMULATION" && overall >= 50) return "STARTER_POSITION_CANDIDATE";
+  if (stage === "INFLECTION" && overall >= 40) return "STARTER_POSITION_CANDIDATE";
+  if (stage === "EARLY_ACCUMULATION" && overall >= 40) return "STARTER_POSITION_CANDIDATE";
   if (stage === "EXPANSION") return "ADD_ON_CONFIRMATION";
   return "WATCH";
 }
@@ -704,22 +704,20 @@ export function scoreInflection(data: PreRunStockData): InflectionResult {
   const laResult = scoreLiquidityAuction(data);
   const ipResult = scoreInstitutionalParticipation(data);
 
-  // Fix 1: Signal-readiness overall score.
-  // Instead of flat weighted average, use:
-  //   Base score = weighted average of category scores (same weights)
-  //   Quality multiplier = LA score acts as a scaling factor (0.6 - 1.0)
-  //   This ensures illiquid stocks get dampened while liquid stocks get full credit.
+  // Signal-readiness overall score.
+  // Base = weighted average of 5 behavioral categories (weights sum to 1.0).
+  // LA acts as quality multiplier (0.7 - 1.0) — dampens illiquid stocks.
 
   const rawWeighted =
-    seResult.score * 0.25 +     // SE gets more weight (was 0.20)
-    vcResult.score * 0.15 +     // VC stays same
-    beResult.score * 0.25 +     // BE stays same
-    rsResult.score * 0.10 +     // RS reduced (was 0.15) — trajectory matters, not level
-    ipResult.score * 0.10;      // IP reduced (was 0.15)
+    seResult.score * 0.30 +     // SE: primary inflection signal
+    vcResult.score * 0.15 +     // VC: compression confirmation
+    beResult.score * 0.30 +     // BE: buyer emergence (primary)
+    rsResult.score * 0.10 +     // RS: trajectory (secondary)
+    ipResult.score * 0.15;      // IP: institutional footprint
 
-  // LA acts as quality multiplier (0.6 - 1.0 range)
-  // Liquid stocks (LA >= 60) get full credit; illiquid stocks get dampened
-  const qualityMultiplier = 0.6 + (Math.min(laResult.score, 100) / 100) * 0.4;
+  // LA acts as quality multiplier (0.7 - 1.0 range)
+  // Liquid stocks (LA >= 60) get near-full credit; illiquid stocks get dampened
+  const qualityMultiplier = 0.7 + (Math.min(laResult.score, 100) / 100) * 0.3;
 
   const overallScore = Math.round(rawWeighted * qualityMultiplier);
 
@@ -757,17 +755,17 @@ export function scoreInflection(data: PreRunStockData): InflectionResult {
 
   const invalidationLevel = calcInvalidationLevel(data);
 
-  // Fix 5: Signal classification with achievable thresholds
+  // Signal classification calibrated to actual distribution
   const isPrimarySignal =
-    overallScore >= 55 &&
+    overallScore >= 42 &&
     (stage === "INFLECTION" || stage === "EARLY_ACCUMULATION") &&
     tradeRead === "STARTER_POSITION_CANDIDATE" &&
     !extensionRisk;
 
   const isStrongerSignal =
-    overallScore >= 65 &&
-    beResult.score >= 55 &&
-    seResult.score >= 50 &&
+    overallScore >= 50 &&
+    beResult.score >= 50 &&
+    seResult.score >= 45 &&
     !extensionRisk;
 
   return {
