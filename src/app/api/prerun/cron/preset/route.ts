@@ -138,6 +138,7 @@ function formatTelegramSummary(
   scannedCount: number,
   records: PreRunDailyRecord[],
   newTickers: string[],
+  partial = false,
 ): string {
   const date = new Date().toLocaleDateString("en-US", {
     weekday: "short",
@@ -148,7 +149,7 @@ function formatTelegramSummary(
 
   const lines: string[] = [];
   lines.push("<b>PreRun Daily Scan</b>");
-  lines.push(`${date} | ${scannedCount} scanned | ${records.length} qualifying`);
+  lines.push(`${date} | ${scannedCount} scanned | ${records.length} qualifying${partial ? " (partial)" : ""}`);
   lines.push("");
 
   const presetCounts = {
@@ -227,6 +228,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const startTime = Date.now();
+    const TIME_LIMIT_MS = 260_000; // 260s — leave 40s for flush + purge + telegram
+
     // Build universe: SP500 + NDX100 + SP400 (deduplicated)
     const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...SP400_MEMBERS])];
     const today = new Date().toISOString().slice(0, 10);
@@ -241,8 +245,16 @@ export async function GET(request: NextRequest) {
     let pendingRecords: PreRunDailyRecord[] = [];
     let totalPersisted = 0;
     let fetchedCount = 0;
+    let timedOut = false;
 
     for (let i = 0; i < universe.length; i += BATCH_SIZE) {
+      // Time guard: break early to guarantee Telegram sends
+      if (Date.now() - startTime > TIME_LIMIT_MS) {
+        console.log(`[prerun-daily] time limit reached at ${fetchedCount}/${universe.length} tickers, proceeding to summary`);
+        timedOut = true;
+        break;
+      }
+
       const batch = universe.slice(i, i + BATCH_SIZE);
 
       const settled = await Promise.allSettled(
@@ -316,7 +328,7 @@ export async function GET(request: NextRequest) {
     const chatId = process.env.TELEGRAM_CHAT_ID;
     let telegramSent = false;
     if (botToken && chatId) {
-      const message = formatTelegramSummary(universe.length, allRecords, newTickers);
+      const message = formatTelegramSummary(universe.length, allRecords, newTickers, timedOut);
       const tgResult = await sendTelegramMessage(botToken, chatId, message);
       telegramSent = tgResult.ok;
       if (!tgResult.ok) {
@@ -332,6 +344,8 @@ export async function GET(request: NextRequest) {
       purgedCount: purged,
       newTodayCount: newTickers.length,
       telegramSent,
+      timedOut,
+      elapsedMs: Date.now() - startTime,
       presetCounts: {
         sndk: allRecords.filter((r) => r.is_sndk).length,
         early_mover: allRecords.filter((r) => r.is_early_mover).length,
