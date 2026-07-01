@@ -772,6 +772,28 @@ export async function loadPreRunDaily(date: string): Promise<PreRunDailyRecord[]
   }
 }
 
+/** Load just the ticker list for a given date (lightweight, for resume). */
+export async function loadPreRunDailyTickers(date: string): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerun_daily")
+      .select("ticker")
+      .eq("scan_date", date);
+
+    if (error) {
+      console.error("[persistence] loadPreRunDailyTickers error:", error.message);
+      return [];
+    }
+    return (data ?? []).map((r) => r.ticker as string);
+  } catch (err) {
+    console.error("[persistence] loadPreRunDailyTickers exception:", err);
+    return [];
+  }
+}
+
 /** Load available prerun daily scan dates. */
 export async function loadPreRunDailyDates(limit = 14): Promise<string[]> {
   try {

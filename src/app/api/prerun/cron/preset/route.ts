@@ -12,14 +12,15 @@ import {
   clearPreRunDaily,
   loadPreRunDailyDates,
   loadPreRunDaily,
+  loadPreRunDailyTickers,
 } from "@/lib/supabase/persistence";
 import type { PreRunDailyRecord } from "@/lib/supabase/persistence";
 import type { PreRunResult } from "@/lib/prerun/types";
 
 export const maxDuration = 300;
 
-const BATCH_SIZE = 10;
-const BATCH_DELAY = 800;
+const BATCH_SIZE = 15;
+const BATCH_DELAY = 500;
 const PERSIST_INTERVAL = 50;
 
 type PresetName = "sndk" | "early_mover" | "pullback" | "leading" | "stealth" | "early_plus";
@@ -244,6 +245,17 @@ export async function GET(request: NextRequest) {
       console.log(`[prerun-daily] cleared ${cleared} rows for ${today}`);
     }
 
+    // Resume mode: skip tickers already in DB for today
+    let scanUniverse = universe;
+    let skippedCount = 0;
+    if (searchParams.get("resume") === "true" && searchParams.get("clear") !== "true") {
+      const existing = await loadPreRunDailyTickers(today);
+      const existingSet = new Set(existing);
+      scanUniverse = universe.filter((t) => !existingSet.has(t));
+      skippedCount = universe.length - scanUniverse.length;
+      console.log(`[prerun-daily] resume mode: skipping ${skippedCount} already-scanned tickers, ${scanUniverse.length} remaining`);
+    }
+
     // Pre-warm sector ETF cache + load sector quadrants
     const [, sectorQuadrants] = await Promise.all([
       prefetchSectorETFs(),
@@ -256,15 +268,15 @@ export async function GET(request: NextRequest) {
     let fetchedCount = 0;
     let timedOut = false;
 
-    for (let i = 0; i < universe.length; i += BATCH_SIZE) {
+    for (let i = 0; i < scanUniverse.length; i += BATCH_SIZE) {
       // Time guard: break early to guarantee Telegram sends
       if (Date.now() - startTime > TIME_LIMIT_MS) {
-        console.log(`[prerun-daily] time limit reached at ${fetchedCount}/${universe.length} tickers, proceeding to summary`);
+        console.log(`[prerun-daily] time limit reached at ${fetchedCount}/${scanUniverse.length} tickers, proceeding to summary`);
         timedOut = true;
         break;
       }
 
-      const batch = universe.slice(i, i + BATCH_SIZE);
+      const batch = scanUniverse.slice(i, i + BATCH_SIZE);
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
@@ -299,7 +311,7 @@ export async function GET(request: NextRequest) {
         pendingRecords = [];
       }
 
-      if (i + BATCH_SIZE < universe.length) {
+      if (i + BATCH_SIZE < scanUniverse.length) {
         await new Promise((r) => setTimeout(r, BATCH_DELAY));
       }
     }
@@ -359,6 +371,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       scannedCount: universe.length,
       fetchedCount,
+      skippedCount,
       qualifyingCount: dbRecords.length,
       persistedCount: totalPersisted,
       clearedCount: cleared,
