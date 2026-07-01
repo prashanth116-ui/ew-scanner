@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import {
   upsertPreRunDaily,
   purgeOldPreRunDaily,
+  clearPreRunDaily,
   loadPreRunDailyDates,
   loadPreRunDaily,
 } from "@/lib/supabase/persistence";
@@ -18,7 +19,7 @@ import type { PreRunResult } from "@/lib/prerun/types";
 export const maxDuration = 300;
 
 const BATCH_SIZE = 10;
-const BATCH_DELAY = 1100;
+const BATCH_DELAY = 800;
 const PERSIST_INTERVAL = 50;
 
 type PresetName = "sndk" | "early_mover" | "pullback" | "leading" | "stealth" | "early_plus";
@@ -218,6 +219,7 @@ function formatTelegramSummary(
 }
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = request.nextUrl;
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
@@ -234,6 +236,13 @@ export async function GET(request: NextRequest) {
     // Build universe: SP500 + NDX100 + SP400 (deduplicated)
     const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...SP400_MEMBERS])];
     const today = new Date().toISOString().slice(0, 10);
+
+    // Clear today's data if requested (for full re-scan)
+    let cleared = 0;
+    if (searchParams.get("clear") === "true") {
+      cleared = await clearPreRunDaily(today);
+      console.log(`[prerun-daily] cleared ${cleared} rows for ${today}`);
+    }
 
     // Pre-warm sector ETF cache + load sector quadrants
     const [, sectorQuadrants] = await Promise.all([
@@ -352,6 +361,7 @@ export async function GET(request: NextRequest) {
       fetchedCount,
       qualifyingCount: dbRecords.length,
       persistedCount: totalPersisted,
+      clearedCount: cleared,
       purgedCount: purged,
       newTodayCount: newTickers.length,
       telegramSent,

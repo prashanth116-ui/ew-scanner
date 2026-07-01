@@ -726,6 +726,29 @@ export async function purgeOldPreRunDaily(retentionDays = 14): Promise<number> {
   }
 }
 
+/** Delete all prerun daily results for a specific date. */
+export async function clearPreRunDaily(date: string): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const { data, error } = await supabase
+      .from("prerun_daily")
+      .delete()
+      .eq("scan_date", date)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] clearPreRunDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] clearPreRunDaily exception:", err);
+    return 0;
+  }
+}
+
 /** Load prerun daily results for a given date. */
 export async function loadPreRunDaily(date: string): Promise<PreRunDailyRecord[]> {
   try {
