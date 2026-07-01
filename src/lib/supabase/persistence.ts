@@ -617,3 +617,505 @@ export async function loadInflectionDailyMulti(
     return [];
   }
 }
+
+// ── PreRun Daily Scan (Standard scoring — 6 presets) ──
+
+export interface PreRunDailyRecord {
+  scan_date: string;
+  ticker: string;
+  company_name: string;
+  sector: string;
+  price: number;
+  market_cap: number | null;
+  pct_from_ath: number | null;
+  short_float: number | null;
+  final_score: number;
+  total_score: number;
+  score_a: number;
+  score_b: number;
+  score_c: number;
+  score_d: number;
+  score_e: number;
+  score_f: number;
+  score_g: number;
+  score_h: number;
+  score_i: number;
+  score_j: number;
+  score_k: number;
+  score_l: number;
+  score_m: number;
+  score_m2: number;
+  score_n: number;
+  score_o: number;
+  score_p: number;
+  score_q: number;
+  sector_modifier: number;
+  sector_quadrant_modifier: number;
+  gate1: boolean;
+  gate2: boolean;
+  gate3: boolean;
+  verdict: string;
+  obv_divergent: boolean;
+  vp_divergence_bullish: boolean;
+  higher_lows_count: number | null;
+  rrg_quadrant: string | null;
+  is_sndk: boolean;
+  is_early_mover: boolean;
+  is_pullback: boolean;
+  is_leading: boolean;
+  is_stealth: boolean;
+  is_early_plus: boolean;
+}
+
+/** Batch upsert prerun daily scan results. */
+export async function upsertPreRunDaily(records: PreRunDailyRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertPreRunDaily: no admin client");
+      return 0;
+    }
+
+    let upserted = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = records.slice(i, i + 500);
+      const { data, error } = await supabase
+        .from("prerun_daily")
+        .upsert(batch, { onConflict: "scan_date,ticker" })
+        .select("id");
+
+      if (error) {
+        console.error("[persistence] upsertPreRunDaily error:", error.message);
+      } else {
+        upserted += data?.length ?? 0;
+      }
+    }
+    return upserted;
+  } catch (err) {
+    console.error("[persistence] upsertPreRunDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete prerun_daily rows older than retentionDays. */
+export async function purgeOldPreRunDaily(retentionDays = 14): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("prerun_daily")
+      .delete()
+      .lt("scan_date", cutoffStr)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] purgeOldPreRunDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] purgeOldPreRunDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Load prerun daily results for a given date. */
+export async function loadPreRunDaily(date: string): Promise<PreRunDailyRecord[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerun_daily")
+      .select("*")
+      .eq("scan_date", date)
+      .order("final_score", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadPreRunDaily error:", error.message);
+      return [];
+    }
+    return (data ?? []) as PreRunDailyRecord[];
+  } catch (err) {
+    console.error("[persistence] loadPreRunDaily exception:", err);
+    return [];
+  }
+}
+
+/** Load available prerun daily scan dates. */
+export async function loadPreRunDailyDates(limit = 14): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerun_daily")
+      .select("scan_date")
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadPreRunDailyDates error:", error.message);
+      return [];
+    }
+
+    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
+    return unique.slice(0, limit);
+  } catch (err) {
+    console.error("[persistence] loadPreRunDailyDates exception:", err);
+    return [];
+  }
+}
+
+/** Load prerun daily results for multiple dates (for streak/delta).
+ *  Returns lightweight rows with score + preset flags. */
+export async function loadPreRunDailyMulti(
+  dates: string[]
+): Promise<Array<{ scan_date: string; ticker: string; final_score: number; is_sndk: boolean; is_early_mover: boolean; is_pullback: boolean; is_leading: boolean; is_stealth: boolean; is_early_plus: boolean }>> {
+  if (dates.length === 0) return [];
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerun_daily")
+      .select("scan_date, ticker, final_score, is_sndk, is_early_mover, is_pullback, is_leading, is_stealth, is_early_plus")
+      .in("scan_date", dates)
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadPreRunDailyMulti error:", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; final_score: number; is_sndk: boolean; is_early_mover: boolean; is_pullback: boolean; is_leading: boolean; is_stealth: boolean; is_early_plus: boolean }>;
+  } catch (err) {
+    console.error("[persistence] loadPreRunDailyMulti exception:", err);
+    return [];
+  }
+}
+
+// ── VCP Daily Scan ──
+
+export interface VCPDailyRecord {
+  scan_date: string;
+  ticker: string;
+  company_name: string;
+  sector: string;
+  price: number;
+  total_score: number;
+  trend_score: number;
+  volume_score: number;
+  compression_score: number;
+  rel_strength_score: number;
+  risk_quality_score: number;
+  phase: string;
+  pivot_high: number | null;
+  atr_pct: number | null;
+  dist_from_sma50_pct: number | null;
+  dry_volume_days: number | null;
+  tight_closes: boolean | null;
+  inside_bar_count: number | null;
+  entry: number | null;
+  stop: number | null;
+  target_2r: number | null;
+  target_3r: number | null;
+  sma10_exit: number | null;
+}
+
+/** Batch upsert VCP daily scan results. */
+export async function upsertVCPDaily(records: VCPDailyRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertVCPDaily: no admin client");
+      return 0;
+    }
+
+    let upserted = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = records.slice(i, i + 500);
+      const { data, error } = await supabase
+        .from("vcp_daily")
+        .upsert(batch, { onConflict: "scan_date,ticker" })
+        .select("id");
+
+      if (error) {
+        console.error("[persistence] upsertVCPDaily error:", error.message);
+      } else {
+        upserted += data?.length ?? 0;
+      }
+    }
+    return upserted;
+  } catch (err) {
+    console.error("[persistence] upsertVCPDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete vcp_daily rows older than retentionDays. */
+export async function purgeOldVCPDaily(retentionDays = 14): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("vcp_daily")
+      .delete()
+      .lt("scan_date", cutoffStr)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] purgeOldVCPDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] purgeOldVCPDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Load VCP daily results for a given date. */
+export async function loadVCPDaily(date: string): Promise<VCPDailyRecord[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("vcp_daily")
+      .select("*")
+      .eq("scan_date", date)
+      .order("total_score", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadVCPDaily error:", error.message);
+      return [];
+    }
+    return (data ?? []) as VCPDailyRecord[];
+  } catch (err) {
+    console.error("[persistence] loadVCPDaily exception:", err);
+    return [];
+  }
+}
+
+/** Load available VCP daily scan dates. */
+export async function loadVCPDailyDates(limit = 14): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("vcp_daily")
+      .select("scan_date")
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadVCPDailyDates error:", error.message);
+      return [];
+    }
+
+    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
+    return unique.slice(0, limit);
+  } catch (err) {
+    console.error("[persistence] loadVCPDailyDates exception:", err);
+    return [];
+  }
+}
+
+/** Load VCP daily results for multiple dates (for streak/delta). */
+export async function loadVCPDailyMulti(
+  dates: string[]
+): Promise<Array<{ scan_date: string; ticker: string; total_score: number }>> {
+  if (dates.length === 0) return [];
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("vcp_daily")
+      .select("scan_date, ticker, total_score")
+      .in("scan_date", dates)
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadVCPDailyMulti error:", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; total_score: number }>;
+  } catch (err) {
+    console.error("[persistence] loadVCPDailyMulti exception:", err);
+    return [];
+  }
+}
+
+// ── Institutional Daily Scan ──
+
+export interface InstitutionalDailyRecord {
+  scan_date: string;
+  ticker: string;
+  company_name: string;
+  sector: string;
+  price: number;
+  composite_score: number;
+  institutional_score: number;
+  execution_score: number;
+  risk_score: number;
+  discipline_score: number;
+  classification: string;
+  entry_quality: string | null;
+  best_trigger: string | null;
+  tier: string | null;
+  avoid_reason: string | null;
+  commentary_summary: string | null;
+  rs_accel_spy: number | null;
+  rs_accel_qqq: number | null;
+  gap_pct: number | null;
+  dist_from_ema20_atr: number | null;
+}
+
+/** Batch upsert institutional daily scan results. */
+export async function upsertInstitutionalDaily(records: InstitutionalDailyRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertInstitutionalDaily: no admin client");
+      return 0;
+    }
+
+    let upserted = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = records.slice(i, i + 500);
+      const { data, error } = await supabase
+        .from("institutional_daily")
+        .upsert(batch, { onConflict: "scan_date,ticker" })
+        .select("id");
+
+      if (error) {
+        console.error("[persistence] upsertInstitutionalDaily error:", error.message);
+      } else {
+        upserted += data?.length ?? 0;
+      }
+    }
+    return upserted;
+  } catch (err) {
+    console.error("[persistence] upsertInstitutionalDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete institutional_daily rows older than retentionDays. */
+export async function purgeOldInstitutionalDaily(retentionDays = 14): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("institutional_daily")
+      .delete()
+      .lt("scan_date", cutoffStr)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] purgeOldInstitutionalDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] purgeOldInstitutionalDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Load institutional daily results for a given date. */
+export async function loadInstitutionalDaily(date: string): Promise<InstitutionalDailyRecord[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("institutional_daily")
+      .select("*")
+      .eq("scan_date", date)
+      .order("composite_score", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadInstitutionalDaily error:", error.message);
+      return [];
+    }
+    return (data ?? []) as InstitutionalDailyRecord[];
+  } catch (err) {
+    console.error("[persistence] loadInstitutionalDaily exception:", err);
+    return [];
+  }
+}
+
+/** Load available institutional daily scan dates. */
+export async function loadInstitutionalDailyDates(limit = 14): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("institutional_daily")
+      .select("scan_date")
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadInstitutionalDailyDates error:", error.message);
+      return [];
+    }
+
+    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
+    return unique.slice(0, limit);
+  } catch (err) {
+    console.error("[persistence] loadInstitutionalDailyDates exception:", err);
+    return [];
+  }
+}
+
+/** Load institutional daily results for multiple dates (for streak/delta). */
+export async function loadInstitutionalDailyMulti(
+  dates: string[]
+): Promise<Array<{ scan_date: string; ticker: string; composite_score: number }>> {
+  if (dates.length === 0) return [];
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("institutional_daily")
+      .select("scan_date, ticker, composite_score")
+      .in("scan_date", dates)
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadInstitutionalDailyMulti error:", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; composite_score: number }>;
+  } catch (err) {
+    console.error("[persistence] loadInstitutionalDailyMulti exception:", err);
+    return [];
+  }
+}

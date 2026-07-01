@@ -35,6 +35,18 @@
     {
       "path": "/api/inflection/cron/daily",
       "schedule": "45 1 * * 2-6"
+    },
+    {
+      "path": "/api/prerun/cron/preset",
+      "schedule": "0 2 * * 2-6"
+    },
+    {
+      "path": "/api/vcp/cron/daily",
+      "schedule": "15 2 * * 2-6"
+    },
+    {
+      "path": "/api/institutional/cron/daily",
+      "schedule": "30 2 * * 2-6"
     }
   ]
 }

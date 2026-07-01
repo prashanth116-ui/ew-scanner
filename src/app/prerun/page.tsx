@@ -2107,6 +2107,13 @@ function PreRunPage() {
               ))}
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                href="/prerun/institutional-daily"
+                className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Daily Results</span>
+              </Link>
               <button
                 onClick={handleExport}
                 className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
@@ -2149,6 +2156,13 @@ function PreRunPage() {
               ))}
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                href="/prerun/vcp-daily"
+                className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Daily Results</span>
+              </Link>
               <button
                 onClick={handleExport}
                 className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
@@ -2197,6 +2211,13 @@ function PreRunPage() {
               >
                 <ListPlus className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Watchlist</span>
+              </Link>
+              <Link
+                href="/prerun/preset-daily"
+                className="flex items-center gap-1 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Daily Results</span>
               </Link>
               <button
                 onClick={handleExport}
