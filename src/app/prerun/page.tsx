@@ -20,6 +20,7 @@ import {
   Target,
   Shield,
   Activity,
+  Calendar,
 } from "lucide-react";
 import Link from "next/link";
 import type {
@@ -2257,6 +2258,13 @@ function PreRunPage() {
                 <p className="text-lg font-bold text-emerald-400">{inflectionStats.signals}</p>
               </div>
             </div>
+            <Link
+              href="/prerun/inflection-daily"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#141414] px-3 py-2 text-xs text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              Daily Results
+            </Link>
           </div>
         )}
 
@@ -2478,6 +2486,13 @@ function PreRunPage() {
                 <p className="text-[10px] text-[#666]">Stages</p>
               </div>
             </div>
+            <Link
+              href="/prerun/inflection-daily"
+              className="mt-6 inline-flex items-center gap-1.5 rounded-md border border-purple-500/30 bg-purple-500/10 px-4 py-2 text-sm text-purple-400 hover:bg-purple-500/20 transition-colors"
+            >
+              <Calendar className="h-4 w-4" />
+              View Daily Scan Results
+            </Link>
           </div>
         )}
 
