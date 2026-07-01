@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
+import { useState, useEffect, useMemo, useCallback, Fragment, Component, type ReactNode } from "react";
 import {
   Loader2,
   Calendar,
@@ -91,6 +91,48 @@ const PRESET_DESCRIPTIONS: Record<Preset, string> = {
   early_plus: "Pre-breakout: volume divergence + range coil",
 };
 
+// ── Error Boundary ──
+
+class TableErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/[0.05] p-6 text-center">
+          <p className="text-red-400 font-semibold mb-2">Render error</p>
+          <p className="text-[#a0a0a0] text-xs font-mono">{this.state.error.message}</p>
+          <p className="text-[#666] text-[10px] mt-2 font-mono whitespace-pre-wrap">{this.state.error.stack?.slice(0, 500)}</p>
+          <button
+            onClick={() => this.setState({ error: null })}
+            className="mt-3 px-3 py-1 rounded text-xs bg-[#2a2a2a] text-white hover:bg-[#3a3a3a]"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ── Safe number formatting ──
+
+function fmtNum(v: unknown, decimals: number): string {
+  if (v == null) return "-";
+  const n = Number(v);
+  if (isNaN(n)) return "-";
+  return n.toFixed(decimals);
+}
+
 // ── Helpers ──
 
 function verdictBadge(v: string): { label: string; color: string } {
@@ -128,11 +170,11 @@ function streakColor(streak: number): string {
   return "text-[#666] bg-[#1a1a1a] border-[#2a2a2a]";
 }
 
-function formatMktCap(v: number | null): string {
-  if (v === null) return "-";
-  if (v >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
-  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-  if (v >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
+function formatMktCap(v: number | null | undefined): string {
+  if (v == null) return "-";
+  if (v >= 1e12) return `$${fmtNum(v / 1e12, 1)}T`;
+  if (v >= 1e9) return `$${fmtNum(v / 1e9, 1)}B`;
+  if (v >= 1e6) return `$${fmtNum(v / 1e6, 0)}M`;
   return `$${v}`;
 }
 
@@ -606,6 +648,7 @@ export default function PreRunPresetDailyPage() {
       )}
 
       {!loadingResults && filtered.length > 0 && (
+        <TableErrorBoundary>
         <div className="rounded-lg border border-[#2a2a2a] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -640,7 +683,7 @@ export default function PreRunPresetDailyPage() {
                         <td className="px-2 py-2 font-bold text-white whitespace-nowrap">{row.ticker}</td>
                         <td className="px-2 py-2 text-[#a0a0a0] max-w-[140px] truncate">{row.company_name}</td>
                         <td className="px-2 py-2 text-[#777] max-w-[100px] truncate text-[10px]">{row.sector || "-"}</td>
-                        <td className="px-2 py-2 text-white tabular-nums whitespace-nowrap">${row.price != null ? Number(row.price).toFixed(2) : "-"}</td>
+                        <td className="px-2 py-2 text-white tabular-nums whitespace-nowrap">${fmtNum(row.price, 2)}</td>
                         <td className="px-2 py-2"><span className={`text-[11px] font-bold tabular-nums ${scoreColor(row.final_score ?? 0)}`}>{row.final_score ?? 0}</span></td>
                         <td className="px-2 py-2 tabular-nums whitespace-nowrap">
                           {delta !== undefined ? (
@@ -650,8 +693,8 @@ export default function PreRunPresetDailyPage() {
                         <td className="px-2 py-2">
                           <span className={`inline-flex items-center justify-center rounded border px-1.5 py-0.5 text-[9px] font-bold tabular-nums min-w-[24px] ${streakColor(streak)}`}>{streak}d</span>
                         </td>
-                        <td className="px-2 py-2 text-[#a0a0a0] tabular-nums text-[10px]">{row.pct_from_ath != null ? `${Number(row.pct_from_ath).toFixed(0)}%` : "-"}</td>
-                        <td className="px-2 py-2 text-[#a0a0a0] tabular-nums text-[10px]">{row.short_float != null ? `${Number(row.short_float).toFixed(1)}%` : "-"}</td>
+                        <td className="px-2 py-2 text-[#a0a0a0] tabular-nums text-[10px]">{row.pct_from_ath != null ? `${fmtNum(row.pct_from_ath, 0)}%` : "-"}</td>
+                        <td className="px-2 py-2 text-[#a0a0a0] tabular-nums text-[10px]">{row.short_float != null ? `${fmtNum(row.short_float, 1)}%` : "-"}</td>
                         <td className="px-2 py-2">
                           <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold tracking-wide whitespace-nowrap ${vBadge.color}`}>{vBadge.label}</span>
                           {isNew && <span className="ml-1 inline-flex items-center rounded border border-green-500/30 bg-green-500/10 px-1 py-0.5 text-[8px] font-bold text-green-400">NEW</span>}
@@ -665,6 +708,7 @@ export default function PreRunPresetDailyPage() {
             </table>
           </div>
         </div>
+        </TableErrorBoundary>
       )}
 
       <div className="mt-6 text-center text-[10px] text-[#444]">
