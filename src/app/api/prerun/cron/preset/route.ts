@@ -307,7 +307,18 @@ export async function GET(request: NextRequest) {
     // Purge old data
     const purged = await purgeOldPreRunDaily(14).catch(() => 0);
 
-    // Determine "new today"
+    // Read full DB results for today (includes data from this + previous runs)
+    let dbRecords: PreRunDailyRecord[] = allRecords;
+    try {
+      const fullResults = await loadPreRunDaily(today);
+      if (fullResults.length > 0) {
+        dbRecords = fullResults as PreRunDailyRecord[];
+      }
+    } catch {
+      // Fall back to in-memory allRecords
+    }
+
+    // Determine "new today" using full DB data
     let newTickers: string[] = [];
     try {
       const dates = await loadPreRunDailyDates(2);
@@ -315,20 +326,20 @@ export async function GET(request: NextRequest) {
       if (yesterday) {
         const prevResults = await loadPreRunDaily(yesterday);
         const prevTickers = new Set(prevResults.map((r) => r.ticker));
-        newTickers = allRecords.map((r) => r.ticker).filter((t) => !prevTickers.has(t));
+        newTickers = dbRecords.map((r) => r.ticker).filter((t) => !prevTickers.has(t));
       } else {
-        newTickers = allRecords.map((r) => r.ticker);
+        newTickers = dbRecords.map((r) => r.ticker);
       }
     } catch {
       // Non-critical
     }
 
-    // Send Telegram summary
+    // Send Telegram summary using full DB data
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
     let telegramSent = false;
     if (botToken && chatId) {
-      const message = formatTelegramSummary(universe.length, allRecords, newTickers, timedOut);
+      const message = formatTelegramSummary(universe.length, dbRecords, newTickers, timedOut);
       const tgResult = await sendTelegramMessage(botToken, chatId, message);
       telegramSent = tgResult.ok;
       if (!tgResult.ok) {
@@ -339,7 +350,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       scannedCount: universe.length,
       fetchedCount,
-      qualifyingCount: allRecords.length,
+      qualifyingCount: dbRecords.length,
       persistedCount: totalPersisted,
       purgedCount: purged,
       newTodayCount: newTickers.length,
@@ -347,12 +358,12 @@ export async function GET(request: NextRequest) {
       timedOut,
       elapsedMs: Date.now() - startTime,
       presetCounts: {
-        sndk: allRecords.filter((r) => r.is_sndk).length,
-        early_mover: allRecords.filter((r) => r.is_early_mover).length,
-        pullback: allRecords.filter((r) => r.is_pullback).length,
-        leading: allRecords.filter((r) => r.is_leading).length,
-        stealth: allRecords.filter((r) => r.is_stealth).length,
-        early_plus: allRecords.filter((r) => r.is_early_plus).length,
+        sndk: dbRecords.filter((r) => r.is_sndk).length,
+        early_mover: dbRecords.filter((r) => r.is_early_mover).length,
+        pullback: dbRecords.filter((r) => r.is_pullback).length,
+        leading: dbRecords.filter((r) => r.is_leading).length,
+        stealth: dbRecords.filter((r) => r.is_stealth).length,
+        early_plus: dbRecords.filter((r) => r.is_early_plus).length,
       },
     });
   } catch (err) {
