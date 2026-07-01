@@ -640,8 +640,8 @@ export default function PreRunPresetDailyPage() {
                         <td className="px-2 py-2 font-bold text-white whitespace-nowrap">{row.ticker}</td>
                         <td className="px-2 py-2 text-[#a0a0a0] max-w-[140px] truncate">{row.company_name}</td>
                         <td className="px-2 py-2 text-[#777] max-w-[100px] truncate text-[10px]">{row.sector || "-"}</td>
-                        <td className="px-2 py-2 text-white tabular-nums whitespace-nowrap">${Number(row.price).toFixed(2)}</td>
-                        <td className="px-2 py-2"><span className={`text-[11px] font-bold tabular-nums ${scoreColor(row.final_score)}`}>{row.final_score}</span></td>
+                        <td className="px-2 py-2 text-white tabular-nums whitespace-nowrap">${row.price != null ? Number(row.price).toFixed(2) : "-"}</td>
+                        <td className="px-2 py-2"><span className={`text-[11px] font-bold tabular-nums ${scoreColor(row.final_score ?? 0)}`}>{row.final_score ?? 0}</span></td>
                         <td className="px-2 py-2 tabular-nums whitespace-nowrap">
                           {delta !== undefined ? (
                             <span className={`text-[10px] font-medium ${delta > 0 ? "text-emerald-400" : delta < 0 ? "text-red-400" : "text-[#555]"}`}>{delta > 0 ? "+" : ""}{delta}</span>
@@ -650,8 +650,8 @@ export default function PreRunPresetDailyPage() {
                         <td className="px-2 py-2">
                           <span className={`inline-flex items-center justify-center rounded border px-1.5 py-0.5 text-[9px] font-bold tabular-nums min-w-[24px] ${streakColor(streak)}`}>{streak}d</span>
                         </td>
-                        <td className="px-2 py-2 text-[#a0a0a0] tabular-nums text-[10px]">{row.pct_from_ath !== null ? `${Number(row.pct_from_ath).toFixed(0)}%` : "-"}</td>
-                        <td className="px-2 py-2 text-[#a0a0a0] tabular-nums text-[10px]">{row.short_float !== null ? `${Number(row.short_float).toFixed(1)}%` : "-"}</td>
+                        <td className="px-2 py-2 text-[#a0a0a0] tabular-nums text-[10px]">{row.pct_from_ath != null ? `${Number(row.pct_from_ath).toFixed(0)}%` : "-"}</td>
+                        <td className="px-2 py-2 text-[#a0a0a0] tabular-nums text-[10px]">{row.short_float != null ? `${Number(row.short_float).toFixed(1)}%` : "-"}</td>
                         <td className="px-2 py-2">
                           <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold tracking-wide whitespace-nowrap ${vBadge.color}`}>{vBadge.label}</span>
                           {isNew && <span className="ml-1 inline-flex items-center rounded border border-green-500/30 bg-green-500/10 px-1 py-0.5 text-[8px] font-bold text-green-400">NEW</span>}
