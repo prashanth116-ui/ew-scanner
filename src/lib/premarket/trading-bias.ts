@@ -85,6 +85,10 @@ function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
     return "Neutral";
   }
 
+  // Magnitude gate: tiny moves are noise, not signal
+  const avgAbsChange = equities.reduce((s, e) => s + Math.abs(e.changePct), 0) / equities.length;
+  if (avgAbsChange < 0.15) return "Neutral";
+
   const dirs = equities.map((e) => sign(e.changePct));
   const upCount = dirs.filter((d) => d === "up").length;
   const downCount = dirs.filter((d) => d === "down").length;
