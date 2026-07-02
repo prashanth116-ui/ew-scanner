@@ -3,6 +3,7 @@ import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { fetchPremarketData } from "@/lib/premarket/fetch";
 import { computeBiasScore } from "@/lib/premarket/scoring";
+import { computeTradingBias } from "@/lib/premarket/trading-bias";
 import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
 import { fetchMacroRegime, enhanceRegimeWithCrossAsset } from "@/lib/sector-rotation/regime";
 import { computeMarketPosture, computeSectorTiers, computeRiskFlags } from "@/lib/sector-rotation/brief";
@@ -94,12 +95,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    const tradingBias = computeTradingBias(
+      premarketResult.futures,
+      premarketResult.internals,
+      enhancedRegime?.vix ?? null,
+      score,
+    );
+
     const response: PremarketData = {
       futures: premarketResult.futures,
       internals: premarketResult.internals,
       checklist,
       biasScore: score,
       biasLabel: label,
+      tradingBias,
       timestamp: Date.now(),
     };
 

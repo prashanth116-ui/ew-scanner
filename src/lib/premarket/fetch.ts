@@ -20,6 +20,7 @@ const FUTURES_SYMBOLS = [
   { symbol: "ES=F", name: "S&P 500 E-mini" },
   { symbol: "NQ=F", name: "Nasdaq 100 E-mini" },
   { symbol: "RTY=F", name: "Russell 2000 E-mini" },
+  { symbol: "YM=F", name: "Dow E-mini" },
   { symbol: "CL=F", name: "Crude Oil WTI" },
   { symbol: "GC=F", name: "Gold" },
 ];

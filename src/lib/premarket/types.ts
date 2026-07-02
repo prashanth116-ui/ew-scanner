@@ -23,11 +23,29 @@ export interface ChecklistItem {
   autoChecked: boolean; // system-determined pass/fail
 }
 
+export type MarketBias = "Strong Bull" | "Lean Bull" | "Neutral" | "Lean Bear" | "Strong Bear";
+export type DayType = "Trend Day" | "Range Day" | "Uncertain";
+
+export interface TradingBias {
+  bias: MarketBias;
+  confidence: number;           // 0-100
+  preferredDirection: "Long" | "Short" | "Flat";
+  leadingAsset: string | null;  // "ES" | "NQ" | "YM" | null
+  weakestAsset: string | null;  // "ES" | "NQ" | "YM" | null
+  bestToTrade: string | null;   // asset with highest absolute changePct
+  assetToAvoid: string | null;  // asset diverging from consensus
+  dayType: DayType;
+  vixInterpretation: string;    // Human-readable VIX cross-reference
+  playbook: string;             // 2-3 sentence explanation
+  whyThisBias: string[];        // bullet-point reasons (3-5 items)
+}
+
 export interface PremarketData {
   futures: FuturesSnapshot[];
   internals: InternalsSnapshot;
   checklist: ChecklistItem[];
   biasScore: number; // -10 to +10
   biasLabel: string; // "Strong Bull" / "Lean Bull" / "Neutral" / "Lean Bear" / "Strong Bear"
+  tradingBias: TradingBias | null; // null when insufficient data
   timestamp: number;
 }
