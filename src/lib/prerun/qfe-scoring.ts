@@ -300,27 +300,32 @@ export function scoreLeadership(data: PreRunStockData): number {
 // ── Entry Engine (0-100) ──
 
 export function scoreEntry(data: PreRunStockData): number {
-  let total = 0;
+  // Base credit: every ticker reaching QFE already passed a preset scanner
+  let total = 5;
 
-  // EMA Proximity (0-20)
+  // EMA Proximity (0-22)
   const distEma10 = Math.abs(data.distFromEma10Atr ?? 5);
-  if (distEma10 <= 0.3) total += 10;
-  else if (distEma10 <= 0.5) total += 8;
-  else if (distEma10 <= 1.0) total += 5;
-  else if (distEma10 <= 1.5) total += 3;
+  if (distEma10 <= 0.3) total += 11;
+  else if (distEma10 <= 0.5) total += 9;
+  else if (distEma10 <= 1.0) total += 6;
+  else if (distEma10 <= 1.5) total += 4;
+  else if (distEma10 <= 2.5) total += 2;
 
   const distEma20 = Math.abs(data.instDistFromEma20Atr ?? 5);
-  if (distEma20 <= 0.3) total += 10;
-  else if (distEma20 <= 0.5) total += 8;
-  else if (distEma20 <= 1.0) total += 5;
-  else if (distEma20 <= 1.5) total += 3;
+  if (distEma20 <= 0.3) total += 11;
+  else if (distEma20 <= 0.5) total += 9;
+  else if (distEma20 <= 1.0) total += 6;
+  else if (distEma20 <= 1.5) total += 4;
+  else if (distEma20 <= 2.5) total += 2;
 
   // Breakout Proximity (0-15)
   const pctFromBase = data.pctFromBaseHigh ?? 100;
   if (pctFromBase <= 2) total += 15;
   else if (pctFromBase <= 5) total += 12;
   else if (pctFromBase <= 10) total += 8;
-  else if (pctFromBase <= 15) total += 4;
+  else if (pctFromBase <= 15) total += 5;
+  else if (pctFromBase <= 25) total += 3;
+  else if (pctFromBase <= 35) total += 1;
 
   // Compression Quality (0-15)
   if (data.atrContracting === true) total += 5;
@@ -335,17 +340,17 @@ export function scoreEntry(data: PreRunStockData): number {
   if (data.vpDivergenceBullish === true) total += 5;
   if (data.aboveEma50 === true) total += 5;
 
-  // Extension Penalty (0 to -15)
+  // Extension Penalty (0 to -15) — softer thresholds
   const rawDistEma20 = data.instDistFromEma20Atr ?? 0;
-  if (rawDistEma20 > 4) total -= 15;
-  else if (rawDistEma20 > 3) total -= 10;
-  else if (rawDistEma20 > 2) total -= 5;
+  if (rawDistEma20 > 4.5) total -= 15;
+  else if (rawDistEma20 > 3.5) total -= 10;
+  else if (rawDistEma20 > 2.5) total -= 5;
 
-  // Earnings Risk (-10 to 0)
+  // Earnings Risk (-7 to 0) — softened
   const dte = data.daysToEarnings;
-  if (dte !== null && dte <= 3) total -= 10;
-  else if (dte !== null && dte <= 7) total -= 5;
-  else if (dte !== null && dte <= 14) total -= 2;
+  if (dte !== null && dte <= 3) total -= 7;
+  else if (dte !== null && dte <= 7) total -= 3;
+  else if (dte !== null && dte <= 14) total -= 1;
 
   // Weekly Confirmation (0-10)
   if (data.weeklyReversalSignal === true) total += 5;
@@ -357,6 +362,7 @@ export function scoreEntry(data: PreRunStockData): number {
   if (gapPct <= 0.5) total += 10;
   else if (gapPct <= 1.0) total += 7;
   else if (gapPct <= 2.0) total += 4;
+  else if (gapPct <= 3.0) total += 2;
 
   return clamp(total, 0, 100);
 }
@@ -384,12 +390,12 @@ export function computeQFE(
     quality * 0.30 + leadership * 0.30 + entry * 0.25 + marketEnvScore * 0.15
   );
 
-  // Rating
+  // Rating — calibrated to realistic score distribution
   let rating: QFERating = "D";
-  if (composite >= 90) rating = "A+";
-  else if (composite >= 80) rating = "A";
-  else if (composite >= 70) rating = "B+";
-  else if (composite >= 60) rating = "B";
+  if (composite >= 73) rating = "A+";
+  else if (composite >= 66) rating = "A";
+  else if (composite >= 60) rating = "B+";
+  else if (composite >= 53) rating = "B";
   else if (composite >= 45) rating = "C";
 
   // Risk Level
@@ -410,15 +416,15 @@ export function computeQFE(
   if (distEma20 > 2.0) extensionLevel = "Extended";
   else if (distEma20 > 1.0) extensionLevel = "Moderate";
 
-  // Action
+  // Action — composite-based with component guardrails
   let action: QFEAction = "Avoid";
-  if (entry >= 70 && quality >= 60 && leadership >= 60 && riskLevel !== "High") {
+  if (composite >= 68 && entry >= 45 && quality >= 50 && riskLevel !== "High") {
     action = "Buy Now";
-  } else if (quality >= 60 && leadership >= 60 && entry < 70) {
+  } else if (composite >= 60 && (quality >= 50 || leadership >= 55)) {
     action = "Buy Pullback";
-  } else if (quality >= 50 && leadership >= 50 && entry < 50) {
+  } else if (composite >= 53) {
     action = "Watchlist";
-  } else if (quality >= 40 || leadership >= 40) {
+  } else if (composite >= 45) {
     action = "Wait";
   }
 
