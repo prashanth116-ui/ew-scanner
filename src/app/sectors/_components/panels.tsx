@@ -173,6 +173,48 @@ export function SubSectorPanel({ scores, collapsed, onToggle }: { scores: Sector
   );
 }
 
+// ── Leadership Baskets Panel ──
+
+export function LeadershipBasketsPanel({ scores, collapsed, onToggle }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
+  if (scores.length === 0) return null;
+
+  return (
+    <CollapsiblePanel id="leadership-baskets" title="Leadership Baskets" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
+      <p className="text-[10px] text-[#555] mb-3 px-1">MAGS, QQQ, IWM, ARKK — institutional leadership breadth and risk appetite.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 px-1">
+        {scores.map((s) => (
+          <div key={s.etf} className="rounded-lg border border-[#2a2a2a] bg-[#111] p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-semibold text-white text-sm">{s.etf}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${quadrantColor(s.quadrant)}`}>
+                {s.quadrant}
+              </span>
+            </div>
+            <p className="text-[10px] text-[#888] mb-2">{s.sector}</p>
+            <div className="grid grid-cols-2 gap-y-1 text-[11px]">
+              <span className="text-[#666]">Score</span>
+              <span className="text-right text-white font-mono">{s.compositeScore}</span>
+              <span className="text-[#666]">Momentum</span>
+              <span className="text-right text-white font-mono">{s.momentumPercentile}%</span>
+              <span className="text-[#666]">Accel</span>
+              <span className={`text-right font-mono ${s.acceleration > 0 ? "text-green-400" : s.acceleration < 0 ? "text-red-400" : "text-[#888]"}`}>
+                {s.acceleration > 0 ? "+" : ""}{s.acceleration.toFixed(2)}
+              </span>
+              <span className="text-[#666]">RS</span>
+              <span className="text-right text-white font-mono">{s.mansfieldRS.toFixed(2)}</span>
+            </div>
+            {s.stealthAccumulation && (
+              <div className="mt-2 rounded border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-400">
+                Stealth Accumulation
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </CollapsiblePanel>
+  );
+}
+
 // ── Cross-Asset Money Flow Panel ──
 
 export function CrossAssetPanel({ scores, collapsed, onToggle }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void }) {

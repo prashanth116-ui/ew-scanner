@@ -3,7 +3,7 @@ export interface SectorStock {
   name: string;
 }
 
-export type SectorCategory = "gics_sector" | "sub_sector" | "cross_asset";
+export type SectorCategory = "gics_sector" | "sub_sector" | "cross_asset" | "leadership_basket";
 
 export interface SectorDefinition {
   id: string;
@@ -1859,6 +1859,41 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     category: "cross_asset",
     stocks: [],
   },
+
+  // ── Leadership Baskets ──
+
+  {
+    id: "mag-7",
+    displayName: "Magnificent 7",
+    etf: "MAGS",
+    description: "Mega-cap tech leadership — concentration vs breadth indicator",
+    category: "leadership_basket",
+    stocks: [],
+  },
+  {
+    id: "nasdaq-100",
+    displayName: "Nasdaq 100",
+    etf: "QQQ",
+    description: "Large-cap growth — broad tech participation beyond mega-caps",
+    category: "leadership_basket",
+    stocks: [],
+  },
+  {
+    id: "russell-2000",
+    displayName: "Russell 2000",
+    etf: "IWM",
+    description: "Small-cap equities — breadth confirmation and domestic risk appetite",
+    category: "leadership_basket",
+    stocks: [],
+  },
+  {
+    id: "ark-innovation",
+    displayName: "ARK Innovation",
+    etf: "ARKK",
+    description: "Speculative growth — risk appetite canary for high-beta names",
+    category: "leadership_basket",
+    stocks: [],
+  },
 ];
 
 // ── Helper functions ──
@@ -1903,6 +1938,11 @@ export function getSubSectors(): SectorDefinition[] {
 /** Get cross-asset ETFs (GLD, TLT, HYG, EEM, UUP). */
 export function getCrossAssetETFs(): SectorDefinition[] {
   return SECTOR_UNIVERSE.filter((s) => s.category === "cross_asset");
+}
+
+/** Get leadership basket ETFs (MAGS, QQQ, IWM, ARKK). */
+export function getLeadershipBaskets(): SectorDefinition[] {
+  return SECTOR_UNIVERSE.filter((s) => s.category === "leadership_basket");
 }
 
 /** Get all sectors that have stocks for enrichment (excludes cross-asset ETFs). */

@@ -125,6 +125,7 @@ export interface SectorRotationResult {
   sectors: SectorRotationScore[];
   subSectorScores?: SectorRotationScore[];
   crossAssetScores?: SectorRotationScore[];
+  leadershipBasketScores?: SectorRotationScore[];
   rotationActive: boolean;
   rotationSummary: string;
   dispersionIndex: number;

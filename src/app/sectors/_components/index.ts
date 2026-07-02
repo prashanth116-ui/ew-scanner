@@ -54,7 +54,7 @@ export { TradingActionBadge, ComparisonDelta } from "./comparison-delta";
 export { RRGChart } from "./rrg-chart";
 export { AlertPanel, loadAlerts, saveAlerts } from "./alerts";
 export { StockSearch } from "./stock-search";
-export { CorrelationMatrix, SectorComparison, SubSectorPanel, CrossAssetPanel } from "./panels";
+export { CorrelationMatrix, SectorComparison, SubSectorPanel, CrossAssetPanel, LeadershipBasketsPanel } from "./panels";
 export { SectorStockTable, FilterRecipes } from "./sector-stock-table";
 export { SectorDetail } from "./sector-detail";
 export { StockPicksPanel, TopPicksBySector } from "./stock-picks-panel";

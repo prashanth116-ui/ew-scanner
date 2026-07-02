@@ -449,6 +449,7 @@ export async function calculateSectorRotation(
   const gicsSectors = scoredSectors.filter((s) => s.category === "gics_sector");
   const subSectorScores = scoredSectors.filter((s) => s.category === "sub_sector");
   const crossAssetScores = scoredSectors.filter((s) => s.category === "cross_asset");
+  const leadershipBasketScores = scoredSectors.filter((s) => s.category === "leadership_basket");
 
   // Multi-signal rotation detection (GICS sectors only for rotation logic)
   const all20dReturns = rawScores.filter((r) => r.category === "gics_sector").map((r) => r.roc20d);
@@ -714,6 +715,7 @@ export async function calculateSectorRotation(
     sectors: gicsSectors,
     subSectorScores,
     crossAssetScores,
+    leadershipBasketScores,
     rotationActive,
     rotationSummary,
     dispersionIndex,

@@ -15,7 +15,7 @@ import {
 } from "../_components";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
-import type { FuturesSnapshot, InternalsSnapshot, ChecklistItem } from "@/lib/premarket/types";
+import type { FuturesSnapshot, InternalsSnapshot, ChecklistItem, TradingBias } from "@/lib/premarket/types";
 import { computeBiasScore } from "@/lib/premarket/scoring";
 import { loadHistory } from "@/lib/sector-rotation/history";
 import { SUB_SECTOR_PARENT, subSectorDivergenceTooltip } from "@/lib/sector-rotation/sub-sector-constants";
@@ -32,6 +32,8 @@ import {
   type SectorTiers,
   type WhatChangedResult,
 } from "@/lib/sector-rotation/brief";
+import { computeLeadershipHealth } from "@/lib/sector-rotation/leadership-health";
+import type { LeadershipHealth } from "@/lib/sector-rotation/leadership-health";
 
 // ── Posture color mapping ──
 
@@ -53,6 +55,7 @@ export default function DailyBriefPage() {
   const [futures, setFutures] = useState<FuturesSnapshot[]>([]);
   const [internals, setInternals] = useState<InternalsSnapshot>({ addLine: null, tick: null, trin: null });
   const [pulseLoading, setPulseLoading] = useState(true);
+  const [tradingBias, setTradingBias] = useState<TradingBias | null>(null);
 
   // Fetch macro events + pre-market data in parallel
   useEffect(() => {
@@ -65,10 +68,11 @@ export default function DailyBriefPage() {
     const fetchPulse = () => {
       fetch("/api/premarket")
         .then((res) => (res.ok ? res.json() : null))
-        .then((result: { futures: FuturesSnapshot[]; internals: InternalsSnapshot } | null) => {
+        .then((result: { futures: FuturesSnapshot[]; internals: InternalsSnapshot; tradingBias?: TradingBias | null } | null) => {
           if (result) {
             setFutures(result.futures);
             setInternals(result.internals);
+            setTradingBias(result.tradingBias ?? null);
           }
         })
         .catch(() => {})
@@ -133,6 +137,16 @@ export default function DailyBriefPage() {
     } : null;
     return computeBiasScore(futures, internals, posture, regimeData);
   }, [futures, internals, posture, data?.regime]);
+
+  // Leadership health
+  const leadershipHealth = useMemo(() => {
+    if (!data?.leadershipBasketScores?.length) return null;
+    return computeLeadershipHealth(
+      data.leadershipBasketScores,
+      data.crossAssetScores ?? [],
+      data.sectors,
+    );
+  }, [data]);
 
   // Persist today's posture (side effect)
   useEffect(() => {
@@ -264,6 +278,12 @@ export default function DailyBriefPage() {
           subSectorScores={data?.subSectorScores ?? []}
         />
       </CollapsiblePanel>
+
+      {/* 0.5 Pre-Market Trading Bias */}
+      <TradingBiasCard bias={tradingBias} loading={pulseLoading} />
+
+      {/* 0.6 Leadership Health */}
+      {leadershipHealth && <LeadershipHealthCard health={leadershipHealth} />}
 
       {/* 1. Market Posture Banner */}
       {posture && <PostureBanner posture={posture} />}
@@ -431,6 +451,176 @@ export default function DailyBriefPage() {
 
 // ── Sub-components ──
 
+// ── Trading Bias Card ──
+
+const BIAS_STYLES: Record<string, { bg: string; border: string; text: string }> = {
+  "Strong Bull": { bg: "bg-emerald-500/10", border: "border-emerald-500/30", text: "text-emerald-400" },
+  "Lean Bull": { bg: "bg-emerald-500/5", border: "border-emerald-500/20", text: "text-emerald-400" },
+  Neutral: { bg: "bg-amber-500/5", border: "border-amber-500/20", text: "text-amber-400" },
+  "Lean Bear": { bg: "bg-red-500/5", border: "border-red-500/20", text: "text-red-400" },
+  "Strong Bear": { bg: "bg-red-500/10", border: "border-red-500/30", text: "text-red-400" },
+};
+
+function TradingBiasCard({ bias, loading }: { bias: TradingBias | null; loading: boolean }) {
+  if (loading && !bias) return null;
+  if (!bias) {
+    return (
+      <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-[#888]">Pre-Market Trading Bias</h2>
+        </div>
+        <p className="text-xs text-[#555]">Insufficient data — waiting for futures</p>
+      </div>
+    );
+  }
+
+  const style = BIAS_STYLES[bias.bias] ?? BIAS_STYLES.Neutral;
+  const dirColor = bias.preferredDirection === "Long" ? "text-green-400 bg-green-500/10 border-green-500/30"
+    : bias.preferredDirection === "Short" ? "text-red-400 bg-red-500/10 border-red-500/30"
+    : "text-[#888] bg-[#222] border-[#333]";
+  const dayTypeColor = bias.dayType === "Trend Day" ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/30"
+    : bias.dayType === "Range Day" ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
+    : "text-[#888] bg-[#222] border-[#333]";
+
+  return (
+    <div className={`rounded-xl border ${style.border} ${style.bg} p-4 space-y-3`}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white">Pre-Market Trading Bias</h2>
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-bold ${style.text}`}>{bias.bias}</span>
+          <span className="text-xs text-[#888]">({bias.confidence}%)</span>
+        </div>
+      </div>
+
+      {/* Confidence bar */}
+      <div className="h-1.5 rounded-full bg-[#222] overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            bias.confidence >= 60 ? "bg-emerald-500" : bias.confidence >= 40 ? "bg-amber-500" : "bg-red-500"
+          }`}
+          style={{ width: `${bias.confidence}%` }}
+        />
+      </div>
+
+      {/* Badges row */}
+      <div className="flex flex-wrap gap-2">
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${dirColor}`}>
+          {bias.preferredDirection}
+        </span>
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${dayTypeColor}`}>
+          {bias.dayType}
+        </span>
+      </div>
+
+      {/* Leadership + VIX row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#666]">Leading:</span>
+            <span className="text-white font-medium">{bias.leadingAsset ?? "\u2014"}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[#666]">Weakest:</span>
+            <span className="text-white font-medium">{bias.weakestAsset ?? "\u2014"}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[#666]">Best to trade:</span>
+            <span className="text-white font-medium">{bias.bestToTrade ?? "\u2014"}</span>
+          </div>
+          {bias.assetToAvoid && (
+            <div className="flex items-center gap-2">
+              <span className="text-[#666]">Avoid:</span>
+              <span className="text-red-400 font-medium">{bias.assetToAvoid}</span>
+            </div>
+          )}
+        </div>
+        <div>
+          <span className="text-[#666]">VIX:</span>{" "}
+          <span className="text-[#ccc]">{bias.vixInterpretation}</span>
+        </div>
+      </div>
+
+      {/* Playbook */}
+      <div>
+        <div className="text-[10px] text-[#555] uppercase tracking-wider mb-1">Playbook</div>
+        <p className="text-xs text-[#ccc] italic leading-relaxed">{bias.playbook}</p>
+      </div>
+
+      {/* Why This Bias */}
+      {bias.whyThisBias.length > 0 && (
+        <div>
+          <div className="text-[10px] text-[#555] uppercase tracking-wider mb-1">Why This Bias</div>
+          <ul className="space-y-0.5">
+            {bias.whyThisBias.map((reason, i) => (
+              <li key={i} className="text-xs text-[#999] flex items-start gap-1.5">
+                <span className="text-[#555] mt-0.5 shrink-0">&bull;</span>
+                <span>{reason}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeadershipHealthCard({ health }: { health: LeadershipHealth }) {
+  const barColor = health.score >= 65 ? "bg-emerald-500" : health.score >= 35 ? "bg-amber-500" : "bg-red-500";
+  const labelColor = health.score >= 65 ? "text-emerald-400" : health.score >= 35 ? "text-amber-400" : "text-red-400";
+  const borderColor = health.score >= 65 ? "border-emerald-500/30" : health.score >= 35 ? "border-amber-500/30" : "border-red-500/30";
+  const bgColor = health.score >= 65 ? "bg-emerald-500/5" : health.score >= 35 ? "bg-amber-500/5" : "bg-red-500/5";
+
+  return (
+    <div className={`rounded-xl border ${borderColor} ${bgColor} p-4 space-y-3`}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white">Leadership Health</h2>
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-bold ${labelColor}`}>{health.score}</span>
+        </div>
+      </div>
+
+      {/* Score bar */}
+      <div className="h-1.5 rounded-full bg-[#222] overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: `${health.score}%` }}
+        />
+      </div>
+
+      {/* Label */}
+      <div className="flex items-center gap-2">
+        <span className={`text-xs font-semibold ${labelColor}`}>{health.label}</span>
+        {health.broadening && (
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-400">Broadening</span>
+        )}
+        {health.megaCapDominant && (
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-400">Mega-Cap Led</span>
+        )}
+        {health.specRiskOn && (
+          <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-400">Spec Risk On</span>
+        )}
+      </div>
+
+      {/* Summary */}
+      <p className="text-xs text-[#ccc] leading-relaxed">{health.summary}</p>
+
+      {/* Bullets */}
+      {health.bullets.length > 0 && (
+        <ul className="space-y-0.5">
+          {health.bullets.map((b, i) => (
+            <li key={i} className="text-xs text-[#999] flex items-start gap-1.5">
+              <span className="text-[#555] mt-0.5 shrink-0">&bull;</span>
+              <span>{b}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function PostureBanner({ posture }: { posture: PostureResult }) {
   const style = POSTURE_STYLES[posture.posture];
   const Icon = style.icon;
@@ -479,7 +669,7 @@ function generateBiasSummary(bias: { score: number; checklist: ChecklistItem[] }
   return "Mixed signals across futures, macro, and rotation — no clear directional edge.";
 }
 
-const INDEX_FUTURES = new Set(["ES=F", "NQ=F", "RTY=F"]);
+const INDEX_FUTURES = new Set(["ES=F", "NQ=F", "RTY=F", "YM=F"]);
 
 function FuturesRow({ items, label }: { items: FuturesSnapshot[]; label: string }) {
   if (items.length === 0) return null;

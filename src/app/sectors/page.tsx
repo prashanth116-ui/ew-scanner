@@ -18,6 +18,7 @@ import {
   StockSearch,
   SubSectorPanel,
   CrossAssetPanel,
+  LeadershipBasketsPanel,
   DataStalenessWarning,
   SectorNav,
   SummaryStrip,
@@ -35,7 +36,7 @@ import {
   computeRiskFlags,
 } from "@/lib/sector-rotation/brief";
 
-const DEFAULT_COLLAPSED = ["regime", "rotation-status", "sub-sectors", "cross-asset", "correlation", "cross-pairs", "sector-comparison"];
+const DEFAULT_COLLAPSED = ["regime", "rotation-status", "leadership-baskets", "sub-sectors", "cross-asset", "correlation", "cross-pairs", "sector-comparison"];
 
 const ETF_COUNT = getEquitySectors().length + getSubSectors().length + getCrossAssetETFs().length;
 
@@ -56,6 +57,7 @@ export default function SectorRotationPage() {
     sortedSectors,
     subSectorScores,
     crossAssetScores,
+    leadershipBasketScores,
     comparisonMap,
     comparisonSummary,
     allStocks,
@@ -355,6 +357,11 @@ export default function SectorRotationPage() {
         <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">3. Act &mdash; Supporting Data</span>
         <div className="h-px flex-1 bg-[#2a2a2a]" />
       </div>
+
+      {/* Leadership Baskets */}
+      {leadershipBasketScores.length > 0 && (
+        <LeadershipBasketsPanel scores={leadershipBasketScores} collapsed={collapsedPanels.has("leadership-baskets")} onToggle={togglePanel} />
+      )}
 
       {/* Sub-Sector Leading Indicators */}
       {subSectorScores.length > 0 && (

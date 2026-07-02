@@ -255,6 +255,7 @@ export function useSectorData() {
 
   const subSectorScores = data?.subSectorScores ?? [];
   const crossAssetScores = data?.crossAssetScores ?? [];
+  const leadershipBasketScores = data?.leadershipBasketScores ?? [];
 
   return {
     data,
@@ -279,6 +280,7 @@ export function useSectorData() {
     sortedSectors,
     subSectorScores,
     crossAssetScores,
+    leadershipBasketScores,
     comparisonMap,
     comparisonSummary,
     handleExport,
