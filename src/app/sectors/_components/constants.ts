@@ -1,8 +1,10 @@
 import type { RRGQuadrant, ConvictionLevel, ExtensionTier } from "@/lib/sector-rotation/types";
 import type { TradingAction, SortMode } from "./types";
+import { COMPOSITE } from "@/lib/sector-rotation/config";
 
 export const COLLAPSED_KEY = "ew-sectors-collapsed-v1";
-export const COMPOSITE_TRADE_THRESHOLD = 60;
+/** Actionable tier threshold — sourced from centralized config. */
+export const COMPOSITE_TRADE_THRESHOLD = COMPOSITE.ACTIONABLE_THRESHOLD;
 export const COMPOSITE_WATCH_THRESHOLD = 40;
 export const ALERT_STORAGE_KEY = "ew-sector-alerts-v1";
 export const LOADING_PHASES = ["Fetching ETF data", "Fetching stock quotes", "Computing sector scores", "Building correlation matrix"] as const;

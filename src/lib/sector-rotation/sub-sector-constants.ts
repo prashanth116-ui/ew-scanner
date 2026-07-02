@@ -11,6 +11,8 @@ export const SUB_SECTOR_PARENT: Record<string, string> = {
   ARKX: "XLI",  // Space & Defense Innovation → Industrials
   UFO: "XLI",   // Space → Industrials
   AIQ: "XLK",   // AI & Robotics → Technology
+  SMH: "XLK",   // Semiconductors → Technology
+  IGV: "XLK",   // Software & Cloud → Technology
 };
 
 /** Short-form divergence context for each sub-sector ETF. */
@@ -23,6 +25,8 @@ export const SUB_SECTOR_CONTEXT: Record<string, string> = {
   ARKX: "space and defense tech innovation gaining/losing momentum vs traditional industrials",
   UFO: "space industry (launch, satellite, orbital) leading/lagging broad industrials",
   AIQ: "AI outperforming/underperforming broad tech",
+  SMH: "semiconductor cycle leading/lagging broad tech spending",
+  IGV: "software and cloud demand outpacing/trailing broad technology",
 };
 
 /** Long-form context for sub-sector cards (derived from parent + short context). */

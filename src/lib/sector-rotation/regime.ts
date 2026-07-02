@@ -7,6 +7,7 @@
 import "server-only";
 
 import { fetchWithRetry } from "@/lib/yahoo-utils";
+import { REGIME as REGIME_CFG } from "./config";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
 const UA =
@@ -74,20 +75,20 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     const vix = vixCloses[vixCloses.length - 1];
     const vix5dAgo = vixCloses[Math.max(0, vixCloses.length - 6)];
     const vixSlope: "rising" | "falling" | "flat" =
-      vix - vix5dAgo > 2 ? "rising" : vix - vix5dAgo < -2 ? "falling" : "flat";
+      vix - vix5dAgo > REGIME_CFG.VIX_SLOPE_THRESHOLD ? "rising" : vix - vix5dAgo < -REGIME_CFG.VIX_SLOPE_THRESHOLD ? "falling" : "flat";
 
     const yield10y = tnxCloses ? tnxCloses[tnxCloses.length - 1] : 0;
 
     const dxy = dxyCloses ? dxyCloses[dxyCloses.length - 1] : 0;
     const dxy20dAgo = dxyCloses ? dxyCloses[Math.max(0, dxyCloses.length - 21)] : 0;
     const dxyTrend: "rising" | "falling" | "flat" =
-      dxy - dxy20dAgo > 1 ? "rising" : dxy - dxy20dAgo < -1 ? "falling" : "flat";
+      dxy - dxy20dAgo > REGIME_CFG.DXY_TREND_THRESHOLD ? "rising" : dxy - dxy20dAgo < -REGIME_CFG.DXY_TREND_THRESHOLD ? "falling" : "flat";
 
     // Adaptive VIX thresholds: use 25th/75th percentile of 3-month range
     // Falls back to static thresholds (18/25) when data is insufficient
     const sortedVix = [...vixCloses].sort((a, b) => a - b);
-    const vixP25 = sortedVix[Math.floor(sortedVix.length * 0.25)] ?? 18;
-    const vixP75 = sortedVix[Math.floor(sortedVix.length * 0.75)] ?? 25;
+    const vixP25 = sortedVix[Math.floor(sortedVix.length * 0.25)] ?? REGIME_CFG.VIX_RISK_ON;
+    const vixP75 = sortedVix[Math.floor(sortedVix.length * 0.75)] ?? REGIME_CFG.VIX_RISK_OFF;
     // Clamp adaptive thresholds to sensible bounds (12-22 for low, 20-35 for high)
     const vixLow = Math.max(12, Math.min(22, vixP25));
     const vixHigh = Math.max(20, Math.min(35, vixP75));
@@ -98,7 +99,7 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
       regime = "RISK_ON";
     } else if (vix > vixHigh || vixSlope === "rising") {
       regime = "RISK_OFF";
-    } else if (dxyTrend === "rising" && yield10y > 4.5) {
+    } else if (dxyTrend === "rising" && yield10y > REGIME_CFG.YIELD_INFLATIONARY) {
       regime = "INFLATIONARY";
     } else {
       regime = "MIXED";
@@ -109,7 +110,7 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     // Extreme VIX: well below 25th pctile or well above 75th pctile
     if (regime === "RISK_ON" && vix < vixLow * 0.8) regimeConfidence += 15;
     else if (regime === "RISK_OFF" && vix > vixHigh * 1.2) regimeConfidence += 15;
-    else if (regime === "INFLATIONARY" && yield10y > 5) regimeConfidence += 10;
+    else if (regime === "INFLATIONARY" && yield10y > REGIME_CFG.YIELD_EXTREME) regimeConfidence += 10;
     if (vixSlope === "rising" && regime === "RISK_OFF") regimeConfidence += 10;
     if (vixSlope === "falling" && regime === "RISK_ON") regimeConfidence += 10;
 
@@ -178,12 +179,12 @@ export function enhanceRegimeWithCrossAsset(
 
   const gldAccel = crossAssetROC.gld ?? 0;
   const tltAccel = crossAssetROC.tlt ?? 0;
-  const gldRising = gldAccel > 2;
-  const gldFalling = gldAccel < -2;
-  const tltRising = tltAccel > 2;
-  const tltFalling = tltAccel < -2;
-  const gldStrongRising = gldAccel > 5;
-  const tltStrongRising = tltAccel > 5;
+  const gldRising = gldAccel > REGIME_CFG.CROSS_ASSET_ACCEL;
+  const gldFalling = gldAccel < -REGIME_CFG.CROSS_ASSET_ACCEL;
+  const tltRising = tltAccel > REGIME_CFG.CROSS_ASSET_ACCEL;
+  const tltFalling = tltAccel < -REGIME_CFG.CROSS_ASSET_ACCEL;
+  const gldStrongRising = gldAccel > REGIME_CFG.CROSS_ASSET_STRONG_ACCEL;
+  const tltStrongRising = tltAccel > REGIME_CFG.CROSS_ASSET_STRONG_ACCEL;
 
   switch (regime.regime) {
     case "RISK_OFF":

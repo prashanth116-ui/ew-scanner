@@ -14,7 +14,7 @@ import { getTradingAction } from "@/app/sectors/_components";
 import type { DailySnapshot, SectorSnapshot } from "./history";
 import { computeLeadershipHealth } from "./leadership-health";
 import type { LeadershipHealth } from "./leadership-health";
-import { COMPOSITE, POSTURE, RISK_FLAGS, ROTATION } from "./config";
+import { COMPOSITE, POSTURE, REGIME as REGIME_CFG, RISK_FLAGS, ROTATION } from "./config";
 
 // ── Types ──
 
@@ -102,7 +102,7 @@ export function computeMarketPosture(
   const isRiskOn = regime?.regime === "RISK_ON";
   const isRiskOff = regime?.regime === "RISK_OFF";
   const vixRising = regime?.vixSlope === "rising";
-  const vixHigh = (regime?.vix ?? 0) > 30;
+  const vixHigh = (regime?.vix ?? 0) > REGIME_CFG.VIX_EXTREME;
 
   // CASH: RISK_OFF + VIX>30 + 0 active rotations with positive conviction
   if (isRiskOff && vixHigh && positiveConviction.length === 0) {
@@ -516,7 +516,7 @@ export function computeWhatChanged(
     const prev = prevMap.get(curr.sector);
     if (!prev) continue;
     const delta = curr.compositeScore - prev.compositeScore;
-    if (Math.abs(delta) > 3) {
+    if (Math.abs(delta) > RISK_FLAGS.SCORE_MOVER_DELTA) {
       scoreMovers.push({
         sector: curr.sector,
         etf: curr.etf,
@@ -546,7 +546,7 @@ export function computeWhatChanged(
   // Dispersion change (flag if delta > 2)
   const dispDelta = Math.abs(data.dispersionIndex - previousSnapshot.dispersionIndex);
   const dispersionChange =
-    dispDelta > 2
+    dispDelta > RISK_FLAGS.DISPERSION_CHANGE
       ? { from: previousSnapshot.dispersionIndex, to: data.dispersionIndex }
       : null;
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import type { SectorRotationResult, SectorRotationScore, ExtensionTier } from "@/lib/sector-rotation/types";
+import type { SectorRotationResult, SectorRotationScore } from "@/lib/sector-rotation/types";
 import type { PreRunResult, PreRunStockData, PreRunScores, PreRunVerdict } from "@/lib/prerun/types";
 import type { RotationTrackerResult } from "@/lib/sector-rotation/rotation-types";
 import type { DailySnapshot, SectorSnapshot } from "@/lib/sector-rotation/history";

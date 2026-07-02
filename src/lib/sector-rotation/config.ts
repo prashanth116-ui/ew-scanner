@@ -93,10 +93,6 @@ export const QUALITY_GATES = {
 // ── Conviction Scoring ──
 
 export const CONVICTION = {
-  /** Signals >= this = HIGH conviction (unweighted fallback) */
-  HIGH_THRESHOLD: 3,
-  /** Signals >= this = MEDIUM conviction (unweighted fallback) */
-  MEDIUM_THRESHOLD: 2,
   /** RS acceleration >= this = strong catch-up signal */
   STRONG_RS_ACCEL: 3.0,
   /** Volume ratio >= this = above-average volume signal */

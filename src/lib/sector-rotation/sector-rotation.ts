@@ -44,6 +44,7 @@ import {
   clampNormalize,
   stddev,
 } from "./math";
+import { COMPOSITE, ROTATION } from "./config";
 
 // ── Chart data type ──
 
@@ -58,14 +59,7 @@ interface ChartData {
 
 // ── Dynamic composite weighting ──
 
-const BASE_WEIGHTS = {
-  momentum: 25,
-  acceleration: 15,
-  mansfield: 20,
-  cmf: 15,
-  breadth: 15,
-  smartMoney: 10,
-};
+const BASE_WEIGHTS = COMPOSITE.BASE_WEIGHTS;
 
 function computeComposite(
   normalized: Record<string, number>,
@@ -137,9 +131,27 @@ export async function calculateSectorRotation(
   const allETFs = [...new Set(["SPY", ...sectorETFs, ...crossETFs])];
   const allStockSymbols = getAllSectorSymbols();
 
-  // Fetch ETF charts, batch stock quotes, and institutional cache in parallel
+  // Batch chart fetches to avoid Yahoo Finance rate limiting (max 15 concurrent)
+  const CHART_BATCH_SIZE = 15;
+  const CHART_BATCH_DELAY = 300; // ms between batches
+  async function fetchChartsBatched(etfs: string[]): Promise<PromiseSettledResult<ChartData | null>[]> {
+    const results: PromiseSettledResult<ChartData | null>[] = [];
+    for (let i = 0; i < etfs.length; i += CHART_BATCH_SIZE) {
+      const batch = etfs.slice(i, i + CHART_BATCH_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map((etf) => fetchYahooChart(etf, "1y", "1d"))
+      );
+      results.push(...batchResults);
+      if (i + CHART_BATCH_SIZE < etfs.length) {
+        await new Promise((r) => setTimeout(r, CHART_BATCH_DELAY));
+      }
+    }
+    return results;
+  }
+
+  // Fetch ETF charts (batched), batch stock quotes, and institutional cache in parallel
   const [chartResults, batchQuotes, institutionalCache] = await Promise.all([
-    Promise.allSettled(allETFs.map((etf) => fetchYahooChart(etf, "1y", "1d"))),
+    fetchChartsBatched(allETFs),
     fetchBatchQuotes(allStockSymbols),
     loadInstitutionalCache(allStockSymbols).catch(() => new Map<string, number | null>()),
   ]);
@@ -312,7 +324,7 @@ export async function calculateSectorRotation(
       const prevVols = chart.volumes.slice(-21, -1);
       const avgVol20 = calcSMA(prevVols, 20) ?? 0;
       const todayVol = chart.volumes[chart.volumes.length - 1];
-      unusualVolume = avgVol20 > 0 && todayVol > 1.5 * avgVol20;
+      unusualVolume = avgVol20 > 0 && todayVol > ROTATION.VOLUME_SURGE * avgVol20;
     }
 
     // Smart money composite — only meaningful with pre-run data (cap at 100)
@@ -461,7 +473,7 @@ export async function calculateSectorRotation(
   // Rotation active when:
   // - High dispersion (> 4): sectors clearly diverging, OR
   // - Moderate dispersion (> 2) AND wide spread (> 8%): some sectors moving strongly apart
-  const rotationActive = dispersionIndex > 4 || (dispersionIndex > 2 && sectorSpread > 8);
+  const rotationActive = dispersionIndex > ROTATION.DISPERSION_ACTIVE || (dispersionIndex > ROTATION.DISPERSION_MODERATE && sectorSpread > ROTATION.SECTOR_SPREAD_THRESHOLD);
 
   // Rotation summary — prefer WEAKENING (active outflow) over LAGGING (already rotated)
   // Sort by acceleration to pick the most actively deteriorating/improving sectors

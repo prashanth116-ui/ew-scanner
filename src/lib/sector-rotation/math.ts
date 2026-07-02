@@ -8,7 +8,6 @@ import "server-only";
 
 import { calcSMA } from "@/lib/prerun/data";
 
-export type { RRGQuadrant } from "./types";
 import type { RRGQuadrant } from "./types";
 
 // ── Rate of Change ──

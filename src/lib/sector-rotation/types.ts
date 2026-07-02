@@ -99,8 +99,6 @@ export interface RejectedStock {
 }
 
 export type ExtensionTier = "MODERATE_EXTENSION" | "HIGH_EXTENSION" | "EXTREME_EXTENSION";
-/** @deprecated Use ExtensionTier */
-export type PullbackTier = ExtensionTier;
 
 export interface PullbackWatchStock {
   symbol: string;

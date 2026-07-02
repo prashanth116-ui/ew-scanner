@@ -13,7 +13,7 @@ import type {
   StockPhase,
   ConvictionLevel,
 } from "./types";
-import { CONVICTION } from "./config";
+import { CONVICTION, QUALITY_GATES, EXTENSION_TIERS } from "./config";
 
 /** Raw input for a stock before enrichment. */
 export interface StockInput {
@@ -71,43 +71,43 @@ export function applyQualityGates(
     const above50ma = s.sma50 != null && s.price > s.sma50;
     let failedExtension = false;
 
-    // Gate 1: Market cap >= $2B (skip if null)
-    if (s.marketCap != null && s.marketCap < 2_000_000_000) {
-      otherReasons.push(`market_cap=$${(s.marketCap / 1e9).toFixed(1)}B (<$2B)`);
+    // Gate 1: Market cap >= minimum (skip if null)
+    if (s.marketCap != null && s.marketCap < QUALITY_GATES.MIN_MARKET_CAP) {
+      otherReasons.push(`market_cap=$${(s.marketCap / 1e9).toFixed(1)}B (<$${QUALITY_GATES.MIN_MARKET_CAP / 1e9}B)`);
     }
 
-    // Gate 2: Avg daily volume >= 1M shares
-    if (s.avgVolume10d < 1_000_000) {
-      otherReasons.push(`vol_20d=${(s.avgVolume10d / 1e6).toFixed(1)}M (<1M)`);
+    // Gate 2: Avg daily volume >= minimum
+    if (s.avgVolume10d < QUALITY_GATES.MIN_AVG_VOLUME) {
+      otherReasons.push(`vol_20d=${(s.avgVolume10d / 1e6).toFixed(1)}M (<${QUALITY_GATES.MIN_AVG_VOLUME / 1e6}M)`);
     }
 
-    // Gate 3: Volume spike ratio <= 5x
-    if (volRatio > 5.0) {
-      otherReasons.push(`vol_spike=${volRatio.toFixed(1)}x (>5x)`);
+    // Gate 3: Volume spike ratio <= max
+    if (volRatio > QUALITY_GATES.MAX_VOLUME_SPIKE) {
+      otherReasons.push(`vol_spike=${volRatio.toFixed(1)}x (>${QUALITY_GATES.MAX_VOLUME_SPIKE}x)`);
     }
 
-    // Gate 4: Price extension <= 80% above 200-SMA
-    if (pctFrom200ma != null && pctFrom200ma > 80) {
+    // Gate 4: Price extension <= max % above 200-SMA
+    if (pctFrom200ma != null && pctFrom200ma > QUALITY_GATES.MAX_EXTENSION_PCT) {
       failedExtension = true;
     }
 
     // Gate 5: Above 50-SMA or turnaround signal
-    if (!above50ma && !(rsAccel != null && rsAccel > 0.5 && volRatio >= 1.0)) {
+    if (!above50ma && !(rsAccel != null && rsAccel > QUALITY_GATES.TURNAROUND_RS_ACCEL && volRatio >= QUALITY_GATES.TURNAROUND_VOL_RATIO)) {
       otherReasons.push("below_50MA_no_turnaround");
     }
 
-    // Gate 6: Institutional ownership > 30% (structural filter, not timing signal)
-    // This is a liquidity/quality characteristic — stocks with <30% institutional
+    // Gate 6: Institutional ownership > minimum (structural filter, not timing signal)
+    // This is a liquidity/quality characteristic — stocks with low institutional
     // ownership are structurally more prone to manipulation and liquidity gaps.
     // Based on quarterly 13F filings; ownership levels rarely shift dramatically.
-    if (s.institutionalPct != null && s.institutionalPct < 30) {
-      otherReasons.push(`institutional=${s.institutionalPct.toFixed(0)}% (<30%)`);
+    if (s.institutionalPct != null && s.institutionalPct < QUALITY_GATES.MIN_INSTITUTIONAL_PCT) {
+      otherReasons.push(`institutional=${s.institutionalPct.toFixed(0)}% (<${QUALITY_GATES.MIN_INSTITUTIONAL_PCT}%)`);
     }
 
-    // Gate 7: Sector correlation — stock 20d return within 30% of ETF
+    // Gate 7: Sector correlation — stock 20d return within threshold of ETF
     if (s.ret20d != null) {
       const retDiff = Math.abs(s.ret20d - s.etfRet20d);
-      if (retDiff > 30) {
+      if (retDiff > QUALITY_GATES.MAX_ETF_DEVIATION) {
         otherReasons.push(`uncorrelated_ret_diff=${retDiff.toFixed(1)}%`);
       }
     }
@@ -142,9 +142,9 @@ export function buildExtendedWatch(extensionOnly: StockInput[]): PullbackWatchSt
       const distanceTo80Pct = Math.round((pctFrom200ma - 80) * 10) / 10;
 
       let tier: ExtensionTier;
-      if (pctFrom200ma <= 100) {
+      if (pctFrom200ma <= EXTENSION_TIERS.MODERATE_CEILING) {
         tier = "MODERATE_EXTENSION";
-      } else if (pctFrom200ma <= 150 && pctFrom50ma <= 15) {
+      } else if (pctFrom200ma <= EXTENSION_TIERS.HIGH_CEILING && pctFrom50ma <= EXTENSION_TIERS.HIGH_MAX_FROM_50) {
         tier = "HIGH_EXTENSION";
       } else {
         tier = "EXTREME_EXTENSION";
@@ -176,8 +176,6 @@ export function buildExtendedWatch(extensionOnly: StockInput[]): PullbackWatchSt
     });
 }
 
-/** @deprecated Use buildExtendedWatch */
-export const buildPullbackWatch = buildExtendedWatch;
 
 // ── Step 6: Classification ──
 
@@ -194,7 +192,7 @@ function classifyCategory(
   if (above50ma) {
     return "CATCH_UP";
   }
-  if (rsAccel != null && rsAccel > 0.5 && volRatio >= 1.0) {
+  if (rsAccel != null && rsAccel > QUALITY_GATES.TURNAROUND_RS_ACCEL && volRatio >= QUALITY_GATES.TURNAROUND_VOL_RATIO) {
     return "TURNAROUND";
   }
   return "AVOID";
@@ -349,7 +347,7 @@ export function enrichStocks(stocks: StockInput[]): {
   });
 
   // Build pullback watch from extension-only rejects
-  const pullbackWatch = buildPullbackWatch(extensionOnly);
+  const pullbackWatch = buildExtendedWatch(extensionOnly);
 
   return { passed: enriched, rejected, pullbackWatch };
 }
