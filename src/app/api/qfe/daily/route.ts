@@ -94,6 +94,10 @@ export async function GET(request: NextRequest) {
     dropped.sort((a, b) => b.prev_score - a.prev_score);
   }
 
+  // Extract market environment detail from first row (same for all rows on a date)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const marketEnvDetail = results.length > 0 ? (results[0] as any).market_env_detail ?? null : null;
+
   return NextResponse.json({
     date,
     count: results.length,
@@ -101,5 +105,6 @@ export async function GET(request: NextRequest) {
     streaks,
     deltas,
     dropped,
+    marketEnvDetail,
   });
 }

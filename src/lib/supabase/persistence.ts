@@ -1204,6 +1204,7 @@ export interface QFEDailyRecord {
   commentary: string | null;
   source_presets: string[];
   data_quality: number | null;
+  market_env_detail: Record<string, unknown> | null;
 }
 
 /** Batch upsert QFE daily scan results. */

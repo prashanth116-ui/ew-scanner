@@ -63,6 +63,20 @@ interface DroppedTicker {
   prev_rating: string;
 }
 
+interface MarketEnvDetail {
+  spyTrendScore: number;
+  qqqTrendScore: number;
+  sectorBreadthScore: number;
+  distributionDayScore: number;
+  spyDistFromHighScore: number;
+  regime: string;
+  spyAboveSma50: boolean;
+  spyAboveSma200: boolean;
+  spyDistributionDays: number;
+  leadingSectors: number;
+  improvingSectors: number;
+}
+
 type RatingFilter = "ALL" | "A+" | "A" | "B+" | "B" | "C" | "D";
 type ActionFilter = "ALL" | "Buy Now" | "Buy Pullback" | "Watchlist" | "Wait" | "Avoid";
 type RiskFilter = "ALL" | "Low" | "Moderate" | "High";
@@ -100,8 +114,8 @@ function extensionBadge(e: string): { label: string; color: string } {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "text-emerald-400";
-  if (score >= 60) return "text-cyan-400";
+  if (score >= 66) return "text-emerald-400";
+  if (score >= 53) return "text-cyan-400";
   if (score >= 45) return "text-amber-400";
   return "text-red-400";
 }
@@ -169,7 +183,7 @@ function ScoreBar({ label, score, max = 100 }: { label: string; score: number; m
       <span className="w-16 text-[#555] shrink-0">{label}</span>
       <div className="flex-1 h-2 bg-[#1a1a1a] rounded-full overflow-hidden">
         <div
-          className={`h-full rounded-full ${score >= 80 ? "bg-emerald-500" : score >= 60 ? "bg-cyan-500" : score >= 45 ? "bg-amber-500" : "bg-red-500"}`}
+          className={`h-full rounded-full ${score >= 66 ? "bg-emerald-500" : score >= 53 ? "bg-cyan-500" : score >= 45 ? "bg-amber-500" : "bg-red-500"}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -298,14 +312,18 @@ export default function QFEDailyPage() {
   const [dropped, setDropped] = useState<DroppedTicker[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [marketEnvDetail, setMarketEnvDetail] = useState<MarketEnvDetail | null>(null);
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>("ALL");
   const [actionFilter, setActionFilter] = useState<ActionFilter>("ALL");
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("ALL");
+  const [sectorFilter, setSectorFilter] = useState("ALL");
+  const [newTodayOnly, setNewTodayOnly] = useState(false);
   const [tickerSearch, setTickerSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("qfe_score");
   const [sortAsc, setSortAsc] = useState(false);
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
   const [showDropped, setShowDropped] = useState(false);
+  const [showMarketEnv, setShowMarketEnv] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -333,6 +351,7 @@ export default function QFEDailyPage() {
           setResults(json.results ?? []);
           setStreaks(json.streaks ?? {});
           setDeltas(json.deltas ?? {});
+          setMarketEnvDetail(json.marketEnvDetail ?? null);
           setDropped(json.dropped ?? []);
         }
       } catch { /* Error loading */ } finally {
@@ -351,11 +370,30 @@ export default function QFEDailyPage() {
     });
   }, []);
 
+  // Derive unique sectors from results for the sector filter dropdown
+  const sectors = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of results) if (r.sector) s.add(r.sector);
+    return [...s].sort();
+  }, [results]);
+
+  // Count new-today tickers
+  const newTodayCount = useMemo(() => results.filter((r) => deltas[r.ticker] === undefined).length, [results, deltas]);
+
+  // Rating distribution counts
+  const ratingDist = useMemo(() => {
+    const counts: Record<string, number> = { "A+": 0, A: 0, "B+": 0, B: 0, C: 0, D: 0 };
+    for (const r of results) counts[r.rating] = (counts[r.rating] ?? 0) + 1;
+    return counts;
+  }, [results]);
+
   const filtered = useMemo(() => {
     let rows = [...results];
     if (ratingFilter !== "ALL") rows = rows.filter((r) => r.rating === ratingFilter);
     if (actionFilter !== "ALL") rows = rows.filter((r) => r.action === actionFilter);
     if (riskFilter !== "ALL") rows = rows.filter((r) => r.risk_level === riskFilter);
+    if (sectorFilter !== "ALL") rows = rows.filter((r) => r.sector === sectorFilter);
+    if (newTodayOnly) rows = rows.filter((r) => deltas[r.ticker] === undefined);
     if (tickerSearch) {
       const q = tickerSearch.toUpperCase();
       rows = rows.filter((r) =>
@@ -381,7 +419,7 @@ export default function QFEDailyPage() {
       return sortAsc ? cmp : -cmp;
     });
     return rows;
-  }, [results, ratingFilter, actionFilter, riskFilter, tickerSearch, sortField, sortAsc, streaks, deltas]);
+  }, [results, ratingFilter, actionFilter, riskFilter, sectorFilter, newTodayOnly, tickerSearch, sortField, sortAsc, streaks, deltas]);
 
   const copyWatchlist = useCallback(() => {
     const tickers = filtered.map((r) => r.ticker).join("\n");
@@ -392,7 +430,6 @@ export default function QFEDailyPage() {
 
   // Summary stats
   const buyNowCount = results.filter((r) => r.action === "Buy Now").length;
-  const aPlusCount = results.filter((r) => r.rating === "A+" || r.rating === "A").length;
   const marketEnvScore = results.length > 0 ? results[0].market_env_score : 0;
   const regime = marketEnvScore >= 80 ? "Bullish" : marketEnvScore >= 60 ? "Constructive" : marketEnvScore >= 40 ? "Neutral" : marketEnvScore >= 25 ? "Cautious" : "Defensive";
   const regimeColor = marketEnvScore >= 60 ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" : marketEnvScore >= 40 ? "text-amber-400 bg-amber-500/10 border-amber-500/30" : "text-red-400 bg-red-500/10 border-red-500/30";
@@ -425,12 +462,62 @@ export default function QFEDailyPage() {
         </div>
         <div className="flex items-center gap-2">
           {results.length > 0 && (
-            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${regimeColor}`}>
-              {regime} ({marketEnvScore})
-            </span>
+            <button
+              onClick={() => setShowMarketEnv(!showMarketEnv)}
+              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold transition-colors hover:brightness-125 ${regimeColor}`}
+            >
+              {regime} ({marketEnvScore}) {showMarketEnv ? "\u25B2" : "\u25BC"}
+            </button>
           )}
         </div>
       </div>
+
+      {/* Market Environment Breakdown */}
+      {showMarketEnv && marketEnvDetail && (
+        <div className="mb-4 rounded-lg border border-[#2a2a2a] bg-[#0a0a0a] p-3">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[11px] sm:grid-cols-5">
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-[#555]">SPY Trend</p>
+              <p className={`font-bold ${marketEnvDetail.spyTrendScore >= 20 ? "text-emerald-400" : marketEnvDetail.spyTrendScore >= 10 ? "text-amber-400" : "text-red-400"}`}>
+                {marketEnvDetail.spyTrendScore}/25
+              </p>
+              <p className="text-[9px] text-[#444]">
+                {marketEnvDetail.spyAboveSma200 && marketEnvDetail.spyAboveSma50 ? "Above SMA50 + SMA200" : marketEnvDetail.spyAboveSma200 ? "Above SMA200 only" : "Below both SMAs"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-[#555]">QQQ Trend</p>
+              <p className={`font-bold ${marketEnvDetail.qqqTrendScore >= 12 ? "text-emerald-400" : marketEnvDetail.qqqTrendScore >= 8 ? "text-amber-400" : "text-red-400"}`}>
+                {marketEnvDetail.qqqTrendScore}/15
+              </p>
+            </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-[#555]">Sector Breadth</p>
+              <p className={`font-bold ${marketEnvDetail.sectorBreadthScore >= 20 ? "text-emerald-400" : marketEnvDetail.sectorBreadthScore >= 10 ? "text-amber-400" : "text-red-400"}`}>
+                {marketEnvDetail.sectorBreadthScore}/25
+              </p>
+              <p className="text-[9px] text-[#444]">
+                {marketEnvDetail.leadingSectors}L + {marketEnvDetail.improvingSectors}I sectors
+              </p>
+            </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-[#555]">Distribution</p>
+              <p className={`font-bold ${marketEnvDetail.distributionDayScore >= 15 ? "text-emerald-400" : marketEnvDetail.distributionDayScore >= 8 ? "text-amber-400" : "text-red-400"}`}>
+                {marketEnvDetail.distributionDayScore}/20
+              </p>
+              <p className="text-[9px] text-[#444]">
+                {marketEnvDetail.spyDistributionDays} dist days (25d)
+              </p>
+            </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-[#555]">SPY vs High</p>
+              <p className={`font-bold ${marketEnvDetail.spyDistFromHighScore >= 12 ? "text-emerald-400" : marketEnvDetail.spyDistFromHighScore >= 6 ? "text-amber-400" : "text-red-400"}`}>
+                {marketEnvDetail.spyDistFromHighScore}/15
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Date Tabs */}
       <div className="mb-4 flex items-center gap-1.5 overflow-x-auto pb-1">
@@ -449,14 +536,24 @@ export default function QFEDailyPage() {
         ))}
       </div>
 
-      {/* Summary Bar */}
+      {/* Summary Bar with rating distribution */}
       {!loadingResults && results.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-3 text-[11px]">
           <span className="text-[#555]">{results.length} rated</span>
           <span className="text-[#555]">|</span>
           <span className="text-emerald-400">{buyNowCount} Buy Now</span>
           <span className="text-[#555]">|</span>
-          <span className="text-cyan-400">{aPlusCount} A+/A</span>
+          {ratingDist["A+"] > 0 && <span className="text-emerald-400 font-medium">{ratingDist["A+"]}A+</span>}
+          <span className="text-emerald-400 font-medium">{ratingDist.A}A</span>
+          <span className="text-cyan-400 font-medium">{ratingDist["B+"]}B+</span>
+          <span className="text-cyan-400 font-medium">{ratingDist.B}B</span>
+          <span className="text-amber-400 font-medium">{ratingDist.C}C</span>
+          {newTodayCount > 0 && (
+            <>
+              <span className="text-[#555]">|</span>
+              <span className="text-cyan-400">{newTodayCount} new</span>
+            </>
+          )}
           {dropped.length > 0 && (
             <>
               <span className="text-[#555]">|</span>
@@ -496,6 +593,23 @@ export default function QFEDailyPage() {
           <option value="ALL">All Risk</option>
           {(["Low", "Moderate", "High"] as const).map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
+
+        <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)}
+          className="rounded-md border border-[#2a2a2a] bg-[#0f0f0f] px-2 py-1.5 text-xs text-[#a0a0a0] focus:border-[#5ba3e6] focus:outline-none">
+          <option value="ALL">All Sectors</option>
+          {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+
+        <button
+          onClick={() => setNewTodayOnly(!newTodayOnly)}
+          className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
+            newTodayOnly
+              ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
+              : "border-[#2a2a2a] bg-[#0f0f0f] text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
+          }`}
+        >
+          New Today
+        </button>
 
         <div className="flex-1" />
 

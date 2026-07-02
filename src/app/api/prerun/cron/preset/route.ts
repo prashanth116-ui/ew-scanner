@@ -117,6 +117,7 @@ function buildQFERecord(
   result: PreRunResult,
   qfe: ReturnType<typeof computeQFE>,
   scanDate: string,
+  marketEnv: MarketEnvironment,
 ): QFEDailyRecord {
   const d = result.data;
   return {
@@ -156,6 +157,19 @@ function buildQFERecord(
     commentary: qfe.commentary,
     source_presets: qfe.sourcePresets,
     data_quality: d.dataQuality,
+    market_env_detail: {
+      spyTrendScore: marketEnv.spyTrendScore,
+      qqqTrendScore: marketEnv.qqqTrendScore,
+      sectorBreadthScore: marketEnv.sectorBreadthScore,
+      distributionDayScore: marketEnv.distributionDayScore,
+      spyDistFromHighScore: marketEnv.spyDistFromHighScore,
+      regime: marketEnv.regime,
+      spyAboveSma50: marketEnv.spyAboveSma50,
+      spyAboveSma200: marketEnv.spyAboveSma200,
+      spyDistributionDays: marketEnv.spyDistributionDays,
+      leadingSectors: marketEnv.leadingSectors,
+      improvingSectors: marketEnv.improvingSectors,
+    },
   };
 }
 
@@ -405,7 +419,7 @@ export async function GET(request: NextRequest) {
           }
           // QFE: persist all tickers with C rating or better (composite >= 45)
           if (qfe.scores.composite >= 45) {
-            const qfeRecord = buildQFERecord(result, qfe, today);
+            const qfeRecord = buildQFERecord(result, qfe, today, marketEnv);
             allQFERecords.push(qfeRecord);
             pendingQFERecords.push(qfeRecord);
           }
