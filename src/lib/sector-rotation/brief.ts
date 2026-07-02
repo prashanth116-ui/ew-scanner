@@ -132,6 +132,7 @@ export function computeMarketPosture(
         data.leadershipBasketScores,
         data.crossAssetScores ?? [],
         data.sectors,
+        data.subSectorScores ?? [],
       )
     : null;
   const narrowLeadership = leadershipHealth && (leadershipHealth.score < 50 || leadershipHealth.megaCapDominant);
@@ -328,6 +329,7 @@ export function computeRiskFlags(
       data.leadershipBasketScores,
       data.crossAssetScores ?? [],
       data.sectors,
+      data.subSectorScores ?? [],
     );
     if (lh) {
       if (lh.score < RISK_FLAGS.DETERIORATING_LEADERSHIP) {

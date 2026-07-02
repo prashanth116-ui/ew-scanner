@@ -99,7 +99,6 @@ export function enrichCryptoTokens(
       classified.category,
       classified.rsAccel,
       classified.volRatio,
-      null, // no institutional data for crypto
       s.sectorQuadrant,
       s.sectorComposite,
       s.sectorStealth

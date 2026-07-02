@@ -209,7 +209,7 @@ export function enhanceRegimeWithCrossAsset(
         bonus += 10;
       }
       // Both safe havens falling in MIXED → upgrade to RISK_ON
-      if (gldFalling && tltFalling && gldAccel < -3 && tltAccel < -3) {
+      if (gldFalling && tltFalling && gldAccel < REGIME_CFG.CROSS_ASSET_STRONG_FALLING && tltAccel < REGIME_CFG.CROSS_ASSET_STRONG_FALLING) {
         updatedRegime = "RISK_ON";
         bonus += 5;
       }

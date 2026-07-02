@@ -135,7 +135,7 @@ export function SubSectorPanel({ scores, collapsed, onToggle }: { scores: Sector
 
   return (
     <CollapsiblePanel id="sub-sectors" title="Leading Indicators (Sub-Sectors)" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
-      <p className="text-[10px] text-[#555] mb-3 px-1">KRE (credit cycle), XHB (housing), XRT (consumer), IYT (transport), ITA (aerospace &amp; defense), ARKX (space innovation), UFO (space), AIQ (AI &amp; robotics) — early signals before GICS sectors move.</p>
+      <p className="text-[10px] text-[#555] mb-3 px-1">SMH (semis), IGV (software), KRE (credit cycle), XHB (housing), XRT (consumer), IYT (transport), ITA (aerospace &amp; defense), ARKX (space innovation), UFO (space), AIQ (AI &amp; robotics) — early signals before GICS sectors move.</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 px-1">
         {scores.map((s) => (
           <div key={s.etf} className="rounded-lg border border-[#2a2a2a] bg-[#111] p-3">

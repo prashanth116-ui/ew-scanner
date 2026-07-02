@@ -292,10 +292,13 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [],
             const tx = tooltipFlipX ? tooltipX - 140 : tooltipX + 12;
             const ty = tooltipFlipY ? tooltipY + 12 : tooltipY - 90;
             const color = quadrantDotColor(activeScore.quadrant);
-            const velocity = activeScore.rrgTrail && activeScore.rrgTrail.length >= 2
+            const prevTrailPt = activeScore.rrgTrail && activeScore.rrgTrail.length >= 2
+              ? activeScore.rrgTrail[activeScore.rrgTrail.length - 2]
+              : null;
+            const velocity = prevTrailPt
               ? Math.sqrt(
-                  Math.pow(activeScore.rsRatio - activeScore.rrgTrail[1].rsRatio, 2) +
-                  Math.pow(activeScore.rsMomentum - activeScore.rrgTrail[1].rsMomentum, 2)
+                  Math.pow(activeScore.rsRatio - prevTrailPt.rsRatio, 2) +
+                  Math.pow(activeScore.rsMomentum - prevTrailPt.rsMomentum, 2)
                 ).toFixed(2)
               : "—";
             return (

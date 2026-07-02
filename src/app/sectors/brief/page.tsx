@@ -146,6 +146,7 @@ export default function DailyBriefPage() {
       data.leadershipBasketScores,
       data.crossAssetScores ?? [],
       data.sectors,
+      data.subSectorScores ?? [],
     );
   }, [data]);
 
@@ -1301,7 +1302,7 @@ function BriefGuide() {
           <GuideSection
             title="Risk Flags"
             color="text-red-400"
-            description="Automated detection of 7 different risk conditions that require attention."
+            description="Automated detection of 10 different risk conditions that require attention."
             details={[
               { label: "Leading + Negative Accel", desc: "A sector in LEADING quadrant is losing momentum. May soon transition to WEAKENING." },
               { label: "Declining Signals", desc: "An active rotation's signal count is dropping. Conviction is fading." },
@@ -1310,6 +1311,9 @@ function BriefGuide() {
               { label: "False Start", desc: "A recently ended rotation lasted < 5 days. Likely not a real rotation." },
               { label: "Correlation Breakdown", desc: "Cross-sector correlations have broken down. Unusual stress or regime change." },
               { label: "Panic Rotation", desc: "High dispersion + risk-off regime. Panic selling in cyclicals." },
+              { label: "Narrow Leadership", desc: "Leadership health score is low or mega-caps dominating — rally breadth too narrow." },
+              { label: "Momentum Rollover", desc: "A LEADING sector has high rotation velocity but negative acceleration — may be rapidly exiting." },
+              { label: "Cross-Asset Risk-Off", desc: "Gold (GLD) and/or Treasuries (TLT) accelerating — money may be leaving equities for safe havens." },
             ]}
             unique="Nowhere else surfaces these as alerts. You'd have to manually cross-reference multiple panels on the dashboard."
           />

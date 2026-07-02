@@ -114,7 +114,7 @@ export function applyQualityGates(
 
     const allReasons = [...otherReasons];
     if (failedExtension) {
-      allReasons.push(`extension=${(pctFrom200ma ?? 0).toFixed(0)}% (>80%)`);
+      allReasons.push(`extension=${(pctFrom200ma ?? 0).toFixed(0)}% (>${QUALITY_GATES.MAX_EXTENSION_PCT}%)`);
     }
 
     if (allReasons.length === 0) {
@@ -139,7 +139,7 @@ export function buildExtendedWatch(extensionOnly: StockInput[]): PullbackWatchSt
       const pctFrom200ma = calcPctFrom(s.price, s.sma200)!;
       const pctFrom50ma = calcPctFrom(s.price, s.sma50)!;
       const volRatio = calcVolRatio(s.volume, s.avgVolume10d);
-      const distanceTo80Pct = Math.round((pctFrom200ma - 80) * 10) / 10;
+      const distanceTo80Pct = Math.round((pctFrom200ma - QUALITY_GATES.MAX_EXTENSION_PCT) * 10) / 10;
 
       let tier: ExtensionTier;
       if (pctFrom200ma <= EXTENSION_TIERS.MODERATE_CEILING) {
@@ -260,7 +260,6 @@ export function scoreConviction(
   category: StockCategory,
   rsAccel: number | null,
   volRatio: number,
-  _institutionalPct: number | null,
   sectorQuadrant: RRGQuadrant,
   sectorComposite: number,
   sectorStealth: boolean
@@ -302,7 +301,6 @@ export function enrichStocks(stocks: StockInput[]): {
       classified.category,
       classified.rsAccel,
       classified.volRatio,
-      s.institutionalPct,
       s.sectorQuadrant,
       s.sectorComposite,
       s.sectorStealth

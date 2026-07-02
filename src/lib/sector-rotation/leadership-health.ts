@@ -38,6 +38,7 @@ export function computeLeadershipHealth(
   leadershipBaskets: SectorRotationScore[],
   crossAsset: SectorRotationScore[],
   gicsSectors: SectorRotationScore[],
+  subSectors?: SectorRotationScore[],
 ): LeadershipHealth | null {
   if (leadershipBaskets.length < 2) return null;
 
@@ -46,8 +47,9 @@ export function computeLeadershipHealth(
   const iwm = findByETF(leadershipBaskets, "IWM");
   const arkk = findByETF(leadershipBaskets, "ARKK");
   const hyg = findByETF(crossAsset, "HYG");
-  const smh = findByETF(gicsSectors, "SMH");
-  const igv = findByETF(gicsSectors, "IGV");
+  // SMH and IGV are sub_sector category, not gics_sector
+  const smh = findByETF(subSectors ?? [], "SMH") ?? findByETF(gicsSectors, "SMH");
+  const igv = findByETF(subSectors ?? [], "IGV") ?? findByETF(gicsSectors, "IGV");
 
   let score = 0;
 

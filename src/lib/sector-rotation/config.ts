@@ -26,6 +26,8 @@ export const REGIME = {
   CROSS_ASSET_ACCEL: 2,
   /** Strong cross-asset acceleration for regime override */
   CROSS_ASSET_STRONG_ACCEL: 5,
+  /** Cross-asset falling threshold for MIXED→RISK_ON upgrade */
+  CROSS_ASSET_STRONG_FALLING: -3,
 } as const;
 
 // ── Composite Scoring ──
@@ -33,10 +35,6 @@ export const REGIME = {
 export const COMPOSITE = {
   /** Sector composite >= this = actionable tier */
   ACTIONABLE_THRESHOLD: 60,
-  /** Sector composite >= this = conviction signal (stock enrichment) */
-  HIGH_COMPOSITE: 70,
-  /** Momentum composite weights: [ROC63, ROC126, ROC189, ROC252] */
-  MOMENTUM_WEIGHTS: [0.4, 0.2, 0.2, 0.2] as readonly number[],
   /** Weight redistribution base: momentum, accel, mansfield, cmf, breadth, smartMoney */
   BASE_WEIGHTS: {
     momentum: 25,
