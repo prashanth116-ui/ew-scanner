@@ -1164,3 +1164,222 @@ export async function loadInstitutionalDailyMulti(
     return [];
   }
 }
+
+// ── QFE Daily Scan ──
+
+export interface QFEDailyRecord {
+  scan_date: string;
+  ticker: string;
+  company_name: string;
+  sector: string;
+  price: number;
+  market_cap: number | null;
+  qfe_score: number;
+  quality_score: number;
+  leadership_score: number;
+  entry_score: number;
+  market_env_score: number;
+  rating: string;
+  action: string;
+  risk_level: string;
+  extension_level: string;
+  rs_5d_spy: number | null;
+  rs_10d_spy: number | null;
+  rs_20d_spy: number | null;
+  rs_50d_spy: number | null;
+  rs_5d_qqq: number | null;
+  rs_10d_qqq: number | null;
+  rs_20d_qqq: number | null;
+  rs_50d_qqq: number | null;
+  rs_5d_sector: number | null;
+  rs_10d_sector: number | null;
+  rs_20d_sector: number | null;
+  rs_50d_sector: number | null;
+  money_flow_persistence: number | null;
+  rvol_trajectory: number | null;
+  float_rotation: number | null;
+  weekly_reversal: boolean;
+  dist_from_ema10_atr: number | null;
+  dist_from_ema20_atr: number | null;
+  commentary: string | null;
+  source_presets: string[];
+  data_quality: number | null;
+}
+
+/** Batch upsert QFE daily scan results. */
+export async function upsertQFEDaily(records: QFEDailyRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertQFEDaily: no admin client");
+      return 0;
+    }
+
+    let upserted = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = records.slice(i, i + 500);
+      const { data, error } = await supabase
+        .from("qfe_daily")
+        .upsert(batch, { onConflict: "scan_date,ticker" })
+        .select("id");
+
+      if (error) {
+        console.error("[persistence] upsertQFEDaily error:", error.message);
+      } else {
+        upserted += data?.length ?? 0;
+      }
+    }
+    return upserted;
+  } catch (err) {
+    console.error("[persistence] upsertQFEDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete qfe_daily rows older than retentionDays. */
+export async function purgeOldQFEDaily(retentionDays = 14): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("qfe_daily")
+      .delete()
+      .lt("scan_date", cutoffStr)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] purgeOldQFEDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] purgeOldQFEDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete all QFE daily results for a specific date. */
+export async function clearQFEDaily(date: string): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const { data, error } = await supabase
+      .from("qfe_daily")
+      .delete()
+      .eq("scan_date", date)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] clearQFEDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] clearQFEDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Load QFE daily results for a given date. */
+export async function loadQFEDaily(date: string): Promise<QFEDailyRecord[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("qfe_daily")
+      .select("*")
+      .eq("scan_date", date)
+      .order("qfe_score", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadQFEDaily error:", error.message);
+      return [];
+    }
+    return (data ?? []) as QFEDailyRecord[];
+  } catch (err) {
+    console.error("[persistence] loadQFEDaily exception:", err);
+    return [];
+  }
+}
+
+/** Load just the ticker list for a given date (lightweight, for resume). */
+export async function loadQFEDailyTickers(date: string): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("qfe_daily")
+      .select("ticker")
+      .eq("scan_date", date);
+
+    if (error) {
+      console.error("[persistence] loadQFEDailyTickers error:", error.message);
+      return [];
+    }
+    return (data ?? []).map((r) => r.ticker as string);
+  } catch (err) {
+    console.error("[persistence] loadQFEDailyTickers exception:", err);
+    return [];
+  }
+}
+
+/** Load available QFE daily scan dates. */
+export async function loadQFEDailyDates(limit = 14): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("qfe_daily")
+      .select("scan_date")
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadQFEDailyDates error:", error.message);
+      return [];
+    }
+
+    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
+    return unique.slice(0, limit);
+  } catch (err) {
+    console.error("[persistence] loadQFEDailyDates exception:", err);
+    return [];
+  }
+}
+
+/** Load QFE daily results for multiple dates (for streak/delta). */
+export async function loadQFEDailyMulti(
+  dates: string[]
+): Promise<Array<{ scan_date: string; ticker: string; qfe_score: number; rating: string; action: string }>> {
+  if (dates.length === 0) return [];
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("qfe_daily")
+      .select("scan_date, ticker, qfe_score, rating, action")
+      .in("scan_date", dates)
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadQFEDailyMulti error:", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; qfe_score: number; rating: string; action: string }>;
+  } catch (err) {
+    console.error("[persistence] loadQFEDailyMulti exception:", err);
+    return [];
+  }
+}

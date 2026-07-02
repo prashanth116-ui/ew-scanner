@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { autoScorePreRun } from "@/lib/prerun/scoring";
+import { computeQFE, computeMarketEnvironment } from "@/lib/prerun/qfe-scoring";
+import type { MarketEnvironment } from "@/lib/prerun/qfe-scoring";
 import { SP500_MEMBERS, NDX100_MEMBERS, SP400_MEMBERS } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
 import { sendTelegramMessage } from "@/lib/ew-telegram";
@@ -13,8 +15,12 @@ import {
   loadPreRunDailyDates,
   loadPreRunDaily,
   loadPreRunDailyTickers,
+  upsertQFEDaily,
+  purgeOldQFEDaily,
+  clearQFEDaily,
+  loadQFEDaily,
 } from "@/lib/supabase/persistence";
-import type { PreRunDailyRecord } from "@/lib/supabase/persistence";
+import type { PreRunDailyRecord, QFEDailyRecord } from "@/lib/supabase/persistence";
 import type { PreRunResult } from "@/lib/prerun/types";
 
 export const maxDuration = 300;
@@ -106,6 +112,53 @@ function resultToRecord(
   };
 }
 
+/** Build a QFE database record from scan data + QFE result. */
+function buildQFERecord(
+  result: PreRunResult,
+  qfe: ReturnType<typeof computeQFE>,
+  scanDate: string,
+): QFEDailyRecord {
+  const d = result.data;
+  return {
+    scan_date: scanDate,
+    ticker: d.ticker,
+    company_name: d.companyName,
+    sector: getSectorForTicker(d.ticker),
+    price: d.currentPrice ?? 0,
+    market_cap: d.marketCap,
+    qfe_score: qfe.scores.composite,
+    quality_score: qfe.scores.quality,
+    leadership_score: qfe.scores.leadership,
+    entry_score: qfe.scores.entry,
+    market_env_score: qfe.scores.marketEnv,
+    rating: qfe.rating,
+    action: qfe.action,
+    risk_level: qfe.riskLevel,
+    extension_level: qfe.extensionLevel,
+    rs_5d_spy: d.rs5dVsSPY,
+    rs_10d_spy: d.rs10dVsSPY,
+    rs_20d_spy: d.relativeStrength20d,
+    rs_50d_spy: d.rs50dVsSPY,
+    rs_5d_qqq: d.rs5dVsQQQ,
+    rs_10d_qqq: d.rs10dVsQQQ,
+    rs_20d_qqq: d.instRsVsQQQ,
+    rs_50d_qqq: d.rs50dVsQQQ,
+    rs_5d_sector: d.rs5dVsSector,
+    rs_10d_sector: d.rs10dVsSector,
+    rs_20d_sector: d.sectorReturn20d !== null && d.relativeStrength20d !== null ? d.relativeStrength20d : null,
+    rs_50d_sector: d.rs50dVsSector,
+    money_flow_persistence: d.moneyFlowPersistence,
+    rvol_trajectory: d.rvolTrajectory,
+    float_rotation: d.floatTurnover20d,
+    weekly_reversal: d.weeklyReversalSignal === true,
+    dist_from_ema10_atr: d.distFromEma10Atr,
+    dist_from_ema20_atr: d.instDistFromEma20Atr,
+    commentary: qfe.commentary,
+    source_presets: qfe.sourcePresets,
+    data_quality: d.dataQuality,
+  };
+}
+
 /** Load sector quadrant map from Supabase sector_snapshots. */
 async function loadSectorQuadrants(): Promise<Record<string, string>> {
   const quadrants: Record<string, string> = {};
@@ -141,6 +194,8 @@ function formatTelegramSummary(
   records: PreRunDailyRecord[],
   newTickers: string[],
   partial = false,
+  qfeRecords?: QFEDailyRecord[],
+  marketRegime?: string,
 ): string {
   const date = new Date().toLocaleDateString("en-US", {
     weekday: "short",
@@ -214,6 +269,22 @@ function formatTelegramSummary(
     lines.push(
       `<b>New today:</b> ${newTickers.slice(0, 10).join(", ")}${newTickers.length > 10 ? ` (+${newTickers.length - 10} more)` : ""}`
     );
+    lines.push("");
+  }
+
+  // QFE section
+  if (qfeRecords && qfeRecords.length > 0) {
+    const aPlus = qfeRecords.filter((r) => r.rating === "A+").length;
+    const aRating = qfeRecords.filter((r) => r.rating === "A").length;
+    const buyNow = qfeRecords.filter((r) => r.action === "Buy Now").length;
+
+    lines.push(`<b>QFE Engine:</b> ${qfeRecords.length} rated | ${aPlus + aRating} A+/A | ${buyNow} Buy Now`);
+    if (marketRegime) lines.push(`Market: ${marketRegime}`);
+
+    const topQFE = [...qfeRecords].sort((a, b) => b.qfe_score - a.qfe_score).slice(0, 5);
+    for (const r of topQFE) {
+      lines.push(`* ${r.ticker} QFE:${r.qfe_score} ${r.rating} ${r.action}`);
+    }
   }
 
   return lines.join("\n");
@@ -241,8 +312,12 @@ export async function GET(request: NextRequest) {
     // Clear today's data if requested (for full re-scan)
     let cleared = 0;
     if (searchParams.get("clear") === "true") {
-      cleared = await clearPreRunDaily(today);
-      console.log(`[prerun-daily] cleared ${cleared} rows for ${today}`);
+      const [prerunCleared, qfeCleared] = await Promise.all([
+        clearPreRunDaily(today),
+        clearQFEDaily(today),
+      ]);
+      cleared = prerunCleared;
+      console.log(`[prerun-daily] cleared ${prerunCleared} prerun + ${qfeCleared} qfe rows for ${today}`);
     }
 
     // Resume mode: skip tickers already in DB for today
@@ -262,9 +337,27 @@ export async function GET(request: NextRequest) {
       loadSectorQuadrants(),
     ]);
 
+    // Compute market environment ONCE (1 extra API call for SPY 1y)
+    let marketEnv: MarketEnvironment;
+    try {
+      marketEnv = await computeMarketEnvironment(sectorQuadrants);
+    } catch (err) {
+      logError("api/prerun/cron/preset/marketEnv", err);
+      // Fallback to neutral market
+      marketEnv = {
+        spyTrendScore: 15, qqqTrendScore: 8, sectorBreadthScore: 12,
+        distributionDayScore: 10, spyDistFromHighScore: 8, totalScore: 53,
+        spyAboveSma50: true, spyAboveSma200: true, spyDistributionDays: 3,
+        leadingSectors: 3, improvingSectors: 3, regime: "Neutral",
+      };
+    }
+
     const allRecords: PreRunDailyRecord[] = [];
     let pendingRecords: PreRunDailyRecord[] = [];
+    const allQFERecords: QFEDailyRecord[] = [];
+    let pendingQFERecords: QFEDailyRecord[] = [];
     let totalPersisted = 0;
+    let totalQFEPersisted = 0;
     let fetchedCount = 0;
     let timedOut = false;
 
@@ -285,30 +378,54 @@ export async function GET(request: NextRequest) {
           const sector = getSectorForTicker(ticker);
           const quadrant = sector ? sectorQuadrants[sector] ?? null : null;
           const result = autoScorePreRun(data, quadrant);
-          return { result, quadrant };
+
+          // QFE scoring (pure arithmetic, <1ms)
+          const flags = computePresetFlags(result, quadrant);
+          const sourcePresets: string[] = [];
+          if (flags.sndk) sourcePresets.push("SNDK");
+          if (flags.early_mover) sourcePresets.push("Early Mover");
+          if (flags.pullback) sourcePresets.push("Pullback");
+          if (flags.leading) sourcePresets.push("Leading");
+          if (flags.stealth) sourcePresets.push("Stealth");
+          if (flags.early_plus) sourcePresets.push("Early+");
+
+          const qfe = computeQFE(data, marketEnv, sourcePresets, quadrant);
+          return { result, quadrant, qfe };
         })
       );
 
       for (const r of settled) {
         if (r.status === "fulfilled" && r.value) {
           fetchedCount++;
-          const { result, quadrant } = r.value;
+          const { result, quadrant, qfe } = r.value;
           const record = resultToRecord(result, today, quadrant);
           if (record) {
             allRecords.push(record);
             pendingRecords.push(record);
           }
+          // QFE: persist all tickers with C rating or better (composite >= 45)
+          if (qfe.scores.composite >= 45) {
+            const qfeRecord = buildQFERecord(result, qfe, today);
+            allQFERecords.push(qfeRecord);
+            pendingQFERecords.push(qfeRecord);
+          }
         }
       }
 
-      // Incremental persist
-      if (pendingRecords.length >= PERSIST_INTERVAL) {
-        const n = await upsertPreRunDaily(pendingRecords).catch((err) => {
-          console.error("[prerun-daily] incremental persist error:", err);
-          return 0;
-        });
+      // Incremental persist (prerun + QFE in parallel)
+      if (pendingRecords.length >= PERSIST_INTERVAL || pendingQFERecords.length >= PERSIST_INTERVAL) {
+        const [n, nQFE] = await Promise.all([
+          pendingRecords.length > 0
+            ? upsertPreRunDaily(pendingRecords).catch((err) => { console.error("[prerun-daily] incremental persist error:", err); return 0; })
+            : Promise.resolve(0),
+          pendingQFERecords.length > 0
+            ? upsertQFEDaily(pendingQFERecords).catch((err) => { console.error("[qfe-daily] incremental persist error:", err); return 0; })
+            : Promise.resolve(0),
+        ]);
         totalPersisted += n;
+        totalQFEPersisted += nQFE;
         pendingRecords = [];
+        pendingQFERecords = [];
       }
 
       if (i + BATCH_SIZE < scanUniverse.length) {
@@ -316,27 +433,42 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Flush remaining
-    if (pendingRecords.length > 0) {
-      const n = await upsertPreRunDaily(pendingRecords).catch((err) => {
-        console.error("[prerun-daily] flush persist error:", err);
-        return 0;
-      });
+    // Flush remaining (parallel)
+    if (pendingRecords.length > 0 || pendingQFERecords.length > 0) {
+      const [n, nQFE] = await Promise.all([
+        pendingRecords.length > 0
+          ? upsertPreRunDaily(pendingRecords).catch((err) => { console.error("[prerun-daily] flush persist error:", err); return 0; })
+          : Promise.resolve(0),
+        pendingQFERecords.length > 0
+          ? upsertQFEDaily(pendingQFERecords).catch((err) => { console.error("[qfe-daily] flush persist error:", err); return 0; })
+          : Promise.resolve(0),
+      ]);
       totalPersisted += n;
+      totalQFEPersisted += nQFE;
     }
 
-    // Purge old data
-    const purged = await purgeOldPreRunDaily(14).catch(() => 0);
+    // Purge old data (parallel)
+    const [purged] = await Promise.all([
+      purgeOldPreRunDaily(14).catch(() => 0),
+      purgeOldQFEDaily(14).catch(() => 0),
+    ]);
 
     // Read full DB results for today (includes data from this + previous runs)
     let dbRecords: PreRunDailyRecord[] = allRecords;
+    let dbQFERecords: QFEDailyRecord[] = allQFERecords;
     try {
-      const fullResults = await loadPreRunDaily(today);
+      const [fullResults, fullQFE] = await Promise.all([
+        loadPreRunDaily(today),
+        loadQFEDaily(today),
+      ]);
       if (fullResults.length > 0) {
         dbRecords = fullResults as PreRunDailyRecord[];
       }
+      if (fullQFE.length > 0) {
+        dbQFERecords = fullQFE as QFEDailyRecord[];
+      }
     } catch {
-      // Fall back to in-memory allRecords
+      // Fall back to in-memory records
     }
 
     // Determine "new today" using full DB data
@@ -360,7 +492,7 @@ export async function GET(request: NextRequest) {
     const chatId = process.env.TELEGRAM_CHAT_ID;
     let telegramSent = false;
     if (botToken && chatId) {
-      const message = formatTelegramSummary(universe.length, dbRecords, newTickers, timedOut);
+      const message = formatTelegramSummary(universe.length, dbRecords, newTickers, timedOut, dbQFERecords, marketEnv.regime);
       const tgResult = await sendTelegramMessage(botToken, chatId, message);
       telegramSent = tgResult.ok;
       if (!tgResult.ok) {
@@ -387,6 +519,15 @@ export async function GET(request: NextRequest) {
         leading: dbRecords.filter((r) => r.is_leading).length,
         stealth: dbRecords.filter((r) => r.is_stealth).length,
         early_plus: dbRecords.filter((r) => r.is_early_plus).length,
+      },
+      qfe: {
+        totalRated: dbQFERecords.length,
+        persistedCount: totalQFEPersisted,
+        marketRegime: marketEnv.regime,
+        marketEnvScore: marketEnv.totalScore,
+        buyNowCount: dbQFERecords.filter((r) => r.action === "Buy Now").length,
+        aPlusCount: dbQFERecords.filter((r) => r.rating === "A+").length,
+        aCount: dbQFERecords.filter((r) => r.rating === "A").length,
       },
     });
   } catch (err) {

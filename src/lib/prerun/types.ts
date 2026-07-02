@@ -130,6 +130,24 @@ export interface PreRunStockData {
   accumulationDayCount: number | null;    // Up days with above-avg volume (last 20)
   atrRatio5v20: number | null;            // ATR(5) / ATR(20) ratio
   volumeRecent5d: number[] | null;        // Last 5 daily volumes (oldest→newest) for trend display
+  // ── QFE: Multi-timeframe relative strength ──
+  rs5dVsSPY: number | null;
+  rs10dVsSPY: number | null;
+  rs50dVsSPY: number | null;
+  rs5dVsQQQ: number | null;
+  rs10dVsQQQ: number | null;
+  rs50dVsQQQ: number | null;
+  rs5dVsSector: number | null;
+  rs10dVsSector: number | null;
+  rs50dVsSector: number | null;
+  spyReturn20d: number | null;
+  qqqReturn20d: number | null;
+  // ── QFE: New signal fields ──
+  moneyFlowPersistence: number | null;   // Count of last 20 sessions with above-avg up-volume
+  rvolTrajectory: number | null;         // Slope of (vol/50d_avg) over last 5 bars
+  weeklyReversalSignal: boolean | null;  // Weekly hammer/engulfing/outside bar
+  weeklyReversalType: string | null;     // "hammer" | "engulfing" | "outside_bar" | null
+  distFromEma10Atr: number | null;       // (price - EMA10) / ATR(14)
   lastUpdated: string;
 }
 

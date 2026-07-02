@@ -1045,6 +1045,15 @@ export function calc20dReturn(closes: number[]): number | null {
   return ((recent - past) / past) * 100;
 }
 
+/** Calculate N-day return from chart closes (generalized for QFE multi-TF RS). */
+export function calcNdReturn(closes: number[], n: number): number | null {
+  if (closes.length < n + 1) return null;
+  const recent = closes[closes.length - 1];
+  const past = closes[closes.length - 1 - n];
+  if (!past || past === 0) return null;
+  return ((recent - past) / past) * 100;
+}
+
 // ── Batch quotes for sector-level breadth + RS ──
 
 export interface BatchQuote {
@@ -1207,6 +1216,14 @@ async function fetchSectorETFReturn(sectorETF: string, targetDate?: string): Pro
   return closes ? calc20dReturn(closes) : null;
 }
 
+/** Get N-day return for a sector ETF from cache. Zero API calls — cache already warmed by prefetchSectorETFs. */
+function getSectorETFNdReturn(etf: string, n: number, targetDate?: string): number | null {
+  const cached = sectorChartCache.get(etf);
+  if (!cached) return null;
+  const closes = targetDate ? getSectorClosesForDate(etf, targetDate) : cached.closes;
+  return closes ? calcNdReturn(closes, n) : null;
+}
+
 /** Pre-warm the sector ETF cache by fetching all 14 sector ETFs in parallel.
  *  Call once before the batch scan loop to avoid per-stock serial fetches.
  *  Saves ~14 sequential Yahoo chart requests during scan. */
@@ -1322,6 +1339,82 @@ export function calcVolatilitySqueeze(
   if (atr20 === 0) return { squeezed: null, atrRatio: null };
   const ratio = atr5 / atr20;
   return { squeezed: ratio < 1.0, atrRatio: ratio };
+}
+
+// ── QFE Signal Helpers ──
+
+/** Count of last 20 sessions where close > open AND volume > 50d avg volume.
+ *  Measures persistent money flow (institutional buying). Returns 0-20. */
+export function calcMoneyFlowPersistence(closes: number[], opens: number[], volumes: number[]): number | null {
+  if (closes.length < 50 || volumes.length < 50) return null;
+  const n = Math.min(20, closes.length);
+  const avg50Vol = volumes.slice(-50).reduce((a, b) => a + b, 0) / 50;
+  if (avg50Vol === 0) return null;
+  let count = 0;
+  for (let i = closes.length - n; i < closes.length; i++) {
+    if (closes[i] > opens[i] && volumes[i] > avg50Vol) count++;
+  }
+  return count;
+}
+
+/** Linear regression slope of relative volume (daily_vol / 50d_avg_vol) over last 5 bars.
+ *  Positive slope = volume building (pre-breakout accumulation). */
+export function calcRvolTrajectory(volumes: number[]): number | null {
+  if (volumes.length < 55) return null;
+  const avg50 = volumes.slice(-55, -5).reduce((a, b) => a + b, 0) / 50;
+  if (avg50 === 0) return null;
+  const rvolSeries: number[] = [];
+  for (let i = volumes.length - 5; i < volumes.length; i++) {
+    rvolSeries.push(volumes[i] / avg50);
+  }
+  // Simple linear regression slope over 5 points
+  const n = rvolSeries.length;
+  const xMean = (n - 1) / 2;
+  const yMean = rvolSeries.reduce((a, b) => a + b, 0) / n;
+  let num = 0, den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (i - xMean) * (rvolSeries[i] - yMean);
+    den += (i - xMean) * (i - xMean);
+  }
+  return den === 0 ? 0 : num / den;
+}
+
+/** Check last 2 weekly candles for reversal signals: hammer, bullish engulfing, outside bar.
+ *  Uses weekly OHLCV from chart5y (already fetched). */
+export function calcWeeklyReversalSignal(
+  opens: number[], highs: number[], lows: number[], closes: number[]
+): { signal: boolean; type: string | null } {
+  if (opens.length < 3) return { signal: false, type: null };
+  const n = opens.length;
+  const lastO = opens[n - 1], lastH = highs[n - 1], lastL = lows[n - 1], lastC = closes[n - 1];
+  const prevO = opens[n - 2], prevH = highs[n - 2], prevL = lows[n - 2], prevC = closes[n - 2];
+  const lastBody = Math.abs(lastC - lastO);
+  const lastRange = lastH - lastL;
+
+  // Hammer: lower wick > 2x body, close near high, bullish close
+  if (lastRange > 0 && lastC > lastO) {
+    const lowerWick = Math.min(lastO, lastC) - lastL;
+    const upperWick = lastH - Math.max(lastO, lastC);
+    if (lowerWick > lastBody * 2 && upperWick < lastBody * 0.5) {
+      return { signal: true, type: "hammer" };
+    }
+  }
+
+  // Bullish engulfing: prior candle down, current body engulfs prior
+  if (prevC < prevO && lastC > lastO) {
+    const prevBody = prevO - prevC;
+    if (lastBody > prevBody && lastC > prevO && lastO < prevC) {
+      return { signal: true, type: "engulfing" };
+    }
+  }
+
+  // Outside bar with higher close: wider range than prior + higher close
+  const prevRange = prevH - prevL;
+  if (lastRange > prevRange && lastH > prevH && lastL < prevL && lastC > prevC) {
+    return { signal: true, type: "outside_bar" };
+  }
+
+  return { signal: false, type: null };
 }
 
 /** Aggregate 1h OHLC to 4h bars. Opens from first bar, highs/lows from max/min, closes from last bar. */
@@ -1929,6 +2022,49 @@ export async function fetchPreRunData(
     }
   }
 
+  // ── QFE: Multi-timeframe relative strength ──
+  // All computed from already-fetched data — zero additional API calls
+  const stockReturn5d = chart3mo ? calcNdReturn(chart3mo.closes, 5) : null;
+  const stockReturn10d = chart3mo ? calcNdReturn(chart3mo.closes, 10) : null;
+  const stockReturn50d = chart3mo ? calcNdReturn(chart3mo.closes, 50) : null;
+
+  const spyReturn5d = getSectorETFNdReturn("SPY", 5, targetDate);
+  const spyReturn10d = getSectorETFNdReturn("SPY", 10, targetDate);
+  const spyReturn50d = getSectorETFNdReturn("SPY", 50, targetDate);
+  const qqqReturn5d = getSectorETFNdReturn("QQQ", 5, targetDate);
+  const qqqReturn10d = getSectorETFNdReturn("QQQ", 10, targetDate);
+  const qqqReturn50d = getSectorETFNdReturn("QQQ", 50, targetDate);
+  const sectorReturn5d = getSectorETFNdReturn(sectorETF, 5, targetDate);
+  const sectorReturn10d = getSectorETFNdReturn(sectorETF, 10, targetDate);
+  const sectorReturn50d = getSectorETFNdReturn(sectorETF, 50, targetDate);
+
+  const rs5dVsSPY = stockReturn5d !== null && spyReturn5d !== null ? stockReturn5d - spyReturn5d : null;
+  const rs10dVsSPY = stockReturn10d !== null && spyReturn10d !== null ? stockReturn10d - spyReturn10d : null;
+  const rs50dVsSPY = stockReturn50d !== null && spyReturn50d !== null ? stockReturn50d - spyReturn50d : null;
+  const rs5dVsQQQ = stockReturn5d !== null && qqqReturn5d !== null ? stockReturn5d - qqqReturn5d : null;
+  const rs10dVsQQQ = stockReturn10d !== null && qqqReturn10d !== null ? stockReturn10d - qqqReturn10d : null;
+  const rs50dVsQQQ = stockReturn50d !== null && qqqReturn50d !== null ? stockReturn50d - qqqReturn50d : null;
+  const rs5dVsSector = stockReturn5d !== null && sectorReturn5d !== null ? stockReturn5d - sectorReturn5d : null;
+  const rs10dVsSector = stockReturn10d !== null && sectorReturn10d !== null ? stockReturn10d - sectorReturn10d : null;
+  const rs50dVsSector = stockReturn50d !== null && sectorReturn50d !== null ? stockReturn50d - sectorReturn50d : null;
+
+  // QFE signal fields — computed from already-fetched chart3mo/chart5y
+  const moneyFlowPersistence = chart3mo ? calcMoneyFlowPersistence(chart3mo.closes, chart3mo.opens, chart3mo.volumes) : null;
+  const rvolTrajectory = chart3mo ? calcRvolTrajectory(chart3mo.volumes) : null;
+  const weeklyReversal = chart5y ? calcWeeklyReversalSignal(chart5y.opens, chart5y.highs, chart5y.lows, chart5y.closes) : { signal: false, type: null };
+
+  // Dist from EMA10 in ATR units
+  let distFromEma10Atr: number | null = null;
+  if (chart3mo && chart3mo.closes.length >= 14 && currentPrice !== null) {
+    const ema10Arr = calcEMA(chart3mo.closes, 10);
+    const lastEma10 = ema10Arr.length > 0 ? ema10Arr[ema10Arr.length - 1] : null;
+    const atrArr14 = calcATRArray(chart3mo.highs, chart3mo.lows, chart3mo.closes, 14);
+    const lastAtr14 = atrArr14.length > 0 ? atrArr14[atrArr14.length - 1] : 0;
+    if (lastEma10 !== null && lastAtr14 > 0) {
+      distFromEma10Atr = (currentPrice - lastEma10) / lastAtr14;
+    }
+  }
+
   // ── Data quality: count how many of the API calls succeeded ──
   let apiSuccessCount = 0;
   for (const r of settled) {
@@ -2034,6 +2170,24 @@ export async function fetchPreRunData(
     accumulationDayCount,
     atrRatio5v20,
     volumeRecent5d,
+    // QFE: Multi-timeframe relative strength
+    rs5dVsSPY,
+    rs10dVsSPY,
+    rs50dVsSPY,
+    rs5dVsQQQ,
+    rs10dVsQQQ,
+    rs50dVsQQQ,
+    rs5dVsSector,
+    rs10dVsSector,
+    rs50dVsSector,
+    spyReturn20d,
+    qqqReturn20d,
+    // QFE: Signal fields
+    moneyFlowPersistence,
+    rvolTrajectory,
+    weeklyReversalSignal: weeklyReversal.signal,
+    weeklyReversalType: weeklyReversal.type,
+    distFromEma10Atr,
     lastUpdated: targetDate ? new Date(targetDate + "T16:00:00-04:00").toISOString() : new Date().toISOString(),
   };
 }
