@@ -9,6 +9,7 @@ import "server-only";
 import type { EnrichedStock, RejectedStock, PullbackWatchStock } from "../sector-rotation/types";
 import type { StockInput } from "../sector-rotation/stock-enrichment";
 import { classifyStock, scoreConviction } from "../sector-rotation/stock-enrichment";
+import { CRYPTO_QUALITY_GATES } from "../sector-rotation/config";
 
 // ── Crypto Quality Gates ──
 
@@ -22,45 +23,43 @@ function applyCryptoQualityGates(
     const reasons: string[] = [];
     const volRatio = s.avgVolume10d > 0 ? s.volume / s.avgVolume10d : 0;
 
-    // Gate 1: Market cap >= $50M (crypto: much lower than equity $2B)
-    if (s.marketCap != null && s.marketCap < 50_000_000) {
-      reasons.push(`market_cap=$${(s.marketCap / 1e6).toFixed(0)}M (<$50M)`);
+    // Gate 1: Market cap >= minimum (crypto: much lower than equity)
+    if (s.marketCap != null && s.marketCap < CRYPTO_QUALITY_GATES.MIN_MARKET_CAP) {
+      reasons.push(`market_cap=$${(s.marketCap / 1e6).toFixed(0)}M (<$${CRYPTO_QUALITY_GATES.MIN_MARKET_CAP / 1e6}M)`);
     }
 
-    // Gate 2: Dollar volume >= $500K
+    // Gate 2: Dollar volume >= minimum
     // Yahoo Finance reports crypto volume in coin units, not USD — multiply by price
     const dollarVolume = s.volume * s.price;
-    if (dollarVolume < 500_000) {
-      reasons.push(`dollar_vol=$${(dollarVolume / 1e3).toFixed(0)}K (<$500K)`);
+    if (dollarVolume < CRYPTO_QUALITY_GATES.MIN_DOLLAR_VOLUME) {
+      reasons.push(`dollar_vol=$${(dollarVolume / 1e3).toFixed(0)}K (<$${CRYPTO_QUALITY_GATES.MIN_DOLLAR_VOLUME / 1e3}K)`);
     }
 
-    // Gate 3: Volume spike ratio <= 10x (crypto is more volatile than equities)
-    if (volRatio > 10.0) {
-      reasons.push(`vol_spike=${volRatio.toFixed(1)}x (>10x)`);
+    // Gate 3: Volume spike ratio <= max (crypto is more volatile than equities)
+    if (volRatio > CRYPTO_QUALITY_GATES.MAX_VOLUME_SPIKE) {
+      reasons.push(`vol_spike=${volRatio.toFixed(1)}x (>${CRYPTO_QUALITY_GATES.MAX_VOLUME_SPIKE}x)`);
     }
 
-    // Gate 4: Price extension <= 150% above 200-SMA (crypto: wider than equity 80%)
+    // Gate 4: Price extension <= max above 200-SMA (crypto: wider than equity)
     if (s.sma200 != null && s.sma200 > 0) {
       const pctFrom200 = ((s.price - s.sma200) / s.sma200) * 100;
-      if (pctFrom200 > 150) {
-        reasons.push(`extension=${pctFrom200.toFixed(0)}% (>150%)`);
+      if (pctFrom200 > CRYPTO_QUALITY_GATES.MAX_EXTENSION_PCT) {
+        reasons.push(`extension=${pctFrom200.toFixed(0)}% (>${CRYPTO_QUALITY_GATES.MAX_EXTENSION_PCT}%)`);
       }
     }
 
     // Gate 5: Liquidity depth proxy — volume-to-market-cap ratio
-    // Extremely illiquid tokens (vol/mcap < 0.001) are unreliable
     if (s.marketCap != null && s.marketCap > 0) {
       const volToMcap = dollarVolume / s.marketCap;
-      if (volToMcap < 0.001) {
-        reasons.push(`liquidity_depth=${(volToMcap * 100).toFixed(3)}% (<0.1%)`);
+      if (volToMcap < CRYPTO_QUALITY_GATES.MIN_VOL_TO_MCAP) {
+        reasons.push(`liquidity_depth=${(volToMcap * 100).toFixed(3)}% (<${CRYPTO_QUALITY_GATES.MIN_VOL_TO_MCAP * 100}%)`);
       }
     }
 
     // Gate 6: Price stability (anti-rug check)
-    // If price is more than 50% below 200-SMA, flag as extreme decline
     if (s.sma200 != null && s.sma200 > 0) {
       const pctFrom200 = ((s.price - s.sma200) / s.sma200) * 100;
-      if (pctFrom200 < -50) {
+      if (pctFrom200 < CRYPTO_QUALITY_GATES.EXTREME_DECLINE_PCT) {
         reasons.push(`extreme_decline=${pctFrom200.toFixed(0)}% from 200MA`);
       }
     }
@@ -117,9 +116,9 @@ export function enrichCryptoTokens(
       // Reclassify conviction based on adjusted signals
       if (adjustedSignals !== scored.convictionSignals) {
         const newConviction =
-          adjustedSignals >= 4
+          adjustedSignals >= CRYPTO_QUALITY_GATES.CONVICTION_HIGH_SIGNALS
             ? "HIGH" as const
-            : adjustedSignals >= 2
+            : adjustedSignals >= CRYPTO_QUALITY_GATES.CONVICTION_MEDIUM_SIGNALS
             ? "MEDIUM" as const
             : "WATCH" as const;
         scored = {

@@ -1,6 +1,7 @@
 /** Sub-sector → parent GICS mapping, divergence context, and divergence scoring. */
 
 import type { SectorRotationScore, RRGQuadrant } from "./types";
+import { SUB_SECTOR } from "./config";
 
 export const SUB_SECTOR_PARENT: Record<string, string> = {
   KRE: "XLF",   // Regional Banks → Financials
@@ -90,9 +91,9 @@ export function computeSubSectorDivergences(
     const quadrantDelta = QUADRANT_RANK[sub.quadrant] - QUADRANT_RANK[parent.quadrant];
 
     let signal: "leading" | "lagging" | "aligned";
-    if (quadrantDelta > 0 || (quadrantDelta === 0 && scoreDelta > 10)) {
+    if (quadrantDelta > 0 || (quadrantDelta === 0 && scoreDelta > SUB_SECTOR.DIVERGENCE_THRESHOLD)) {
       signal = "leading";
-    } else if (quadrantDelta < 0 || (quadrantDelta === 0 && scoreDelta < -10)) {
+    } else if (quadrantDelta < 0 || (quadrantDelta === 0 && scoreDelta < -SUB_SECTOR.DIVERGENCE_THRESHOLD)) {
       signal = "lagging";
     } else {
       signal = "aligned";

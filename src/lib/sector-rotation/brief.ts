@@ -135,7 +135,7 @@ export function computeMarketPosture(
         data.subSectorScores ?? [],
       )
     : null;
-  const narrowLeadership = leadershipHealth && (leadershipHealth.score < 50 || leadershipHealth.megaCapDominant);
+  const narrowLeadership = leadershipHealth && (leadershipHealth.score < RISK_FLAGS.NARROW_LEADERSHIP || leadershipHealth.megaCapDominant);
 
   // AGGRESSIVE: RISK_ON + sufficient rotations + dispersion
   // Capped at SELECTIVE if leadership is narrow (mega-cap dominated or score < 50)

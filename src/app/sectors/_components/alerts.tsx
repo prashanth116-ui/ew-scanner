@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Bell, BellOff, X } from "lucide-react";
-import type { SectorRotationScore, SectorRotationResult } from "@/lib/sector-rotation/types";
+import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 import type { SectorAlert } from "./types";
 import { ALERT_STORAGE_KEY } from "./constants";
 
@@ -18,7 +18,7 @@ export function saveAlerts(alerts: SectorAlert[]) {
   localStorage.setItem(ALERT_STORAGE_KEY, JSON.stringify(alerts));
 }
 
-export function AlertPanel({ sectors, data }: { sectors: SectorRotationScore[]; data: SectorRotationResult }) {
+export function AlertPanel({ sectors }: { sectors: SectorRotationScore[] }) {
   const [alerts, setAlerts] = useState<SectorAlert[]>([]);
   const [open, setOpen] = useState(false);
   const [triggeredAlerts, setTriggeredAlerts] = useState<string[]>([]);

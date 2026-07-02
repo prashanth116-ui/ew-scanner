@@ -466,6 +466,7 @@ function stockCategoryBadge(cat: StockCategory): { label: string; className: str
     case "avoid":
       return { label: "Avoid", className: "bg-red-500/15 text-red-400" };
   }
+  return cat satisfies never;
 }
 
 // ── Strategy Overlay: Action Signal (logic imported from rotation-helpers) ──

@@ -12,8 +12,26 @@ export const REGIME = {
   VIX_RISK_OFF: 25,
   /** VIX above this = high confidence RISK_OFF */
   VIX_EXTREME: 30,
-  /** VIX below this = high confidence RISK_ON */
-  VIX_LOW: 14,
+  /** Adaptive VIX low bound: minimum for 25th percentile clamp */
+  VIX_ADAPTIVE_LOW_MIN: 12,
+  /** Adaptive VIX low bound: maximum for 25th percentile clamp */
+  VIX_ADAPTIVE_LOW_MAX: 22,
+  /** Adaptive VIX high bound: minimum for 75th percentile clamp */
+  VIX_ADAPTIVE_HIGH_MIN: 20,
+  /** Adaptive VIX high bound: maximum for 75th percentile clamp */
+  VIX_ADAPTIVE_HIGH_MAX: 35,
+  /** Extreme VIX multiplier below adaptive low (confidence boost) */
+  VIX_EXTREME_LOW_MULT: 0.8,
+  /** Extreme VIX multiplier above adaptive high (confidence boost) */
+  VIX_EXTREME_HIGH_MULT: 1.2,
+  /** Regime alignment score bonus for favored sectors */
+  ALIGNED_BONUS: 5,
+  /** Regime alignment penalty for avoid sectors */
+  MISALIGNED_PENALTY: -3,
+  /** Confidence boost for extreme VIX/yield */
+  CONFIDENCE_BOOST_LARGE: 15,
+  /** Confidence boost for moderate confirming signals */
+  CONFIDENCE_BOOST_SMALL: 10,
   /** VIX change over 5d to classify as rising/falling */
   VIX_SLOPE_THRESHOLD: 2,
   /** Yield above this + DXY rising = INFLATIONARY */
@@ -35,6 +53,8 @@ export const REGIME = {
 export const COMPOSITE = {
   /** Sector composite >= this = actionable tier */
   ACTIONABLE_THRESHOLD: 60,
+  /** Sector composite >= this = watch tier */
+  WATCH_THRESHOLD: 40,
   /** Weight redistribution base: momentum, accel, mansfield, cmf, breadth, smartMoney */
   BASE_WEIGHTS: {
     momentum: 25,
@@ -214,6 +234,10 @@ export const TOP_STOCK_WEIGHTS = {
   RS_PERCENTILE_THRESHOLD: 80,
   /** Bonus points for top RS percentile */
   RS_BONUS: 3,
+  /** Final score >= this = "High score" reason */
+  HIGH_SCORE_THRESHOLD: 19,
+  /** pctFromBaseHigh < this = "Near breakout" reason */
+  NEAR_BREAKOUT_PCT: 10,
 } as const;
 
 // ── Stock Classification ──
@@ -241,6 +265,93 @@ export const CLASSIFICATION = {
   P4_RS_ACCEL: -2.0,
   /** Phase P4_EXHAUSTING: sector accel threshold (negative) */
   P4_SECTOR_ACCEL: -3,
+} as const;
+
+// ── Sector Scoring Signals ──
+
+export const SCORING_SIGNALS = {
+  /** CMF positive count >= this out of 20 bars = flow/price divergence */
+  FLOW_DIVERGENCE_MIN_POSITIVE: 15,
+  /** Breadth % > this + declining ETF = breadth divergence */
+  BREADTH_DIVERGENCE_PCT: 50,
+  /** ROC20d < this + positive accel = acceleration inflection */
+  ACCEL_INFLECTION_ROC_MAX: 2,
+  /** Minimum leading indicators for stealth accumulation */
+  STEALTH_MIN_SIGNALS: 2,
+  /** Trend classification breakpoints: strong up */
+  TREND_STRONG_UP: 3,
+  /** Trend classification: mild up */
+  TREND_MILD_UP: 1,
+  /** Trend classification: mild down (below this = strong down) */
+  TREND_MILD_DOWN: -1,
+  /** Trend classification: strong down */
+  TREND_STRONG_DOWN: -3,
+  /** Pair analysis: ratio change > this = Risk-On */
+  PAIR_RISK_ON: 1,
+  /** Pair analysis: ratio change < this = Risk-Off */
+  PAIR_RISK_OFF: -1,
+  /** Momentum composite weights */
+  MOMENTUM_WEIGHTS: { roc63: 0.4, roc126: 0.2, roc189: 0.2, roc252: 0.2 },
+  /** OBV normalized slope threshold for accumulation/distribution */
+  OBV_SLOPE_THRESHOLD: 0.01,
+} as const;
+
+// ── Rotation Lifecycle ──
+
+export const ROTATION_LIFECYCLE = {
+  /** Days active > this = EXHAUSTING */
+  EXHAUSTING_DAYS: 30,
+  /** Days active <= this = EARLY */
+  EARLY_MAX_DAYS: 5,
+  /** Days active <= this = MATURING (above = LATE) */
+  MATURING_MAX_DAYS: 15,
+  /** Days to look back for "recently ended" rotations */
+  RECENTLY_ENDED_DAYS: 14,
+} as const;
+
+// ── Rotation Conviction ──
+
+export const ROTATION_CONVICTION = {
+  /** Score >= this = HIGH conviction */
+  HIGH: 6,
+  /** Score >= this = MODERATE conviction */
+  MODERATE: 3,
+  /** Score >= this = LOW conviction (below = EXIT) */
+  LOW: 0,
+  /** Acceleration > this = strong acceleration (2 pts) */
+  STRONG_ACCEL: 1,
+  /** CMF > this = strong inflow (2 pts) */
+  STRONG_CMF: 0.1,
+  /** Turnaround candidate: volume vs avg threshold (rotation tracker) */
+  TURNAROUND_VOL: 0.8,
+} as const;
+
+// ── Sub-Sector Divergence ──
+
+export const SUB_SECTOR = {
+  /** Score delta > this = sub-sector leading/lagging signal */
+  DIVERGENCE_THRESHOLD: 10,
+} as const;
+
+// ── Crypto Quality Gates ──
+
+export const CRYPTO_QUALITY_GATES = {
+  /** Minimum market cap ($) */
+  MIN_MARKET_CAP: 50_000_000,
+  /** Minimum dollar volume ($) */
+  MIN_DOLLAR_VOLUME: 500_000,
+  /** Maximum volume spike ratio */
+  MAX_VOLUME_SPIKE: 10.0,
+  /** Maximum % extension above 200-SMA */
+  MAX_EXTENSION_PCT: 150,
+  /** Minimum volume-to-market-cap ratio (liquidity depth) */
+  MIN_VOL_TO_MCAP: 0.001,
+  /** Extreme decline threshold (% below 200-SMA) */
+  EXTREME_DECLINE_PCT: -50,
+  /** Conviction signals >= this = HIGH in regime reclassification */
+  CONVICTION_HIGH_SIGNALS: 4,
+  /** Conviction signals >= this = MEDIUM in regime reclassification */
+  CONVICTION_MEDIUM_SIGNALS: 2,
 } as const;
 
 // ── Extension Tiers ──

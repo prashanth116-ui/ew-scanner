@@ -90,9 +90,9 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     const sortedVix = [...vixCloses].sort((a, b) => a - b);
     const vixP25 = sortedVix[Math.floor(sortedVix.length * 0.25)] ?? REGIME_CFG.VIX_RISK_ON;
     const vixP75 = sortedVix[Math.floor(sortedVix.length * 0.75)] ?? REGIME_CFG.VIX_RISK_OFF;
-    // Clamp adaptive thresholds to sensible bounds (12-22 for low, 20-35 for high)
-    const vixLow = Math.max(12, Math.min(22, vixP25));
-    const vixHigh = Math.max(20, Math.min(35, vixP75));
+    // Clamp adaptive thresholds to sensible bounds
+    const vixLow = Math.max(REGIME_CFG.VIX_ADAPTIVE_LOW_MIN, Math.min(REGIME_CFG.VIX_ADAPTIVE_LOW_MAX, vixP25));
+    const vixHigh = Math.max(REGIME_CFG.VIX_ADAPTIVE_HIGH_MIN, Math.min(REGIME_CFG.VIX_ADAPTIVE_HIGH_MAX, vixP75));
 
     // Classify regime using adaptive thresholds
     let regime: MacroRegime;
@@ -109,11 +109,11 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     // Base confidence from VIX/yield/DXY clarity
     let regimeConfidence = 50;
     // Extreme VIX: well below 25th pctile or well above 75th pctile
-    if (regime === "RISK_ON" && vix < vixLow * 0.8) regimeConfidence += 15;
-    else if (regime === "RISK_OFF" && vix > vixHigh * 1.2) regimeConfidence += 15;
-    else if (regime === "INFLATIONARY" && yield10y > REGIME_CFG.YIELD_EXTREME) regimeConfidence += 10;
-    if (vixSlope === "rising" && regime === "RISK_OFF") regimeConfidence += 10;
-    if (vixSlope === "falling" && regime === "RISK_ON") regimeConfidence += 10;
+    if (regime === "RISK_ON" && vix < vixLow * REGIME_CFG.VIX_EXTREME_LOW_MULT) regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_LARGE;
+    else if (regime === "RISK_OFF" && vix > vixHigh * REGIME_CFG.VIX_EXTREME_HIGH_MULT) regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_LARGE;
+    else if (regime === "INFLATIONARY" && yield10y > REGIME_CFG.YIELD_EXTREME) regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_SMALL;
+    if (vixSlope === "rising" && regime === "RISK_OFF") regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_SMALL;
+    if (vixSlope === "falling" && regime === "RISK_ON") regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_SMALL;
 
     const sectorMap = REGIME_SECTOR_MAP[regime];
     const data: MacroRegimeData = {
@@ -143,8 +143,8 @@ export function getRegimeAdjustment(
   sector: string,
   regime: MacroRegimeData
 ): number {
-  if (regime.favoredSectors.includes(sector)) return 5;
-  if (regime.avoidSectors.includes(sector)) return -3;
+  if (regime.favoredSectors.includes(sector)) return REGIME_CFG.ALIGNED_BONUS;
+  if (regime.avoidSectors.includes(sector)) return REGIME_CFG.MISALIGNED_PENALTY;
   return 0;
 }
 

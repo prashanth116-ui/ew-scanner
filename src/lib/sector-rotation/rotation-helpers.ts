@@ -11,6 +11,7 @@ import type {
   ConvictionResult,
   RegimeData,
 } from "./rotation-types";
+import { ROTATION_LIFECYCLE, ROTATION_CONVICTION } from "./config";
 
 // ── Safe health accessor (guards against stale cached data missing health) ──
 
@@ -26,28 +27,28 @@ export function getHealth(event: RotationEvent): RotationHealthSignals {
 
 // ── Lifecycle Stage ──
 
-export const LIFECYCLE_EXHAUSTING_DAYS = 30;
-export const LIFECYCLE_EARLY_MAX_DAYS = 5;
-export const LIFECYCLE_MATURING_MAX_DAYS = 15;
+export const LIFECYCLE_EXHAUSTING_DAYS = ROTATION_LIFECYCLE.EXHAUSTING_DAYS;
+export const LIFECYCLE_EARLY_MAX_DAYS = ROTATION_LIFECYCLE.EARLY_MAX_DAYS;
+export const LIFECYCLE_MATURING_MAX_DAYS = ROTATION_LIFECYCLE.MATURING_MAX_DAYS;
 
 export function computeLifecycleStage(event: RotationEvent): LifecycleStage {
   const h = getHealth(event);
   if (
-    event.daysActive > LIFECYCLE_EXHAUSTING_DAYS ||
+    event.daysActive > ROTATION_LIFECYCLE.EXHAUSTING_DAYS ||
     (h.acceleration < 0 && (h.quadrant === "WEAKENING" || h.quadrant === "LAGGING"))
   ) {
     return "EXHAUSTING";
   }
-  if (event.daysActive <= LIFECYCLE_EARLY_MAX_DAYS) return "EARLY";
-  if (event.daysActive <= LIFECYCLE_MATURING_MAX_DAYS) return "MATURING";
+  if (event.daysActive <= ROTATION_LIFECYCLE.EARLY_MAX_DAYS) return "EARLY";
+  if (event.daysActive <= ROTATION_LIFECYCLE.MATURING_MAX_DAYS) return "MATURING";
   return "LATE";
 }
 
 // ── Conviction Score ──
 
-export const CONVICTION_HIGH_THRESHOLD = 6;
-export const CONVICTION_MODERATE_THRESHOLD = 3;
-export const CONVICTION_LOW_THRESHOLD = 0;
+export const CONVICTION_HIGH_THRESHOLD = ROTATION_CONVICTION.HIGH;
+export const CONVICTION_MODERATE_THRESHOLD = ROTATION_CONVICTION.MODERATE;
+export const CONVICTION_LOW_THRESHOLD = ROTATION_CONVICTION.LOW;
 
 export function computeConviction(event: RotationEvent): ConvictionResult {
   const h = getHealth(event);
@@ -61,12 +62,12 @@ export function computeConviction(event: RotationEvent): ConvictionResult {
   else { score -= 1; factors.push("lagging quadrant"); }
 
   // Acceleration (-1 to +2)
-  if (h.acceleration > 1) { score += 2; factors.push("strong acceleration"); }
+  if (h.acceleration > ROTATION_CONVICTION.STRONG_ACCEL) { score += 2; factors.push("strong acceleration"); }
   else if (h.acceleration > 0) { score += 1; factors.push("moderate acceleration"); }
   else { score -= 1; factors.push("negative acceleration"); }
 
   // CMF (-1 to +2)
-  if (h.cmf20 > 0.1) { score += 2; factors.push("strong inflow"); }
+  if (h.cmf20 > ROTATION_CONVICTION.STRONG_CMF) { score += 2; factors.push("strong inflow"); }
   else if (h.cmf20 > 0) { score += 1; factors.push("moderate inflow"); }
   else { score -= 1; factors.push("money outflow"); }
 
@@ -80,9 +81,9 @@ export function computeConviction(event: RotationEvent): ConvictionResult {
   }
 
   let level: ConvictionLevel;
-  if (score >= CONVICTION_HIGH_THRESHOLD) level = "HIGH";
-  else if (score >= CONVICTION_MODERATE_THRESHOLD) level = "MODERATE";
-  else if (score >= CONVICTION_LOW_THRESHOLD) level = "LOW";
+  if (score >= ROTATION_CONVICTION.HIGH) level = "HIGH";
+  else if (score >= ROTATION_CONVICTION.MODERATE) level = "MODERATE";
+  else if (score >= ROTATION_CONVICTION.LOW) level = "LOW";
   else level = "EXIT";
 
   const topFactor = factors[0] ?? "mixed signals";

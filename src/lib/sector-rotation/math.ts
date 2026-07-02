@@ -7,6 +7,7 @@
 import "server-only";
 
 import { calcSMA } from "@/lib/prerun/data";
+import { SCORING_SIGNALS } from "./config";
 
 import type { RRGQuadrant } from "./types";
 
@@ -25,7 +26,8 @@ export function calcMomentumComposite(closes: number[]): number {
   const roc126 = calcROC(closes, 126);
   const roc189 = calcROC(closes, 189);
   const roc252 = calcROC(closes, 252);
-  return 0.4 * roc63 + 0.2 * roc126 + 0.2 * roc189 + 0.2 * roc252;
+  const w = SCORING_SIGNALS.MOMENTUM_WEIGHTS;
+  return w.roc63 * roc63 + w.roc126 * roc126 + w.roc189 * roc189 + w.roc252 * roc252;
 }
 
 // ── Acceleration ──
@@ -167,8 +169,8 @@ export function calcOBVSlope(closes: number[], volumes: number[], lookback = 20)
   const avgObv = Math.abs(sumY / n) || 1;
   const normalizedSlope = slope / avgObv;
 
-  if (normalizedSlope > 0.01) return 1;
-  if (normalizedSlope < -0.01) return -1;
+  if (normalizedSlope > SCORING_SIGNALS.OBV_SLOPE_THRESHOLD) return 1;
+  if (normalizedSlope < -SCORING_SIGNALS.OBV_SLOPE_THRESHOLD) return -1;
   return 0;
 }
 

@@ -5,7 +5,7 @@ import { COMPOSITE } from "@/lib/sector-rotation/config";
 export const COLLAPSED_KEY = "ew-sectors-collapsed-v1";
 /** Actionable tier threshold — sourced from centralized config. */
 export const COMPOSITE_TRADE_THRESHOLD = COMPOSITE.ACTIONABLE_THRESHOLD;
-export const COMPOSITE_WATCH_THRESHOLD = 40;
+export const COMPOSITE_WATCH_THRESHOLD = COMPOSITE.WATCH_THRESHOLD;
 export const ALERT_STORAGE_KEY = "ew-sector-alerts-v1";
 export const LOADING_PHASES = ["Fetching ETF data", "Fetching stock quotes", "Computing sector scores", "Building correlation matrix"] as const;
 export const LOADING_TIMEOUT_MS = 90_000;

@@ -83,7 +83,7 @@ export interface RotationPatternStats {
 
 export type LifecycleStage = "EARLY" | "MATURING" | "LATE" | "EXHAUSTING";
 export type ConvictionLevel = "HIGH" | "MODERATE" | "LOW" | "EXIT";
-export type StockCategory = "leader" | "catch-up" | "avoid" | "turnaround";
+export type StockCategory = "leader" | "catch-up" | "turnaround" | "avoid";
 
 export interface ConvictionResult {
   level: ConvictionLevel;

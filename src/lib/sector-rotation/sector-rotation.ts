@@ -44,7 +44,7 @@ import {
   clampNormalize,
   stddev,
 } from "./math";
-import { COMPOSITE, ROTATION, SMART_MONEY, TOP_STOCK_WEIGHTS } from "./config";
+import { COMPOSITE, ROTATION, SMART_MONEY, TOP_STOCK_WEIGHTS, SCORING_SIGNALS } from "./config";
 
 // ── Chart data type ──
 
@@ -290,14 +290,14 @@ export async function calculateSectorRotation(
       const positiveCount = calcRollingCMFPositiveCount(
         chart.highs, chart.lows, chart.closes, chart.volumes, 20, 20
       );
-      flowPriceDivergence = positiveCount >= 15;
+      flowPriceDivergence = positiveCount >= SCORING_SIGNALS.FLOW_DIVERGENCE_MIN_POSITIVE;
     }
 
     // Breadth divergence: > 50% stocks healthy but sector ETF declining
-    const breadthDivergence = breadthPct !== null && breadthPct > 50 && roc20d < 0;
+    const breadthDivergence = breadthPct !== null && breadthPct > SCORING_SIGNALS.BREADTH_DIVERGENCE_PCT && roc20d < 0;
 
     // Acceleration inflection: 2nd derivative positive but price flat-to-negative
-    const accelerationInflection = accel > 0 && roc20d < 2;
+    const accelerationInflection = accel > 0 && roc20d < SCORING_SIGNALS.ACCEL_INFLECTION_ROC_MAX;
 
     // Smart money — only score if we have pre-run data for this sector
     const hasSmartMoneyData = allStocks.length > 0;
@@ -399,10 +399,10 @@ export async function calculateSectorRotation(
     // Trend from 20d ROC
     let trend: "UP" | "DOWN" | "FLAT";
     let trendArrow: string;
-    if (raw.roc20d > 3) { trend = "UP"; trendArrow = "\u2191"; }
-    else if (raw.roc20d > 1) { trend = "UP"; trendArrow = "\u2197"; }
-    else if (raw.roc20d > -1) { trend = "FLAT"; trendArrow = "\u2192"; }
-    else if (raw.roc20d > -3) { trend = "DOWN"; trendArrow = "\u2198"; }
+    if (raw.roc20d > SCORING_SIGNALS.TREND_STRONG_UP) { trend = "UP"; trendArrow = "\u2191"; }
+    else if (raw.roc20d > SCORING_SIGNALS.TREND_MILD_UP) { trend = "UP"; trendArrow = "\u2197"; }
+    else if (raw.roc20d > SCORING_SIGNALS.TREND_MILD_DOWN) { trend = "FLAT"; trendArrow = "\u2192"; }
+    else if (raw.roc20d > SCORING_SIGNALS.TREND_STRONG_DOWN) { trend = "DOWN"; trendArrow = "\u2198"; }
     else { trend = "DOWN"; trendArrow = "\u2193"; }
 
     const leadingCount = [
@@ -410,7 +410,7 @@ export async function calculateSectorRotation(
       raw.breadthDivergence,
       raw.accelerationInflection,
     ].filter(Boolean).length;
-    const stealthAccumulation = leadingCount >= 2;
+    const stealthAccumulation = leadingCount >= SCORING_SIGNALS.STEALTH_MIN_SIGNALS;
 
     return {
       sector: raw.displayName,
@@ -526,8 +526,8 @@ export async function calculateSectorRotation(
     const pastRatio = past.numClose / past.denClose;
     const change = pastRatio !== 0 ? ((currentRatio - pastRatio) / pastRatio) * 100 : 0;
     let trend: string;
-    if (change > 1) trend = "Rising (Risk-On)";
-    else if (change < -1) trend = "Falling (Risk-Off)";
+    if (change > SCORING_SIGNALS.PAIR_RISK_ON) trend = "Rising (Risk-On)";
+    else if (change < SCORING_SIGNALS.PAIR_RISK_OFF) trend = "Falling (Risk-Off)";
     else trend = "Flat";
     return { ratio: Math.round(currentRatio * 1000) / 1000, trend };
   }
@@ -577,12 +577,12 @@ export async function calculateSectorRotation(
           (rsPercentile !== null && rsPercentile >= W.RS_PERCENTILE_THRESHOLD ? W.RS_BONUS : 0);
 
         const reasons: string[] = [];
-        if (r.scores.finalScore >= 19) reasons.push("High score");
+        if (r.scores.finalScore >= W.HIGH_SCORE_THRESHOLD) reasons.push("High score");
         if ((r.data.insiderBuys90d ?? 0) > 0) reasons.push("Insider buying");
         if ((r.data.putCallRatio ?? 1) < SMART_MONEY.BULLISH_PCR) reasons.push("Bullish options flow");
         if (rsPercentile !== null && rsPercentile >= W.RS_PERCENTILE_THRESHOLD) reasons.push(`Top ${Math.round(100 - rsPercentile)}% RS`);
         else if ((r.data.relativeStrength20d ?? 0) > 0) reasons.push("RS leader");
-        if ((r.data.pctFromBaseHigh ?? 100) < 10) reasons.push("Near breakout");
+        if ((r.data.pctFromBaseHigh ?? 100) < W.NEAR_BREAKOUT_PCT) reasons.push("Near breakout");
 
         return { ticker: r.data.ticker, score: Math.round(score * 10) / 10, reasons };
       })

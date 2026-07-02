@@ -140,7 +140,7 @@ export default function SectorRotationPage() {
           </div>
           <div className="flex items-center gap-2">
             <StockSearch allStocks={allStocks} />
-            <AlertPanel sectors={data.sectors} data={data} />
+            <AlertPanel sectors={data.sectors} />
             {/* Desktop action buttons */}
             <button onClick={handleExport} className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="Export to Excel">
               <FileDown className="h-4 w-4" /><span>Export</span>

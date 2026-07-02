@@ -31,6 +31,7 @@ import { SECTOR_UNIVERSE, getSectorsWithStocks } from "@/data/sector-universe";
 import { fetchMacroRegime } from "./regime";
 import { computePairZScore } from "./pairs";
 import { calcAcceleration, calcCMF, calcRRG } from "./math";
+import { ROTATION, ROTATION_CONVICTION, ROTATION_LIFECYCLE, QUALITY_GATES } from "./config";
 
 // ── Module-level cache (15 minutes) ──
 
@@ -151,7 +152,7 @@ function computeDailySignals(aligned: AlignedBar[]): DailySignal[] {
     }
 
     const rsGoldenCross = rs10 > rs30;
-    const volumeSurge = volAvg > 0 && volumes[i] > 1.5 * volAvg;
+    const volumeSurge = volAvg > 0 && volumes[i] > ROTATION.VOLUME_SURGE * volAvg;
     const priceAbove50MA = closes[i] > sma50;
 
     const signalCount =
@@ -184,17 +185,17 @@ function detectRotationEvents(
   let currentStart: number | null = null; // index into dailySignals
   let belowThresholdStreak = 0;
 
-  for (let i = 5; i < dailySignals.length; i++) {
+  for (let i = ROTATION.SIGNAL_LOOKBACK; i < dailySignals.length; i++) {
     const today = dailySignals[i];
-    const isStrong = today.signals.signalCount >= 2;
+    const isStrong = today.signals.signalCount >= ROTATION.SIGNAL_START;
 
     if (currentStart === null) {
       // Check if this is an inflection point: 2+ signals today,
-      // but fewer than 2 on each of the prior 5 days
+      // but fewer than 2 on each of the prior N days
       if (isStrong) {
         const priorAllWeak = dailySignals
-          .slice(i - 5, i)
-          .every((d) => d.signals.signalCount < 2);
+          .slice(i - ROTATION.SIGNAL_LOOKBACK, i)
+          .every((d) => d.signals.signalCount < ROTATION.SIGNAL_START);
         if (priorAllWeak) {
           currentStart = i;
           belowThresholdStreak = 0;
@@ -204,7 +205,7 @@ function detectRotationEvents(
       // We're in a rotation — check for end condition
       if (!isStrong) {
         belowThresholdStreak++;
-        if (belowThresholdStreak >= 3) {
+        if (belowThresholdStreak >= ROTATION.SIGNAL_END_DAYS) {
           // Rotation ended 3 days ago
           const endIdx = i - 2;
           events.push(
@@ -358,8 +359,8 @@ function checkTurnaroundCandidate(
 ): boolean {
   return (
     perfPct < sectorAvgPct && // currently lagging the sector
-    rsAccel > 0.5 &&          // meaningful positive RS acceleration
-    volumeVsAvg >= 0.8        // at least near-average volume
+    rsAccel > QUALITY_GATES.TURNAROUND_RS_ACCEL && // meaningful positive RS acceleration
+    volumeVsAvg >= ROTATION_CONVICTION.TURNAROUND_VOL  // at least near-average volume
   );
 }
 
@@ -406,7 +407,8 @@ async function fetchStockPerformance(
     for (let j = 0; j < batch.length; j++) {
       const sym = batch[j];
       const chart = charts[j];
-      const quote = batchQuotes.get(sym)!;
+      const quote = batchQuotes.get(sym);
+      if (!quote) continue;
 
       if (!chart) continue;
 
@@ -666,7 +668,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
 
   // 6. Recently ended rotations (ended within last 10 trading days)
   const tenDaysAgo = new Date();
-  tenDaysAgo.setDate(tenDaysAgo.getDate() - 14); // ~10 trading days
+  tenDaysAgo.setDate(tenDaysAgo.getDate() - ROTATION_LIFECYCLE.RECENTLY_ENDED_DAYS); // ~10 trading days
   const cutoff = tenDaysAgo.toISOString().slice(0, 10);
 
   const recentlyEndedRotations = allEvents.filter(

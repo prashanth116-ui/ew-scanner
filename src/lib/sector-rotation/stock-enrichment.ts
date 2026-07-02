@@ -215,11 +215,12 @@ function classifyPhase(
   if (pct >= CLASSIFICATION.P2_PCT_LOW && pct <= CLASSIFICATION.P2_PCT_HIGH && accel > CLASSIFICATION.P2_RS_ACCEL && volRatio >= CLASSIFICATION.P2_VOL_RATIO) {
     return "P2_TURNAROUND";
   }
-  if (pct > CLASSIFICATION.P3_PCT_LOW && accel >= 0) {
-    return "P3_TRENDING";
-  }
+  // Check exhaustion before trending — catches decelerating stocks that would otherwise fall through
   if (accel < CLASSIFICATION.P4_RS_ACCEL || sectorAcceleration < CLASSIFICATION.P4_SECTOR_ACCEL) {
     return "P4_EXHAUSTING";
+  }
+  if (pct > CLASSIFICATION.P3_PCT_LOW && accel >= 0) {
+    return "P3_TRENDING";
   }
   return above50ma ? "P3_TRENDING" : "P1_BASING";
 }
