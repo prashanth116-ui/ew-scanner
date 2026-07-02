@@ -44,7 +44,7 @@ import {
   clampNormalize,
   stddev,
 } from "./math";
-import { COMPOSITE, ROTATION } from "./config";
+import { COMPOSITE, ROTATION, SMART_MONEY, TOP_STOCK_WEIGHTS } from "./config";
 
 // ── Chart data type ──
 
@@ -330,11 +330,11 @@ export async function calculateSectorRotation(
     // Smart money composite — only meaningful with pre-run data (cap at 100)
     let smartMoneyScore = 0;
     if (hasSmartMoneyData) {
-      if (aggregateInsiderBuys > 0) smartMoneyScore += 25;
-      if (aggregateInsiderBuys >= 3) smartMoneyScore += 10;
-      if (aggregatePCR !== null && aggregatePCR < 0.7) smartMoneyScore += 25;
-      if (unusualVolume) smartMoneyScore += 20;
-      if (earningsBeatPct >= 50) smartMoneyScore += 20;
+      if (aggregateInsiderBuys > 0) smartMoneyScore += SMART_MONEY.INSIDER_ANY;
+      if (aggregateInsiderBuys >= 3) smartMoneyScore += SMART_MONEY.INSIDER_HEAVY;
+      if (aggregatePCR !== null && aggregatePCR < SMART_MONEY.BULLISH_PCR) smartMoneyScore += SMART_MONEY.PCR_SCORE;
+      if (unusualVolume) smartMoneyScore += SMART_MONEY.UNUSUAL_VOLUME;
+      if (earningsBeatPct >= SMART_MONEY.EARNINGS_BEAT_MIN_PCT) smartMoneyScore += SMART_MONEY.EARNINGS_BEAT;
       smartMoneyScore = Math.min(smartMoneyScore, 100);
     }
 
@@ -567,19 +567,20 @@ export async function calculateSectorRotation(
           ? percentileRank(sectorRSValues, r.data.relativeStrength20d ?? 0)
           : null;
 
+        const W = TOP_STOCK_WEIGHTS;
         const score =
-          r.scores.finalScore * 0.4 +
-          r.scores.scoreJ * 0.2 * 12 +
-          r.scores.scoreK * 0.2 * 12 +
-          ((r.data.insiderBuys90d ?? 0) > 0 ? 10 : 0) * 0.1 +
-          ((r.data.putCallRatio ?? 1) < 0.7 ? 10 : 0) * 0.1 +
-          (rsPercentile !== null && rsPercentile >= 80 ? 3 : 0); // Bonus for top 20% RS
+          r.scores.finalScore * W.FINAL_SCORE +
+          r.scores.scoreJ * W.SCORE_J * W.JK_MULTIPLIER +
+          r.scores.scoreK * W.SCORE_K * W.JK_MULTIPLIER +
+          ((r.data.insiderBuys90d ?? 0) > 0 ? W.INSIDER_POINTS : 0) * W.INSIDER +
+          ((r.data.putCallRatio ?? 1) < SMART_MONEY.BULLISH_PCR ? W.PCR_POINTS : 0) * W.PCR +
+          (rsPercentile !== null && rsPercentile >= W.RS_PERCENTILE_THRESHOLD ? W.RS_BONUS : 0);
 
         const reasons: string[] = [];
         if (r.scores.finalScore >= 19) reasons.push("High score");
         if ((r.data.insiderBuys90d ?? 0) > 0) reasons.push("Insider buying");
-        if ((r.data.putCallRatio ?? 1) < 0.7) reasons.push("Bullish options flow");
-        if (rsPercentile !== null && rsPercentile >= 80) reasons.push(`Top ${Math.round(100 - rsPercentile)}% RS`);
+        if ((r.data.putCallRatio ?? 1) < SMART_MONEY.BULLISH_PCR) reasons.push("Bullish options flow");
+        if (rsPercentile !== null && rsPercentile >= W.RS_PERCENTILE_THRESHOLD) reasons.push(`Top ${Math.round(100 - rsPercentile)}% RS`);
         else if ((r.data.relativeStrength20d ?? 0) > 0) reasons.push("RS leader");
         if ((r.data.pctFromBaseHigh ?? 100) < 10) reasons.push("Near breakout");
 

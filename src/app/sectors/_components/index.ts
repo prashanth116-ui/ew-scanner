@@ -1,7 +1,7 @@
 // Barrel re-exports — preserves all existing import paths from "./_components" and "../_components"
 
 // Types
-export type { TradingAction, SortMode, StockInSector, SectorAlert } from "./types";
+export type { TradingAction, SortMode, SmaFilter, VolFilter, VerdictFilter, RsAccelFilter, PhaseFilter, PicksSortKey, PullbackSortKey, StockInSector, SectorAlert } from "./types";
 
 // Constants
 export {

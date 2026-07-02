@@ -26,7 +26,7 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [],
   const activeLabel = pinned ?? hovered;
 
   // Compute data bounds
-  const allScores = [...sectors, ...subSectorScores, ...crossAssetScores, ...leadershipBasketScores];
+  const allScores = useMemo(() => [...sectors, ...subSectorScores, ...crossAssetScores, ...leadershipBasketScores], [sectors, subSectorScores, crossAssetScores, leadershipBasketScores]);
   const allRatios: number[] = [];
   const allMoms: number[] = [];
   for (const s of allScores) {

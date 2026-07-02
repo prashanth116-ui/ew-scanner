@@ -13,7 +13,7 @@ import type {
   StockPhase,
   ConvictionLevel,
 } from "./types";
-import { CONVICTION, QUALITY_GATES, EXTENSION_TIERS } from "./config";
+import { CONVICTION, QUALITY_GATES, EXTENSION_TIERS, CLASSIFICATION } from "./config";
 
 /** Raw input for a stock before enrichment. */
 export interface StockInput {
@@ -135,9 +135,10 @@ export function applyQualityGates(
 
 export function buildExtendedWatch(extensionOnly: StockInput[]): PullbackWatchStock[] {
   return extensionOnly
+    .filter((s) => s.sma200 != null && s.sma200 > 0)
     .map((s) => {
-      const pctFrom200ma = calcPctFrom(s.price, s.sma200)!;
-      const pctFrom50ma = calcPctFrom(s.price, s.sma50)!;
+      const pctFrom200ma = calcPctFrom(s.price, s.sma200) ?? 0;
+      const pctFrom50ma = calcPctFrom(s.price, s.sma50) ?? 0;
       const volRatio = calcVolRatio(s.volume, s.avgVolume10d);
       const distanceTo80Pct = Math.round((pctFrom200ma - QUALITY_GATES.MAX_EXTENSION_PCT) * 10) / 10;
 
@@ -156,8 +157,8 @@ export function buildExtendedWatch(extensionOnly: StockInput[]): PullbackWatchSt
         sector: s.sector,
         sectorEtf: s.sectorEtf,
         price: s.price,
-        sma50: s.sma50!,
-        sma200: s.sma200!,
+        sma50: s.sma50 ?? s.price,
+        sma200: s.sma200 ?? s.price,
         pctFrom200ma: Math.round(pctFrom200ma * 10) / 10,
         pctFrom50ma: Math.round(pctFrom50ma * 10) / 10,
         distanceTo80Pct,
@@ -186,7 +187,7 @@ function classifyCategory(
   volRatio: number,
   rsAccel: number | null
 ): StockCategory {
-  if (above50ma && ret20d != null && ret20d > etfRet20d && volRatio >= 1.0) {
+  if (above50ma && ret20d != null && ret20d > etfRet20d && volRatio >= CLASSIFICATION.LEADER_VOL_RATIO) {
     return "LEADER";
   }
   if (above50ma) {
@@ -211,13 +212,13 @@ function classifyPhase(
   if (!above50ma && accel > 0) {
     return "P1_BASING";
   }
-  if (pct >= -5 && pct <= 3 && accel > 0.5 && volRatio >= 1.2) {
+  if (pct >= CLASSIFICATION.P2_PCT_LOW && pct <= CLASSIFICATION.P2_PCT_HIGH && accel > CLASSIFICATION.P2_RS_ACCEL && volRatio >= CLASSIFICATION.P2_VOL_RATIO) {
     return "P2_TURNAROUND";
   }
-  if (pct > 3 && accel >= 0) {
+  if (pct > CLASSIFICATION.P3_PCT_LOW && accel >= 0) {
     return "P3_TRENDING";
   }
-  if (accel < -2.0 || sectorAcceleration < -3) {
+  if (accel < CLASSIFICATION.P4_RS_ACCEL || sectorAcceleration < CLASSIFICATION.P4_SECTOR_ACCEL) {
     return "P4_EXHAUSTING";
   }
   return above50ma ? "P3_TRENDING" : "P1_BASING";
@@ -225,9 +226,9 @@ function classifyPhase(
 
 function rsAccelDescription(rsAccel: number | null): string {
   if (rsAccel == null) return "n/a";
-  if (rsAccel >= 3.0) return "strong catch-up";
-  if (rsAccel >= 0.5) return "moderate";
-  if (rsAccel >= -0.5) return "neutral";
+  if (rsAccel >= CLASSIFICATION.RS_DESC_STRONG) return "strong catch-up";
+  if (rsAccel >= CLASSIFICATION.RS_DESC_MODERATE) return "moderate";
+  if (rsAccel >= CLASSIFICATION.RS_DESC_NEUTRAL) return "neutral";
   return "decelerating";
 }
 

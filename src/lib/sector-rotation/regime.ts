@@ -27,6 +27,7 @@ export interface MacroRegimeData {
   avoidSectors: string[];
 }
 
+// Sector names match `displayName` from sector-universe.ts (GICS standard names)
 const REGIME_SECTOR_MAP: Record<MacroRegime, { favored: string[]; avoid: string[] }> = {
   RISK_ON: {
     favored: ["Technology", "Consumer Discretionary", "Communication Services"],

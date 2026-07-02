@@ -172,6 +172,77 @@ export const POSTURE = {
   SELECTIVE_MIN_SECTORS: 3,
 } as const;
 
+// ── Smart Money Composite ──
+
+export const SMART_MONEY = {
+  /** Points for any insider buying activity */
+  INSIDER_ANY: 25,
+  /** Bonus points for 3+ insider buys */
+  INSIDER_HEAVY: 10,
+  /** Put/call ratio below this = bullish options flow */
+  BULLISH_PCR: 0.7,
+  /** Points for bullish options flow */
+  PCR_SCORE: 25,
+  /** Points for unusual ETF volume */
+  UNUSUAL_VOLUME: 20,
+  /** Points for earnings beat majority */
+  EARNINGS_BEAT: 20,
+  /** Minimum earnings beat % to score */
+  EARNINGS_BEAT_MIN_PCT: 50,
+} as const;
+
+// ── Top Stock Scoring ──
+
+export const TOP_STOCK_WEIGHTS = {
+  /** Weight for final pre-run score */
+  FINAL_SCORE: 0.4,
+  /** Weight for J-score (normalized to 12-pt scale) */
+  SCORE_J: 0.2,
+  /** Weight for K-score (normalized to 12-pt scale) */
+  SCORE_K: 0.2,
+  /** Score normalization multiplier for J/K */
+  JK_MULTIPLIER: 12,
+  /** Weight for insider buying signal */
+  INSIDER: 0.1,
+  /** Points awarded for insider buying */
+  INSIDER_POINTS: 10,
+  /** Weight for bullish options flow signal */
+  PCR: 0.1,
+  /** Points awarded for bullish PCR */
+  PCR_POINTS: 10,
+  /** RS percentile threshold for bonus */
+  RS_PERCENTILE_THRESHOLD: 80,
+  /** Bonus points for top RS percentile */
+  RS_BONUS: 3,
+} as const;
+
+// ── Stock Classification ──
+
+export const CLASSIFICATION = {
+  /** Volume ratio >= this for LEADER classification */
+  LEADER_VOL_RATIO: 1.0,
+  /** RS accel >= this = "strong catch-up" description */
+  RS_DESC_STRONG: 3.0,
+  /** RS accel >= this = "moderate" description */
+  RS_DESC_MODERATE: 0.5,
+  /** RS accel >= this = "neutral" description (below = "decelerating") */
+  RS_DESC_NEUTRAL: -0.5,
+  /** Phase P2_TURNAROUND: pctFrom50ma lower bound */
+  P2_PCT_LOW: -5,
+  /** Phase P2_TURNAROUND: pctFrom50ma upper bound */
+  P2_PCT_HIGH: 3,
+  /** Phase P2_TURNAROUND: minimum RS accel */
+  P2_RS_ACCEL: 0.5,
+  /** Phase P2_TURNAROUND: minimum volume ratio */
+  P2_VOL_RATIO: 1.2,
+  /** Phase P3_TRENDING: pctFrom50ma lower bound */
+  P3_PCT_LOW: 3,
+  /** Phase P4_EXHAUSTING: RS accel threshold (negative) */
+  P4_RS_ACCEL: -2.0,
+  /** Phase P4_EXHAUSTING: sector accel threshold (negative) */
+  P4_SECTOR_ACCEL: -3,
+} as const;
+
 // ── Extension Tiers ──
 
 export const EXTENSION_TIERS = {
