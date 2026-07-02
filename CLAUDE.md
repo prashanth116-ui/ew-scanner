@@ -1,7 +1,7 @@
 # EW-Scanner Project Instructions
 
 ## Overview
-Next.js 16 market analysis platform deployed on Vercel with Supabase backend. Features multiple stock scanners (Elliott Wave, Confluence, Catalyst, Squeeze, PreRun), sector rotation tracking, and automated nightly cron jobs with Telegram alerts.
+Next.js 16 market analysis platform deployed on Vercel with Supabase backend. Features multiple stock scanners (Elliott Wave, Confluence, Catalyst, Squeeze, PreRun), sector rotation tracking with 31 ETFs, pre-market trading bias engine, crypto rotation, and automated nightly cron jobs with Telegram alerts.
 
 ## Key Commands
 ```bash
@@ -77,6 +77,88 @@ npm run build             # Production build
 
 All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from `src/lib/prerun/data.ts`.
 
+### Sector Rotation System
+Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo Finance v8 chart API.
+
+**ETF Universe (31 total):**
+| Category | Count | Examples |
+|----------|-------|---------|
+| GICS Sectors | 14 | XLK, XLF, XLE, XLV, XLI, XLY, XLP, XLU, XLB, XLRE, XLC, SMH, IGV, XBI |
+| Sub-Sectors | 8 | XHB, XME, KRE, XOP, IBB, HACK, KWEB, TAN |
+| Cross-Asset | 5 | TLT, HYG, GLD, UUP, DBA |
+| Leadership Baskets | 4 | MAGS, QQQ, IWM, ARKK |
+
+**Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment.
+
+**Centralized Config:** All thresholds live in `src/lib/sector-rotation/config.ts`. Sections: REGIME, COMPOSITE, ROTATION, QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, CLASSIFICATION, SCORING_SIGNALS, ROTATION_LIFECYCLE, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS. **Never hardcode thresholds** — always add to config.ts and import.
+
+**Key files:**
+| File | Purpose |
+|------|---------|
+| `src/lib/sector-rotation/config.ts` | All thresholds and scoring breakpoints |
+| `src/lib/sector-rotation/sector-rotation.ts` | Main scoring engine — `calculateSectorRotation()` |
+| `src/lib/sector-rotation/stock-enrichment.ts` | Stock quality gates, classification (LEADER/CATCH_UP/TURNAROUND/AVOID), phase (P1-P4), conviction scoring |
+| `src/lib/sector-rotation/rotation-tracker.ts` | Active rotation detection — signal history, lifecycle stages |
+| `src/lib/sector-rotation/rotation-helpers.ts` | Lifecycle stage, conviction level, action signals |
+| `src/lib/sector-rotation/regime.ts` | Macro regime classification (RISK_ON/OFF/INFLATIONARY/MIXED) with adaptive VIX bounds |
+| `src/lib/sector-rotation/brief.ts` | Market posture (AGGRESSIVE/ACTIVE/SELECTIVE/DEFENSIVE), sector tiers, risk flags |
+| `src/lib/sector-rotation/leadership-health.ts` | Leadership Health Score (0-100) from MAGS/QQQ/IWM/ARKK |
+| `src/lib/sector-rotation/math.ts` | Momentum scoring, RS ratios, CMF, OBV slope |
+| `src/lib/sector-rotation/types.ts` | Core types: `SectorRotationScore`, `EnrichedStock`, `SectorRotationResult` |
+| `src/lib/sector-rotation/rotation-types.ts` | Rotation tracker types: `RotationEvent`, `ActiveRotationDetail` |
+| `src/lib/sector-rotation/sub-sector-constants.ts` | Sub-sector → parent GICS mapping, divergence threshold |
+| `src/data/sector-universe.ts` | ETF definitions, category assignments, constituent stocks |
+
+**UI Pages:**
+| Route | File | Purpose |
+|-------|------|---------|
+| `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart, sector cards, leadership baskets, sub-sectors, cross-asset |
+| `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias, leadership health, sector tiers, risk flags |
+| `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks from enriched rotation data |
+| `/sectors/crypto` | `src/app/sectors/crypto/page.tsx` | Crypto rotation dashboard |
+| `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables |
+
+**API Routes:**
+| Route | Purpose |
+|-------|---------|
+| `/api/sector-rotation` | Main data endpoint — returns all 31 ETF scores, leadership baskets, regime |
+| `/api/sector-rotation/alert` | Sector snapshot persistence for alerting |
+| `/api/premarket` | Pre-market futures, internals, trading bias, sector checklist |
+
+### Pre-Market Trading Bias Engine
+Computes structured trading bias from equity futures, VIX, and market internals.
+
+**Inputs:** ES=F, NQ=F, YM=F, RTY=F (4 equity futures), VIX level, TICK/TRIN/ADD internals.
+
+**Classification logic (`classifyBias`):**
+1. **Magnitude gate:** If average absolute change < 0.15%, return Neutral (tiny moves are noise)
+2. **Unanimous:** All 4 up → Strong Bull, all 4 down → Strong Bear
+3. **Majority rules:** If more futures are down than up → Lean Bear (or Strong Bear if avg < -1.0%). Vice versa for bullish. Leadership shortcuts never override majority direction.
+4. **Even split:** Use average change as tiebreaker (±0.3% threshold)
+5. **Fallback:** biasScore from checklist scoring
+
+**Outputs:** `TradingBias` object with bias, confidence (0-100), preferredDirection (Long/Short/Flat), leading/weakest asset, bestToTrade/assetToAvoid, dayType, VIX interpretation, playbook text, reasons array.
+
+**Key files:**
+| File | Purpose |
+|------|---------|
+| `src/lib/premarket/trading-bias.ts` | Bias classification, confidence, playbook generation |
+| `src/lib/premarket/fetch.ts` | Yahoo Finance data fetching for futures + internals (2-min cache) |
+| `src/lib/premarket/scoring.ts` | Checklist-based bias score (-10 to +10) |
+| `src/lib/premarket/types.ts` | `TradingBias`, `FuturesSnapshot`, `PremarketData` types |
+| `src/app/api/premarket/route.ts` | API route — aggregates futures, sector data, regime, posture |
+
+### Crypto Rotation
+Mirrors the equity sector rotation system for crypto assets. Uses adapted quality gates (lower market cap, dollar volume, wider extension thresholds) and reuses equity classification/conviction logic.
+
+**Key files:**
+| File | Purpose |
+|------|---------|
+| `src/lib/crypto-rotation/crypto-rotation.ts` | Main crypto scoring engine |
+| `src/lib/crypto-rotation/token-enrichment.ts` | Crypto quality gates + enrichment (thresholds from `CRYPTO_QUALITY_GATES` in config) |
+| `src/lib/crypto-rotation/crypto-regime.ts` | Crypto-specific regime classification |
+| `src/lib/crypto-rotation/brief.ts` | Crypto daily brief computation |
+
 ## Key Files
 
 ### Cron Routes
@@ -95,6 +177,8 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 | `src/app/api/inflection/daily/route.ts` | Read inflection daily data |
 | `src/app/api/vcp/daily/route.ts` | Read VCP daily data |
 | `src/app/api/institutional/daily/route.ts` | Read institutional daily data |
+| `src/app/api/sector-rotation/route.ts` | Sector rotation scores (31 ETFs, leadership baskets, regime) |
+| `src/app/api/premarket/route.ts` | Pre-market futures, internals, trading bias, sector checklist |
 
 ### UI Pages
 | File | Route |
@@ -103,6 +187,11 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 | `src/app/prerun/inflection-daily/page.tsx` | `/prerun/inflection-daily` |
 | `src/app/prerun/vcp-daily/page.tsx` | `/prerun/vcp-daily` |
 | `src/app/prerun/institutional-daily/page.tsx` | `/prerun/institutional-daily` |
+| `src/app/sectors/page.tsx` | `/sectors` — Sector rotation dashboard (RRG chart, cards, baskets) |
+| `src/app/sectors/brief/page.tsx` | `/sectors/brief` — Daily brief (posture, bias, health, tiers) |
+| `src/app/sectors/picks/page.tsx` | `/sectors/picks` — Enriched stock picks |
+| `src/app/sectors/crypto/page.tsx` | `/sectors/crypto` — Crypto rotation dashboard |
+| `src/app/rotation/page.tsx` | `/rotation` — Active rotation tracker |
 
 ### Persistence & Data
 | File | Purpose |
@@ -121,6 +210,9 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 | `src/lib/ew-telegram.ts` | `sendTelegramMessage()` for Telegram bot alerts |
 
 ## Patterns & Conventions
+
+### Centralized Config Pattern
+All scoring thresholds for the sector rotation system live in `src/lib/sector-rotation/config.ts`. **Never hardcode numeric thresholds** in scoring logic — add them to config.ts and import. The config has 17 exported sections (REGIME, COMPOSITE, ROTATION, QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, CLASSIFICATION, SCORING_SIGNALS, ROTATION_LIFECYCLE, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS).
 
 ### Persistence Functions (per table)
 Each daily table has 5 standard functions in `persistence.ts`:
