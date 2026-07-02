@@ -9,13 +9,13 @@ import type { FuturesSnapshot, InternalsSnapshot, TradingBias, MarketBias, DayTy
 // ── Helpers ──
 
 interface EquityFuture {
-  symbol: string;   // "ES" | "NQ" | "YM"
+  symbol: string;   // "ES" | "NQ" | "YM" | "RTY"
   changePct: number;
   price: number;
 }
 
 function extractEquityFutures(futures: FuturesSnapshot[]): EquityFuture[] {
-  const MAP: Record<string, string> = { "ES=F": "ES", "NQ=F": "NQ", "YM=F": "YM" };
+  const MAP: Record<string, string> = { "ES=F": "ES", "NQ=F": "NQ", "YM=F": "YM", "RTY=F": "RTY" };
   const result: EquityFuture[] = [];
   for (const f of futures) {
     const label = MAP[f.symbol];
@@ -65,7 +65,7 @@ function interpretVix(avgEquityChange: number, vix: number | null): string {
     return "Bearish confirmation — selling with elevated fear, watch for acceleration";
   }
   if (equityDown && vixLow) {
-    return "Complacent decline — market down but fear not spiking, possible bounce setup";
+    return "Complacent decline — market down but fear not spiking";
   }
 
   // Neutral / moderate VIX
@@ -78,7 +78,6 @@ function interpretVix(avgEquityChange: number, vix: number | null): string {
 
 function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
   if (equities.length < 2) {
-    // Fallback to biasScore
     if (biasScore >= 6) return "Strong Bull";
     if (biasScore >= 3) return "Lean Bull";
     if (biasScore <= -6) return "Strong Bear";
@@ -86,25 +85,26 @@ function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
     return "Neutral";
   }
 
-  const dirs = equities.map((e) => sign(e.symbol === "NQ" ? e.changePct : e.changePct));
-  const allUp = dirs.every((d) => d === "up");
-  const allDown = dirs.every((d) => d === "down");
+  const dirs = equities.map((e) => sign(e.changePct));
+  const upCount = dirs.filter((d) => d === "up").length;
+  const downCount = dirs.filter((d) => d === "down").length;
+  const avgChange = equities.reduce((s, e) => s + e.changePct, 0) / equities.length;
 
-  if (allUp) return "Strong Bull";
-  if (allDown) return "Strong Bear";
+  // Unanimous direction
+  if (dirs.every((d) => d === "up")) return "Strong Bull";
+  if (dirs.every((d) => d === "down")) return "Strong Bear";
 
-  // Leadership patterns
-  const sorted = [...equities].sort((a, b) => b.changePct - a.changePct);
-  const leader = sorted[0];
-  const laggard = sorted[sorted.length - 1];
+  // Majority direction — leadership nuances don't override the tape
+  if (downCount > upCount) {
+    return avgChange < -1.0 ? "Strong Bear" : "Lean Bear";
+  }
+  if (upCount > downCount) {
+    return avgChange > 1.0 ? "Strong Bull" : "Lean Bull";
+  }
 
-  // NQ leading with meaningful gap
-  if (leader.symbol === "NQ" && leader.changePct > 0.3) return "Lean Bull";
-  // YM leading (value/safety)
-  if (leader.symbol === "YM" && leader.changePct > 0.3) return "Lean Bull";
-
-  // NQ weakest with meaningful selling
-  if (laggard.symbol === "NQ" && laggard.changePct < -0.3) return "Lean Bear";
+  // Evenly split — use average change as tiebreaker
+  if (avgChange > 0.3) return "Lean Bull";
+  if (avgChange < -0.3) return "Lean Bear";
 
   // Fallback to biasScore
   if (biasScore >= 3) return "Lean Bull";
@@ -273,6 +273,9 @@ function generatePlaybook(
   }
 
   if (isComplacent) {
+    if (bias === "Strong Bear" || bias === "Lean Bear") {
+      return "Selling is orderly with VIX staying low — no panic yet, but don't mistake complacency for a floor. Stay short-biased and watch for failed bounces at resistance.";
+    }
     return "Market is down but fear is not spiking — possible bounce setup. Watch for a failed breakdown at key support. Keep stops tight if going long.";
   }
 
@@ -303,6 +306,15 @@ function generatePlaybook(
 
   if (bias === "Strong Bear") {
     return `All equity futures pointing lower. Reduce exposure and avoid catching falling knives. Wait for a successful retest of support before adding risk.`;
+  }
+
+  if (bias === "Lean Bear" && weakest === "NQ") {
+    const nq = equities.find((e) => e.symbol === "NQ");
+    return `Growth/tech leading the selling${nq ? " — NQ " + fmt(nq.changePct) : ""}. Trim high-beta growth exposure and tighten stops. Value may hold up better.`;
+  }
+
+  if (bias === "Lean Bear" && weakest === "RTY") {
+    return `Small-caps weakest — risk appetite fading. Trim speculative positions and favor large-cap quality names if staying long.`;
   }
 
   if (bias === "Lean Bear") {
@@ -345,7 +357,7 @@ function buildReasons(
     if (lead && weak) {
       const gap = Math.abs(lead.changePct - weak.changePct);
       if (gap > 0.1) {
-        const leaderType = leading === "NQ" ? "growth appetite" : leading === "YM" ? "value/safety preference" : "broad leadership";
+        const leaderType = leading === "NQ" ? "growth appetite" : leading === "YM" ? "value/safety preference" : leading === "RTY" ? "small-cap risk appetite" : "broad leadership";
         reasons.push(`${leading} leading by ${gap.toFixed(2)}pp — ${leaderType}`);
       }
     }
