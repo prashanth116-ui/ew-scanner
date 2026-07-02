@@ -1,4 +1,6 @@
-/** Sub-sector → parent GICS mapping and divergence context (single source of truth). */
+/** Sub-sector → parent GICS mapping, divergence context, and divergence scoring. */
+
+import type { SectorRotationScore, RRGQuadrant } from "./types";
 
 export const SUB_SECTOR_PARENT: Record<string, string> = {
   KRE: "XLF",   // Regional Banks → Financials
@@ -37,4 +39,79 @@ export function subSectorDivergenceTooltip(etf: string): string {
   const ctx = SUB_SECTOR_CONTEXT[etf];
   if (!parent || !ctx) return "Sub-sector diverging from parent";
   return `${etf} vs ${parent} divergence \u2014 ${ctx}`;
+}
+
+// ── Sub-sector divergence scoring ──
+
+const QUADRANT_RANK: Record<RRGQuadrant, number> = {
+  LEADING: 4,
+  IMPROVING: 3,
+  WEAKENING: 2,
+  LAGGING: 1,
+};
+
+export interface SubSectorDivergence {
+  subEtf: string;
+  subName: string;
+  parentEtf: string;
+  parentName: string;
+  scoreDelta: number;       // sub.compositeScore - parent.compositeScore
+  quadrantDelta: number;    // rank difference (positive = sub leading)
+  subQuadrant: RRGQuadrant;
+  parentQuadrant: RRGQuadrant;
+  signal: "leading" | "lagging" | "aligned";
+  context: string;
+}
+
+/**
+ * Compute divergence between each sub-sector and its parent GICS sector.
+ * Positive scoreDelta = sub-sector outperforming parent = early rotation signal.
+ */
+export function computeSubSectorDivergences(
+  subSectors: SectorRotationScore[],
+  gicsSectors: SectorRotationScore[],
+): SubSectorDivergence[] {
+  const parentMap = new Map<string, SectorRotationScore>();
+  for (const s of gicsSectors) parentMap.set(s.etf, s);
+
+  const divergences: SubSectorDivergence[] = [];
+
+  for (const sub of subSectors) {
+    const parentEtf = SUB_SECTOR_PARENT[sub.etf];
+    if (!parentEtf) continue;
+    const parent = parentMap.get(parentEtf);
+    if (!parent) continue;
+
+    const scoreDelta = sub.compositeScore - parent.compositeScore;
+    const quadrantDelta = QUADRANT_RANK[sub.quadrant] - QUADRANT_RANK[parent.quadrant];
+
+    let signal: "leading" | "lagging" | "aligned";
+    if (quadrantDelta > 0 || (quadrantDelta === 0 && scoreDelta > 10)) {
+      signal = "leading";
+    } else if (quadrantDelta < 0 || (quadrantDelta === 0 && scoreDelta < -10)) {
+      signal = "lagging";
+    } else {
+      signal = "aligned";
+    }
+
+    const ctx = SUB_SECTOR_CONTEXT[sub.etf] ?? "";
+
+    divergences.push({
+      subEtf: sub.etf,
+      subName: sub.sector,
+      parentEtf,
+      parentName: parent.sector,
+      scoreDelta,
+      quadrantDelta,
+      subQuadrant: sub.quadrant,
+      parentQuadrant: parent.quadrant,
+      signal,
+      context: ctx,
+    });
+  }
+
+  // Sort by absolute divergence magnitude (strongest signal first)
+  divergences.sort((a, b) => Math.abs(b.scoreDelta) - Math.abs(a.scoreDelta));
+
+  return divergences;
 }

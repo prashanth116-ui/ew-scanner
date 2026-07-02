@@ -5,7 +5,7 @@ import { Plus, Minus, RotateCcw } from "lucide-react";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 import { quadrantDotColor } from "./helpers";
 
-export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [] }: { sectors: SectorRotationScore[]; subSectorScores?: SectorRotationScore[]; crossAssetScores?: SectorRotationScore[] }) {
+export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [], leadershipBasketScores = [] }: { sectors: SectorRotationScore[]; subSectorScores?: SectorRotationScore[]; crossAssetScores?: SectorRotationScore[]; leadershipBasketScores?: SectorRotationScore[] }) {
   const W = 600;
   const H = 480;
   const PAD = 55;
@@ -14,6 +14,7 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [] 
   const [showSectors, setShowSectors] = useState(true);
   const [showSubSectors, setShowSubSectors] = useState(true);
   const [showCrossAssets, setShowCrossAssets] = useState(true);
+  const [showLeadershipBaskets, setShowLeadershipBaskets] = useState(true);
 
   // Hover & pin state
   const [hovered, setHovered] = useState<string | null>(null);
@@ -25,7 +26,7 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [] 
   const activeLabel = pinned ?? hovered;
 
   // Compute data bounds
-  const allScores = [...sectors, ...subSectorScores, ...crossAssetScores];
+  const allScores = [...sectors, ...subSectorScores, ...crossAssetScores, ...leadershipBasketScores];
   const allRatios: number[] = [];
   const allMoms: number[] = [];
   for (const s of allScores) {
@@ -119,6 +120,14 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [] 
             className={`rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${showCrossAssets ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border-[#5ba3e6]/30" : "text-[#666] border-[#333]"}`}
           >
             Cross-assets
+          </button>
+        )}
+        {leadershipBasketScores.length > 0 && (
+          <button
+            onClick={() => setShowLeadershipBaskets(!showLeadershipBaskets)}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${showLeadershipBaskets ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border-[#5ba3e6]/30" : "text-[#666] border-[#333]"}`}
+          >
+            Leadership
           </button>
         )}
       </div>
@@ -256,6 +265,28 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [] 
             );
           })}
 
+          {/* Leadership basket markers (squares) */}
+          {showLeadershipBaskets && leadershipBasketScores.map((s) => {
+            const x = scaleX(s.rsRatio);
+            const y = scaleY(s.rsMomentum);
+            const color = quadrantDotColor(s.quadrant);
+            const isActive = activeLabel === s.sector;
+            const size = isActive ? 7 : 5;
+            const opacity = isActive ? 1 : dimOpacity ?? 0.7;
+            return (
+              <g
+                key={`lead-${s.etf}`}
+                onMouseEnter={() => setHovered(s.sector)}
+                onMouseLeave={() => setHovered(null)}
+                onClick={(e) => { e.stopPropagation(); handleClick(s.sector); }}
+                style={{ cursor: "pointer" }}
+              >
+                <rect x={x - size} y={y - size} width={size * 2} height={size * 2} fill={color} stroke={isActive ? "#fff" : "none"} strokeWidth={1} opacity={opacity} rx={1} />
+                {!isActive && <text x={x} y={y - size - 4} textAnchor="middle" fill={color} fontSize={7} opacity={dimOpacity ?? 0.6}>{s.etf}</text>}
+              </g>
+            );
+          })}
+
           {/* Enhanced tooltip */}
           {activeScore && (() => {
             const tx = tooltipFlipX ? tooltipX - 140 : tooltipX + 12;
@@ -281,7 +312,7 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [] 
           })()}
 
           {/* Legend */}
-          {(subSectorScores.length > 0 || crossAssetScores.length > 0) && (
+          {(subSectorScores.length > 0 || crossAssetScores.length > 0 || leadershipBasketScores.length > 0) && (
             <g>
               <circle cx={PAD + 10} cy={H - 18} r={4} fill="#888" />
               <text x={PAD + 20} y={H - 14} fill="#666" fontSize={9}>Sector</text>
@@ -295,6 +326,12 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [] 
                 <>
                   <polygon points={`${PAD + 145},${H - 22} ${PAD + 150},${H - 18} ${PAD + 145},${H - 14} ${PAD + 140},${H - 18}`} fill="#888" />
                   <text x={PAD + 156} y={H - 14} fill="#666" fontSize={9}>Cross-asset</text>
+                </>
+              )}
+              {leadershipBasketScores.length > 0 && (
+                <>
+                  <rect x={PAD + 218} y={H - 22} width={8} height={8} fill="#888" rx={1} />
+                  <text x={PAD + 232} y={H - 14} fill="#666" fontSize={9}>Leadership</text>
                 </>
               )}
             </g>

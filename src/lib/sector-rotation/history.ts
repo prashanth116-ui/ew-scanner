@@ -21,6 +21,7 @@ export interface SectorSnapshot {
 export interface DailySnapshot {
   date: string; // "2026-04-26"
   sectors: SectorSnapshot[];
+  leadershipBaskets?: SectorSnapshot[];
   rotationSummary: string;
   dispersionIndex: number;
 }
@@ -34,7 +35,7 @@ interface HistoryStore {
 
 const STORAGE_KEY = "ew-scanner-sector-history";
 const MAX_DAYS = 60;
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2; // 2 = added leadershipBaskets
 
 function isClient(): boolean {
   return typeof window !== "undefined";
@@ -48,17 +49,20 @@ export function saveSnapshot(data: SectorRotationResult): void {
 
   const date = new Date(data.calculatedAt).toISOString().slice(0, 10); // "YYYY-MM-DD"
 
+  const toSnapshot = (s: { sector: string; compositeScore: number; acceleration: number; quadrant: RRGQuadrant; mansfieldRS: number; breadthPct: number | null; trend: "UP" | "DOWN" | "FLAT" }): SectorSnapshot => ({
+    sector: s.sector,
+    compositeScore: s.compositeScore,
+    acceleration: s.acceleration,
+    quadrant: s.quadrant,
+    mansfieldRS: s.mansfieldRS,
+    breadthPct: s.breadthPct,
+    trend: s.trend,
+  });
+
   const snapshot: DailySnapshot = {
     date,
-    sectors: data.sectors.map((s) => ({
-      sector: s.sector,
-      compositeScore: s.compositeScore,
-      acceleration: s.acceleration,
-      quadrant: s.quadrant,
-      mansfieldRS: s.mansfieldRS,
-      breadthPct: s.breadthPct,
-      trend: s.trend,
-    })),
+    sectors: data.sectors.map(toSnapshot),
+    leadershipBaskets: data.leadershipBasketScores?.map(toSnapshot),
     rotationSummary: data.rotationSummary,
     dispersionIndex: data.dispersionIndex,
   };

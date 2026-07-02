@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
       ...result.sectors,
       ...(result.subSectorScores ?? []),
       ...(result.crossAssetScores ?? []),
+      ...(result.leadershipBasketScores ?? []),
     ];
     const snapshots: SectorSnapshotRecord[] = allScores.map((s) => ({
       snapshot_date: today,

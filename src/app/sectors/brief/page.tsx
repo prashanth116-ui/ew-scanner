@@ -18,7 +18,8 @@ import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 import type { FuturesSnapshot, InternalsSnapshot, ChecklistItem, TradingBias } from "@/lib/premarket/types";
 import { computeBiasScore } from "@/lib/premarket/scoring";
 import { loadHistory } from "@/lib/sector-rotation/history";
-import { SUB_SECTOR_PARENT, subSectorDivergenceTooltip } from "@/lib/sector-rotation/sub-sector-constants";
+import { SUB_SECTOR_PARENT, subSectorDivergenceTooltip, computeSubSectorDivergences } from "@/lib/sector-rotation/sub-sector-constants";
+import type { SubSectorDivergence } from "@/lib/sector-rotation/sub-sector-constants";
 import {
   computeMarketPosture,
   computeSectorTiers,
@@ -146,6 +147,12 @@ export default function DailyBriefPage() {
       data.crossAssetScores ?? [],
       data.sectors,
     );
+  }, [data]);
+
+  // Sub-sector divergences
+  const subSectorDivergences = useMemo(() => {
+    if (!data?.subSectorScores?.length || !data.sectors.length) return [];
+    return computeSubSectorDivergences(data.subSectorScores, data.sectors);
   }, [data]);
 
   // Persist today's posture (side effect)
@@ -366,6 +373,44 @@ export default function DailyBriefPage() {
             <TierTable label="Actionable" sectors={tiers.actionable} labelColor="text-green-400" subSectorScores={data?.subSectorScores ?? []} />
             <TierTable label="Watch" sectors={tiers.watch} labelColor="text-amber-400" subSectorScores={data?.subSectorScores ?? []} />
             <TierTable label="Avoid" sectors={tiers.avoid} labelColor="text-red-400" subSectorScores={data?.subSectorScores ?? []} />
+          </div>
+        </CollapsiblePanel>
+      )}
+
+      {/* 4.5 Sub-Sector Divergences */}
+      {subSectorDivergences.filter((d) => d.signal !== "aligned").length > 0 && (
+        <CollapsiblePanel
+          id="divergences"
+          title="Sub-Sector Divergences"
+          collapsed={collapsed.has("divergences")}
+          onToggle={toggle}
+          badge={
+            <span className="rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 text-[10px] text-cyan-400">
+              {subSectorDivergences.filter((d) => d.signal !== "aligned").length} active
+            </span>
+          }
+        >
+          <p className="text-[10px] text-[#555] mb-3">Sub-sectors diverging from parent GICS sectors — early rotation signals.</p>
+          <div className="space-y-2">
+            {subSectorDivergences.filter((d) => d.signal !== "aligned").map((d) => (
+              <div key={d.subEtf} className={`rounded-lg border p-3 ${d.signal === "leading" ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-white">{d.subEtf}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${quadrantColor(d.subQuadrant)}`}>{d.subQuadrant}</span>
+                    <span className="text-[#555]">{"\u2192"}</span>
+                    <span className="text-xs text-[#888]">{d.parentEtf}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${quadrantColor(d.parentQuadrant)}`}>{d.parentQuadrant}</span>
+                  </div>
+                  <span className={`text-xs font-mono ${d.scoreDelta > 0 ? "text-green-400" : "text-red-400"}`}>
+                    {d.scoreDelta > 0 ? "+" : ""}{d.scoreDelta}
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] text-[#888]">
+                  {d.subName} {d.signal === "leading" ? "leading" : "lagging"} {d.parentName} — {d.context}
+                </p>
+              </div>
+            ))}
           </div>
         </CollapsiblePanel>
       )}

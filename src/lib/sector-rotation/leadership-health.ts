@@ -1,6 +1,7 @@
 /** Leadership Health Score — measures market leadership breadth and risk appetite. */
 
 import type { SectorRotationScore, RRGQuadrant } from "./types";
+import { LEADERSHIP } from "./config";
 
 export interface LeadershipHealth {
   score: number;           // 0-100
@@ -93,16 +94,16 @@ export function computeLeadershipHealth(
 
   // Label
   let label: string;
-  if (score >= 80) label = "Broad & Healthy";
-  else if (score >= 65) label = "Healthy";
-  else if (score >= 50) label = "Narrowing";
-  else if (score >= 35) label = "Narrow";
+  if (score >= LEADERSHIP.BROAD_HEALTHY) label = "Broad & Healthy";
+  else if (score >= LEADERSHIP.HEALTHY) label = "Healthy";
+  else if (score >= LEADERSHIP.NARROWING) label = "Narrowing";
+  else if (score >= LEADERSHIP.NARROW) label = "Narrow";
   else label = "Deteriorating";
 
   // Key derivations
-  const broadening = !!(iwm && mags && iwm.acceleration > 0 && iwm.compositeScore > mags.compositeScore - 20);
+  const broadening = !!(iwm && mags && iwm.acceleration > 0 && iwm.compositeScore > mags.compositeScore - LEADERSHIP.BROADENING_GAP);
   const specRiskOn = !!(arkk && isStrong(arkk.quadrant));
-  const megaCapDominant = !!(mags && iwm && mags.compositeScore - iwm.compositeScore > 25);
+  const megaCapDominant = !!(mags && iwm && mags.compositeScore - iwm.compositeScore > LEADERSHIP.MEGA_CAP_SPREAD);
 
   // Build summary
   let summary: string;

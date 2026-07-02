@@ -83,11 +83,20 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     const dxyTrend: "rising" | "falling" | "flat" =
       dxy - dxy20dAgo > 1 ? "rising" : dxy - dxy20dAgo < -1 ? "falling" : "flat";
 
-    // Classify regime
+    // Adaptive VIX thresholds: use 25th/75th percentile of 3-month range
+    // Falls back to static thresholds (18/25) when data is insufficient
+    const sortedVix = [...vixCloses].sort((a, b) => a - b);
+    const vixP25 = sortedVix[Math.floor(sortedVix.length * 0.25)] ?? 18;
+    const vixP75 = sortedVix[Math.floor(sortedVix.length * 0.75)] ?? 25;
+    // Clamp adaptive thresholds to sensible bounds (12-22 for low, 20-35 for high)
+    const vixLow = Math.max(12, Math.min(22, vixP25));
+    const vixHigh = Math.max(20, Math.min(35, vixP75));
+
+    // Classify regime using adaptive thresholds
     let regime: MacroRegime;
-    if (vix < 18 && vixSlope !== "rising") {
+    if (vix < vixLow && vixSlope !== "rising") {
       regime = "RISK_ON";
-    } else if (vix > 25 || vixSlope === "rising") {
+    } else if (vix > vixHigh || vixSlope === "rising") {
       regime = "RISK_OFF";
     } else if (dxyTrend === "rising" && yield10y > 4.5) {
       regime = "INFLATIONARY";
@@ -97,8 +106,9 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
 
     // Base confidence from VIX/yield/DXY clarity
     let regimeConfidence = 50;
-    if (regime === "RISK_ON" && vix < 14) regimeConfidence += 15;
-    else if (regime === "RISK_OFF" && vix > 30) regimeConfidence += 15;
+    // Extreme VIX: well below 25th pctile or well above 75th pctile
+    if (regime === "RISK_ON" && vix < vixLow * 0.8) regimeConfidence += 15;
+    else if (regime === "RISK_OFF" && vix > vixHigh * 1.2) regimeConfidence += 15;
     else if (regime === "INFLATIONARY" && yield10y > 5) regimeConfidence += 10;
     if (vixSlope === "rising" && regime === "RISK_OFF") regimeConfidence += 10;
     if (vixSlope === "falling" && regime === "RISK_ON") regimeConfidence += 10;
@@ -155,7 +165,8 @@ async function fetchSymbolData(
 }
 
 /**
- * Enhance regime confidence using cross-asset ETF trends (GLD, TLT).
+ * Enhance regime confidence and potentially upgrade classification
+ * using cross-asset ETF trends (GLD, TLT).
  * Call after main calculation when cross-asset ROC data is available.
  */
 export function enhanceRegimeWithCrossAsset(
@@ -163,10 +174,16 @@ export function enhanceRegimeWithCrossAsset(
   crossAssetROC: { gld?: number; tlt?: number }
 ): MacroRegimeData {
   let bonus = 0;
-  const gldRising = (crossAssetROC.gld ?? 0) > 2;
-  const gldFalling = (crossAssetROC.gld ?? 0) < -2;
-  const tltRising = (crossAssetROC.tlt ?? 0) > 2;
-  const tltFalling = (crossAssetROC.tlt ?? 0) < -2;
+  let updatedRegime = regime.regime;
+
+  const gldAccel = crossAssetROC.gld ?? 0;
+  const tltAccel = crossAssetROC.tlt ?? 0;
+  const gldRising = gldAccel > 2;
+  const gldFalling = gldAccel < -2;
+  const tltRising = tltAccel > 2;
+  const tltFalling = tltAccel < -2;
+  const gldStrongRising = gldAccel > 5;
+  const tltStrongRising = tltAccel > 5;
 
   switch (regime.regime) {
     case "RISK_OFF":
@@ -175,14 +192,35 @@ export function enhanceRegimeWithCrossAsset(
       break;
     case "RISK_ON":
       if (gldFalling && tltFalling) bonus += 10;
+      // Strong safe-haven inflows contradict RISK_ON — downgrade to MIXED
+      if (gldStrongRising && tltStrongRising) {
+        updatedRegime = "MIXED";
+        bonus = -10;
+      }
       break;
     case "INFLATIONARY":
       if (gldRising && tltFalling) bonus += 10;
       break;
+    case "MIXED":
+      // Strong safe-haven inflows in MIXED → upgrade to RISK_OFF
+      if (gldStrongRising && tltStrongRising) {
+        updatedRegime = "RISK_OFF";
+        bonus += 10;
+      }
+      // Both safe havens falling in MIXED → upgrade to RISK_ON
+      if (gldFalling && tltFalling && gldAccel < -3 && tltAccel < -3) {
+        updatedRegime = "RISK_ON";
+        bonus += 5;
+      }
+      break;
   }
+
+  const sectorMap = updatedRegime !== regime.regime ? REGIME_SECTOR_MAP[updatedRegime] : null;
 
   return {
     ...regime,
-    regimeConfidence: Math.min(100, regime.regimeConfidence + bonus),
+    regime: updatedRegime,
+    regimeConfidence: Math.min(100, Math.max(0, regime.regimeConfidence + bonus)),
+    ...(sectorMap ? { favoredSectors: sectorMap.favored, avoidSectors: sectorMap.avoid } : {}),
   };
 }

@@ -6,7 +6,7 @@ import { CopyButton } from "@/components/copy-button";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import Link from "next/link";
 import { ScannerCTA } from "@/components/scanner-cta";
-import { getEquitySectors, getSubSectors, getCrossAssetETFs } from "@/data/sector-universe";
+import { getEquitySectors, getSubSectors, getCrossAssetETFs, getLeadershipBaskets } from "@/data/sector-universe";
 import {
   useCollapsedPanels,
   CollapsiblePanel,
@@ -36,9 +36,9 @@ import {
   computeRiskFlags,
 } from "@/lib/sector-rotation/brief";
 
-const DEFAULT_COLLAPSED = ["regime", "rotation-status", "leadership-baskets", "sub-sectors", "cross-asset", "correlation", "cross-pairs", "sector-comparison"];
+const DEFAULT_COLLAPSED = ["regime", "rotation-status", "sub-sectors", "cross-asset", "correlation", "cross-pairs", "sector-comparison"];
 
-const ETF_COUNT = getEquitySectors().length + getSubSectors().length + getCrossAssetETFs().length;
+const ETF_COUNT = getEquitySectors().length + getSubSectors().length + getCrossAssetETFs().length + getLeadershipBaskets().length;
 
 export default function SectorRotationPage() {
   const {
@@ -320,7 +320,7 @@ export default function SectorRotationPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <h3 className="mb-3 text-sm font-semibold text-[#888]">Relative Rotation Graph</h3>
-            <RRGChart sectors={data.sectors} subSectorScores={subSectorScores} crossAssetScores={crossAssetScores} />
+            <RRGChart sectors={data.sectors} subSectorScores={subSectorScores} crossAssetScores={crossAssetScores} leadershipBasketScores={leadershipBasketScores} />
           </div>
           <div className="space-y-4 rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
             <h3 className="mb-2 text-sm font-semibold text-[#888]">Leading Indicators</h3>

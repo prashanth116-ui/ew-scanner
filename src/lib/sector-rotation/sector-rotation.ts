@@ -679,10 +679,10 @@ export async function calculateSectorRotation(
     etfReturns20d[group.etf] = returns;
   }
 
-  // Compute 20d return correlation matrix between GICS sector ETFs only
+  // Compute 20d return correlation matrix between GICS sector + leadership basket ETFs
   const correlationMatrix: Record<string, number> = {};
-  const gicsGroups = sectorGroups.filter((g) => g.category === "gics_sector");
-  const etfReturnArrays = gicsGroups
+  const correlationGroups = sectorGroups.filter((g) => g.category === "gics_sector" || g.category === "leadership_basket");
+  const etfReturnArrays = correlationGroups
     .map((g) => ({ etf: g.etf, returns: etfReturns20d[g.etf] }))
     .filter((e) => e.returns && e.returns.length >= 10);
 

@@ -12,6 +12,9 @@ import type { RotationTrackerResult } from "./rotation-types";
 import { computeConviction } from "./rotation-helpers";
 import { getTradingAction } from "@/app/sectors/_components";
 import type { DailySnapshot, SectorSnapshot } from "./history";
+import { computeLeadershipHealth } from "./leadership-health";
+import type { LeadershipHealth } from "./leadership-health";
+import { COMPOSITE, POSTURE, RISK_FLAGS, ROTATION } from "./config";
 
 // ── Types ──
 
@@ -123,12 +126,29 @@ export function computeMarketPosture(
     };
   }
 
-  // AGGRESSIVE: RISK_ON + ≥2 active rotations with HIGH/MODERATE + dispersion > 5
+  // Compute leadership health for posture modulation
+  const leadershipHealth = data.leadershipBasketScores?.length
+    ? computeLeadershipHealth(
+        data.leadershipBasketScores,
+        data.crossAssetScores ?? [],
+        data.sectors,
+      )
+    : null;
+  const narrowLeadership = leadershipHealth && (leadershipHealth.score < 50 || leadershipHealth.megaCapDominant);
+
+  // AGGRESSIVE: RISK_ON + sufficient rotations + dispersion
+  // Capped at SELECTIVE if leadership is narrow (mega-cap dominated or score < 50)
   if (
     isRiskOn &&
-    highModerate.length >= 2 &&
-    data.dispersionIndex > 5
+    highModerate.length >= POSTURE.AGGRESSIVE_MIN_ROTATIONS &&
+    data.dispersionIndex > POSTURE.AGGRESSIVE_MIN_DISPERSION
   ) {
+    if (narrowLeadership) {
+      return {
+        posture: "SELECTIVE",
+        reasoning: `Risk-on regime with ${highModerate.length} high-conviction rotations, but leadership is ${leadershipHealth!.label.toLowerCase()} (score ${leadershipHealth!.score}). Rally breadth too narrow for full aggression.`,
+      };
+    }
     return {
       posture: "AGGRESSIVE",
       reasoning: `Risk-on regime with ${highModerate.length} high-conviction rotations and elevated sector dispersion (${data.dispersionIndex.toFixed(1)}). Lean into strongest sectors.`,
@@ -138,7 +158,7 @@ export function computeMarketPosture(
   // SELECTIVE: RISK_ON/MIXED + ≥1 active rotation with MODERATE+ OR ≥3 sectors LEADING/IMPROVING
   if (
     (isRiskOn || regime?.regime === "MIXED") &&
-    (highModerate.length >= 1 || leadingImproving.length >= 3)
+    (highModerate.length >= POSTURE.SELECTIVE_MIN_ROTATIONS || leadingImproving.length >= POSTURE.SELECTIVE_MIN_SECTORS)
   ) {
     return {
       posture: "SELECTIVE",
@@ -188,7 +208,7 @@ export function computeSectorTiers(
       // Path 2: Active rotation with HIGH/MODERATE conviction + favorable quadrant (composite waived)
       if (
         inFavorableQuadrant &&
-        (s.compositeScore >= 60 || highConvictionETFs.has(s.etf))
+        (s.compositeScore >= COMPOSITE.ACTIONABLE_THRESHOLD || highConvictionETFs.has(s.etf))
       ) {
         actionable.push(s);
       } else {
@@ -259,9 +279,9 @@ export function computeRiskFlags(
     });
   }
 
-  // 4. Sector data quality < 50%
+  // 4. Sector data quality below threshold
   for (const s of data.sectors) {
-    if (s.dataQuality < 50) {
+    if (s.dataQuality < RISK_FLAGS.LOW_DATA_QUALITY) {
       flags.push({
         severity: "medium",
         message: `${s.sector} low data quality`,
@@ -273,7 +293,7 @@ export function computeRiskFlags(
   // 5. Recently ended rotation lasting < 5 days (false start)
   if (rotationData) {
     for (const ended of rotationData.recentlyEndedRotations) {
-      if (ended.daysActive < 5) {
+      if (ended.daysActive < ROTATION.MIN_ROTATION_DAYS) {
         flags.push({
           severity: "medium",
           message: `${ended.sectorName} false start`,
@@ -294,7 +314,7 @@ export function computeRiskFlags(
   }
 
   // 7. High dispersion + regime RISK_OFF (panic rotation)
-  if (data.dispersionIndex > 10 && data.regime?.regime === "RISK_OFF") {
+  if (data.dispersionIndex > RISK_FLAGS.PANIC_DISPERSION && data.regime?.regime === "RISK_OFF") {
     flags.push({
       severity: "high",
       message: "Panic rotation detected",
@@ -302,12 +322,47 @@ export function computeRiskFlags(
     });
   }
 
-  // 8. Cross-asset risk-off signals (GLD/TLT rising = money leaving equities)
+  // 8. Narrow leadership — concentration risk
+  if (data.leadershipBasketScores?.length) {
+    const lh = computeLeadershipHealth(
+      data.leadershipBasketScores,
+      data.crossAssetScores ?? [],
+      data.sectors,
+    );
+    if (lh) {
+      if (lh.score < RISK_FLAGS.DETERIORATING_LEADERSHIP) {
+        flags.push({
+          severity: "high",
+          message: "Leadership deteriorating",
+          detail: `Leadership health score ${lh.score} (${lh.label}). ${lh.summary}`,
+        });
+      } else if (lh.score < RISK_FLAGS.NARROW_LEADERSHIP || (lh.megaCapDominant && !lh.broadening)) {
+        flags.push({
+          severity: "medium",
+          message: "Narrow leadership",
+          detail: `Leadership health score ${lh.score} (${lh.label}). ${lh.megaCapDominant ? "Mega-caps dominating — breadth risk." : lh.summary}`,
+        });
+      }
+    }
+  }
+
+  // 9. High rotation velocity + negative acceleration (momentum rollover risk)
+  for (const s of data.sectors) {
+    if (s.rotationVelocity > RISK_FLAGS.HIGH_ROTATION_VELOCITY && s.acceleration < RISK_FLAGS.ROLLOVER_ACCEL && s.quadrant === "LEADING") {
+      flags.push({
+        severity: "medium",
+        message: `${s.sector} momentum rollover risk`,
+        detail: `High rotation velocity (${s.rotationVelocity.toFixed(2)}) with negative acceleration (${s.acceleration.toFixed(2)}). May be rapidly transitioning out of LEADING.`,
+      });
+    }
+  }
+
+  // 10. Cross-asset risk-off signals (GLD/TLT rising = money leaving equities)
   if (data.crossAssetScores) {
     const gld = data.crossAssetScores.find((s) => s.etf === "GLD");
     const tlt = data.crossAssetScores.find((s) => s.etf === "TLT");
-    const gldRising = gld && gld.acceleration > 2;
-    const tltRising = tlt && tlt.acceleration > 2;
+    const gldRising = gld && gld.acceleration > RISK_FLAGS.CROSS_ASSET_RISK_OFF_ACCEL;
+    const tltRising = tlt && tlt.acceleration > RISK_FLAGS.CROSS_ASSET_RISK_OFF_ACCEL;
     if (gldRising && tltRising) {
       flags.push({
         severity: "high",
@@ -377,7 +432,7 @@ function snapshotTier(s: SectorSnapshot): "actionable" | "watch" | "avoid" {
     s.quadrant === "LEADING" || (s.quadrant === "IMPROVING" && s.acceleration > 0);
 
   if (action === "TRADE" || action === "BUILD") {
-    return inFavorableQuadrant && s.compositeScore >= 60 ? "actionable" : "watch";
+    return inFavorableQuadrant && s.compositeScore >= COMPOSITE.ACTIONABLE_THRESHOLD ? "actionable" : "watch";
   }
   if (action === "WATCH") return "watch";
   return "avoid";
@@ -439,7 +494,7 @@ export function computeWhatChanged(
       curr.quadrant === "LEADING" || (curr.quadrant === "IMPROVING" && curr.acceleration > 0);
     let currTier: "actionable" | "watch" | "avoid";
     if (currAction === "TRADE" || currAction === "BUILD") {
-      currTier = currFavorable && curr.compositeScore >= 60 ? "actionable" : "watch";
+      currTier = currFavorable && curr.compositeScore >= COMPOSITE.ACTIONABLE_THRESHOLD ? "actionable" : "watch";
     } else if (currAction === "WATCH") {
       currTier = "watch";
     } else {

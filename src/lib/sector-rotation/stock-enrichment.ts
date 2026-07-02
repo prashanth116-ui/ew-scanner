@@ -13,6 +13,7 @@ import type {
   StockPhase,
   ConvictionLevel,
 } from "./types";
+import { CONVICTION } from "./config";
 
 /** Raw input for a stock before enrichment. */
 export interface StockInput {
@@ -266,18 +267,21 @@ export function scoreConviction(
   sectorComposite: number,
   sectorStealth: boolean
 ): { conviction: ConvictionLevel; convictionSignals: number } {
+  // Weighted conviction: structural signals (sector-level) worth more than tactical (stock-level)
+  const W = CONVICTION.SIGNAL_WEIGHTS;
+  let weightedScore = 0;
   let signals = 0;
 
-  if (sectorQuadrant === "IMPROVING" || sectorQuadrant === "LEADING") signals++;
-  if (sectorComposite >= 70) signals++;
-  if (category === "TURNAROUND" || category === "LEADER") signals++;
-  if (rsAccel != null && rsAccel >= 3.0) signals++;
-  if (sectorStealth) signals++;
-  if (volRatio >= 1.2) signals++;
+  if (sectorQuadrant === "IMPROVING" || sectorQuadrant === "LEADING") { weightedScore += W.sectorQuadrant; signals++; }
+  if (sectorComposite >= CONVICTION.HIGH_COMPOSITE) { weightedScore += W.sectorComposite; signals++; }
+  if (category === "TURNAROUND" || category === "LEADER") { weightedScore += W.stockCategory; signals++; }
+  if (rsAccel != null && rsAccel >= CONVICTION.STRONG_RS_ACCEL) { weightedScore += W.rsAccel; signals++; }
+  if (sectorStealth) { weightedScore += W.sectorStealth; signals++; }
+  if (volRatio >= CONVICTION.HIGH_VOL_RATIO) { weightedScore += W.volumeRatio; signals++; }
 
   let conviction: ConvictionLevel;
-  if (signals >= 3) conviction = "HIGH";
-  else if (signals >= 2) conviction = "MEDIUM";
+  if (weightedScore >= CONVICTION.WEIGHTED_HIGH) conviction = "HIGH";
+  else if (weightedScore >= CONVICTION.WEIGHTED_MEDIUM) conviction = "MEDIUM";
   else conviction = "WATCH";
 
   return { conviction, convictionSignals: signals };
