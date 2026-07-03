@@ -12,7 +12,7 @@ import { analyzeVolume } from "../src/lib/ew-volume";
 import { analyzeMomentum } from "../src/lib/ew-momentum";
 import type { EnhancedScoredCandidate, PriceSeries } from "../src/lib/ew-types";
 
-const BASE_URL = "https://ew-scanner.vercel.app";
+const BASE_URL = "https://quantradar.com";
 
 // Structural override stocks identified in the audit
 const STRUCTURAL_TICKERS = [

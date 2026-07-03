@@ -5,7 +5,7 @@
 
 import type { SavedStratScan, StratFilters, StratResult } from "./types";
 
-const SCANS_KEY = "ew-scanner-strat-scans";
+const SCANS_KEY = "quantradar-strat-scans";
 const MAX_SCANS = 30;
 
 function isClient(): boolean {

@@ -703,7 +703,7 @@ export default function SqueezeGuidePage() {
             </ul>
             <p className="mt-2 text-[#a0a0a0]">
               Click &ldquo;Enrich Top 20 with EW Wave Position&rdquo; after scanning to add wave labels. This uses
-              the same AI analysis as the main EW Scanner.
+              the same AI analysis as the main QuantRadar wave scanner.
             </p>
           </SubSection>
 

@@ -19,14 +19,14 @@ import type {
   InflectionResult,
 } from "./types";
 
-const WATCHLIST_KEY = "ew-scanner-prerun-watchlist";
-const ALERTS_KEY = "ew-scanner-prerun-alerts";
-const HISTORY_KEY = "ew-scanner-prerun-history";
-const SCANS_KEY = "ew-scanner-prerun-scans";
-const SCAN_RESULTS_KEY = "ew-scanner-prerun-scan-results";
-const VCP_RESULTS_KEY = "ew-scanner-prerun-vcp-results";
-const INST_RESULTS_KEY = "ew-scanner-prerun-inst-results";
-const INFLECTION_RESULTS_KEY = "ew-scanner-prerun-inflection-results";
+const WATCHLIST_KEY = "quantradar-prerun-watchlist";
+const ALERTS_KEY = "quantradar-prerun-alerts";
+const HISTORY_KEY = "quantradar-prerun-history";
+const SCANS_KEY = "quantradar-prerun-scans";
+const SCAN_RESULTS_KEY = "quantradar-prerun-scan-results";
+const VCP_RESULTS_KEY = "quantradar-prerun-vcp-results";
+const INST_RESULTS_KEY = "quantradar-prerun-inst-results";
+const INFLECTION_RESULTS_KEY = "quantradar-prerun-inflection-results";
 const MAX_ALERTS = 200;
 const MAX_HISTORY = 500;
 const MAX_SCANS = 30;

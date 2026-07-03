@@ -13,7 +13,7 @@ export default function TermsPage() {
           1. Acceptance of Terms
         </h2>
         <p>
-          By accessing or using EW Scanner (&quot;the Service&quot;), you agree
+          By accessing or using QuantRadar (&quot;the Service&quot;), you agree
           to be bound by these Terms of Service. If you do not agree, do not use
           the Service.
         </p>
@@ -24,7 +24,7 @@ export default function TermsPage() {
           2. Description of Service
         </h2>
         <p>
-          EW Scanner provides algorithmic Elliott Wave analysis, squeeze
+          QuantRadar provides algorithmic Elliott Wave analysis, squeeze
           detection, and pre-run scanning tools for educational and
           informational purposes. The Service includes free and paid tiers with
           AI-powered analysis features.
@@ -109,7 +109,7 @@ export default function TermsPage() {
           8. Intellectual Property
         </h2>
         <p>
-          All content, algorithms, and branding are owned by EW Scanner. You
+          All content, algorithms, and branding are owned by QuantRadar. You
           retain ownership of your data (watchlists, saved scans, preferences).
         </p>
       </section>
@@ -137,8 +137,8 @@ export default function TermsPage() {
         <h2 className="text-base font-semibold text-white">11. Contact</h2>
         <p>
           For questions about these Terms, contact us at{" "}
-          <a href="mailto:support@ewscanner.com" className="text-[#5ba3e6] hover:underline">
-            support@ewscanner.com
+          <a href="mailto:support@quantradar.com" className="text-[#5ba3e6] hover:underline">
+            support@quantradar.com
           </a>
           .
         </p>

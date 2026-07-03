@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const BASE = "https://ew-scanner.vercel.app";
+const BASE = "https://quantradar.com";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [

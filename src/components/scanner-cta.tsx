@@ -8,7 +8,7 @@ const scanners = [
   {
     id: "ew",
     href: "/",
-    title: "EW Scanner",
+    title: "QuantRadar",
     description:
       "Algorithmic Elliott Wave counting with Fibonacci analysis and AI-powered deep analysis across 130+ curated stocks.",
     icon: Activity,

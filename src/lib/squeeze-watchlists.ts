@@ -1,7 +1,7 @@
 import type { SqueezeWatchlist, SqueezeWatchlistItem, ScoredSqueezeCandidate } from "./ew-types";
 import { normalizeSiPercent } from "./squeeze-scoring";
 
-const STORAGE_KEY = "ew-scanner-squeeze-watchlists";
+const STORAGE_KEY = "quantradar-squeeze-watchlists";
 const MAX_WATCHLISTS = 20;
 const MAX_ITEMS_PER_LIST = 100;
 

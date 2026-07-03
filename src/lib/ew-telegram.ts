@@ -32,7 +32,7 @@ export function formatAlertMessage(
   });
 
   const lines: string[] = [];
-  lines.push(`<b>EW Scanner Alert</b>`);
+  lines.push(`<b>QuantRadar Alert</b>`);
   lines.push(`${MODE_LABELS[mode]} | ${universe} | ${date}`);
   lines.push(`${candidates.length} candidate${candidates.length !== 1 ? "s" : ""}`);
   lines.push("");

@@ -66,7 +66,7 @@ export default function EWScannerGuidePage() {
                 Scanner Guide
               </h1>
               <p className="mt-1 text-[#a0a0a0]">
-                Best practices and real-world scenarios for the EW Scanner.
+                Best practices and real-world scenarios for QuantRadar.
               </p>
             </div>
           </div>

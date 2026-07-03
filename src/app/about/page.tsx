@@ -5,13 +5,13 @@ import { Activity, TrendingUp, Zap, BarChart3, Search, Shield, Clock, Database, 
 export const metadata: Metadata = {
   title: "About",
   description:
-    "EW Scanner — Free algorithmic Elliott Wave scanning, short squeeze screening, and multi-bagger stock detection with AI-powered analysis.",
+    "QuantRadar — Free algorithmic Elliott Wave scanning, short squeeze screening, and multi-bagger stock detection with AI-powered analysis.",
 };
 
 const scanners = [
   {
     href: "/",
-    title: "EW Scanner",
+    title: "QuantRadar",
     description:
       "Algorithmic Elliott Wave counting across curated stock universes (S&P 500, Nasdaq, Biotech, Energy, and more). Fibonacci analysis, multi-timeframe confirmation, and AI-powered deep analysis.",
     icon: Activity,
@@ -149,7 +149,7 @@ export default function AboutPage() {
         <div className="mx-auto flex items-center justify-center gap-3 mb-6">
           <Activity className="h-10 w-10 text-[#5ba3e6]" />
           <h1 className="text-4xl font-bold text-white sm:text-5xl">
-            EW Scanner
+            QuantRadar
           </h1>
         </div>
         <p className="mx-auto max-w-2xl text-lg text-[#a0a0a0]">
@@ -252,7 +252,7 @@ export default function AboutPage() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Activity className="h-4 w-4 text-[#5ba3e6]" />
-                    <span className="font-medium text-white">EW Scanner</span>
+                    <span className="font-medium text-white">QuantRadar</span>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-[#a0a0a0]">Yahoo Finance weekly bars</td>
@@ -311,7 +311,7 @@ export default function AboutPage() {
           <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-4">
             <div className="flex items-center gap-2 mb-2">
               <Clock className="h-4 w-4 text-[#5ba3e6]" />
-              <span className="text-xs font-semibold text-white">EW Scanner</span>
+              <span className="text-xs font-semibold text-white">QuantRadar</span>
             </div>
             <p className="text-xs text-[#777]">Uses weekly bars for swing/position timeframes. Data updates each Friday close. Best for multi-week setups, not intraday.</p>
           </div>
@@ -347,8 +347,8 @@ export default function AboutPage() {
         </div>
         <p className="text-sm text-[#a0a0a0]">
           Questions, feedback, or bug reports? Reach us at{" "}
-          <a href="mailto:support@ewscanner.com" className="text-[#5ba3e6] hover:underline">
-            support@ewscanner.com
+          <a href="mailto:support@quantradar.com" className="text-[#5ba3e6] hover:underline">
+            support@quantradar.com
           </a>
         </p>
       </section>
@@ -356,7 +356,7 @@ export default function AboutPage() {
       {/* Disclaimer */}
       <section className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-6 text-center text-xs text-[#555]">
         <p>
-          <strong className="text-[#777]">Disclaimer:</strong> EW Scanner is an
+          <strong className="text-[#777]">Disclaimer:</strong> QuantRadar is an
           educational and analytical tool. It does not constitute financial
           advice. All trading involves risk. Past performance does not guarantee
           future results. Always do your own research before making investment

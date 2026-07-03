@@ -1,7 +1,7 @@
 import type { SavedScan, EnhancedScoredCandidate, ScannerMode } from "./ew-types";
 
-const STORAGE_KEY = "ew-scanner-saved-scans";
-const CUSTOM_UNIVERSE_KEY = "ew-scanner-custom-universes";
+const STORAGE_KEY = "quantradar-saved-scans";
+const CUSTOM_UNIVERSE_KEY = "quantradar-custom-universes";
 
 function isClient(): boolean {
   return typeof window !== "undefined";

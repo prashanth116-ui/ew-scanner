@@ -5,7 +5,7 @@
 
 import type { CryptoRotationResult } from "./types";
 
-const STORAGE_KEY = "ew-scanner-crypto-rotation";
+const STORAGE_KEY = "quantradar-crypto-rotation";
 const TTL = 4 * 60 * 60 * 1000; // 4 hours
 const SCHEMA_VERSION = 1;
 

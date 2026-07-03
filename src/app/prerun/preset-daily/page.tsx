@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { fmtNum } from "@/lib/daily-format";
+import { formatDatePill, streakColor, scoreBarColor, formatMktCap } from "@/lib/daily-page-utils";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
 
 // ── Types ──
@@ -111,32 +112,7 @@ function scoreColor(score: number): string {
   return "text-red-400";
 }
 
-function scoreBarColor(score: number, max: number): string {
-  const pct = score / max;
-  if (pct >= 0.6) return "bg-emerald-500";
-  if (pct >= 0.45) return "bg-cyan-500";
-  if (pct >= 0.3) return "bg-amber-500";
-  return "bg-red-500";
-}
-
-function formatDatePill(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00Z");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function streakColor(streak: number): string {
-  if (streak >= 5) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
-  if (streak >= 3) return "text-cyan-400 bg-cyan-500/10 border-cyan-500/30";
-  return "text-[#666] bg-[#1a1a1a] border-[#2a2a2a]";
-}
-
-function formatMktCap(v: number | null | undefined): string {
-  if (v == null) return "-";
-  if (v >= 1e12) return `$${fmtNum(v / 1e12, 1)}T`;
-  if (v >= 1e9) return `$${fmtNum(v / 1e9, 1)}B`;
-  if (v >= 1e6) return `$${fmtNum(v / 1e6, 0)}M`;
-  return `$${v}`;
-}
+// scoreBarColor, formatDatePill, streakColor, formatMktCap imported from daily-page-utils
 
 // ── CSV Export ──
 

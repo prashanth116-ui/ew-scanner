@@ -195,7 +195,7 @@ export default function ConfluenceGuidePage() {
                 </thead>
                 <tbody className="text-[#c0c0c0]">
                   <tr className="border-b border-[#222]">
-                    <td className="px-3 py-1.5 text-white">EW Scanner</td>
+                    <td className="px-3 py-1.5 text-white">QuantRadar</td>
                     <td className="px-3 py-1.5">0&ndash;25</td>
                     <td className="px-3 py-1.5 font-mono text-[11px]">enhancedNormalized (pre-computed)</td>
                     <td className="px-3 py-1.5">18/25 &rarr; 0.72</td>

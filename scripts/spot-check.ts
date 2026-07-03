@@ -9,7 +9,7 @@
 import { countWaves, countWavesMultiCycle, getWaveStatusInfo } from "../src/lib/ew-wave-counter";
 import { findRecentCyclePivot } from "../src/lib/ew-structural";
 
-const BASE_URL = "https://ew-scanner.vercel.app";
+const BASE_URL = "https://quantradar.com";
 
 const TICKERS = [
   // SP500 mix

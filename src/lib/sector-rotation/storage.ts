@@ -5,7 +5,7 @@
 
 import type { SectorRotationResult } from "./types";
 
-const STORAGE_KEY = "ew-scanner-sector-rotation";
+const STORAGE_KEY = "quantradar-sector-rotation";
 const TTL = 4 * 60 * 60 * 1000; // 4 hours
 const SCHEMA_VERSION = 9; // Bump when SectorRotationResult shape changes (9 = leadershipBasketScores)
 

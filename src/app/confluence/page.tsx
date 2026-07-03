@@ -159,7 +159,7 @@ function generateWhyThisStock(r: ConfluenceResult): string {
 
 // Scanner link paths
 const SCANNER_LINKS: Record<string, { href: string; label: string }> = {
-  ew: { href: "/", label: "EW Scanner" },
+  ew: { href: "/", label: "QuantRadar" },
   squeeze: { href: "/squeeze", label: "Squeeze Scanner" },
   prerun: { href: "/pre-run", label: "Pre-Run Scanner" },
   sector: { href: "/sectors", label: "Sector Scanner" },
@@ -1544,7 +1544,7 @@ function ResultRow({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* EW Panel */}
             <DetailPanel
-              title="EW Scanner"
+              title="QuantRadar"
               color="#5ba3e6"
               available={!!result.ewResult}
               score={s.ewNormalized}

@@ -1,6 +1,6 @@
 /**
  * Sector rotation history — compact daily snapshots stored in localStorage.
- * Separate from the live 24h cache (ew-scanner-sector-rotation).
+ * Separate from the live 24h cache (quantradar-sector-rotation).
  * Max 60 days (~39KB). One snapshot per calendar date.
  */
 
@@ -33,7 +33,7 @@ interface HistoryStore {
 
 // ── Constants ──
 
-const STORAGE_KEY = "ew-scanner-sector-history";
+const STORAGE_KEY = "quantradar-sector-history";
 const MAX_DAYS = 60;
 const SCHEMA_VERSION = 2; // 2 = added leadershipBaskets
 

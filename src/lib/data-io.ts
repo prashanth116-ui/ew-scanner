@@ -32,7 +32,7 @@ export function uploadJson<T>(): Promise<T | null> {
   });
 }
 
-/** Export all EW Scanner data from localStorage. */
+/** Export all QuantRadar data from localStorage. */
 export function exportAllData(): Record<string, unknown> {
   const keys = [
     "ew-saved-scans",

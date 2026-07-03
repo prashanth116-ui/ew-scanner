@@ -1,4 +1,4 @@
-/** Central types for EW Scanner V3 */
+/** Central types for QuantRadar V3 */
 
 export interface PriceSeries {
   timestamps: number[];

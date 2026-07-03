@@ -7,7 +7,7 @@ import json
 import urllib.request
 import sys
 
-API_BASE = "https://ew-scanner.vercel.app"
+API_BASE = "https://quantradar.com"
 
 
 def fetch_stock(ticker: str) -> dict | None:

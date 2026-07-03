@@ -1,5 +1,5 @@
 /**
- * Market regime detection for EW Scanner.
+ * Market regime detection for QuantRadar.
  * Adjusts mode thresholds based on SPY vs 200d SMA.
  * SERVER-ONLY: Called from /api/quote during scan.
  */

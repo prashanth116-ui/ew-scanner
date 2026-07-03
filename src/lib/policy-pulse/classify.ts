@@ -1,9 +1,10 @@
 import type { RawArticle, ClassifiedResult, ThemeDefinition } from "./types";
+import { POLICY_PULSE } from "@/lib/sector-rotation/config";
 
-/** Source authority scores (out of 25). */
+/** Source authority scores — driven by centralized config. */
 const SOURCE_AUTHORITY: Record<string, number> = {
-  "whitehouse-rss": 25,
-  "fed-register": 23,
+  "whitehouse-rss": POLICY_PULSE.SOURCE_WHITEHOUSE_RSS,
+  "fed-register": POLICY_PULSE.SOURCE_FED_REGISTER,
 };
 
 /** Known high-authority Finnhub sub-sources. */
@@ -15,8 +16,8 @@ const HIGH_AUTHORITY_SOURCES = new Set([
 function getSourceAuthority(source: string, finnhubSource?: string): number {
   if (SOURCE_AUTHORITY[source]) return SOURCE_AUTHORITY[source];
   const sub = (finnhubSource ?? "").toLowerCase();
-  if (HIGH_AUTHORITY_SOURCES.has(sub)) return 20;
-  return 10;
+  if (HIGH_AUTHORITY_SOURCES.has(sub)) return POLICY_PULSE.SOURCE_HIGH_AUTHORITY;
+  return POLICY_PULSE.SOURCE_DEFAULT;
 }
 
 /** Count keyword matches in text, returning matched keywords. */

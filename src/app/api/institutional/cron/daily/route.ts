@@ -104,6 +104,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const startTime = Date.now();
+
     const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS])];
     const today = new Date().toISOString().slice(0, 10);
 
@@ -182,11 +184,13 @@ export async function GET(request: NextRequest) {
       // Non-critical
     }
 
-    // Send Telegram summary
+    // Send Telegram summary (with time guard to avoid Vercel timeout)
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
     let telegramSent = false;
-    if (botToken && chatId) {
+    const elapsedMs = Date.now() - startTime;
+    const timedOut = elapsedMs > 240_000;
+    if (botToken && chatId && !timedOut) {
       const message = formatTelegramSummary(universe.length, qualifying, newTickers);
       const tgResult = await sendTelegramMessage(botToken, chatId, message);
       telegramSent = tgResult.ok;
@@ -203,6 +207,8 @@ export async function GET(request: NextRequest) {
       purgedCount: purged,
       newTodayCount: newTickers.length,
       telegramSent,
+      timedOut,
+      elapsedMs: Date.now() - startTime,
       tierCounts: {
         shortlist: qualifying.filter((r) => r.tier === "SHORTLIST").length,
         watchlist: qualifying.filter((r) => r.tier === "WATCHLIST").length,

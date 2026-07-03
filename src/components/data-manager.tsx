@@ -11,7 +11,7 @@ export function DataManager() {
     try {
       const data = exportAllData();
       const dateStr = new Date().toISOString().slice(0, 10);
-      downloadJson(data, `ew-scanner-backup-${dateStr}.json`);
+      downloadJson(data, `quantradar-backup-${dateStr}.json`);
       setStatus("Exported successfully");
       setTimeout(() => setStatus(null), 3000);
     } catch {

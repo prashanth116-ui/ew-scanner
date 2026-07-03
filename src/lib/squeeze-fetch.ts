@@ -174,7 +174,7 @@ function extractZipText(buf: Buffer): string {
 export async function fetchBulkFTDMap(): Promise<Map<string, number>> {
   if (cachedFtdMap && Date.now() - ftdCacheTime < FTD_CACHE_TTL) return cachedFtdMap;
 
-  const SEC_UA = "EW-Scanner admin@ew-scanner.app";
+  const SEC_UA = "QuantRadar admin@quantradar.com";
   const now = new Date();
 
   const months = [
@@ -232,7 +232,7 @@ export async function fetchBulkFTDMap(): Promise<Map<string, number>> {
  * Returns total FTD shares across all settlement dates in the file, or null on failure.
  */
 export async function fetchSECFtdShares(ticker: string): Promise<number | null> {
-  const SEC_UA = "EW-Scanner admin@ew-scanner.app";
+  const SEC_UA = "QuantRadar admin@quantradar.com";
   const now = new Date();
 
   // Try current month first, then previous month (SEC files have ~2 week lag)

@@ -719,7 +719,9 @@ export function scoreInflection(data: PreRunStockData): InflectionResult {
   // Liquid stocks (LA >= 60) get near-full credit; illiquid stocks get dampened
   const qualityMultiplier = 0.7 + (Math.min(laResult.score, 100) / 100) * 0.3;
 
-  const overallScore = Math.round(rawWeighted * qualityMultiplier);
+  const overallScore = Number.isFinite(rawWeighted)
+    ? Math.round(rawWeighted * qualityMultiplier)
+    : 0;
 
   const scores: InflectionScores = {
     sellerExhaustion: seResult.score,

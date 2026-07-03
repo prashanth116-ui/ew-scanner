@@ -1577,7 +1577,7 @@ export default function SectorGuidePage() {
                 positive RS (% above 50d SMA) are outperforming their peers. These lead the sector move.
               </li>
               <li>
-                <strong className="text-white">Pre-Run Score &ge; 15</strong> &mdash; Stocks with high EW Scanner scores have strong
+                <strong className="text-white">Pre-Run Score &ge; 15</strong> &mdash; Stocks with high QuantRadar scores have strong
                 technical setups (base patterns, volume, institutional accumulation).
               </li>
               <li>
@@ -1654,7 +1654,7 @@ export default function SectorGuidePage() {
                 the rotating sector.
               </li>
               <li>
-                <strong className="text-white">Cross-check the EW scanner</strong> &mdash; Stocks in Wave 2 or Wave 4
+                <strong className="text-white">Cross-check the wave scanner</strong> &mdash; Stocks in Wave 2 or Wave 4
                 positions offer the best risk/reward entries. A sector rotation + corrective wave = high-conviction setup.
               </li>
               <li>
@@ -1757,7 +1757,7 @@ export default function SectorGuidePage() {
               <div className="rounded-md bg-[#5ba3e6]/10 border border-[#5ba3e6]/20 p-2">
                 <div className="font-semibold text-[#5ba3e6] text-[11px]">Step 3: EW Cross-Check</div>
                 <div className="text-[10px] text-[#5ba3e6]/70">
-                  EW scanner shows AMD in Wave 2 position with deep fib retracement &mdash; ideal risk/reward
+                  Wave scanner shows AMD in Wave 2 position with deep fib retracement &mdash; ideal risk/reward
                   entry. AVGO in Wave 4 &mdash; shallower pullback, higher confidence. Both confirm corrective
                   wave + sector rotation alignment.
                 </div>

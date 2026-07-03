@@ -7,7 +7,7 @@
  */
 
 const LOCAL_URL = "http://localhost:3099";
-const PROD_URL = "https://ew-scanner.vercel.app";
+const PROD_URL = "https://quantradar.com";
 
 interface DeepResult {
   ticker: string;

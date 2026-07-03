@@ -10,7 +10,7 @@ export default function DisclaimerPage() {
 
       <section className="space-y-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-4">
         <p className="font-medium text-yellow-200">
-          EW Scanner is NOT a registered investment advisor, broker-dealer, or
+          QuantRadar is NOT a registered investment advisor, broker-dealer, or
           financial planner. The information provided by this Service does not
           constitute financial advice, investment advice, trading advice, or any
           other sort of advice.
@@ -22,7 +22,7 @@ export default function DisclaimerPage() {
           1. Educational Purpose Only
         </h2>
         <p>
-          All content provided by EW Scanner — including wave counts, scores,
+          All content provided by QuantRadar — including wave counts, scores,
           labels, AI analyses, price targets, and risk assessments — is for
           educational and informational purposes only. None of this content
           should be construed as a recommendation to buy, sell, or hold any
@@ -97,7 +97,7 @@ export default function DisclaimerPage() {
         </h2>
         <p>
           Use of the Service does not create a fiduciary relationship between
-          you and EW Scanner. We owe no duty to any user to act in their best
+          you and QuantRadar. We owe no duty to any user to act in their best
           interest regarding trading or investment decisions.
         </p>
       </section>
@@ -117,8 +117,8 @@ export default function DisclaimerPage() {
         <h2 className="text-base font-semibold text-white">8. Contact</h2>
         <p>
           If you have questions about this disclaimer, contact us at{" "}
-          <a href="mailto:support@ewscanner.com" className="text-[#5ba3e6] hover:underline">
-            support@ewscanner.com
+          <a href="mailto:support@quantradar.com" className="text-[#5ba3e6] hover:underline">
+            support@quantradar.com
           </a>{" "}
           or visit our{" "}
           <a href="/about" className="text-[#5ba3e6] hover:underline">

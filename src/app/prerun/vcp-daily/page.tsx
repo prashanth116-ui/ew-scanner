@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { fmtNum } from "@/lib/daily-format";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
+import { formatDatePill, streakColor } from "@/lib/daily-page-utils";
 
 // ── Types ──
 
@@ -78,16 +79,7 @@ function scoreColor(score: number): string {
   return "text-red-400";
 }
 
-function formatDatePill(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00Z");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function streakColor(streak: number): string {
-  if (streak >= 5) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
-  if (streak >= 3) return "text-cyan-400 bg-cyan-500/10 border-cyan-500/30";
-  return "text-[#666] bg-[#1a1a1a] border-[#2a2a2a]";
-}
+// formatDatePill, streakColor imported from daily-page-utils
 
 // ── CSV Export ──
 

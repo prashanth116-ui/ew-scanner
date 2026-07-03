@@ -17,21 +17,21 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "EW Scanner",
-    template: "%s | EW Scanner",
+    default: "QuantRadar",
+    template: "%s | QuantRadar",
   },
   description:
     "Free algorithmic stock scanning — Elliott Wave analysis, short squeeze screening, multi-bagger detection, and sector rotation tracking with AI-powered insights.",
   openGraph: {
-    title: "EW Scanner",
+    title: "QuantRadar",
     description:
       "Free algorithmic stock scanning — Elliott Wave analysis, short squeeze screening, multi-bagger detection, and sector rotation tracking with AI-powered insights.",
-    siteName: "EW Scanner",
+    siteName: "QuantRadar",
     type: "website",
   },
   twitter: {
     card: "summary",
-    title: "EW Scanner",
+    title: "QuantRadar",
     description:
       "Free algorithmic stock scanning — Elliott Wave analysis, short squeeze screening, multi-bagger detection, and sector rotation tracking with AI-powered insights.",
   },

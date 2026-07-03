@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
+import { fmtNum } from "@/lib/daily-format";
+import { formatDatePill, streakColor } from "@/lib/daily-page-utils";
 
 // ── Types ──
 
@@ -85,16 +87,7 @@ function scoreColor(score: number): string {
   return "text-red-400";
 }
 
-function formatDatePill(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00Z");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function streakColor(streak: number): string {
-  if (streak >= 5) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
-  if (streak >= 3) return "text-cyan-400 bg-cyan-500/10 border-cyan-500/30";
-  return "text-[#666] bg-[#1a1a1a] border-[#2a2a2a]";
-}
+// formatDatePill, streakColor imported from daily-page-utils
 
 function triggerLabel(t: string | null): string {
   if (!t || t === "none") return "-";
@@ -162,10 +155,10 @@ function ExpandedInst({ row }: { row: InstitutionalDailyRow }) {
           <div>
             <p className="text-[9px] uppercase tracking-wider text-[#555] mb-1.5">Details</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
-              {row.rs_accel_spy !== null && <><span className="text-[#555]">RS Accel vs SPY</span><span className={`font-medium ${Number(row.rs_accel_spy) > 0 ? "text-emerald-400" : "text-red-400"}`}>{Number(row.rs_accel_spy) > 0 ? "+" : ""}{Number(row.rs_accel_spy).toFixed(2)}</span></>}
-              {row.rs_accel_qqq !== null && <><span className="text-[#555]">RS Accel vs QQQ</span><span className={`font-medium ${Number(row.rs_accel_qqq) > 0 ? "text-emerald-400" : "text-red-400"}`}>{Number(row.rs_accel_qqq) > 0 ? "+" : ""}{Number(row.rs_accel_qqq).toFixed(2)}</span></>}
-              {row.gap_pct !== null && <><span className="text-[#555]">Gap%</span><span className="text-[#a0a0a0] font-medium">{Number(row.gap_pct).toFixed(2)}%</span></>}
-              {row.dist_from_ema20_atr !== null && <><span className="text-[#555]">EMA20 Dist (ATR)</span><span className="text-[#a0a0a0] font-medium">{Number(row.dist_from_ema20_atr).toFixed(2)}</span></>}
+              {row.rs_accel_spy !== null && <><span className="text-[#555]">RS Accel vs SPY</span><span className={`font-medium ${Number(row.rs_accel_spy) > 0 ? "text-emerald-400" : "text-red-400"}`}>{Number(row.rs_accel_spy) > 0 ? "+" : ""}{fmtNum(row.rs_accel_spy, 2)}</span></>}
+              {row.rs_accel_qqq !== null && <><span className="text-[#555]">RS Accel vs QQQ</span><span className={`font-medium ${Number(row.rs_accel_qqq) > 0 ? "text-emerald-400" : "text-red-400"}`}>{Number(row.rs_accel_qqq) > 0 ? "+" : ""}{fmtNum(row.rs_accel_qqq, 2)}</span></>}
+              {row.gap_pct !== null && <><span className="text-[#555]">Gap%</span><span className="text-[#a0a0a0] font-medium">{fmtNum(row.gap_pct, 2)}%</span></>}
+              {row.dist_from_ema20_atr !== null && <><span className="text-[#555]">EMA20 Dist (ATR)</span><span className="text-[#a0a0a0] font-medium">{fmtNum(row.dist_from_ema20_atr, 2)}</span></>}
               <span className="text-[#555]">Entry Quality</span><span className={`font-medium ${row.entry_quality === "HIGH" ? "text-emerald-400" : row.entry_quality === "MODERATE" ? "text-amber-400" : "text-red-400"}`}>{row.entry_quality ?? "-"}</span>
               <span className="text-[#555]">Trigger</span><span className="text-[#a0a0a0] font-medium">{triggerLabel(row.best_trigger)}</span>
             </div>
@@ -427,7 +420,7 @@ export default function InstitutionalDailyPage() {
                         <td className="px-2 py-2 text-[#444]">{isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}</td>
                         <td className="px-2 py-2 font-bold text-white whitespace-nowrap">{row.ticker}</td>
                         <td className="px-2 py-2 text-[#a0a0a0] max-w-[140px] truncate">{row.company_name}</td>
-                        <td className="px-2 py-2 text-white tabular-nums whitespace-nowrap">${Number(row.price).toFixed(2)}</td>
+                        <td className="px-2 py-2 text-white tabular-nums whitespace-nowrap">${fmtNum(row.price, 2)}</td>
                         <td className="px-2 py-2"><span className={`text-[11px] font-bold tabular-nums ${scoreColor(row.composite_score)}`}>{row.composite_score}</span></td>
                         <td className="px-2 py-2 tabular-nums whitespace-nowrap">
                           {delta !== undefined ? <span className={`text-[10px] font-medium ${delta > 0 ? "text-emerald-400" : delta < 0 ? "text-red-400" : "text-[#555]"}`}>{delta > 0 ? "+" : ""}{delta}</span> : <span className="text-[10px] text-[#333]">-</span>}

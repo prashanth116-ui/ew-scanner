@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
+import { fmtNum } from "@/lib/daily-format";
+import { formatDatePill, streakColor } from "@/lib/daily-page-utils";
 
 // ── Types ──
 
@@ -131,16 +133,7 @@ const TRADE_READ_ORDER: Record<string, number> = {
   AVOID: 3,
 };
 
-function formatDatePill(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00Z");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function streakColor(streak: number): string {
-  if (streak >= 5) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
-  if (streak >= 3) return "text-cyan-400 bg-cyan-500/10 border-cyan-500/30";
-  return "text-[#666] bg-[#1a1a1a] border-[#2a2a2a]";
-}
+// formatDatePill, streakColor imported from daily-page-utils
 
 // ── Inline Score Bar ──
 
@@ -240,7 +233,7 @@ function ExpandedEvidence({ row }: { row: InflectionDailyRow }) {
           {row.invalidation !== null && (
             <div className="shrink-0">
               <p className="text-[9px] uppercase tracking-wider text-[#555] mb-1">Invalidation</p>
-              <p className="text-xs font-medium text-white">${Number(row.invalidation).toFixed(2)}</p>
+              <p className="text-xs font-medium text-white">${fmtNum(row.invalidation, 2)}</p>
             </div>
           )}
         </div>
@@ -752,7 +745,7 @@ export default function InflectionDailyPage() {
 
                         {/* Price */}
                         <td className="px-2 py-2 text-white tabular-nums whitespace-nowrap">
-                          ${Number(row.price).toFixed(2)}
+                          ${fmtNum(row.price, 2)}
                         </td>
 
                         {/* Overall Score */}

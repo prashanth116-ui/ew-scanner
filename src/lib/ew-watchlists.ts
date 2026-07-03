@@ -1,6 +1,6 @@
 import type { Watchlist, WatchlistItem, ScannerMode, ConfidenceTier, EnhancedScoredCandidate } from "./ew-types";
 
-const STORAGE_KEY = "ew-scanner-watchlists";
+const STORAGE_KEY = "quantradar-watchlists";
 const MAX_WATCHLISTS = 20;
 const MAX_ITEMS_PER_LIST = 100;
 

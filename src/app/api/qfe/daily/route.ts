@@ -106,5 +106,7 @@ export async function GET(request: NextRequest) {
     deltas,
     dropped,
     marketEnvDetail,
+  }, {
+    headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=120" },
   });
 }

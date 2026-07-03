@@ -454,7 +454,7 @@ export function computePlaybook(
 
 // ── 1f. Earnings Watchlist ──
 
-const EARNINGS_WATCHLIST_KEY = "ew-scanner-earnings-watchlist";
+const EARNINGS_WATCHLIST_KEY = "quantradar-earnings-watchlist";
 
 export interface EarningsWatchlistItem {
   ticker: string;

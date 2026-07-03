@@ -401,3 +401,50 @@ export const PRERUNNER = {
   /** Lifecycle score mapping (used for turnaround lifecycle component) */
   LIFECYCLE_SCORES: { EARLY: 20, MATURING: 15, LATE: 5, EXHAUSTING: 0 } as Record<string, number>,
 } as const;
+
+// ── Crypto Rotation Weights ──
+
+export const CRYPTO_WEIGHTS = {
+  MOMENTUM: 30,
+  ACCELERATION: 20,
+  MANSFIELD: 25,
+  CMF: 25,
+} as const;
+
+// ── Pre-Market Bias Scoring ──
+
+export const PREMARKET_SCORING = {
+  /** Posture points */
+  POSTURE_AGGRESSIVE: 3,
+  POSTURE_SELECTIVE: 1,
+  POSTURE_DEFENSIVE: -2,
+  POSTURE_CASH: -4,
+  /** Regime points */
+  REGIME_RISK_ON: 2,
+  REGIME_RISK_OFF: -2,
+  REGIME_INFLATIONARY: -1,
+  REGIME_MIXED: 0,
+  /** Bias label thresholds */
+  STRONG_BULL: 6,
+  LEAN_BULL: 2,
+  NEUTRAL: -1,
+  LEAN_BEAR: -5,
+} as const;
+
+// ── Policy Pulse Classification ──
+
+export const POLICY_PULSE = {
+  /** Source authority scores (out of 25) */
+  SOURCE_WHITEHOUSE_RSS: 25,
+  SOURCE_FED_REGISTER: 23,
+  SOURCE_HIGH_AUTHORITY: 20,
+  SOURCE_DEFAULT: 10,
+  /** Impact score component max weights */
+  WEIGHT_SOURCE: 25,
+  WEIGHT_DENSITY: 25,
+  WEIGHT_STRONG_KEYWORD: 15,
+  WEIGHT_HEADLINE: 15,
+  WEIGHT_MULTI_KEYWORD: 20,
+  /** Minimum impact score to persist */
+  MIN_PERSIST_SCORE: 40,
+} as const;

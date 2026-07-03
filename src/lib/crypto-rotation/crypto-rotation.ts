@@ -31,6 +31,7 @@ import {
   clampNormalize,
   stddev,
 } from "../sector-rotation/math";
+import { CRYPTO_WEIGHTS as CRYPTO_WEIGHTS_CONFIG } from "../sector-rotation/config";
 
 // ── Chart data type ──
 
@@ -46,10 +47,10 @@ interface ChartData {
 // ── Crypto composite: 4 factors (no breadth, no smart money) ──
 
 const CRYPTO_WEIGHTS = {
-  momentum: 30,
-  acceleration: 20,
-  mansfield: 25,
-  cmf: 25,
+  momentum: CRYPTO_WEIGHTS_CONFIG.MOMENTUM,
+  acceleration: CRYPTO_WEIGHTS_CONFIG.ACCELERATION,
+  mansfield: CRYPTO_WEIGHTS_CONFIG.MANSFIELD,
+  cmf: CRYPTO_WEIGHTS_CONFIG.CMF,
 };
 
 function computeCryptoComposite(

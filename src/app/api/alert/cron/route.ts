@@ -3,6 +3,8 @@ import { runAlertPipeline } from "@/lib/ew-alert-core";
 import { logError } from "@/lib/error-logger";
 import type { AlertConfig } from "@/lib/ew-types";
 
+export const maxDuration = 60;
+
 export async function GET(request: NextRequest) {
   // Verify Vercel Cron secret (required — reject if not configured)
   const cronSecret = process.env.CRON_SECRET;

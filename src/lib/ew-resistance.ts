@@ -1,5 +1,5 @@
 /**
- * Price resistance detection for EW Scanner targets.
+ * Price resistance detection for QuantRadar targets.
  * Computes volume-weighted price histogram to find resistance clusters.
  * CLIENT-SAFE: Uses pre-fetched series data (no server deps).
  */

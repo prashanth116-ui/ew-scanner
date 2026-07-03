@@ -4,7 +4,7 @@ import type {
   SavedSqueezeScan,
 } from "./ew-types";
 
-const STORAGE_KEY = "ew-scanner-squeeze-scans";
+const STORAGE_KEY = "quantradar-squeeze-scans";
 const MAX_SCANS = 30;
 
 function isClient(): boolean {

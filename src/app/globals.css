@@ -79,7 +79,7 @@ body {
   background: #444;
 }
 
-/* EW Scanner card entrance animation */
+/* QuantRadar card entrance animation */
 @keyframes ew-card-enter {
   from {
     opacity: 0;
@@ -94,7 +94,7 @@ body {
   animation: ew-card-enter 0.35s ease-out both;
 }
 
-/* EW Scanner range sliders */
+/* QuantRadar range sliders */
 .ew-slider {
   -webkit-appearance: none;
   appearance: none;
@@ -131,7 +131,7 @@ body {
   background: #262626;
 }
 
-/* EW Scanner table row entrance animation */
+/* QuantRadar table row entrance animation */
 @keyframes ew-row-enter {
   from {
     opacity: 0;

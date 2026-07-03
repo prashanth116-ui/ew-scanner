@@ -153,8 +153,8 @@ export default function PrivacyPage() {
         <h2 className="text-base font-semibold text-white">10. Contact</h2>
         <p>
           For privacy-related questions, contact us at{" "}
-          <a href="mailto:support@ewscanner.com" className="text-[#5ba3e6] hover:underline">
-            support@ewscanner.com
+          <a href="mailto:support@quantradar.com" className="text-[#5ba3e6] hover:underline">
+            support@quantradar.com
           </a>
           .
         </p>

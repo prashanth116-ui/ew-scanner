@@ -79,7 +79,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <Activity className="mx-auto mb-3 h-8 w-8 text-[#5ba3e6]" />
-          <h1 className="text-xl font-bold text-white">Sign in to EW Scanner</h1>
+          <h1 className="text-xl font-bold text-white">Sign in to QuantRadar</h1>
           <p className="mt-1 text-sm text-[#a0a0a0]">
             Save watchlists and scans to the cloud
           </p>

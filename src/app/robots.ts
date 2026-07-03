@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
       disallow: "/api/",
     },
-    sitemap: "https://ew-scanner.vercel.app/sitemap.xml",
+    sitemap: "https://quantradar.com/sitemap.xml",
   };
 }

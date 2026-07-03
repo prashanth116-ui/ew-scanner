@@ -15,7 +15,7 @@ export default function NotFound() {
           href="/"
           className="rounded-md bg-[#185FA5] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1a6dba]"
         >
-          EW Scanner
+          QuantRadar
         </Link>
         <Link
           href="/squeeze"

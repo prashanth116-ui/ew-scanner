@@ -13,7 +13,7 @@ import { logError } from "@/lib/error-logger";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-const SEC_UA = "EW-Scanner admin@ew-scanner.app";
+const SEC_UA = "QuantRadar admin@quantradar.com";
 const YAHOO_SUMMARY =
   "https://query1.finance.yahoo.com/v10/finance/quoteSummary";
 const YAHOO_CHART =

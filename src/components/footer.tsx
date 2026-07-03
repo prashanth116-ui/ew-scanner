@@ -3,7 +3,7 @@ import { Activity } from "lucide-react";
 import { DataManager } from "@/components/data-manager";
 
 const scannerLinks = [
-  { href: "/", label: "EW Scanner" },
+  { href: "/", label: "QuantRadar" },
   { href: "/squeeze", label: "Squeeze Screener" },
   { href: "/prerun", label: "Pre-Run Scanner" },
   { href: "/sectors", label: "Sector Rotation" },
@@ -15,7 +15,7 @@ const scannerLinks = [
 
 const resourceLinks = [
   { href: "/about", label: "About" },
-  { href: "/guide", label: "EW Scanner Guide" },
+  { href: "/guide", label: "QuantRadar Guide" },
   { href: "/squeeze/guide", label: "Squeeze Guide" },
   { href: "/prerun/guide", label: "Pre-Run Guide" },
   { href: "/sectors/guide", label: "Sector Rotation Guide" },
@@ -41,7 +41,7 @@ export function Footer() {
           <div>
             <div className="mb-3 flex items-center gap-2">
               <Activity className="h-4 w-4 text-[#5ba3e6]" />
-              <span className="text-sm font-bold text-white">EW Scanner</span>
+              <span className="text-sm font-bold text-white">QuantRadar</span>
             </div>
             <p className="text-xs leading-relaxed text-[#666]">
               Free algorithmic stock scanning powered by Elliott Wave theory and
@@ -110,7 +110,7 @@ export function Footer() {
         {/* Bottom bar */}
         <div className="mt-8 flex items-center justify-between border-t border-[#2a2a2a] pt-4">
           <DataManager />
-          <span className="text-xs text-[#555]">&copy; 2026 EW Scanner</span>
+          <span className="text-xs text-[#555]">&copy; 2026 QuantRadar</span>
         </div>
       </div>
     </footer>

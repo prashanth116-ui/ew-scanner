@@ -1,6 +1,6 @@
 import type { StratWatchlist, StratWatchlistItem, StratResult } from "./types";
 
-const STORAGE_KEY = "ew-scanner-strat-watchlists";
+const STORAGE_KEY = "quantradar-strat-watchlists";
 const MAX_WATCHLISTS = 20;
 const MAX_ITEMS_PER_LIST = 100;
 

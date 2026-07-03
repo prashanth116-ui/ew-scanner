@@ -1,4 +1,4 @@
--- EW Scanner: Initial database schema
+-- QuantRadar: Initial database schema
 -- Run in Supabase SQL Editor after creating your project
 
 -- Watchlists (shared across all scanners)

@@ -10,6 +10,7 @@
 import type { FuturesSnapshot, ChecklistItem, SectorBreadth } from "./types";
 import type { PostureResult } from "@/lib/sector-rotation/brief";
 import type { MacroRegimeData } from "@/lib/sector-rotation/regime";
+import { PREMARKET_SCORING } from "@/lib/sector-rotation/config";
 
 interface BiasResult {
   score: number;
@@ -18,10 +19,10 @@ interface BiasResult {
 }
 
 function biasLabel(score: number): string {
-  if (score >= 6) return "Strong Bull";
-  if (score >= 2) return "Lean Bull";
-  if (score >= -1) return "Neutral";
-  if (score >= -5) return "Lean Bear";
+  if (score >= PREMARKET_SCORING.STRONG_BULL) return "Strong Bull";
+  if (score >= PREMARKET_SCORING.LEAN_BULL) return "Lean Bull";
+  if (score >= PREMARKET_SCORING.NEUTRAL) return "Neutral";
+  if (score >= PREMARKET_SCORING.LEAN_BEAR) return "Lean Bear";
   return "Strong Bear";
 }
 
@@ -36,10 +37,10 @@ export function computeBiasScore(
 
   // ── Macro: Posture ──
   const posturePoints: Record<string, number> = {
-    AGGRESSIVE: 3,
-    SELECTIVE: 1,
-    DEFENSIVE: -2,
-    CASH: -4,
+    AGGRESSIVE: PREMARKET_SCORING.POSTURE_AGGRESSIVE,
+    SELECTIVE: PREMARKET_SCORING.POSTURE_SELECTIVE,
+    DEFENSIVE: PREMARKET_SCORING.POSTURE_DEFENSIVE,
+    CASH: PREMARKET_SCORING.POSTURE_CASH,
   };
   const postureScore = posturePoints[posture.posture] ?? 0;
   score += postureScore;
@@ -55,10 +56,10 @@ export function computeBiasScore(
   // ── Macro: Regime ──
   if (regime) {
     const regimePoints: Record<string, number> = {
-      RISK_ON: 2,
-      RISK_OFF: -2,
-      INFLATIONARY: -1,
-      MIXED: 0,
+      RISK_ON: PREMARKET_SCORING.REGIME_RISK_ON,
+      RISK_OFF: PREMARKET_SCORING.REGIME_RISK_OFF,
+      INFLATIONARY: PREMARKET_SCORING.REGIME_INFLATIONARY,
+      MIXED: PREMARKET_SCORING.REGIME_MIXED,
     };
     const regimeScore = regimePoints[regime.regime] ?? 0;
     score += regimeScore;

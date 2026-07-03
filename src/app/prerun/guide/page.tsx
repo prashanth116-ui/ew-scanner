@@ -298,7 +298,7 @@ export default function PreRunGuidePage() {
   const webhookUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/api/prerun/webhook/tradingview`
-      : "https://ew-scanner.vercel.app/api/prerun/webhook/tradingview";
+      : "https://quantradar.com/api/prerun/webhook/tradingview";
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
