@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from "react";
 import { AuthButton } from "@/components/auth-button";
 
 const scannerTabs = [
-  { id: "ew", label: "EW Scanner", href: "/" },
+  { id: "ew", label: "QuantRadar", href: "/" },
   { id: "squeeze", label: "Squeeze", href: "/squeeze" },
   { id: "prerun", label: "Pre-Run", href: "/prerun" },
   { id: "sectors", label: "Sectors", href: "/sectors" },
@@ -16,6 +16,7 @@ const scannerTabs = [
   { id: "earnings", label: "Earnings", href: "/earnings" },
   { id: "catalyst", label: "AI Radar", href: "/catalyst" },
   { id: "wave", label: "Wave Scanner", href: "/wave-scanner" },
+  { id: "copilot", label: "Copilot", href: "/trading-copilot" },
 ] as const;
 
 const subPages: Record<string, { href: string; label: string }[]> = {
@@ -45,12 +46,12 @@ const subPages: Record<string, { href: string; label: string }[]> = {
   sectors: [
     { href: "/sectors/brief", label: "Brief" },
     { href: "/sectors", label: "Dashboard" },
-    { href: "/sectors/picks", label: "Picks" },
     { href: "/rotation", label: "Rotation Tracker" },
+    { href: "/sectors/picks", label: "Picks" },
+    { href: "/policy-pulse", label: "Policy Pulse" },
+    { href: "/sectors/guide", label: "Guide" },
     { href: "/sectors/crypto", label: "Crypto" },
     { href: "/sectors/crypto/guide", label: "Crypto Guide" },
-    { href: "/sectors/guide", label: "Guide" },
-    { href: "/policy-pulse", label: "Policy Pulse" },
   ],
   confluence: [
     { href: "/confluence", label: "Scanner" },
@@ -73,9 +74,14 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/wave-scanner", label: "Scanner" },
     { href: "/wave-scanner/guide", label: "Guide" },
   ],
+  copilot: [
+    { href: "/trading-copilot", label: "Copilot" },
+    { href: "/trading-copilot/guide", label: "Guide" },
+  ],
 };
 
-function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" | "strat" | "earnings" | "catalyst" | "wave" {
+function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" | "strat" | "earnings" | "catalyst" | "wave" | "copilot" {
+  if (pathname.startsWith("/trading-copilot")) return "copilot";
   if (pathname.startsWith("/wave-scanner")) return "wave";
   if (pathname.startsWith("/catalyst")) return "catalyst";
   if (pathname.startsWith("/earnings")) return "earnings";
@@ -106,6 +112,7 @@ export function Nav() {
     if (href === "/earnings") return pathname === "/earnings";
     if (href === "/catalyst") return pathname === "/catalyst";
     if (href === "/wave-scanner") return pathname === "/wave-scanner";
+    if (href === "/trading-copilot") return pathname === "/trading-copilot";
     return pathname.startsWith(href);
   };
 
@@ -130,10 +137,10 @@ export function Nav() {
     <header className="sticky top-0 z-50 border-b border-[#2a2a2a] bg-[#0f0f0f]/95 backdrop-blur-sm">
       {/* Row 1: Logo + Scanner Tabs */}
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
-        <Link href="/" className="flex items-center gap-2" aria-label="EW Scanner home">
+        <Link href="/" className="flex items-center gap-2" aria-label="QuantRadar home">
           <Activity className="h-5 w-5 text-[#5ba3e6]" aria-hidden="true" />
           <span className="text-lg font-bold tracking-tight text-white">
-            EW Scanner
+            QuantRadar
           </span>
         </Link>
 
@@ -260,7 +267,7 @@ export function Nav() {
                   {item.label}
                 </Link>
               ))}
-              {tab.id !== "wave" && (
+              {tab.id !== "copilot" && (
                 <div className="mx-3 my-2 h-px bg-[#2a2a2a]" aria-hidden="true" />
               )}
             </div>
