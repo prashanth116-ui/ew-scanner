@@ -1808,122 +1808,232 @@ export default function SectorGuidePage() {
           </Tip>
         </Section>
 
-        {/* Section 19: Top-Down Workflow */}
+        {/* Section 19: Top-Down Workflow — How to Spot Runners Before They Move */}
         <Section
           id="workflow"
-          title="Top-Down Workflow"
+          title="Top-Down Workflow: How to Spot Runners Before They Move"
           icon={<Users className="h-5 w-5 text-[#5ba3e6]" />}
         >
           <p>
-            Work from macro context down to individual stocks. Each step narrows your focus so you only spend time
-            on the highest-conviction setups.
+            The system is a <strong className="text-white">funnel</strong> &mdash; wide at the top (macro), narrow at the bottom
+            (individual stocks). Each level narrows your focus so you only spend time on the highest-conviction setups.
+            Follow these breadcrumbs in order.
           </p>
 
-          <SubSection title="Step 1: Regime Check (Top Banner)">
-            <p>
-              Start at the <strong className="text-white">Regime Banner</strong> at the top of the page. This sets the context for everything below:
-            </p>
-            <ul className="list-disc pl-4 space-y-1">
-              <li><strong className="text-green-400">RISK ON</strong> &mdash; Broad participation likely. Turnaround setups have the best odds. Favor aggressive entries.</li>
-              <li><strong className="text-red-400">RISK OFF</strong> (VIX &gt; 25) &mdash; Be defensive. Favor leaders in favored sectors only. Skip turnaround plays.</li>
-              <li><strong className="text-amber-400">MIXED / INFLATIONARY</strong> &mdash; Be selective. Only act on HIGH conviction sectors with regime alignment.</li>
-            </ul>
-            <p className="mt-2">
-              Note the <strong className="text-white">Favored</strong> and <strong className="text-white">Avoid</strong> sectors &mdash;
-              these tell you which sectors have macro tailwinds or headwinds.
-            </p>
-          </SubSection>
-
-          <SubSection title="Step 2: Scan Active Rotation Cards">
-            <p>
-              Read the <strong className="text-white">action signal banners</strong> on each card. Focus your time on:
-            </p>
-            <div className="space-y-1.5 mt-2">
-              <div className="flex items-center gap-2">
-                <span className="rounded-md bg-green-500/15 px-2 py-0.5 text-[10px] font-medium text-green-400">ENTER</span>
-                <span>Highest priority &mdash; early rotation with strong conviction and regime support</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-md bg-cyan-500/15 px-2 py-0.5 text-[10px] font-medium text-cyan-400">ADD ON PULLBACK</span>
-                <span>Second priority &mdash; established trend, good for adding on dips</span>
-              </div>
-            </div>
-            <p className="mt-2">
-              Skip HOLD and EXIT sectors for new entries &mdash; only check those if you already have positions.
-              Cards with a <span className="text-green-400">Regime Aligned</span> badge have macro support behind them.
-            </p>
-          </SubSection>
-
-          <SubSection title="Step 3: Expand Sector &rarr; Spot Turnarounds">
-            <p>
-              Click a card to expand the stock table. <strong className="text-white">Turnaround setups are highlighted automatically</strong> with
-              an amber left border and <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">Turnaround</span> badge.
-              No filtering needed &mdash; they&apos;re visible while scrolling the full table.
-            </p>
-            <p className="mt-2">
-              A turnaround highlight means all three criteria are met:
-            </p>
-            <ul className="list-disc pl-4 space-y-1">
-              <li><strong className="text-white">Below 50MA</strong> &mdash; not yet in uptrend (early)</li>
-              <li><strong className="text-white">Positive Sector RS</strong> &mdash; relative strength improving vs sector</li>
-              <li><strong className="text-white">Volume &ge; 1.2x average</strong> &mdash; confirms institutional participation (Rotation Tracker uses a lower 0.8x gate for initial detection)</li>
-            </ul>
-          </SubSection>
-
-          <SubSection title="Step 4: Use Filters for Specific Screens">
-            <p>
-              The filter bar has action chips, 50MA, Sector RS, and Volume dropdowns. Use these combos for targeted screening:
-            </p>
-            <div className="overflow-x-auto mt-2">
+          <SubSection title="Level 1: Macro Regime (/sectors/brief)">
+            <p className="mb-2 font-medium text-white">Question: &ldquo;Is the environment favorable?&rdquo;</p>
+            <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-[#2a2a2a] text-[#666]">
-                    <th className="py-1.5 pr-3 text-left font-medium">Goal</th>
-                    <th className="py-1.5 text-left font-medium">Filter Combination</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Breadcrumb</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Where to Look</th>
+                    <th className="py-1.5 text-left font-medium">What You Want</th>
                   </tr>
                 </thead>
                 <tbody className="text-[#c0c0c0]">
                   <tr className="border-b border-[#2a2a2a]/50">
-                    <td className="py-2 pr-3 font-medium text-amber-400">Turnaround candidates</td>
-                    <td className="py-2">Below 50MA + Positive Sector RS + Above Avg volume (matches amber highlights exactly)</td>
+                    <td className="py-1.5 pr-3 font-medium text-white">Regime</td>
+                    <td className="py-1.5 pr-3">Brief &rarr; Pre-Market Pulse</td>
+                    <td className="py-1.5"><span className="text-green-400">RISK_ON</span> or MIXED (not RISK_OFF)</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
-                    <td className="py-2 pr-3 font-medium text-green-400">Strongest leaders</td>
-                    <td className="py-2">Hold/Buy chips + Above 50MA + Above Avg volume</td>
+                    <td className="py-1.5 pr-3 font-medium text-white">VIX</td>
+                    <td className="py-1.5 pr-3">Brief &rarr; Pre-Market Pulse</td>
+                    <td className="py-1.5">Below adaptive upper bound, stable or declining</td>
                   </tr>
                   <tr className="border-b border-[#2a2a2a]/50">
-                    <td className="py-2 pr-3 font-medium text-red-400">Fading stocks to avoid</td>
-                    <td className="py-2">Above 50MA + Negative Sector RS (momentum dying despite uptrend)</td>
+                    <td className="py-1.5 pr-3 font-medium text-white">Trading Bias</td>
+                    <td className="py-1.5 pr-3">Brief &rarr; Trading Bias Card</td>
+                    <td className="py-1.5"><span className="text-green-400">Lean Bull</span> or <span className="text-green-400">Strong Bull</span>, confidence &gt;60%</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Posture</td>
+                    <td className="py-1.5 pr-3">Brief &rarr; Posture Banner</td>
+                    <td className="py-1.5"><span className="text-green-400">AGGRESSIVE</span> or <span className="text-green-400">ACTIVE</span> (not DEFENSIVE/CASH)</td>
                   </tr>
                   <tr>
-                    <td className="py-2 pr-3 font-medium text-cyan-400">Undiscovered catch-ups</td>
-                    <td className="py-2">Buy chip + Below Avg volume (hasn&apos;t been discovered yet &mdash; early)</td>
+                    <td className="py-1.5 pr-3 font-medium text-white">Risk Flags</td>
+                    <td className="py-1.5 pr-3">Brief &rarr; Risk Flags Panel</td>
+                    <td className="py-1.5">Fewer than 2 high-severity flags</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <Warning>
+              If regime is <strong>RISK_OFF</strong> + <strong>DEFENSIVE</strong> posture + 3+ risk flags &rarr; stop here. No runners in this environment.
+            </Warning>
+          </SubSection>
+
+          <SubSection title="Level 2: Sector Selection (/sectors dashboard)">
+            <p className="mb-2 font-medium text-white">Question: &ldquo;Which sectors are rotating in?&rdquo;</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Breadcrumb</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Where to Look</th>
+                    <th className="py-1.5 text-left font-medium">What You Want</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Quadrant</td>
+                    <td className="py-1.5 pr-3">Dashboard &rarr; RRG Chart</td>
+                    <td className="py-1.5">Sectors in <span className="text-cyan-400">IMPROVING</span> quadrant (moving toward LEADING)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Acceleration</td>
+                    <td className="py-1.5 pr-3">Dashboard &rarr; Sector Cards (sort)</td>
+                    <td className="py-1.5">Positive and rising &mdash; the <em>rate of change</em> of momentum</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Stealth Badge</td>
+                    <td className="py-1.5 pr-3">Dashboard &rarr; Sector Cards</td>
+                    <td className="py-1.5">Green &ldquo;stealth&rdquo; badge = accumulation before breakout</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">CMF</td>
+                    <td className="py-1.5 pr-3">Dashboard &rarr; Sector Detail (expand)</td>
+                    <td className="py-1.5">Positive (&gt;0) = institutional inflow, &gt;0.10 = strong</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Dispersion Index</td>
+                    <td className="py-1.5 pr-3">Dashboard &rarr; Summary Strip</td>
+                    <td className="py-1.5">Rising = rotations are happening, not a flat market</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">Sub-sector Divergence</td>
+                    <td className="py-1.5 pr-3">Brief &rarr; Sub-Sector Divergences</td>
+                    <td className="py-1.5">Sub-sector leading its parent = early signal (e.g., XBI outpacing XLV)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <Tip>
+              <strong>The ideal sector:</strong> IMPROVING quadrant + acceleration &gt;1.0 + CMF &gt;0 + stealth badge.
+              This was Biotech (XBI) when it caught SEER.
+            </Tip>
+          </SubSection>
+
+          <SubSection title="Level 3: Rotation Confirmation (/rotation)">
+            <p className="mb-2 font-medium text-white">Question: &ldquo;Is this a real rotation or noise?&rdquo;</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Breadcrumb</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Where to Look</th>
+                    <th className="py-1.5 text-left font-medium">What You Want</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Lifecycle Stage</td>
+                    <td className="py-1.5 pr-3">Rotation Tracker &rarr; Active Rotations</td>
+                    <td className="py-1.5"><span className="text-green-400">EARLY</span> (&le;5 days) = prime entry window</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Conviction Level</td>
+                    <td className="py-1.5 pr-3">Rotation Tracker &rarr; Conviction Badge</td>
+                    <td className="py-1.5"><span className="text-green-400">HIGH</span> (&ge;6) or <span className="text-cyan-400">MODERATE</span> (&ge;3)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Signal Count</td>
+                    <td className="py-1.5 pr-3">Rotation Tracker &rarr; Signal Sparkline</td>
+                    <td className="py-1.5">2+ of 3 signals firing (RS golden cross, volume surge, price &gt;50MA)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Regime Alignment</td>
+                    <td className="py-1.5 pr-3">Rotation Tracker &rarr; Alignment Badge</td>
+                    <td className="py-1.5">Green <span className="text-green-400">&ldquo;Aligned&rdquo;</span> = regime favors this sector</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Action Signal</td>
+                    <td className="py-1.5 pr-3">Rotation Tracker &rarr; Action Badge</td>
+                    <td className="py-1.5"><span className="text-green-400">ENTER</span> or <span className="text-cyan-400">ADD ON PULLBACK</span></td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">Signal Trend</td>
+                    <td className="py-1.5 pr-3">Rotation Tracker &rarr; Sparkline direction</td>
+                    <td className="py-1.5">Signals stable or improving over last 3 days, not declining</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <Warning>
+              <strong>Kill switch:</strong> If lifecycle = LATE/EXHAUSTING, conviction = LOW/EXIT, or action = HOLD/EXIT &rarr; you missed it, move on.
+            </Warning>
+          </SubSection>
+
+          <SubSection title="Level 4: Stock Selection (/sectors/picks)">
+            <p className="mb-2 font-medium text-white">Question: &ldquo;Which stocks in this sector will move most?&rdquo;</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Breadcrumb</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Where to Look</th>
+                    <th className="py-1.5 text-left font-medium">What You Want</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Entry Signals</td>
+                    <td className="py-1.5 pr-3">Picks &rarr; top of page</td>
+                    <td className="py-1.5">Stocks that passed ALL 4 gates (action=ENTER, CMF&gt;0, accel&gt;0, quality stocks exist)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Pre-Runner Radar</td>
+                    <td className="py-1.5 pr-3">Picks &rarr; below Entry Signals</td>
+                    <td className="py-1.5"><span className="text-purple-400">Turnarounds</span> (below 50MA, RS accelerating) + <span className="text-green-400">Leaders</span> (quality-gated, high conviction) scored 0&ndash;100</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">RS Acceleration</td>
+                    <td className="py-1.5 pr-3">Picks &rarr; Stock/Radar table</td>
+                    <td className="py-1.5">High positive = stock catching up fast. SEER had <span className="text-green-400">24.29</span> &mdash; extremely high</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Conviction</td>
+                    <td className="py-1.5 pr-3">Picks &rarr; badge color</td>
+                    <td className="py-1.5"><span className="text-green-400">GREEN (HIGH)</span> or <span className="text-cyan-400">CYAN (MEDIUM)</span></td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Phase</td>
+                    <td className="py-1.5 pr-3">Picks &rarr; Stock Picks table</td>
+                    <td className="py-1.5"><strong>P2_TURNAROUND</strong> = inflection point. <strong>P3_TRENDING</strong> = established uptrend</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Volume Ratio</td>
+                    <td className="py-1.5 pr-3">Picks &rarr; table</td>
+                    <td className="py-1.5">&ge;1.2x = confirming volume. &ge;1.5x = strong institutional participation</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">Top Picks by Sector</td>
+                    <td className="py-1.5 pr-3">Picks &rarr; grouped section</td>
+                    <td className="py-1.5">Pre-ranked top 3 per sector by conviction then RS accel</td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </SubSection>
 
-          <SubSection title="Step 5: Cross-Reference with Regime">
-            <p>
-              A turnaround candidate in a <span className="text-green-400">Regime Aligned</span> sector has higher conviction
-              than one fighting a headwind. Check whether the expanded sector&apos;s card shows the alignment badge.
+          <SubSection title="Case Study: The SEER Playbook">
+            <p className="mb-2">
+              Working backwards from SEER&apos;s data, here&apos;s what the breadcrumbs looked like before the stock spiked after hours:
             </p>
+            <ol className="list-decimal pl-4 space-y-1.5">
+              <li><strong className="text-white">Macro</strong> &mdash; Regime favorable (biotech in favored sectors list)</li>
+              <li><strong className="text-white">Sector</strong> &mdash; XBI in <span className="text-green-400">LEADING</span> quadrant with acceleration <span className="text-green-400">10.84</span> &mdash; strong</li>
+              <li><strong className="text-white">Rotation</strong> &mdash; Biotech rotation active, SEER flagged as turnaround candidate in the stock table</li>
+              <li><strong className="text-white">Stock</strong> &mdash; RS acceleration <span className="text-green-400">24.29</span> (very high), RS improving = true, RS delta <span className="text-green-400">+11.24</span>, turnaround = true</li>
+            </ol>
             <p className="mt-2">
-              Sort by <strong className="text-white">Sector RS descending</strong> within highlighted turnaround rows to rank
-              them by momentum strength &mdash; the highest Sector RS values are reversing fastest.
+              The signal was: <em>&ldquo;Below-50MA stock in a leading sector with the highest RS acceleration in the group.&rdquo;</em>
+              That&apos;s the catch-up play &mdash; when the sector is running and a laggard starts showing relative strength,
+              it often snaps violently. The <Link href="/sectors/picks" className="text-[#5ba3e6] hover:underline">Pre-Runner Radar</Link> now
+              automates this exact pattern detection and surfaces these candidates automatically.
             </p>
-          </SubSection>
-
-          <SubSection title="Step 6: Validate with Pattern Stats">
-            <p>
-              Scroll to <strong className="text-white">Pattern Statistics</strong> to check the sector&apos;s historical rotation quality:
-            </p>
-            <ul className="list-disc pl-4 space-y-1">
-              <li><strong className="text-white">Avg Duration</strong> &mdash; compare to current days active. If past average, the rotation may be aging.</li>
-              <li><strong className="text-white">Avg Perf</strong> &mdash; sectors with consistently positive avg returns are higher quality targets.</li>
-              <li><strong className="text-white">Rotations (1y)</strong> &mdash; frequent short rotations = choppy, less reliable. Fewer long rotations = higher quality.</li>
-            </ul>
           </SubSection>
 
           <SubSection title="Interpreting Big Sector RS Numbers">
@@ -1942,9 +2052,9 @@ export default function SectorGuidePage() {
 
           <Tip>
             The highest-conviction setup: an <strong className="text-green-400">ENTER</strong> sector with
-            <strong className="text-white"> Regime Aligned</strong> badge, containing amber-highlighted turnaround rows with
-            <strong className="text-green-400"> Sector RS &gt; +2</strong>. This means fresh rotation + macro tailwind + lagging stock
-            reversing with institutional volume. Cross-check on the Pre-Run scanner for additional confirmation.
+            <strong className="text-white"> Regime Aligned</strong> badge, containing turnaround candidates with
+            <strong className="text-green-400"> Sector RS &gt; +5</strong> on the Pre-Runner Radar. This means fresh rotation + macro tailwind + lagging stock
+            reversing with institutional volume &mdash; the exact SEER pattern.
           </Tip>
         </Section>
 
