@@ -364,3 +364,40 @@ export const EXTENSION_TIERS = {
   /** Max % from 50d SMA for HIGH tier */
   HIGH_MAX_FROM_50: 15,
 } as const;
+
+// ── Pre-Runner Radar ──
+
+export const PRERUNNER = {
+  /** RS accel cap for normalization (above = full marks) */
+  RS_ACCEL_MAX: 15,
+  /** Volume ratio cap for normalization */
+  VOL_RATIO_MAX: 3.0,
+  /** Bonus when RS direction is improving */
+  RS_IMPROVING_BONUS: 5,
+  /** Minimum composite score to qualify */
+  MIN_SCORE: 40,
+  /** Max candidates in UI panel */
+  MAX_UI_CANDIDATES: 20,
+  /** Max in Telegram alert */
+  MAX_TELEGRAM_CANDIDATES: 5,
+
+  /** Leader scoring weights (sum = 100) */
+  LEADER_RS_WEIGHT: 35,
+  LEADER_SECTOR_WEIGHT: 25,
+  LEADER_VOLUME_WEIGHT: 15,
+  LEADER_CONVICTION_WEIGHT: 15,
+  LEADER_REGIME_WEIGHT: 10,
+
+  /** Turnaround scoring weights (sum = 100) */
+  TURNAROUND_RS_WEIGHT: 40,
+  TURNAROUND_LIFECYCLE_WEIGHT: 20,
+  TURNAROUND_VOLUME_WEIGHT: 15,
+  TURNAROUND_SECTOR_WEIGHT: 15,
+  TURNAROUND_REGIME_WEIGHT: 10,
+
+  /** Quadrant score mapping (used for sector health component) */
+  QUADRANT_SCORES: { LEADING: 25, IMPROVING: 20, WEAKENING: 8, LAGGING: 0 } as Record<string, number>,
+
+  /** Lifecycle score mapping (used for turnaround lifecycle component) */
+  LIFECYCLE_SCORES: { EARLY: 20, MATURING: 15, LATE: 5, EXHAUSTING: 0 } as Record<string, number>,
+} as const;

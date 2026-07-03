@@ -60,6 +60,7 @@ export { SectorDetail } from "./sector-detail";
 export { StockPicksPanel, TopPicksBySector } from "./stock-picks-panel";
 export { PullbackWatchPanel } from "./pullback-panel";
 export { RotationEntrySignals } from "./entry-signals";
+export { PreRunnerRadar } from "./prerunner-radar";
 export { SectorCard, ExpandedStockTable } from "./sector-card";
 export { HistoryChart } from "./history-chart";
 export { SummaryStrip } from "./summary-strip";

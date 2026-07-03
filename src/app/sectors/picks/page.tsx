@@ -9,6 +9,7 @@ import {
   useCollapsedPanels,
   CollapsiblePanel,
   RotationEntrySignals,
+  PreRunnerRadar,
   StockPicksPanel,
   PullbackWatchPanel,
   SectorDetail,
@@ -128,6 +129,17 @@ export default function PicksPage() {
         <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2 text-xs text-red-400">
           Rotation tracker unavailable — entry signals could not be loaded. Will retry automatically.
         </div>
+      )}
+
+      {/* Pre-Runner Radar */}
+      {rotationData && data.enrichedStocks && (
+        <PreRunnerRadar
+          rotationData={rotationData}
+          enrichedStocks={data.enrichedStocks.passed}
+          sectors={data.sectors}
+          collapsed={collapsedPanels.has("prerunner-radar")}
+          onToggle={togglePanel}
+        />
       )}
 
       {/* Top Picks by Sector */}

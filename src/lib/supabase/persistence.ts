@@ -1419,6 +1419,162 @@ export async function loadQFEPendingForwardReturns(
   }
 }
 
+// ── Pre-Runner Radar Daily ──
+
+export interface PreRunnerDailyRecord {
+  scan_date: string;
+  ticker: string;
+  company_name: string | null;
+  type: string;
+  prerunner_score: number;
+  price: number;
+  rs_acceleration: number;
+  rs_improving: boolean;
+  rs_delta: number;
+  sector: string;
+  sector_etf: string;
+  sector_quadrant: string | null;
+  sector_composite: number | null;
+  lifecycle: string | null;
+  rotation_days_active: number | null;
+  volume_ratio: number | null;
+  regime_alignment: string | null;
+  conviction: string | null;
+  performance_pct: number | null;
+  above_sma50: boolean;
+  volume_consistency: number | null;
+  trend_accel: number | null;
+}
+
+/** Batch upsert pre-runner daily results. */
+export async function upsertPreRunnerDaily(records: PreRunnerDailyRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertPreRunnerDaily: no admin client");
+      return 0;
+    }
+
+    let upserted = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = records.slice(i, i + 500);
+      const { data, error } = await supabase
+        .from("prerunner_daily")
+        .upsert(batch, { onConflict: "scan_date,ticker" })
+        .select("id");
+
+      if (error) {
+        console.error("[persistence] upsertPreRunnerDaily error:", error.message);
+      } else {
+        upserted += data?.length ?? 0;
+      }
+    }
+    return upserted;
+  } catch (err) {
+    console.error("[persistence] upsertPreRunnerDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete prerunner_daily rows older than retentionDays. */
+export async function purgeOldPreRunnerDaily(retentionDays = 14): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("prerunner_daily")
+      .delete()
+      .lt("scan_date", cutoffStr)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] purgeOldPreRunnerDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] purgeOldPreRunnerDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Load pre-runner daily results for a given date. */
+export async function loadPreRunnerDaily(date: string): Promise<PreRunnerDailyRecord[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerunner_daily")
+      .select("*")
+      .eq("scan_date", date)
+      .order("prerunner_score", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadPreRunnerDaily error:", error.message);
+      return [];
+    }
+    return (data ?? []) as PreRunnerDailyRecord[];
+  } catch (err) {
+    console.error("[persistence] loadPreRunnerDaily exception:", err);
+    return [];
+  }
+}
+
+/** Delete all pre-runner daily results for a specific date. */
+export async function clearPreRunnerDaily(date: string): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const { data, error } = await supabase
+      .from("prerunner_daily")
+      .delete()
+      .eq("scan_date", date)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] clearPreRunnerDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] clearPreRunnerDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Load available pre-runner daily scan dates. */
+export async function loadPreRunnerDailyDates(limit = 14): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerunner_daily")
+      .select("scan_date")
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadPreRunnerDailyDates error:", error.message);
+      return [];
+    }
+
+    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
+    return unique.slice(0, limit);
+  } catch (err) {
+    console.error("[persistence] loadPreRunnerDailyDates exception:", err);
+    return [];
+  }
+}
+
 /** Update forward return for a batch of QFE rows. */
 export async function updateQFEForwardReturns(
   updates: { scan_date: string; ticker: string; fwd_pct: number }[],
