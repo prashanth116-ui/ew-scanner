@@ -42,6 +42,7 @@ export interface RawArticle {
   summary: string;
   url: string;
   source: string;
+  finnhubSource?: string;
   datetime: number;
   publishedAt?: string;
 }

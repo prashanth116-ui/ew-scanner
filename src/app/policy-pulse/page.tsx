@@ -24,6 +24,7 @@ interface ThemeEventWithCrossRef {
   source: string;
   sourceUrl: string | null;
   publishedAt: string;
+  ingestedAt: string;
   impactScore: number;
   impactedTickers: string[];
   impactedEtfs: string[];
@@ -73,31 +74,39 @@ function sourceLabel(source: string): string {
 // ── Component ──
 
 export default function PolicyPulsePage() {
-  const [events, setEvents] = useState<ThemeEventWithCrossRef[]>([]);
+  const [allEvents, setAllEvents] = useState<ThemeEventWithCrossRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>(7);
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
-  const [minImpact, setMinImpact] = useState(0);
+  const [minImpact, setMinImpact] = useState(50);
 
+  // Fetch all events for the time range (no server-side filtering by theme/impact)
   useEffect(() => {
     setLoading(true);
     setError(null);
 
-    const params = new URLSearchParams();
-    params.set("days", String(timeRange));
-    if (selectedTheme) params.set("theme", selectedTheme);
-    if (minImpact > 0) params.set("minImpact", String(minImpact));
-
-    fetch(`/api/policy-pulse?${params}`)
+    fetch(`/api/policy-pulse?days=${timeRange}`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then((data: ThemeEventWithCrossRef[]) => setEvents(data))
+      .then((data: ThemeEventWithCrossRef[]) => setAllEvents(data))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [timeRange, selectedTheme, minImpact]);
+  }, [timeRange]);
+
+  // Client-side filtering by theme and impact (no re-fetch)
+  const events = useMemo(() => {
+    let filtered = allEvents;
+    if (selectedTheme) {
+      filtered = filtered.filter((e) => e.themeId === selectedTheme);
+    }
+    if (minImpact > 0) {
+      filtered = filtered.filter((e) => e.impactScore >= minImpact);
+    }
+    return filtered;
+  }, [allEvents, selectedTheme, minImpact]);
 
   // Group events by date
   const grouped = useMemo(() => {
@@ -114,11 +123,32 @@ export default function PolicyPulsePage() {
     }));
   }, [events]);
 
-  // Unique themes in current results (for filter chips)
+  // Theme counts from full dataset (before theme filter)
+  const themeCounts = useMemo(() => {
+    const impactFiltered = minImpact > 0
+      ? allEvents.filter((e) => e.impactScore >= minImpact)
+      : allEvents;
+    const counts: Record<string, number> = {};
+    for (const e of impactFiltered) {
+      counts[e.themeId] = (counts[e.themeId] ?? 0) + 1;
+    }
+    return counts;
+  }, [allEvents, minImpact]);
+
+  // Themes that have events
   const activeThemes = useMemo(() => {
-    const ids = new Set(events.map((e) => e.themeId));
-    return THEME_MAP.filter((t) => ids.has(t.id));
-  }, [events]);
+    return THEME_MAP.filter((t) => (themeCounts[t.id] ?? 0) > 0);
+  }, [themeCounts]);
+
+  // Last updated timestamp
+  const lastUpdated = useMemo(() => {
+    if (allEvents.length === 0) return null;
+    const latest = allEvents.reduce((max, e) =>
+      e.ingestedAt > max ? e.ingestedAt : max,
+      allEvents[0].ingestedAt,
+    );
+    return relativeTime(latest);
+  }, [allEvents]);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
@@ -127,7 +157,12 @@ export default function PolicyPulsePage() {
         <div>
           <h1 className="text-xl font-bold text-white">Policy Pulse</h1>
           <p className="mt-1 text-xs text-[#666]">
-            Government and policy news mapped to your scanner universe
+            High-impact policy news mapped to your scanner universe
+            {lastUpdated && (
+              <span className="ml-2 text-[#555]">
+                · Updated {lastUpdated}
+              </span>
+            )}
           </p>
         </div>
 
@@ -159,9 +194,9 @@ export default function PolicyPulsePage() {
               : "bg-[#111] border-[#333] text-[#888] hover:text-white"
           }`}
         >
-          All
+          All ({Object.values(themeCounts).reduce((a, b) => a + b, 0)})
         </button>
-        {(activeThemes.length > 0 ? activeThemes : THEME_MAP).map((theme) => (
+        {activeThemes.map((theme) => (
           <button
             key={theme.id}
             onClick={() =>
@@ -173,7 +208,7 @@ export default function PolicyPulsePage() {
                 : "bg-[#111] border-[#333] text-[#888] hover:text-white"
             }`}
           >
-            {theme.label}
+            {theme.label} ({themeCounts[theme.id] ?? 0})
           </button>
         ))}
       </div>
@@ -280,35 +315,37 @@ export default function PolicyPulsePage() {
                   )}
 
                   {/* Tickers with cross-ref */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {event.scannerData.slice(0, 8).map((ref) => {
-                      const hasData = ref.qfeRating || ref.prerunVerdict;
-                      const score = ref.qfeScore ?? ref.prerunScore;
-                      const label = ref.qfeRating ?? ref.prerunVerdict;
-                      return (
-                        <span
-                          key={ref.ticker}
-                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                            hasData
-                              ? "border-[#5ba3e6]/30 bg-[#5ba3e6]/5 text-[#5ba3e6]"
-                              : "border-[#333] bg-[#111] text-[#888]"
-                          }`}
-                        >
-                          {ref.ticker}
-                          {hasData && (
-                            <span className="text-[#ccc]">
-                              ({label} {score})
-                            </span>
-                          )}
+                  {event.scannerData.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {event.scannerData.slice(0, 8).map((ref) => {
+                        const hasData = ref.qfeRating || ref.prerunVerdict;
+                        const score = ref.qfeScore ?? ref.prerunScore;
+                        const label = ref.qfeRating ?? ref.prerunVerdict;
+                        return (
+                          <span
+                            key={ref.ticker}
+                            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                              hasData
+                                ? "border-[#5ba3e6]/30 bg-[#5ba3e6]/5 text-[#5ba3e6]"
+                                : "border-[#333] bg-[#111] text-[#888]"
+                            }`}
+                          >
+                            {ref.ticker}
+                            {hasData && (
+                              <span className="text-[#ccc]">
+                                ({label} {score})
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                      {event.scannerData.length > 8 && (
+                        <span className="text-[10px] text-[#666]">
+                          +{event.scannerData.length - 8} more
                         </span>
-                      );
-                    })}
-                    {event.scannerData.length > 8 && (
-                      <span className="text-[10px] text-[#666]">
-                        +{event.scannerData.length - 8} more
-                      </span>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* ETFs */}
                   {event.impactedEtfs.length > 0 && (
@@ -331,7 +368,7 @@ export default function PolicyPulsePage() {
         </div>
       ))}
 
-      {/* Footer link */}
+      {/* Footer */}
       {!loading && events.length > 0 && (
         <p className="text-center text-xs text-[#555] pt-4">
           Showing {events.length} event{events.length !== 1 ? "s" : ""} over {timeRange} days.

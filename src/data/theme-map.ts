@@ -60,8 +60,8 @@ export const THEME_MAP: ThemeDefinition[] = [
   {
     id: "defense-spending",
     label: "Defense & Geopolitics",
-    keywords: ["military", "nato", "geopolitical", "conflict", "weapons", "pentagon", "arms deal", "navy"],
-    strongKeywords: ["defense budget", "military contract", "defense spending", "war", "invasion"],
+    keywords: ["military", "nato", "geopolitical", "conflict", "weapons", "pentagon", "arms deal", "navy", "war", "invasion"],
+    strongKeywords: ["defense budget", "military contract", "defense spending", "military strike", "troops deployed", "defense contract", "arms sale"],
     tickers: ["LMT", "RTX", "NOC", "GD", "BA", "HII", "LHX", "TDG"],
     etfs: ["ITA"],
   },
@@ -126,8 +126,8 @@ export const THEME_MAP: ThemeDefinition[] = [
     label: "White House & Executive",
     keywords: ["president", "oval office", "administration", "presidential", "cabinet", "white house statement", "press briefing", "veto", "signing ceremony"],
     strongKeywords: ["trump", "executive order", "white house", "truth social", "mar-a-lago", "presidential directive", "presidential proclamation", "presidential memo"],
-    tickers: [],
-    etfs: [],
+    tickers: ["SPY", "QQQ", "DIA"],
+    etfs: ["SPY", "QQQ", "DIA"],
     sourceWeight: { "whitehouse-rss": 30 },
   },
 ];

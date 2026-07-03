@@ -1,9 +1,9 @@
 import type { RawArticle, ClassifiedResult, ThemeDefinition } from "./types";
 
-/** Source authority scores (out of 30). */
+/** Source authority scores (out of 25). */
 const SOURCE_AUTHORITY: Record<string, number> = {
-  "whitehouse-rss": 30,
-  "fed-register": 28,
+  "whitehouse-rss": 25,
+  "fed-register": 23,
 };
 
 /** Known high-authority Finnhub sub-sources. */
@@ -12,11 +12,11 @@ const HIGH_AUTHORITY_SOURCES = new Set([
   "bloomberg", "cnbc", "financial times", "ft", "nytimes", "new york times",
 ]);
 
-function getSourceAuthority(source: string, subSource?: string): number {
+function getSourceAuthority(source: string, finnhubSource?: string): number {
   if (SOURCE_AUTHORITY[source]) return SOURCE_AUTHORITY[source];
-  const sub = (subSource ?? "").toLowerCase();
-  if (HIGH_AUTHORITY_SOURCES.has(sub)) return 25;
-  return 15;
+  const sub = (finnhubSource ?? "").toLowerCase();
+  if (HIGH_AUTHORITY_SOURCES.has(sub)) return 20;
+  return 10;
 }
 
 /** Count keyword matches in text, returning matched keywords. */
@@ -74,10 +74,11 @@ export function classifyArticle(
 
 /**
  * Compute impact score (0-100) based on:
- * - Source authority (30)
+ * - Source authority (25)
  * - Keyword density (25)
- * - Strong keyword bonus (25)
- * - Headline match (20)
+ * - Strong keyword bonus (15)
+ * - Headline match (15)
+ * - Multi-keyword bonus (20)
  */
 function computeImpactScore(
   article: RawArticle,
@@ -88,9 +89,9 @@ function computeImpactScore(
 ): number {
   let score = 0;
 
-  // 1. Source authority (0-30)
+  // 1. Source authority (0-25)
   const sourceWeight = theme.sourceWeight?.[article.source];
-  score += sourceWeight ?? getSourceAuthority(article.source);
+  score += sourceWeight ?? getSourceAuthority(article.source, article.finnhubSource);
 
   // 2. Keyword density (0-25)
   const combined = `${article.headline} ${article.summary ?? ""}`;
@@ -98,20 +99,25 @@ function computeImpactScore(
   const density = totalWords > 0 ? allMatched.length / totalWords : 0;
   score += Math.min(25, Math.round(density * 500));
 
-  // 3. Strong keyword bonus (0-25)
+  // 3. Strong keyword bonus (0-15)
   if (strongMatches.length > 0) {
     const headlineStrong = strongMatches.some((kw) =>
       headlineLower.includes(kw.toLowerCase()),
     );
-    score += headlineStrong ? 25 : 15;
+    score += headlineStrong ? 15 : 10;
   }
 
-  // 4. Headline match (0-20)
+  // 4. Headline match (0-15)
   const allKeywords = [...theme.strongKeywords, ...theme.keywords];
   const headlineMatch = allKeywords.some((kw) =>
     headlineLower.includes(kw.toLowerCase()),
   );
-  score += headlineMatch ? 20 : 10;
+  score += headlineMatch ? 15 : 5;
+
+  // 5. Multi-keyword bonus (0-20) — rewards articles hitting multiple keywords
+  if (allMatched.length >= 4) score += 20;
+  else if (allMatched.length >= 3) score += 15;
+  else if (allMatched.length >= 2) score += 8;
 
   return Math.min(100, Math.max(0, score));
 }

@@ -132,36 +132,6 @@ export async function purgeOldThemeEvents(retentionDays = 30): Promise<number> {
   }
 }
 
-/** Load distinct dates that have theme events. */
-export async function loadThemeEventDates(limit = 30): Promise<string[]> {
-  try {
-    const supabase = createAdminClient();
-    if (!supabase) return [];
-
-    const { data, error } = await supabase
-      .from("theme_events")
-      .select("published_at")
-      .order("published_at", { ascending: false });
-
-    if (error) {
-      console.error("[policy-pulse] loadThemeEventDates error:", error.message);
-      return [];
-    }
-
-    const unique = [
-      ...new Set(
-        (data ?? []).map((r) =>
-          new Date(r.published_at as string).toISOString().slice(0, 10),
-        ),
-      ),
-    ];
-    return unique.slice(0, limit);
-  } catch (err) {
-    console.error("[policy-pulse] loadThemeEventDates exception:", err);
-    return [];
-  }
-}
-
 /** Raw DB row shape (snake_case). */
 export interface ThemeEventRow {
   id: number;

@@ -42,6 +42,7 @@ async function fetchFinnhubNews(): Promise<RawArticle[]> {
       summary: item.summary?.slice(0, 500) ?? "",
       url: item.url,
       source: "finnhub",
+      finnhubSource: item.source,
       datetime: item.datetime,
     }));
   } catch (err) {
@@ -155,6 +156,9 @@ export async function ingestPolicyPulse(): Promise<IngestResult> {
     }
 
     for (const classification of classifications) {
+      // Only persist high-impact events
+      if (classification.impactScore < 40) continue;
+
       const theme = THEME_MAP.find((t) => t.id === classification.themeId);
       if (!theme) continue;
 

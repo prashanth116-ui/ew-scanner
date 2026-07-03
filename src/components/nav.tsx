@@ -16,7 +16,6 @@ const scannerTabs = [
   { id: "earnings", label: "Earnings", href: "/earnings" },
   { id: "catalyst", label: "AI Radar", href: "/catalyst" },
   { id: "wave", label: "Wave Scanner", href: "/wave-scanner" },
-  { id: "policy", label: "Policy Pulse", href: "/policy-pulse" },
 ] as const;
 
 const subPages: Record<string, { href: string; label: string }[]> = {
@@ -51,6 +50,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/sectors/crypto", label: "Crypto" },
     { href: "/sectors/crypto/guide", label: "Crypto Guide" },
     { href: "/sectors/guide", label: "Guide" },
+    { href: "/policy-pulse", label: "Policy Pulse" },
   ],
   confluence: [
     { href: "/confluence", label: "Scanner" },
@@ -73,18 +73,15 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/wave-scanner", label: "Scanner" },
     { href: "/wave-scanner/guide", label: "Guide" },
   ],
-  policy: [
-    { href: "/policy-pulse", label: "Timeline" },
-  ],
 };
 
-function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" | "strat" | "earnings" | "catalyst" | "wave" | "policy" {
-  if (pathname.startsWith("/policy-pulse")) return "policy";
+function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" | "strat" | "earnings" | "catalyst" | "wave" {
   if (pathname.startsWith("/wave-scanner")) return "wave";
   if (pathname.startsWith("/catalyst")) return "catalyst";
   if (pathname.startsWith("/earnings")) return "earnings";
   if (pathname.startsWith("/strat")) return "strat";
   if (pathname.startsWith("/confluence")) return "confluence";
+  if (pathname.startsWith("/policy-pulse")) return "sectors";
   if (pathname.startsWith("/sectors") || pathname.startsWith("/rotation")) return "sectors";
   if (pathname.startsWith("/prerun")) return "prerun";
   if (pathname.startsWith("/squeeze")) return "squeeze";
@@ -263,7 +260,7 @@ export function Nav() {
                   {item.label}
                 </Link>
               ))}
-              {tab.id !== "policy" && (
+              {tab.id !== "wave" && (
                 <div className="mx-3 my-2 h-px bg-[#2a2a2a]" aria-hidden="true" />
               )}
             </div>
