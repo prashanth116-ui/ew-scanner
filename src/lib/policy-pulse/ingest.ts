@@ -135,8 +135,24 @@ export async function ingestPolicyPulse(): Promise<IngestResult> {
   const records: ThemeEventRecord[] = [];
   const themeCounts: Record<string, number> = {};
 
+  const whiteHouseTheme = THEME_MAP.find((t) => t.id === "white-house");
+
   for (const article of dedupedArticles) {
     const classifications = classifyArticle(article, THEME_MAP);
+
+    // Auto-tag all White House RSS articles under the white-house theme
+    if (
+      article.source === "whitehouse-rss" &&
+      whiteHouseTheme &&
+      !classifications.some((c) => c.themeId === "white-house")
+    ) {
+      classifications.push({
+        themeId: "white-house",
+        impactScore: 70,
+        matchedKeywords: ["whitehouse-rss-source"],
+        strongMatch: true,
+      });
+    }
 
     for (const classification of classifications) {
       const theme = THEME_MAP.find((t) => t.id === classification.themeId);

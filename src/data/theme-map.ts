@@ -121,6 +121,15 @@ export const THEME_MAP: ThemeDefinition[] = [
     tickers: ["NVDA", "MSFT", "GOOGL", "META", "AMD", "PLTR", "CRM", "ORCL"],
     etfs: ["BOTZ", "ROBO"],
   },
+  {
+    id: "white-house",
+    label: "White House & Executive",
+    keywords: ["president", "oval office", "administration", "presidential", "cabinet", "white house statement", "press briefing", "veto", "signing ceremony"],
+    strongKeywords: ["trump", "executive order", "white house", "truth social", "mar-a-lago", "presidential directive", "presidential proclamation", "presidential memo"],
+    tickers: [],
+    etfs: [],
+    sourceWeight: { "whitehouse-rss": 30 },
+  },
 ];
 
 /** Look up a theme definition by ID. */
