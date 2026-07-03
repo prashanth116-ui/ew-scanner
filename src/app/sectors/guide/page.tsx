@@ -37,6 +37,7 @@ const SECTIONS = [
   { id: "workflow", label: "Top-Down Workflow" },
   { id: "quick-checklist", label: "Trade Checklist" },
   { id: "filter-recipes", label: "Filter Recipes" },
+  { id: "prerunner-radar", label: "Pre-Runner Radar" },
   { id: "limitations", label: "Limitations" },
 ];
 
@@ -2176,6 +2177,141 @@ export default function SectorGuidePage() {
             It measures the stock&apos;s own momentum (more directional for individual moves). Use Sector RS for relative positioning
             within a sector trade &mdash; it tells you if the stock is keeping up with peers, not whether it will go up or down.
           </Tip>
+        </Section>
+
+        {/* Section: Pre-Runner Radar */}
+        <Section
+          id="prerunner-radar"
+          title="Pre-Runner Radar"
+          icon={<Target className="h-5 w-5 text-purple-400" />}
+        >
+          <p>
+            The <Link href="/sectors/picks" className="text-[#5ba3e6] hover:underline">Pre-Runner Radar</Link> panel
+            on the Stock Picks page surfaces stocks with extreme relative strength acceleration in actively rotating sectors.
+            It catches two types of candidates that other panels miss:
+          </p>
+
+          <SubSection title="Two Pipelines, One List">
+            <p className="mb-2">
+              The radar merges candidates from two independent pipelines, each catching different stock profiles:
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Type</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Source</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">What It Catches</th>
+                    <th className="py-1.5 text-left font-medium">Quality Gates</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-2 pr-3"><span className="rounded-full bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-400">Turnaround</span></td>
+                    <td className="py-2 pr-3">Rotation Tracker</td>
+                    <td className="py-2 pr-3">Lagging stocks in rotating sectors with positive RS acceleration + volume &mdash; pure price/RS-based detection</td>
+                    <td className="py-2">None (catches small caps, biotech, pre-revenue names that enrichment rejects)</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-3"><span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-400">Leader</span></td>
+                    <td className="py-2 pr-3">Enrichment Pipeline</td>
+                    <td className="py-2 pr-3">Quality-gated stocks classified as LEADER with HIGH or MEDIUM conviction</td>
+                    <td className="py-2">$2B+ market cap, 30%+ institutional ownership, 1M+ avg volume</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2">
+              This dual-pipeline approach is essential because stocks like <strong className="text-white">SEER</strong> (small biotech,
+              below 50-SMA, no institutional coverage) would never pass the enrichment quality gates but <em>are</em> caught by the
+              rotation tracker&apos;s turnaround detection. Meanwhile, large-cap leaders like <strong className="text-white">NVDA</strong> come
+              through the enrichment pipeline. Both belong on the same radar.
+            </p>
+          </SubSection>
+
+          <SubSection title="Scoring (0&ndash;100)">
+            <p className="mb-2">
+              Each candidate is scored on a weighted composite. Leaders and turnarounds use different weight distributions
+              because the signals that matter differ:
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Component</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Leader Weight</th>
+                    <th className="py-1.5 text-left font-medium">Turnaround Weight</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">RS Acceleration</td>
+                    <td className="py-1.5 pr-3">35%</td>
+                    <td className="py-1.5">40%</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Sector Health</td>
+                    <td className="py-1.5 pr-3">25%</td>
+                    <td className="py-1.5">15%</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Rotation Lifecycle</td>
+                    <td className="py-1.5 pr-3">&mdash;</td>
+                    <td className="py-1.5">20%</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Volume Ratio</td>
+                    <td className="py-1.5 pr-3">15%</td>
+                    <td className="py-1.5">15%</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Conviction</td>
+                    <td className="py-1.5 pr-3">15%</td>
+                    <td className="py-1.5">&mdash;</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">Regime Alignment</td>
+                    <td className="py-1.5 pr-3">10%</td>
+                    <td className="py-1.5">10%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2">
+              A <strong className="text-white">+5 bonus</strong> is added when RS direction is improving (RS acceleration
+              is increasing day over day). Minimum score to appear on the radar is <strong className="text-white">55</strong>.
+            </p>
+          </SubSection>
+
+          <SubSection title="Reading the Table">
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong className="text-white">Score bar</strong> &mdash; Visual 0&ndash;100 score. Green (&ge;70) = strong, cyan (&ge;55) = moderate, amber = borderline.</li>
+              <li><strong className="text-white">RS Accel</strong> &mdash; Relative strength acceleration vs sector ETF. The arrow (&uarr;/&darr;) shows whether RS direction is improving or deteriorating. The number in parentheses is the delta (change in RS acceleration).</li>
+              <li><strong className="text-white">Stage</strong> &mdash; Rotation lifecycle for turnarounds: EARLY (first 5 days), MATURING (6&ndash;15 days), LATE (16&ndash;30 days), EXHAUSTING (&gt;30 days). Leaders show &ldquo;&ndash;&rdquo; since they come from the enrichment pipeline.</li>
+              <li><strong className="text-white">Vol Ratio</strong> &mdash; Current volume vs 10-day average. &ge;1.2x = institutional participation. Below 0.8x = drying up.</li>
+              <li><strong className="text-white">Perf %</strong> &mdash; For turnarounds: performance since rotation start. For leaders: 20-day return.</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Nightly Telegram Alert">
+            <p>
+              A cron job runs at 02:50 UTC (10:50 PM ET) nightly and sends a Telegram summary with the top 5 candidates,
+              new additions, and exits vs the prior day. Results are persisted to the database for 14 days.
+            </p>
+          </SubSection>
+
+          <Tip>
+            The Pre-Runner Radar is most useful when combined with the <strong className="text-white">Entry Signals</strong> panel.
+            Entry Signals shows you <em>which sectors</em> to trade (sector-level gates). The Pre-Runner Radar shows you
+            <em> which stocks</em> within those sectors have the strongest RS momentum &mdash; including stocks that
+            the Entry Signals panel can&apos;t see because they fail quality gates.
+          </Tip>
+
+          <Warning>
+            Turnaround candidates have <strong>no quality gates</strong> &mdash; they may include low market cap, low institutional
+            ownership, or pre-revenue names. Always do your own due diligence. The score reflects RS momentum strength,
+            not fundamental quality.
+          </Warning>
         </Section>
 
         {/* ═══════════════════════════════════════════════════════════════
