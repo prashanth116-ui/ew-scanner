@@ -15,7 +15,7 @@ import {
 } from "../_components";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
-import type { FuturesSnapshot, InternalsSnapshot, ChecklistItem, TradingBias } from "@/lib/premarket/types";
+import type { FuturesSnapshot, InternalsSnapshot, ChecklistItem, TradingBias, SectorBreadth, VixData } from "@/lib/premarket/types";
 import { computeBiasScore } from "@/lib/premarket/scoring";
 import { loadHistory } from "@/lib/sector-rotation/history";
 import { SUB_SECTOR_PARENT, subSectorDivergenceTooltip, computeSubSectorDivergences } from "@/lib/sector-rotation/sub-sector-constants";
@@ -55,6 +55,8 @@ export default function DailyBriefPage() {
   const [activeTab, setActiveTab] = useState<TabView>("brief");
   const [futures, setFutures] = useState<FuturesSnapshot[]>([]);
   const [internals, setInternals] = useState<InternalsSnapshot>({ addLine: null, tick: null, trin: null });
+  const [sectorBreadth, setSectorBreadth] = useState<SectorBreadth | null>(null);
+  const [vixData, setVixData] = useState<VixData | null>(null);
   const [pulseLoading, setPulseLoading] = useState(true);
   const [tradingBias, setTradingBias] = useState<TradingBias | null>(null);
 
@@ -69,10 +71,12 @@ export default function DailyBriefPage() {
     const fetchPulse = () => {
       fetch("/api/premarket")
         .then((res) => (res.ok ? res.json() : null))
-        .then((result: { futures: FuturesSnapshot[]; internals: InternalsSnapshot; tradingBias?: TradingBias | null } | null) => {
+        .then((result: { futures: FuturesSnapshot[]; internals: InternalsSnapshot; sectorBreadth?: SectorBreadth | null; vixData?: VixData | null; tradingBias?: TradingBias | null } | null) => {
           if (result) {
             setFutures(result.futures);
             setInternals(result.internals);
+            setSectorBreadth(result.sectorBreadth ?? null);
+            setVixData(result.vixData ?? null);
             setTradingBias(result.tradingBias ?? null);
           }
         })
@@ -135,6 +139,7 @@ export default function DailyBriefPage() {
       dxyTrend: data.regime.dxyTrend,
       favoredSectors: data.regime.favoredSectors,
       avoidSectors: data.regime.avoidSectors,
+      vixBounds: data.regime.vixBounds ?? { low: 17, high: 20 },
     } : null;
     return computeBiasScore(futures, internals, posture, regimeData);
   }, [futures, internals, posture, data?.regime]);
@@ -572,7 +577,16 @@ function TradingBiasCard({ bias, loading }: { bias: TradingBias | null; loading:
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[#666]">Best to trade:</span>
-            <span className="text-white font-medium">{bias.bestToTrade ?? "\u2014"}</span>
+            {bias.bestToTrade ? (
+              <span className="text-white font-medium">
+                {bias.bestToTrade.symbol}{" "}
+                <span className={bias.bestToTrade.direction === "long" ? "text-green-400" : "text-red-400"}>
+                  ({bias.bestToTrade.direction})
+                </span>
+              </span>
+            ) : (
+              <span className="text-white font-medium">{"\u2014"}</span>
+            )}
           </div>
           {bias.assetToAvoid && (
             <div className="flex items-center gap-2">

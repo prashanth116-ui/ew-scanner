@@ -4,11 +4,12 @@ import { logError } from "@/lib/error-logger";
 import { fetchPremarketData } from "@/lib/premarket/fetch";
 import { computeBiasScore } from "@/lib/premarket/scoring";
 import { computeTradingBias } from "@/lib/premarket/trading-bias";
+import type { VixBounds } from "@/lib/premarket/trading-bias";
 import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
 import { fetchMacroRegime, enhanceRegimeWithCrossAsset } from "@/lib/sector-rotation/regime";
 import { computeMarketPosture, computeSectorTiers, computeRiskFlags } from "@/lib/sector-rotation/brief";
 import type { PostureResult } from "@/lib/sector-rotation/brief";
-import type { PremarketData } from "@/lib/premarket/types";
+import type { PremarketData, SectorBreadth } from "@/lib/premarket/types";
 
 export const maxDuration = 30;
 
@@ -52,6 +53,7 @@ export async function GET(request: NextRequest) {
           dxyTrend: enhancedRegime.dxyTrend,
           favoredSectors: enhancedRegime.favoredSectors,
           avoidSectors: enhancedRegime.avoidSectors,
+          vixBounds: enhancedRegime.vixBounds,
         } : undefined,
       };
       posture = computeMarketPosture(dataWithRegime, null);
@@ -95,16 +97,41 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Compute sector breadth from GICS sector ETF data
+    let sectorBreadth: SectorBreadth | null = null;
+    if (sectorResult) {
+      const gicsSectors = sectorResult.sectors.filter((s) => s.category === "gics_sector");
+      let advancing = 0;
+      let declining = 0;
+      for (const s of gicsSectors) {
+        // Use momentum composite > 50 as "advancing" proxy (positive multi-TF momentum)
+        if (s.momentumComposite > 50) advancing++;
+        else declining++;
+      }
+      const total = advancing + declining;
+      sectorBreadth = {
+        advancing,
+        declining,
+        ratio: total > 0 ? advancing / total : 0.5,
+      };
+    }
+
+    // Use adaptive VIX bounds from regime (computed from 3-month 25th/75th percentiles)
+    const vixBounds: VixBounds | null = enhancedRegime?.vixBounds ?? null;
+
     const tradingBias = computeTradingBias(
       premarketResult.futures,
-      premarketResult.internals,
-      enhancedRegime?.vix ?? null,
+      premarketResult.vixData,
       score,
+      sectorBreadth,
+      vixBounds,
     );
 
     const response: PremarketData = {
       futures: premarketResult.futures,
       internals: premarketResult.internals,
+      sectorBreadth,
+      vixData: premarketResult.vixData,
       checklist,
       biasScore: score,
       biasLabel: label,

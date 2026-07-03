@@ -156,6 +156,7 @@ export interface SectorRotationResult {
     dxyTrend: "rising" | "falling" | "flat";
     favoredSectors: string[];
     avoidSectors: string[];
+    vixBounds?: { low: number; high: number };
   };
   /** Stock-level enrichment: quality-gated, classified, conviction-scored */
   enrichedStocks?: {

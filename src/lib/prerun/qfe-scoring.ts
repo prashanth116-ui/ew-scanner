@@ -32,6 +32,7 @@ export interface MarketEnvironment {
   leadingSectors: number;
   improvingSectors: number;
   regime: MarketRegime;
+  computedAt: string; // ISO timestamp for staleness tracking
 }
 
 export interface QFEResult {
@@ -163,7 +164,7 @@ export async function computeMarketEnvironment(
     qqqTrendScore,
     sectorBreadthScore,
     distributionDayScore,
-    spyDistFromHighScore: spyDistFromHighScore,
+    spyDistFromHighScore,
     totalScore,
     spyAboveSma50,
     spyAboveSma200,
@@ -171,10 +172,12 @@ export async function computeMarketEnvironment(
     leadingSectors,
     improvingSectors,
     regime,
+    computedAt: new Date().toISOString(),
   };
 }
 
 // ── Quality Engine (0-100) ──
+// Theoretical max: 100 (Liquidity 15 + VolAccum 20 + TrendHealth 20 + Institutional 15 + Earnings 15 + DQ 5 + Base 10)
 
 export function scoreQuality(data: PreRunStockData): number {
   let total = 0;
@@ -244,6 +247,8 @@ export function scoreQuality(data: PreRunStockData): number {
 }
 
 // ── Leadership Engine (0-100) ──
+// Theoretical max: 90 (SPY RS 25 + QQQ RS 15 + Sector RS 15 + Accel 20 + SectorLead 5 + Resilience 10)
+// + quadrant bonus (0-10) applied in computeQFE → true max 100
 
 export function scoreLeadership(data: PreRunStockData): number {
   let total = 0;
@@ -299,9 +304,11 @@ export function scoreLeadership(data: PreRunStockData): number {
 
 // ── Entry Engine (0-100) ──
 
+// Theoretical max: 87 (EMA 22 + Breakout 15 + Compression 15 + Pullback 15 + Weekly 10 + Gap 10)
+// Entry naturally caps below 100 — perfect entry across all dimensions is rare by design.
+
 export function scoreEntry(data: PreRunStockData): number {
-  // Base credit: every ticker reaching QFE already passed a preset scanner
-  let total = 5;
+  let total = 0;
 
   // EMA Proximity (0-22)
   const distEma10 = Math.abs(data.distFromEma10Atr ?? 5);
@@ -398,15 +405,23 @@ export function computeQFE(
   else if (composite >= 53) rating = "B";
   else if (composite >= 45) rating = "C";
 
+  // Data quality gate: cap rating when data is sparse
+  const dq = data.dataQuality ?? 100;
+  if (dq < 30 && (rating === "A+" || rating === "A" || rating === "B+")) {
+    rating = "C"; // Very low data quality — cap at C
+  } else if (dq < 50 && (rating === "A+" || rating === "A")) {
+    rating = "B"; // Low data quality — cap at B
+  }
+
   // Risk Level
   const beta = data.instBeta ?? 1;
   const gapPct = Math.abs(data.instGapPct ?? 0);
   const atrPct = data.vcpAtrPct ?? 0;
   const dte = data.daysToEarnings;
   let riskLevel: QFERiskLevel = "Moderate";
-  if (beta > 1.5 || gapPct > 2.0 || atrPct > 3.5 || (dte !== null && dte <= 5)) {
+  if (beta > 1.5 || gapPct > 2.0 || atrPct > 3.5 || (dte !== null && dte <= 5) || dq < 30) {
     riskLevel = "High";
-  } else if (beta <= 1.0 && gapPct <= 1.0 && atrPct <= 2.0 && (dte === null || dte > 14)) {
+  } else if (beta <= 1.0 && gapPct <= 1.0 && atrPct <= 2.0 && (dte === null || dte > 14) && dq >= 60) {
     riskLevel = "Low";
   }
 
@@ -418,7 +433,7 @@ export function computeQFE(
 
   // Action — composite-based with component guardrails
   let action: QFEAction = "Avoid";
-  if (composite >= 68 && entry >= 45 && quality >= 50 && riskLevel !== "High") {
+  if (composite >= 68 && entry >= 40 && quality >= 50 && riskLevel !== "High") {
     action = "Buy Now";
   } else if (composite >= 60 && (quality >= 50 || leadership >= 55)) {
     action = "Buy Pullback";
@@ -495,6 +510,12 @@ function buildCommentary(
   const rvol = data.rvolTrajectory ?? 0;
   if (rvol > 0.3) {
     parts.push("Volume trajectory building.");
+  }
+
+  // Data quality warning
+  const commentDq = data.dataQuality ?? 100;
+  if (commentDq < 50) {
+    parts.push(`Low data quality (${commentDq}%) — rating capped.`);
   }
 
   return parts.slice(0, 5).join(" ");

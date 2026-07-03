@@ -1384,3 +1384,64 @@ export async function loadQFEDailyMulti(
     return [];
   }
 }
+
+// ── QFE Forward Return Backfill ──
+
+export interface QFEForwardReturnRow {
+  scan_date: string;
+  ticker: string;
+  price: number;
+}
+
+/** Load QFE rows that need forward return backfill for a specific lookback (1d, 5d, or 10d). */
+export async function loadQFEPendingForwardReturns(
+  scanDate: string,
+  column: "fwd_1d_pct" | "fwd_5d_pct" | "fwd_10d_pct",
+): Promise<QFEForwardReturnRow[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("qfe_daily")
+      .select("scan_date, ticker, price")
+      .eq("scan_date", scanDate)
+      .is(column, null);
+
+    if (error) {
+      console.error(`[persistence] loadQFEPendingForwardReturns(${column}) error:`, error.message);
+      return [];
+    }
+    return (data ?? []) as QFEForwardReturnRow[];
+  } catch (err) {
+    console.error(`[persistence] loadQFEPendingForwardReturns(${column}) exception:`, err);
+    return [];
+  }
+}
+
+/** Update forward return for a batch of QFE rows. */
+export async function updateQFEForwardReturns(
+  updates: { scan_date: string; ticker: string; fwd_pct: number }[],
+  column: "fwd_1d_pct" | "fwd_5d_pct" | "fwd_10d_pct",
+): Promise<number> {
+  if (updates.length === 0) return 0;
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    let updated = 0;
+    for (const u of updates) {
+      const { error } = await supabase
+        .from("qfe_daily")
+        .update({ [column]: u.fwd_pct, fwd_return_updated_at: new Date().toISOString() })
+        .eq("scan_date", u.scan_date)
+        .eq("ticker", u.ticker);
+
+      if (!error) updated++;
+    }
+    return updated;
+  } catch (err) {
+    console.error(`[persistence] updateQFEForwardReturns(${column}) exception:`, err);
+    return 0;
+  }
+}

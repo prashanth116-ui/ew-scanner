@@ -75,6 +75,7 @@ interface MarketEnvDetail {
   spyDistributionDays: number;
   leadingSectors: number;
   improvingSectors: number;
+  computedAt?: string;
 }
 
 type RatingFilter = "ALL" | "A+" | "A" | "B+" | "B" | "C" | "D";
@@ -516,6 +517,11 @@ export default function QFEDailyPage() {
               </p>
             </div>
           </div>
+          {marketEnvDetail.computedAt && (
+            <p className="mt-2 text-[9px] text-[#444]">
+              Computed at {new Date(marketEnvDetail.computedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short" })}
+            </p>
+          )}
         </div>
       )}
 

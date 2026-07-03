@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
               dxyTrend: enhancedRegime.dxyTrend,
               favoredSectors: enhancedRegime.favoredSectors,
               avoidSectors: enhancedRegime.avoidSectors,
+              vixBounds: enhancedRegime.vixBounds,
             }
           : undefined,
       },

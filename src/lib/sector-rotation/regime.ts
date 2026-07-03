@@ -25,6 +25,8 @@ export interface MacroRegimeData {
   dxyTrend: "rising" | "falling" | "flat";
   favoredSectors: string[];
   avoidSectors: string[];
+  /** Adaptive VIX bounds computed from 3-month 25th/75th percentiles */
+  vixBounds: { low: number; high: number };
 }
 
 // Sector names match `displayName` from sector-universe.ts (GICS standard names)
@@ -126,6 +128,7 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
       dxyTrend,
       favoredSectors: sectorMap.favored,
       avoidSectors: sectorMap.avoid,
+      vixBounds: { low: vixLow, high: vixHigh },
     };
 
     _regimeCache = { data, ts: Date.now() };

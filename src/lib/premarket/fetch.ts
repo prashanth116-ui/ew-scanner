@@ -1,19 +1,22 @@
 /**
  * Yahoo Finance data fetching for pre-market checklist.
- * SERVER-ONLY: Fetches futures (ES, NQ, RTY) and market internals (TICK, TRIN, ADD).
+ * SERVER-ONLY: Fetches futures (ES, NQ, RTY, YM, CL, GC) and VIX data.
+ *
+ * NOTE: ^TICK, ^TRIN, ^ADD permanently return 404 on Yahoo Finance.
+ * Breadth is computed from sector rotation data in the API route instead.
  */
 
 import "server-only";
 
 import { fetchWithRetry } from "@/lib/yahoo-utils";
-import type { FuturesSnapshot, InternalsSnapshot } from "./types";
+import type { FuturesSnapshot, InternalsSnapshot, VixData } from "./types";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 // Module-level cache with 2-min TTL (pre-market data changes frequently)
-let _cache: { data: { futures: FuturesSnapshot[]; internals: InternalsSnapshot }; ts: number } | null = null;
+let _cache: { data: { futures: FuturesSnapshot[]; internals: InternalsSnapshot; vixData: VixData | null }; ts: number } | null = null;
 const CACHE_TTL = 2 * 60 * 1000;
 
 const FUTURES_SYMBOLS = [
@@ -25,18 +28,13 @@ const FUTURES_SYMBOLS = [
   { symbol: "GC=F", name: "Gold" },
 ];
 
-const INTERNALS_SYMBOLS = {
-  add: "^ADD",
-  tick: "^TICK",
-  trin: "^TRIN",
-};
-
 interface YahooQuote {
   price: number;
   change: number;
   changePct: number;
   volume: number;
   timestamp: number;
+  previousClose: number;
 }
 
 async function fetchQuote(symbol: string): Promise<YahooQuote | null> {
@@ -59,7 +57,7 @@ async function fetchQuote(symbol: string): Promise<YahooQuote | null> {
     const volume = meta.regularMarketVolume ?? 0;
     const timestamp = (meta.regularMarketTime ?? Math.floor(Date.now() / 1000)) * 1000;
 
-    return { price, change, changePct, volume, timestamp };
+    return { price, change, changePct, volume, timestamp, previousClose: prevClose };
   } catch {
     return null;
   }
@@ -68,14 +66,15 @@ async function fetchQuote(symbol: string): Promise<YahooQuote | null> {
 export async function fetchPremarketData(): Promise<{
   futures: FuturesSnapshot[];
   internals: InternalsSnapshot;
+  vixData: VixData | null;
 }> {
   // Return cached data if fresh
   if (_cache && Date.now() - _cache.ts < CACHE_TTL) {
     return _cache.data;
   }
 
-  // Fetch all symbols in parallel
-  const [futuresResults, addResult, tickResult, trinResult] = await Promise.all([
+  // Fetch futures + VIX in parallel (internals removed — ^TICK/^TRIN/^ADD are dead)
+  const [futuresResults, vixQuote] = await Promise.all([
     Promise.all(FUTURES_SYMBOLS.map(async (f) => {
       const quote = await fetchQuote(f.symbol);
       if (!quote) return null;
@@ -89,20 +88,31 @@ export async function fetchPremarketData(): Promise<{
         timestamp: quote.timestamp,
       } satisfies FuturesSnapshot;
     })),
-    fetchQuote(INTERNALS_SYMBOLS.add),
-    fetchQuote(INTERNALS_SYMBOLS.tick),
-    fetchQuote(INTERNALS_SYMBOLS.trin),
+    fetchQuote("^VIX"),
   ]);
 
   const futures = futuresResults.filter((f): f is FuturesSnapshot => f !== null);
 
+  // Legacy internals — always null (kept for backward compat with scoring.ts checklist)
   const internals: InternalsSnapshot = {
-    addLine: addResult?.price ?? null,
-    tick: tickResult?.price ?? null,
-    trin: trinResult?.price ?? null,
+    addLine: null,
+    tick: null,
+    trin: null,
   };
 
-  const data = { futures, internals };
+  // VIX with daily change (chartPreviousClose gives us yesterday's close)
+  const vixData: VixData | null = vixQuote
+    ? {
+        level: vixQuote.price,
+        previousClose: vixQuote.previousClose,
+        change: vixQuote.price - vixQuote.previousClose,
+        changePct: vixQuote.previousClose !== 0
+          ? ((vixQuote.price - vixQuote.previousClose) / vixQuote.previousClose) * 100
+          : 0,
+      }
+    : null;
+
+  const data = { futures, internals, vixData };
   _cache = { data, ts: Date.now() };
   return data;
 }

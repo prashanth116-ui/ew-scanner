@@ -1,10 +1,19 @@
 /**
  * Pre-Market Trading Bias Engine.
- * Computes structured trading bias from futures, internals, VIX, and existing bias score.
+ * Computes structured trading bias from futures, VIX (with daily change),
+ * adaptive VIX bounds, sector breadth, and existing bias score.
  * Pure functions — no side effects, no fetching.
  */
 
-import type { FuturesSnapshot, InternalsSnapshot, TradingBias, MarketBias, DayType } from "./types";
+import type {
+  FuturesSnapshot,
+  TradingBias,
+  MarketBias,
+  DayType,
+  SectorBreadth,
+  VixData,
+  BestToTradeInfo,
+} from "./types";
 
 // ── Helpers ──
 
@@ -12,6 +21,11 @@ interface EquityFuture {
   symbol: string;   // "ES" | "NQ" | "YM" | "RTY"
   changePct: number;
   price: number;
+}
+
+export interface VixBounds {
+  low: number;   // adaptive 25th percentile (default 17)
+  high: number;  // adaptive 75th percentile (default 20)
 }
 
 function extractEquityFutures(futures: FuturesSnapshot[]): EquityFuture[] {
@@ -42,36 +56,51 @@ function detectLeadership(equities: EquityFuture[]): { leading: string | null; w
   return { leading: sorted[0].symbol, weakest: sorted[sorted.length - 1].symbol };
 }
 
-// ── 3b. VIX Cross-Reference ──
+// ── 3b. VIX Cross-Reference (now with daily change + adaptive bounds) ──
 
-function interpretVix(avgEquityChange: number, vix: number | null): string {
-  if (vix == null) return "VIX data unavailable — cannot cross-reference fear gauge";
+function interpretVix(
+  avgEquityChange: number,
+  vixData: VixData | null,
+  vixBounds: VixBounds,
+): string {
+  if (vixData == null) return "VIX data unavailable — cannot cross-reference fear gauge";
 
+  const vix = vixData.level;
   const equityUp = avgEquityChange > 0.1;
   const equityDown = avgEquityChange < -0.1;
 
-  // Determine VIX direction from level (simplified — we don't have VIX change, so use level bands)
-  // VIX < 15 = low/declining, VIX 15-20 = moderate, VIX > 20 = elevated/rising
-  const vixLow = vix < 17;
-  const vixHigh = vix > 20;
+  // Use adaptive bounds instead of hardcoded 17/20
+  const vixLow = vix < vixBounds.low;
+  const vixHigh = vix > vixBounds.high;
 
-  if (equityUp && vixLow) {
-    return "Bullish confirmation — risk appetite increasing with low fear";
+  // VIX direction from daily change
+  const vixRising = vixData.change > 0.5;
+  const vixFalling = vixData.change < -0.5;
+  const vixDirLabel = vixRising ? " (rising)" : vixFalling ? " (falling)" : "";
+
+  if (equityUp && vixLow && !vixRising) {
+    return `Bullish confirmation — risk appetite increasing with low fear${vixDirLabel}`;
   }
   if (equityUp && vixHigh) {
-    return "Suspicious rally — rising fear despite positive futures, potential reversal risk";
+    return `Suspicious rally — elevated fear despite positive futures, potential reversal risk${vixDirLabel}`;
+  }
+  if (equityUp && vixRising) {
+    return `Cautious rally — futures up but VIX rising${vixDirLabel}, watch for intraday reversal`;
   }
   if (equityDown && vixHigh) {
-    return "Bearish confirmation — selling with elevated fear, watch for acceleration";
+    return `Bearish confirmation — selling with elevated fear${vixDirLabel}, watch for acceleration`;
   }
   if (equityDown && vixLow) {
-    return "Complacent decline — market down but fear not spiking";
+    return `Complacent decline — market down but fear not spiking${vixDirLabel}`;
+  }
+  if (equityDown && vixRising) {
+    return `Fear building — VIX rising${vixDirLabel} alongside selling, likely trend day`;
   }
 
   // Neutral / moderate VIX
-  if (equityUp) return `VIX at ${vix.toFixed(1)} — moderate fear, futures leaning positive`;
-  if (equityDown) return `VIX at ${vix.toFixed(1)} — moderate fear, futures leaning negative`;
-  return `VIX at ${vix.toFixed(1)} — neutral stance, no strong cross-signal`;
+  if (equityUp) return `VIX at ${vix.toFixed(1)}${vixDirLabel} — moderate fear, futures leaning positive`;
+  if (equityDown) return `VIX at ${vix.toFixed(1)}${vixDirLabel} — moderate fear, futures leaning negative`;
+  return `VIX at ${vix.toFixed(1)}${vixDirLabel} — neutral stance, no strong cross-signal`;
 }
 
 // ── 3c. Market Bias Classification ──
@@ -116,17 +145,21 @@ function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
   return "Neutral";
 }
 
-// ── 3d. Confidence Score ──
+// ── 3d. Confidence Score (redesigned: no dead internals, adds VIX direction + breadth) ──
 
 function computeConfidence(
   equities: EquityFuture[],
-  internals: InternalsSnapshot,
-  vix: number | null,
+  vixData: VixData | null,
+  vixBounds: VixBounds,
   avgEquityChange: number,
   bias: MarketBias,
   totalFutures: number,
+  sectorBreadth: SectorBreadth | null,
 ): number {
   let confidence = 0;
+
+  const bullBias = bias === "Strong Bull" || bias === "Lean Bull";
+  const bearBias = bias === "Strong Bear" || bias === "Lean Bear";
 
   // Factor 1: Futures alignment (0-30)
   if (equities.length >= 2) {
@@ -147,46 +180,50 @@ function computeConfidence(
   else if (avgAbsChange > 0.3) confidence += 10;
   else if (avgAbsChange > 0.1) confidence += 5;
 
-  // Factor 3: VIX confirmation (0-20)
-  if (vix != null) {
-    const bullBias = bias === "Strong Bull" || bias === "Lean Bull";
-    const bearBias = bias === "Strong Bear" || bias === "Lean Bear";
-    const vixLow = vix < 17;
-    const vixHigh = vix > 20;
+  // Factor 3: VIX confirmation with direction (0-25)
+  if (vixData != null) {
+    const vixLow = vixData.level < vixBounds.low;
+    const vixHigh = vixData.level > vixBounds.high;
+    const vixRising = vixData.change > 0.5;
+    const vixFalling = vixData.change < -0.5;
 
+    // Level-based confirmation (0-15)
     if ((bullBias && vixLow) || (bearBias && vixHigh)) {
-      confidence += 20; // Confirming
+      confidence += 15; // Confirming
     } else if ((bullBias && vixHigh) || (bearBias && vixLow)) {
-      confidence += 5; // Suspicious / contradicting
+      confidence += 3; // Contradicting
     } else {
-      confidence += 10; // Neutral VIX
+      confidence += 8; // Neutral VIX
+    }
+
+    // Direction-based confirmation (0-10)
+    if ((bullBias && vixFalling) || (bearBias && vixRising)) {
+      confidence += 10; // VIX moving in confirming direction
+    } else if ((bullBias && vixRising) || (bearBias && vixFalling)) {
+      confidence += 0; // VIX contradicting — no points
+    } else {
+      confidence += 5; // VIX flat
     }
   }
 
-  // Factor 4: Internals alignment (0-15)
-  const isBullBias = avgEquityChange > 0.1;
-  const isBearBias = avgEquityChange < -0.1;
-  let internalsConfirm = 0;
-  if (internals.tick != null) {
-    if ((isBullBias && internals.tick > 200) || (isBearBias && internals.tick < -200)) internalsConfirm++;
-  }
-  if (internals.trin != null) {
-    if ((isBullBias && internals.trin < 1.0) || (isBearBias && internals.trin > 1.0)) internalsConfirm++;
-  }
-  if (internals.addLine != null) {
-    if ((isBullBias && internals.addLine > 0) || (isBearBias && internals.addLine < 0)) internalsConfirm++;
-  }
-  const internalsAvailable = [internals.tick, internals.trin, internals.addLine].filter((v) => v != null).length;
-  if (internalsAvailable > 0) {
-    if (internalsConfirm === internalsAvailable) confidence += 15;
-    else if (internalsConfirm >= 2) confidence += 10;
-    else if (internalsConfirm >= 1) confidence += 5;
+  // Factor 4: Sector breadth confirmation (0-15, replaces dead internals)
+  if (sectorBreadth != null) {
+    const { advancing, declining } = sectorBreadth;
+    const total = advancing + declining;
+    if (total > 0) {
+      const advPct = advancing / total;
+      if (bullBias && advPct >= 0.6) confidence += 15;
+      else if (bullBias && advPct >= 0.5) confidence += 8;
+      else if (bearBias && advPct <= 0.4) confidence += 15;
+      else if (bearBias && advPct <= 0.5) confidence += 8;
+      else confidence += 3; // Mixed breadth
+    }
   }
 
-  // Factor 5: Data completeness (0-15)
-  const dataPoints = totalFutures + internalsAvailable + (vix != null ? 1 : 0);
-  const maxDataPoints = 10; // 6 futures + 3 internals + 1 VIX
-  confidence += Math.round((dataPoints / maxDataPoints) * 15);
+  // Factor 5: Data completeness (0-10)
+  const dataPoints = totalFutures + (vixData != null ? 1 : 0) + (sectorBreadth != null ? 1 : 0);
+  const maxDataPoints = 8; // 6 futures + VIX + breadth
+  confidence += Math.round((dataPoints / maxDataPoints) * 10);
 
   return Math.min(100, Math.max(0, confidence));
 }
@@ -195,9 +232,10 @@ function computeConfidence(
 
 function classifyDayType(
   equities: EquityFuture[],
-  internals: InternalsSnapshot,
-  vix: number | null,
+  vixData: VixData | null,
+  vixBounds: VixBounds,
   avgEquityChange: number,
+  sectorBreadth: SectorBreadth | null,
 ): DayType {
   if (equities.length < 2) return "Uncertain";
 
@@ -205,14 +243,21 @@ function classifyDayType(
   const allSameDir = dirs.every((d) => d === dirs[0]) && dirs[0] !== "flat";
   const avgAbsChange = equities.reduce((s, e) => s + Math.abs(e.changePct), 0) / equities.length;
 
-  // Trend Day: all aligned, high magnitude, confirming VIX, extreme TICK
+  // Trend Day: all aligned, high magnitude, confirming VIX or extreme breadth
   const highMag = avgAbsChange > 0.5;
-  const vixConfirms = vix != null && (
-    (avgEquityChange > 0 && vix < 17) || (avgEquityChange < 0 && vix > 20)
+  const vixConfirms = vixData != null && (
+    (avgEquityChange > 0 && vixData.level < vixBounds.low) ||
+    (avgEquityChange < 0 && vixData.level > vixBounds.high)
   );
-  const tickExtreme = internals.tick != null && (internals.tick > 500 || internals.tick < -500);
+  const vixDirConfirms = vixData != null && (
+    (avgEquityChange > 0 && vixData.change < -0.5) ||
+    (avgEquityChange < 0 && vixData.change > 0.5)
+  );
+  const breadthExtreme = sectorBreadth != null && (
+    sectorBreadth.ratio >= 0.8 || sectorBreadth.ratio <= 0.2
+  );
 
-  if (allSameDir && highMag && (vixConfirms || tickExtreme)) return "Trend Day";
+  if (allSameDir && highMag && (vixConfirms || vixDirConfirms || breadthExtreme)) return "Trend Day";
 
   // Range Day: mixed direction, low magnitude
   const mixedDir = !allSameDir || dirs[0] === "flat";
@@ -222,29 +267,55 @@ function classifyDayType(
   return "Uncertain";
 }
 
-// ── 3f. Best/Worst to Trade ──
+// ── 3f. Best/Worst to Trade (now with directional context) ──
 
-function pickBestWorst(equities: EquityFuture[]): { bestToTrade: string | null; assetToAvoid: string | null } {
+function pickBestWorst(
+  equities: EquityFuture[],
+  bias: MarketBias,
+): { bestToTrade: BestToTradeInfo | null; assetToAvoid: string | null } {
   if (equities.length < 2) return { bestToTrade: null, assetToAvoid: null };
 
   // Best = highest absolute changePct (most momentum)
   const sorted = [...equities].sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct));
-  const bestToTrade = sorted[0].symbol;
+  const best = sorted[0];
 
-  // Avoid = the one diverging from the other two
+  const isBullish = bias === "Strong Bull" || bias === "Lean Bull";
+  const isBearish = bias === "Strong Bear" || bias === "Lean Bear";
+  const direction: "long" | "short" = isBearish ? "short" : "long";
+
+  let reason: string;
+  if (isBearish) {
+    reason = best.changePct < 0
+      ? `weakest at ${fmt(best.changePct)}, most short momentum`
+      : `strongest contrarian at ${fmt(best.changePct)}, but bias is bearish`;
+  } else if (isBullish) {
+    reason = best.changePct > 0
+      ? `leading at ${fmt(best.changePct)}, most long momentum`
+      : `least negative at ${fmt(best.changePct)}, but bias is bullish`;
+  } else {
+    reason = `highest magnitude at ${fmt(best.changePct)}, bias neutral`;
+  }
+
+  const bestToTrade: BestToTradeInfo = {
+    symbol: best.symbol,
+    direction,
+    reason,
+  };
+
+  // Avoid = the one diverging from the others
+  let assetToAvoid: string | null = null;
   if (equities.length >= 3) {
     const dirs = equities.map((e) => ({ sym: e.symbol, dir: sign(e.changePct) }));
     const counts: Record<string, string[]> = {};
     for (const d of dirs) {
       (counts[d.dir] ??= []).push(d.sym);
     }
-    // Find the direction with only 1 member (the odd one out)
     for (const [, syms] of Object.entries(counts)) {
-      if (syms.length === 1) return { bestToTrade, assetToAvoid: syms[0] };
+      if (syms.length === 1) { assetToAvoid = syms[0]; break; }
     }
   }
 
-  return { bestToTrade, assetToAvoid: null };
+  return { bestToTrade, assetToAvoid };
 }
 
 // ── 3g. Preferred Direction ──
@@ -271,9 +342,19 @@ function generatePlaybook(
 
   const isSuspicious = vixInterp.startsWith("Suspicious");
   const isComplacent = vixInterp.startsWith("Complacent");
+  const isFearBuilding = vixInterp.startsWith("Fear building");
+  const isCautiousRally = vixInterp.startsWith("Cautious rally");
 
   if (isSuspicious) {
     return "Futures are green but VIX is elevated — be cautious. This pattern often precedes intraday reversals. Consider reducing size or waiting for confirmation after the first 30 minutes.";
+  }
+
+  if (isCautiousRally) {
+    return "Futures lean positive but VIX is rising — the market is pricing in risk despite green tape. Wait for VIX to stabilize before committing to longs. Tighten stops.";
+  }
+
+  if (isFearBuilding) {
+    return "VIX rising alongside selling — this often leads to a trend day. Stay short-biased and avoid bottom-fishing. Let the market find a floor before adding risk.";
   }
 
   if (isComplacent) {
@@ -288,7 +369,7 @@ function generatePlaybook(
   }
 
   if (bias === "Strong Bull") {
-    return `Broad strength across equity futures (avg ${fmt(avgChange)}). Favor long setups in momentum leaders. Monitor internals for confirmation as the session opens.`;
+    return `Broad strength across equity futures (avg ${fmt(avgChange)}). Favor long setups in momentum leaders. Monitor breadth for confirmation as the session opens.`;
   }
 
   if (bias === "Lean Bull" && leading === "NQ") {
@@ -330,17 +411,18 @@ function generatePlaybook(
     return "Mixed signals across futures. Fade extremes and keep position sizes small. Wait for the first 30-min range to establish before committing.";
   }
 
-  return "No clear directional edge — mixed futures and unclear internals. Stay patient, keep sizing small, and wait for a catalyst to break the stalemate.";
+  return "No clear directional edge — mixed futures and unclear signals. Stay patient, keep sizing small, and wait for a catalyst to break the stalemate.";
 }
 
 // ── 3i. Why This Bias Reasons ──
 
 function buildReasons(
   equities: EquityFuture[],
-  internals: InternalsSnapshot,
-  vix: number | null,
+  vixData: VixData | null,
+  vixBounds: VixBounds,
   leading: string | null,
   weakest: string | null,
+  sectorBreadth: SectorBreadth | null,
 ): string[] {
   const reasons: string[] = [];
 
@@ -367,25 +449,27 @@ function buildReasons(
     }
   }
 
-  // VIX
-  if (vix != null) {
-    const vixLevel = vix < 15 ? "low fear" : vix > 25 ? "elevated fear" : vix > 20 ? "above-average fear" : "moderate fear";
-    reasons.push(`VIX at ${vix.toFixed(1)} — ${vixLevel} environment`);
+  // VIX with direction
+  if (vixData != null) {
+    const vixLevel = vixData.level < vixBounds.low ? "low fear" :
+      vixData.level > vixBounds.high * 1.25 ? "elevated fear" :
+        vixData.level > vixBounds.high ? "above-average fear" : "moderate fear";
+    const vixDir = vixData.change > 0.5 ? `, rising ${fmt(vixData.changePct)}` :
+      vixData.change < -0.5 ? `, falling ${fmt(vixData.changePct)}` : "";
+    reasons.push(`VIX at ${vixData.level.toFixed(1)} — ${vixLevel} environment${vixDir}`);
   }
 
-  // TICK
-  if (internals.tick != null) {
-    const tickLabel = internals.tick > 500 ? "strong buying pressure" :
-      internals.tick < -500 ? "strong selling pressure" :
-        internals.tick > 200 ? "moderate buying pressure" :
-          internals.tick < -200 ? "moderate selling pressure" : "neutral";
-    reasons.push(`TICK at ${internals.tick > 0 ? "+" : ""}${Math.round(internals.tick)} — ${tickLabel}`);
-  }
-
-  // TRIN
-  if (internals.trin != null) {
-    const trinLabel = internals.trin < 0.8 ? "bullish breadth" : internals.trin > 1.2 ? "bearish breadth" : "neutral breadth";
-    reasons.push(`TRIN at ${internals.trin.toFixed(2)} — ${trinLabel}`);
+  // Sector breadth (replaces dead TICK/TRIN/ADD)
+  if (sectorBreadth != null) {
+    const { advancing, declining } = sectorBreadth;
+    const total = advancing + declining;
+    if (total > 0) {
+      const breadthLabel = advancing > declining * 2 ? "strong breadth" :
+        advancing > declining ? "positive breadth" :
+          declining > advancing * 2 ? "weak breadth" :
+            declining > advancing ? "negative breadth" : "neutral breadth";
+      reasons.push(`${advancing} of ${total} sector ETFs advancing — ${breadthLabel}`);
+    }
   }
 
   // Alignment count
@@ -398,33 +482,36 @@ function buildReasons(
     reasons.push(`${maxSame} of ${equities.length} equity futures aligned ${dirLabel}`);
   }
 
-  return reasons.slice(0, 5);
+  return reasons.slice(0, 6);
 }
 
 // ── Main Export ──
 
 export function computeTradingBias(
   futures: FuturesSnapshot[],
-  internals: InternalsSnapshot,
-  vix: number | null,
+  vixData: VixData | null,
   biasScore: number,
+  sectorBreadth?: SectorBreadth | null,
+  vixBounds?: VixBounds | null,
 ): TradingBias | null {
   const equities = extractEquityFutures(futures);
 
   // Need at least 2 equity futures to produce a meaningful bias
   if (equities.length < 2) return null;
 
+  const bounds: VixBounds = vixBounds ?? { low: 17, high: 20 };
+  const breadth = sectorBreadth ?? null;
   const avgEquityChange = equities.reduce((s, e) => s + e.changePct, 0) / equities.length;
 
   const { leading, weakest } = detectLeadership(equities);
-  const vixInterp = interpretVix(avgEquityChange, vix);
+  const vixInterp = interpretVix(avgEquityChange, vixData, bounds);
   const bias = classifyBias(equities, biasScore);
-  const confidence = computeConfidence(equities, internals, vix, avgEquityChange, bias, futures.length);
-  const dayType = classifyDayType(equities, internals, vix, avgEquityChange);
-  const { bestToTrade, assetToAvoid } = pickBestWorst(equities);
+  const confidence = computeConfidence(equities, vixData, bounds, avgEquityChange, bias, futures.length, breadth);
+  const dayType = classifyDayType(equities, vixData, bounds, avgEquityChange, breadth);
+  const { bestToTrade, assetToAvoid } = pickBestWorst(equities, bias);
   const direction = preferredDirection(bias);
   const playbook = generatePlaybook(bias, dayType, equities, vixInterp, leading, weakest);
-  const whyThisBias = buildReasons(equities, internals, vix, leading, weakest);
+  const whyThisBias = buildReasons(equities, vixData, bounds, leading, weakest, breadth);
 
   return {
     bias,

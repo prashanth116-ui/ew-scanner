@@ -169,6 +169,7 @@ function buildQFERecord(
       spyDistributionDays: marketEnv.spyDistributionDays,
       leadingSectors: marketEnv.leadingSectors,
       improvingSectors: marketEnv.improvingSectors,
+      computedAt: marketEnv.computedAt,
     },
   };
 }
@@ -363,6 +364,7 @@ export async function GET(request: NextRequest) {
         distributionDayScore: 10, spyDistFromHighScore: 8, totalScore: 53,
         spyAboveSma50: true, spyAboveSma200: true, spyDistributionDays: 3,
         leadingSectors: 3, improvingSectors: 3, regime: "Neutral",
+        computedAt: new Date().toISOString(),
       };
     }
 

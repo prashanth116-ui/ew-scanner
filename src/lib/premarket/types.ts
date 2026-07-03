@@ -8,10 +8,24 @@ export interface FuturesSnapshot {
   timestamp: number;
 }
 
+/** @deprecated Internals (^TICK, ^TRIN, ^ADD) are permanently unavailable on Yahoo Finance. */
 export interface InternalsSnapshot {
-  addLine: number | null; // ^ADD (NYSE Advance-Decline)
-  tick: number | null; // ^TICK (NYSE TICK)
-  trin: number | null; // ^TRIN (Arms Index)
+  addLine: number | null;
+  tick: number | null;
+  trin: number | null;
+}
+
+export interface SectorBreadth {
+  advancing: number;  // count of GICS sector ETFs positive today
+  declining: number;  // count of GICS sector ETFs negative today
+  ratio: number;      // advancing / (advancing + declining), 0-1
+}
+
+export interface VixData {
+  level: number;          // current VIX price
+  previousClose: number;  // previous session close
+  change: number;         // level - previousClose
+  changePct: number;      // (change / previousClose) * 100
 }
 
 export interface ChecklistItem {
@@ -26,13 +40,19 @@ export interface ChecklistItem {
 export type MarketBias = "Strong Bull" | "Lean Bull" | "Neutral" | "Lean Bear" | "Strong Bear";
 export type DayType = "Trend Day" | "Range Day" | "Uncertain";
 
+export interface BestToTradeInfo {
+  symbol: string;
+  direction: "long" | "short";
+  reason: string;
+}
+
 export interface TradingBias {
   bias: MarketBias;
   confidence: number;           // 0-100
   preferredDirection: "Long" | "Short" | "Flat";
-  leadingAsset: string | null;  // "ES" | "NQ" | "YM" | null
-  weakestAsset: string | null;  // "ES" | "NQ" | "YM" | null
-  bestToTrade: string | null;   // asset with highest absolute changePct
+  leadingAsset: string | null;  // "ES" | "NQ" | "YM" | "RTY" | null
+  weakestAsset: string | null;  // "ES" | "NQ" | "YM" | "RTY" | null
+  bestToTrade: BestToTradeInfo | null;  // asset with highest absolute changePct + directional context
   assetToAvoid: string | null;  // asset diverging from consensus
   dayType: DayType;
   vixInterpretation: string;    // Human-readable VIX cross-reference
@@ -43,6 +63,8 @@ export interface TradingBias {
 export interface PremarketData {
   futures: FuturesSnapshot[];
   internals: InternalsSnapshot;
+  sectorBreadth: SectorBreadth | null;
+  vixData: VixData | null;
   checklist: ChecklistItem[];
   biasScore: number; // -10 to +10
   biasLabel: string; // "Strong Bull" / "Lean Bull" / "Neutral" / "Lean Bear" / "Strong Bear"
