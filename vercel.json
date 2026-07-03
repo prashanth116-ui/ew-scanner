@@ -59,10 +59,6 @@
     {
       "path": "/api/prerunner/cron/daily",
       "schedule": "50 2 * * 2-6"
-    },
-    {
-      "path": "/api/policy-pulse/cron",
-      "schedule": "0 */4 * * *"
     }
   ]
 }
