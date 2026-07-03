@@ -2147,6 +2147,299 @@ export default function PreRunGuidePage() {
           </div>
         </Section>
 
+        {/* Top-Down Workflow */}
+        <Section icon={Target} title="Top-Down Workflow: How to Find Multi-Baggers at Their Bases">
+          <p>
+            The Pre-Run system is a <strong className="text-white">screening funnel</strong> &mdash; it starts with ~869 tickers
+            (SP500 + NDX100 + SP400), eliminates noise through 3 hard gates, scores survivors on 18 criteria, then filters by
+            6 preset strategies. Follow these five levels in order.
+          </p>
+
+          <div className="mt-4">
+            <h3 className="mb-2 text-sm font-semibold text-white">Level 1: Choose Your Preset (/prerun/preset-daily)</h3>
+            <p className="mb-2 font-medium text-white">Question: &ldquo;What type of setup am I hunting today?&rdquo;</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Preset</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">What It Finds</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">When to Use</th>
+                    <th className="py-1.5 text-left font-medium">Key Filters</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-amber-400">SNDK</td>
+                    <td className="py-1.5 pr-3">Deeply beaten-down + short squeeze fuel</td>
+                    <td className="py-1.5 pr-3">Bear recoveries, high-SI plays</td>
+                    <td className="py-1.5">40%+ from ATH, 15%+ SI, score &ge;18</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-green-400">Early Mover</td>
+                    <td className="py-1.5 pr-3">Stage 1&rarr;2 breakout candidates</td>
+                    <td className="py-1.5 pr-3">Market turning bullish</td>
+                    <td className="py-1.5">25%+ from ATH, M2+L+F &ge;1, score &ge;14</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-cyan-400">Pullback</td>
+                    <td className="py-1.5 pr-3">Quality stocks in buy zones</td>
+                    <td className="py-1.5 pr-3">Healthy bull, buying dips</td>
+                    <td className="py-1.5">&le;40% from ATH, 2/3 signals, score &ge;15</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-purple-400">Leading</td>
+                    <td className="py-1.5 pr-3">Hot sector stocks (skip ATH gate)</td>
+                    <td className="py-1.5 pr-3">Active sector rotation</td>
+                    <td className="py-1.5">LEADING/IMPROVING quad, M&ge;1, score &ge;12</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-blue-400">Stealth</td>
+                    <td className="py-1.5 pr-3">Institutional accumulation</td>
+                    <td className="py-1.5 pr-3">Quiet markets, hidden strength</td>
+                    <td className="py-1.5">OBV/VP divergence, M2&ge;1, score &ge;11</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-orange-400">Early+</td>
+                    <td className="py-1.5 pr-3">Pre-breakout 1&ndash;2 weeks early</td>
+                    <td className="py-1.5 pr-3">Max lead time</td>
+                    <td className="py-1.5">Vol divergence + coil, M2+N&ge;1, score &ge;10</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-2 rounded-lg border border-[#5ba3e6]/20 bg-[#5ba3e6]/5 p-3 text-xs text-[#5ba3e6]">
+              <strong>Tip:</strong> Bull market = Pullback &amp; Leading. Recovery/bottoming = SNDK &amp; Early Mover. Quiet/flat = Stealth &amp; Early+.
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h3 className="mb-2 text-sm font-semibold text-white">Level 2: Score &amp; Verdict</h3>
+            <p className="mb-2 font-medium text-white">Question: &ldquo;Which stocks passed and how strong?&rdquo;</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Breadcrumb</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Column</th>
+                    <th className="py-1.5 text-left font-medium">What You Want</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Verdict</td>
+                    <td className="py-1.5 pr-3">Verdict badge</td>
+                    <td className="py-1.5"><span className="text-green-400">PRIORITY</span> (score &ge;19, earnings &le;14 days) or <span className="text-green-400">KEEP</span> (score &ge;19)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Final Score</td>
+                    <td className="py-1.5 pr-3">Score column</td>
+                    <td className="py-1.5">Higher = more aligned. 19+ = strong, 25+ = rare/exceptional</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Score Delta</td>
+                    <td className="py-1.5 pr-3">Delta column</td>
+                    <td className="py-1.5">Positive = improving vs yesterday. Rising scores = building momentum</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Streak</td>
+                    <td className="py-1.5 pr-3">Streak badge</td>
+                    <td className="py-1.5">Consecutive days on list. 3+ days = persistent, not a fluke</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">% from ATH</td>
+                    <td className="py-1.5 pr-3">pctFromAth</td>
+                    <td className="py-1.5">How beaten-down. 40%+ = deep value. 20&ndash;30% = moderate discount</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">Short Interest</td>
+                    <td className="py-1.5 pr-3">SI%</td>
+                    <td className="py-1.5">15%+ = squeeze fuel. 20%+ with &lt;$20B cap = max squeeze potential</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h3 className="mb-2 text-sm font-semibold text-white">Level 3: Criteria Deep-Dive (expanded row)</h3>
+            <p className="mb-2 font-medium text-white">Question: &ldquo;Why did this stock score high?&rdquo;</p>
+            <p className="mb-2">Click any row to expand. Focus on these <strong className="text-white">signal clusters</strong>:</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Cluster</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Criteria Firing</th>
+                    <th className="py-1.5 text-left font-medium">Interpretation</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-green-400">Fundamental + Technical</td>
+                    <td className="py-1.5 pr-3">D&ge;2, H&ge;1, F&ge;2, M2&ge;1</td>
+                    <td className="py-1.5">Earnings + insider buying + accumulation + timing = highest conviction</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-amber-400">Squeeze Setup</td>
+                    <td className="py-1.5 pr-3">B&ge;2, A&ge;1, K&ge;2, L&ge;1</td>
+                    <td className="py-1.5">High SI + deep base + near breakout + higher lows</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-blue-400">Stealth Accumulation</td>
+                    <td className="py-1.5 pr-3">F&ge;2, M2&ge;1, N&ge;1, J&ge;1</td>
+                    <td className="py-1.5">Volume divergence + timing + coil + RS = institutional buying</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-purple-400">Momentum Ignition</td>
+                    <td className="py-1.5 pr-3">J&ge;2, M2&ge;2, K&ge;1, L&ge;2</td>
+                    <td className="py-1.5">Strong RS + EMA cross + near breakout = imminent move</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h3 className="mb-2 text-sm font-semibold text-white">Level 4: QFE Overlay (/prerun/qfe-daily)</h3>
+            <p className="mb-2 font-medium text-white">Question: &ldquo;Is the entry quality good right now?&rdquo;</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Breadcrumb</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Column</th>
+                    <th className="py-1.5 text-left font-medium">What You Want</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">QFE Rating</td>
+                    <td className="py-1.5 pr-3">Rating badge</td>
+                    <td className="py-1.5"><strong>A+</strong> (90+) or <strong>A</strong> (80+) = top tier quality</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Action</td>
+                    <td className="py-1.5 pr-3">Action badge</td>
+                    <td className="py-1.5"><span className="text-green-400">Buy Now</span> or <span className="text-cyan-400">Buy Pullback</span> (not Wait/Avoid)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Entry Score</td>
+                    <td className="py-1.5 pr-3">E (0-100)</td>
+                    <td className="py-1.5">&ge;70 = good entry point, not extended</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Market Env</td>
+                    <td className="py-1.5 pr-3">M (0-100)</td>
+                    <td className="py-1.5">&ge;60 = supportive macro. &lt;50 = hostile backdrop</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">Risk / Extension</td>
+                    <td className="py-1.5 pr-3">Risk + Extension badges</td>
+                    <td className="py-1.5">Low/Moderate risk + Low extension = room to run</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-400">
+              <strong>Kill switch:</strong> If Market Environment &lt;50 and Risk = High, the macro backdrop is hostile. Wait for improvement.
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h3 className="mb-2 text-sm font-semibold text-white">Level 5: Cross-Reference with Sectors</h3>
+            <p className="mb-2 font-medium text-white">Question: &ldquo;Does sector rotation confirm this stock?&rdquo;</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Check</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Where</th>
+                    <th className="py-1.5 text-left font-medium">What You Want</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Sector Quadrant</td>
+                    <td className="py-1.5 pr-3"><Link href="/sectors" className="text-[#5ba3e6] hover:underline">/sectors</Link> dashboard</td>
+                    <td className="py-1.5">Stock&apos;s sector in LEADING or IMPROVING (not LAGGING)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Active Rotation</td>
+                    <td className="py-1.5 pr-3"><Link href="/rotation" className="text-[#5ba3e6] hover:underline">/rotation</Link> tracker</td>
+                    <td className="py-1.5">Sector has active rotation with ENTER or ADD signal</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Regime Alignment</td>
+                    <td className="py-1.5 pr-3"><Link href="/sectors/brief" className="text-[#5ba3e6] hover:underline">/sectors/brief</Link></td>
+                    <td className="py-1.5">Sector in regime&apos;s favored list</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">Pre-Runner Radar</td>
+                    <td className="py-1.5 pr-3"><Link href="/sectors/picks" className="text-[#5ba3e6] hover:underline">/sectors/picks</Link></td>
+                    <td className="py-1.5">Stock also on Pre-Runner Radar = double confirmation</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-2 rounded-lg border border-[#5ba3e6]/20 bg-[#5ba3e6]/5 p-3 text-xs text-[#5ba3e6]">
+              <strong>Highest conviction:</strong> A stock scoring KEEP/PRIORITY on Pre-Run + appearing on Pre-Runner Radar + in a LEADING sector
+              with active EARLY rotation + regime aligned. This is the overlap where all systems agree.
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h3 className="mb-2 text-sm font-semibold text-white">Daily Checklist</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-2 text-left font-medium w-6">#</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Action</th>
+                    <th className="py-1.5 text-left font-medium">What to Confirm</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white">1</td>
+                    <td className="py-1.5 pr-3">Check <Link href="/prerun/preset-daily" className="text-[#5ba3e6] hover:underline">/prerun/preset-daily</Link></td>
+                    <td className="py-1.5">Any PRIORITY verdicts? (score &ge;19, earnings &le;14 days)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white">2</td>
+                    <td className="py-1.5 pr-3">Pick the right preset</td>
+                    <td className="py-1.5">Bull = Pullback/Leading. Recovery = SNDK/Early Mover. Quiet = Stealth/Early+</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white">3</td>
+                    <td className="py-1.5 pr-3">Expand top scorers</td>
+                    <td className="py-1.5">Which criteria clusters? Fundamental+Technical = best</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white">4</td>
+                    <td className="py-1.5 pr-3">Check <Link href="/prerun/qfe-daily" className="text-[#5ba3e6] hover:underline">/prerun/qfe-daily</Link></td>
+                    <td className="py-1.5">Rating A/A+? Action = Buy Now? Entry &ge;70? Market Env &ge;60?</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-2 font-medium text-white">5</td>
+                    <td className="py-1.5 pr-3">Cross-reference /sectors</td>
+                    <td className="py-1.5">Sector LEADING/IMPROVING? Active rotation? Regime aligned?</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-2 font-medium text-white">6</td>
+                    <td className="py-1.5 pr-3">Check streak + delta</td>
+                    <td className="py-1.5">Streak &ge;3 days + positive delta = persistent, strengthening</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-400">
+              <strong>Never buy if:</strong> Any gate fails (score=0), verdict=DISCARD, QFE action=Avoid, Market Env &lt;50 + Risk=High,
+              or sector in LAGGING quadrant with no rotation.
+            </div>
+          </div>
+        </Section>
+
         {/* Common Mistakes */}
         <Section icon={AlertTriangle} title="Common Mistakes">
           <ul className="list-disc space-y-2 pl-5 text-[#a0a0a0]">
