@@ -51,6 +51,10 @@
     {
       "path": "/api/institutional/cron/daily",
       "schedule": "30 2 * * 2-6"
+    },
+    {
+      "path": "/api/qfe/cron/backfill",
+      "schedule": "45 2 * * 2-6"
     }
   ]
 }
