@@ -16,6 +16,7 @@ const scannerTabs = [
   { id: "earnings", label: "Earnings", href: "/earnings" },
   { id: "catalyst", label: "AI Radar", href: "/catalyst" },
   { id: "wave", label: "Wave Scanner", href: "/wave-scanner" },
+  { id: "policy", label: "Policy Pulse", href: "/policy-pulse" },
 ] as const;
 
 const subPages: Record<string, { href: string; label: string }[]> = {
@@ -72,9 +73,13 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/wave-scanner", label: "Scanner" },
     { href: "/wave-scanner/guide", label: "Guide" },
   ],
+  policy: [
+    { href: "/policy-pulse", label: "Timeline" },
+  ],
 };
 
-function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" | "strat" | "earnings" | "catalyst" | "wave" {
+function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sectors" | "confluence" | "strat" | "earnings" | "catalyst" | "wave" | "policy" {
+  if (pathname.startsWith("/policy-pulse")) return "policy";
   if (pathname.startsWith("/wave-scanner")) return "wave";
   if (pathname.startsWith("/catalyst")) return "catalyst";
   if (pathname.startsWith("/earnings")) return "earnings";
@@ -258,7 +263,7 @@ export function Nav() {
                   {item.label}
                 </Link>
               ))}
-              {tab.id !== "wave" && (
+              {tab.id !== "policy" && (
                 <div className="mx-3 my-2 h-px bg-[#2a2a2a]" aria-hidden="true" />
               )}
             </div>

@@ -295,6 +295,9 @@ export default function DailyBriefPage() {
       {/* 0.6 Leadership Health */}
       {leadershipHealth && <LeadershipHealthCard health={leadershipHealth} />}
 
+      {/* 0.7 Policy Pulse */}
+      <PolicyPulseWidget />
+
       {/* 1. Market Posture Banner */}
       {posture && <PostureBanner posture={posture} />}
 
@@ -1157,6 +1160,83 @@ function NavCard({ href, title, description, stat }: { href: string; title: stri
       <p className="mt-1 text-[11px] text-[#666]">{description}</p>
       <p className="mt-2 text-xs text-cyan-400 font-medium">{stat}</p>
     </Link>
+  );
+}
+
+// ── Policy Pulse Widget ──
+
+interface PolicyPulseEvent {
+  id: number;
+  themeId: string;
+  themeName: string;
+  headline: string;
+  publishedAt: string;
+  impactScore: number;
+  impactedTickers: string[];
+}
+
+function PolicyPulseWidget() {
+  const [events, setEvents] = useState<PolicyPulseEvent[]>([]);
+  const [widgetLoading, setWidgetLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/policy-pulse?days=2&minImpact=30")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: PolicyPulseEvent[]) => setEvents(data.slice(0, 3)))
+      .catch(() => setEvents([]))
+      .finally(() => setWidgetLoading(false));
+  }, []);
+
+  if (widgetLoading) return null;
+  if (events.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white">Policy Pulse</h2>
+        <span className="text-[10px] text-[#888]">{events.length} recent</span>
+      </div>
+
+      <div className="space-y-2">
+        {events.map((event) => {
+          const badgeColor = event.impactScore >= 75
+            ? "text-red-400 bg-red-500/10 border-red-500/30"
+            : event.impactScore >= 50
+              ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
+              : "text-green-400 bg-green-500/10 border-green-500/30";
+
+          const hoursAgo = Math.max(
+            1,
+            Math.floor(
+              (Date.now() - new Date(event.publishedAt).getTime()) / 3_600_000,
+            ),
+          );
+          const timeLabel = hoursAgo < 24 ? `${hoursAgo}h ago` : `${Math.floor(hoursAgo / 24)}d ago`;
+
+          return (
+            <div key={event.id} className="flex items-start gap-2">
+              <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${badgeColor}`}>
+                {event.impactScore}
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs text-white truncate">{event.headline}</p>
+                <p className="text-[10px] text-[#888]">
+                  {event.themeName} · {event.impactedTickers.slice(0, 3).join(", ")} · {timeLabel}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <Link
+        href="/policy-pulse"
+        className="flex items-center justify-center gap-1 text-[10px] text-[#5ba3e6] hover:text-white transition-colors"
+      >
+        View All
+        <ArrowRight className="h-3 w-3" />
+      </Link>
+    </div>
   );
 }
 
