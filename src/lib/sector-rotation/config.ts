@@ -375,7 +375,7 @@ export const PRERUNNER = {
   /** Bonus when RS direction is improving */
   RS_IMPROVING_BONUS: 5,
   /** Minimum composite score to qualify */
-  MIN_SCORE: 40,
+  MIN_SCORE: 55,
   /** Max candidates in UI panel */
   MAX_UI_CANDIDATES: 20,
   /** Max in Telegram alert */
