@@ -15,7 +15,7 @@ import {
 } from "../_components";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
-import type { FuturesSnapshot, InternalsSnapshot, ChecklistItem, TradingBias, SectorBreadth, VixData } from "@/lib/premarket/types";
+import type { FuturesSnapshot, ChecklistItem, TradingBias, SectorBreadth, VixData } from "@/lib/premarket/types";
 import { computeBiasScore } from "@/lib/premarket/scoring";
 import { loadHistory } from "@/lib/sector-rotation/history";
 import { SUB_SECTOR_PARENT, subSectorDivergenceTooltip, computeSubSectorDivergences } from "@/lib/sector-rotation/sub-sector-constants";
@@ -54,7 +54,6 @@ export default function DailyBriefPage() {
   const [macroLoading, setMacroLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabView>("brief");
   const [futures, setFutures] = useState<FuturesSnapshot[]>([]);
-  const [internals, setInternals] = useState<InternalsSnapshot>({ addLine: null, tick: null, trin: null });
   const [sectorBreadth, setSectorBreadth] = useState<SectorBreadth | null>(null);
   const [vixData, setVixData] = useState<VixData | null>(null);
   const [pulseLoading, setPulseLoading] = useState(true);
@@ -71,10 +70,9 @@ export default function DailyBriefPage() {
     const fetchPulse = () => {
       fetch("/api/premarket")
         .then((res) => (res.ok ? res.json() : null))
-        .then((result: { futures: FuturesSnapshot[]; internals: InternalsSnapshot; sectorBreadth?: SectorBreadth | null; vixData?: VixData | null; tradingBias?: TradingBias | null } | null) => {
+        .then((result: { futures: FuturesSnapshot[]; sectorBreadth?: SectorBreadth | null; vixData?: VixData | null; tradingBias?: TradingBias | null } | null) => {
           if (result) {
             setFutures(result.futures);
-            setInternals(result.internals);
             setSectorBreadth(result.sectorBreadth ?? null);
             setVixData(result.vixData ?? null);
             setTradingBias(result.tradingBias ?? null);
@@ -141,8 +139,8 @@ export default function DailyBriefPage() {
       avoidSectors: data.regime.avoidSectors,
       vixBounds: data.regime.vixBounds ?? { low: 17, high: 20 },
     } : null;
-    return computeBiasScore(futures, internals, posture, regimeData);
-  }, [futures, internals, posture, data?.regime]);
+    return computeBiasScore(futures, posture, regimeData, sectorBreadth);
+  }, [futures, posture, data?.regime, sectorBreadth]);
 
   // Leadership health
   const leadershipHealth = useMemo(() => {
@@ -275,7 +273,7 @@ export default function DailyBriefPage() {
                 : biasResult.score <= -2 ? "bg-red-500/10 border-red-500/30 text-red-400"
                 : "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
             }`}>
-              {biasResult.label} ({biasResult.score > 0 ? "+" : ""}{biasResult.score})
+              {tradingBias?.bias ?? biasResult.label} ({biasResult.score > 0 ? "+" : ""}{biasResult.score})
             </span>
           ) : pulseLoading ? (
             <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">Loading...</span>
@@ -284,7 +282,6 @@ export default function DailyBriefPage() {
       >
         <PreMarketPulseContent
           futures={futures}
-          internals={internals}
           regime={data?.regime ?? null}
           biasResult={biasResult}
           loading={pulseLoading}
@@ -755,14 +752,12 @@ function FuturesRow({ items, label }: { items: FuturesSnapshot[]; label: string 
 
 function PreMarketPulseContent({
   futures,
-  internals,
   regime,
   biasResult,
   loading,
   subSectorScores,
 }: {
   futures: FuturesSnapshot[];
-  internals: InternalsSnapshot;
   regime: { vix: number; vixSlope: string; yield10y: number; dxy: number; dxyTrend: string; regimeConfidence: number } | null;
   biasResult: { score: number; label: string; checklist: ChecklistItem[] } | null;
   loading: boolean;
@@ -848,38 +843,6 @@ function PreMarketPulseContent({
           </div>
         </div>
         <p className="text-[10px] text-[#555] ml-12">{"VIX = fear gauge (< 15 calm, > 25 stressed) · 10Y = bond yields · DXY = US dollar strength"}</p>
-      </>)}
-
-      {/* Internals */}
-      {(internals.tick != null || internals.trin != null || internals.addLine != null) && (<>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-          <span className="text-[10px] text-[#555] font-medium uppercase tracking-wider w-12 shrink-0">Intrnl</span>
-          {internals.tick != null && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[#888]">TICK</span>
-              <span className={`font-medium ${internals.tick > 500 ? "text-green-400" : internals.tick < -500 ? "text-red-400" : "text-[#ccc]"}`}>
-                {internals.tick > 0 ? "+" : ""}{Math.round(internals.tick)}
-              </span>
-            </div>
-          )}
-          {internals.trin != null && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[#888]">TRIN</span>
-              <span className={`font-medium ${internals.trin < 0.8 ? "text-green-400" : internals.trin > 1.2 ? "text-red-400" : "text-[#ccc]"}`}>
-                {internals.trin.toFixed(2)}
-              </span>
-            </div>
-          )}
-          {internals.addLine != null && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[#888]">A/D</span>
-              <span className={`font-medium ${internals.addLine > 0 ? "text-green-400" : internals.addLine < 0 ? "text-red-400" : "text-[#ccc]"}`}>
-                {internals.addLine > 0 ? "+" : ""}{Math.round(internals.addLine)}
-              </span>
-            </div>
-          )}
-        </div>
-        <p className="text-[10px] text-[#555] ml-12">TICK = net upticks vs downticks · TRIN = Arms Index ({"< 0.8 bullish, > 1.2 bearish"}) · A/D = advance-decline breadth</p>
       </>)}
 
       {/* Sub-Sector Rotation */}

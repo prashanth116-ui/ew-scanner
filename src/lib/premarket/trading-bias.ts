@@ -73,9 +73,9 @@ function interpretVix(
   const vixLow = vix < vixBounds.low;
   const vixHigh = vix > vixBounds.high;
 
-  // VIX direction from daily change
-  const vixRising = vixData.change > 0.5;
-  const vixFalling = vixData.change < -0.5;
+  // VIX direction from daily change (percentage-based for consistent sensitivity across VIX levels)
+  const vixRising = vixData.changePct > 3;
+  const vixFalling = vixData.changePct < -3;
   const vixDirLabel = vixRising ? " (rising)" : vixFalling ? " (falling)" : "";
 
   if (equityUp && vixLow && !vixRising) {
@@ -184,8 +184,8 @@ function computeConfidence(
   if (vixData != null) {
     const vixLow = vixData.level < vixBounds.low;
     const vixHigh = vixData.level > vixBounds.high;
-    const vixRising = vixData.change > 0.5;
-    const vixFalling = vixData.change < -0.5;
+    const vixRising = vixData.changePct > 3;
+    const vixFalling = vixData.changePct < -3;
 
     // Level-based confirmation (0-15)
     if ((bullBias && vixLow) || (bearBias && vixHigh)) {
@@ -250,8 +250,8 @@ function classifyDayType(
     (avgEquityChange < 0 && vixData.level > vixBounds.high)
   );
   const vixDirConfirms = vixData != null && (
-    (avgEquityChange > 0 && vixData.change < -0.5) ||
-    (avgEquityChange < 0 && vixData.change > 0.5)
+    (avgEquityChange > 0 && vixData.changePct < -3) ||
+    (avgEquityChange < 0 && vixData.changePct > 3)
   );
   const breadthExtreme = sectorBreadth != null && (
     sectorBreadth.ratio >= 0.8 || sectorBreadth.ratio <= 0.2
@@ -454,8 +454,8 @@ function buildReasons(
     const vixLevel = vixData.level < vixBounds.low ? "low fear" :
       vixData.level > vixBounds.high * 1.25 ? "elevated fear" :
         vixData.level > vixBounds.high ? "above-average fear" : "moderate fear";
-    const vixDir = vixData.change > 0.5 ? `, rising ${fmt(vixData.changePct)}` :
-      vixData.change < -0.5 ? `, falling ${fmt(vixData.changePct)}` : "";
+    const vixDir = vixData.changePct > 3 ? `, rising ${fmt(vixData.changePct)}` :
+      vixData.changePct < -3 ? `, falling ${fmt(vixData.changePct)}` : "";
     reasons.push(`VIX at ${vixData.level.toFixed(1)} — ${vixLevel} environment${vixDir}`);
   }
 

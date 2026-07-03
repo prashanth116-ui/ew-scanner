@@ -431,11 +431,15 @@ export function computeQFE(
   if (distEma20 > 2.0) extensionLevel = "Extended";
   else if (distEma20 > 1.0) extensionLevel = "Moderate";
 
-  // Action — composite-based with component guardrails
+  // Action — composite-based with component guardrails, regime-aware thresholds
+  const hostile = marketEnv.regime === "Defensive" || marketEnv.regime === "Cautious";
+  const buyNowFloor = hostile ? 73 : 68;
+  const buyPullbackFloor = hostile ? 65 : 60;
+
   let action: QFEAction = "Avoid";
-  if (composite >= 68 && entry >= 40 && quality >= 50 && riskLevel !== "High") {
+  if (composite >= buyNowFloor && entry >= 40 && quality >= 50 && riskLevel !== "High") {
     action = "Buy Now";
-  } else if (composite >= 60 && (quality >= 50 || leadership >= 55)) {
+  } else if (composite >= buyPullbackFloor && (quality >= 50 || leadership >= 55)) {
     action = "Buy Pullback";
   } else if (composite >= 53) {
     action = "Watchlist";

@@ -59,12 +59,31 @@ export async function GET(request: NextRequest) {
       posture = computeMarketPosture(dataWithRegime, null);
     }
 
+    // Compute sector breadth from GICS sector ETF data (needed by both bias score and trading bias)
+    let sectorBreadth: SectorBreadth | null = null;
+    if (sectorResult) {
+      const gicsSectors = sectorResult.sectors.filter((s) => s.category === "gics_sector");
+      let advancing = 0;
+      let declining = 0;
+      for (const s of gicsSectors) {
+        // Use momentum composite > 50 as "advancing" proxy (positive multi-TF momentum)
+        if (s.momentumComposite > 50) advancing++;
+        else declining++;
+      }
+      const total = advancing + declining;
+      sectorBreadth = {
+        advancing,
+        declining,
+        ratio: total > 0 ? advancing / total : 0.5,
+      };
+    }
+
     // Compute bias score and checklist
     const { score, label, checklist } = computeBiasScore(
       premarketResult.futures,
-      premarketResult.internals,
       posture,
       enhancedRegime,
+      sectorBreadth,
     );
 
     // Add sector-level checklist items
@@ -95,25 +114,6 @@ export async function GET(request: NextRequest) {
           : riskFlags.slice(0, 2).map((f) => f.message).join("; "),
         autoChecked: riskFlags.length === 0,
       });
-    }
-
-    // Compute sector breadth from GICS sector ETF data
-    let sectorBreadth: SectorBreadth | null = null;
-    if (sectorResult) {
-      const gicsSectors = sectorResult.sectors.filter((s) => s.category === "gics_sector");
-      let advancing = 0;
-      let declining = 0;
-      for (const s of gicsSectors) {
-        // Use momentum composite > 50 as "advancing" proxy (positive multi-TF momentum)
-        if (s.momentumComposite > 50) advancing++;
-        else declining++;
-      }
-      const total = advancing + declining;
-      sectorBreadth = {
-        advancing,
-        declining,
-        ratio: total > 0 ? advancing / total : 0.5,
-      };
     }
 
     // Use adaptive VIX bounds from regime (computed from 3-month 25th/75th percentiles)

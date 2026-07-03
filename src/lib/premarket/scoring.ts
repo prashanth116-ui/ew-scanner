@@ -1,9 +1,13 @@
 /**
  * Bias score engine for pre-market checklist.
  * Pure functions — no side effects, no fetching.
+ *
+ * Scores futures (ES, NQ, YM, RTY, CL, GC), macro regime with adaptive VIX
+ * bounds, market posture, and sector breadth. Produces a -10..+10 score and
+ * structured checklist.
  */
 
-import type { FuturesSnapshot, InternalsSnapshot, ChecklistItem } from "./types";
+import type { FuturesSnapshot, ChecklistItem, SectorBreadth } from "./types";
 import type { PostureResult } from "@/lib/sector-rotation/brief";
 import type { MacroRegimeData } from "@/lib/sector-rotation/regime";
 
@@ -23,9 +27,9 @@ function biasLabel(score: number): string {
 
 export function computeBiasScore(
   futures: FuturesSnapshot[],
-  internals: InternalsSnapshot,
   posture: PostureResult,
   regime: MacroRegimeData | null,
+  sectorBreadth?: SectorBreadth | null,
 ): BiasResult {
   let score = 0;
   const checklist: ChecklistItem[] = [];
@@ -67,18 +71,25 @@ export function computeBiasScore(
       autoChecked: regimeScore > 0,
     });
 
-    // ── Macro: VIX ──
+    // ── Macro: VIX (adaptive bounds from 3-month percentiles) ──
+    const vb = regime.vixBounds ?? { low: 17, high: 20 };
     let vixScore = 0;
     let vixStatus: "bullish" | "bearish" | "neutral" = "neutral";
-    if (regime.vix < 15) {
+    let vixDetail: string;
+    if (regime.vix < vb.low) {
       vixScore = 1;
       vixStatus = "bullish";
-    } else if (regime.vix > 30) {
+      vixDetail = `Low volatility — below adaptive floor (${vb.low.toFixed(0)})`;
+    } else if (regime.vix > vb.high * 1.5) {
       vixScore = -2;
       vixStatus = "bearish";
-    } else if (regime.vix > 25) {
+      vixDetail = `Elevated VIX — well above adaptive ceiling (${vb.high.toFixed(0)})`;
+    } else if (regime.vix > vb.high) {
       vixScore = -1;
       vixStatus = "bearish";
+      vixDetail = `Above-average volatility — above adaptive ceiling (${vb.high.toFixed(0)})`;
+    } else {
+      vixDetail = `Moderate volatility — within adaptive range (${vb.low.toFixed(0)}-${vb.high.toFixed(0)})`;
     }
     score += vixScore;
     checklist.push({
@@ -86,10 +97,7 @@ export function computeBiasScore(
       category: "macro",
       label: `VIX: ${regime.vix.toFixed(1)}`,
       status: vixStatus,
-      detail: regime.vix < 15 ? "Low volatility — risk-on environment" :
-        regime.vix > 30 ? "Elevated VIX — high fear" :
-          regime.vix > 25 ? "Above-average volatility" :
-            "Moderate volatility",
+      detail: vixDetail,
       autoChecked: vixScore > 0,
     });
   } else {
@@ -103,51 +111,33 @@ export function computeBiasScore(
     });
   }
 
-  // ── Futures ──
+  // ── Futures: Equity Indices ──
   const es = futures.find((f) => f.symbol === "ES=F");
   const nq = futures.find((f) => f.symbol === "NQ=F");
+  const ym = futures.find((f) => f.symbol === "YM=F");
   const rty = futures.find((f) => f.symbol === "RTY=F");
 
-  if (es) {
-    const esScore = es.changePct > 0.3 ? 1 : es.changePct < -0.3 ? -1 : 0;
-    score += esScore;
-    checklist.push({
-      id: "es",
-      category: "futures",
-      label: `ES: ${es.changePct >= 0 ? "+" : ""}${es.changePct.toFixed(2)}%`,
-      status: esScore > 0 ? "bullish" : esScore < 0 ? "bearish" : "neutral",
-      detail: `${es.name} at ${es.price.toFixed(2)} (${es.change >= 0 ? "+" : ""}${es.change.toFixed(2)})`,
-      autoChecked: esScore > 0,
-    });
+  for (const [id, future, threshold] of [
+    ["es", es, 0.3],
+    ["nq", nq, 0.4],
+    ["ym", ym, 0.3],
+    ["rty", rty, 0.3],
+  ] as const) {
+    if (future) {
+      const fScore = future.changePct > threshold ? 1 : future.changePct < -threshold ? -1 : 0;
+      score += fScore;
+      checklist.push({
+        id,
+        category: "futures",
+        label: `${id.toUpperCase()}: ${future.changePct >= 0 ? "+" : ""}${future.changePct.toFixed(2)}%`,
+        status: fScore > 0 ? "bullish" : fScore < 0 ? "bearish" : "neutral",
+        detail: `${future.name} at ${future.price.toFixed(2)} (${future.change >= 0 ? "+" : ""}${future.change.toFixed(2)})`,
+        autoChecked: fScore > 0,
+      });
+    }
   }
 
-  if (nq) {
-    const nqScore = nq.changePct > 0.4 ? 1 : nq.changePct < -0.4 ? -1 : 0;
-    score += nqScore;
-    checklist.push({
-      id: "nq",
-      category: "futures",
-      label: `NQ: ${nq.changePct >= 0 ? "+" : ""}${nq.changePct.toFixed(2)}%`,
-      status: nqScore > 0 ? "bullish" : nqScore < 0 ? "bearish" : "neutral",
-      detail: `${nq.name} at ${nq.price.toFixed(2)} (${nq.change >= 0 ? "+" : ""}${nq.change.toFixed(2)})`,
-      autoChecked: nqScore > 0,
-    });
-  }
-
-  if (rty) {
-    const rtyScore = rty.changePct > 0.3 ? 1 : rty.changePct < -0.3 ? -1 : 0;
-    score += rtyScore;
-    checklist.push({
-      id: "rty",
-      category: "futures",
-      label: `RTY: ${rty.changePct >= 0 ? "+" : ""}${rty.changePct.toFixed(2)}%`,
-      status: rtyScore > 0 ? "bullish" : rtyScore < 0 ? "bearish" : "neutral",
-      detail: `${rty.name} at ${rty.price.toFixed(2)} (${rty.change >= 0 ? "+" : ""}${rty.change.toFixed(2)})`,
-      autoChecked: rtyScore > 0,
-    });
-  }
-
-  // ── Commodities ──
+  // ── Futures: Commodities ──
   const cl = futures.find((f) => f.symbol === "CL=F");
   const gc = futures.find((f) => f.symbol === "GC=F");
 
@@ -183,50 +173,33 @@ export function computeBiasScore(
     });
   }
 
-  // ── Internals ──
-  if (internals.tick != null) {
-    const tickScore = internals.tick > 500 ? 1 : internals.tick < -500 ? -1 : 0;
-    score += tickScore;
-    checklist.push({
-      id: "tick",
-      category: "internals",
-      label: `TICK: ${internals.tick > 0 ? "+" : ""}${Math.round(internals.tick)}`,
-      status: tickScore > 0 ? "bullish" : tickScore < 0 ? "bearish" : "neutral",
-      detail: internals.tick > 500 ? "Strong buying pressure" :
-        internals.tick < -500 ? "Strong selling pressure" :
-          "Neutral tick reading",
-      autoChecked: tickScore > 0,
-    });
-  }
-
-  if (internals.trin != null) {
-    const trinScore = internals.trin < 0.8 ? 1 : internals.trin > 1.2 ? -1 : 0;
-    score += trinScore;
-    checklist.push({
-      id: "trin",
-      category: "internals",
-      label: `TRIN: ${internals.trin.toFixed(2)}`,
-      status: trinScore > 0 ? "bullish" : trinScore < 0 ? "bearish" : "neutral",
-      detail: internals.trin < 0.8 ? "Bullish breadth — advancing volume dominant" :
-        internals.trin > 1.2 ? "Bearish breadth — declining volume dominant" :
-          "Neutral Arms Index",
-      autoChecked: trinScore > 0,
-    });
-  }
-
-  if (internals.addLine != null) {
-    const addScore = internals.addLine > 0 ? 1 : internals.addLine < 0 ? -1 : 0;
-    score += addScore;
-    checklist.push({
-      id: "add",
-      category: "internals",
-      label: `A/D: ${internals.addLine > 0 ? "+" : ""}${Math.round(internals.addLine)}`,
-      status: addScore > 0 ? "bullish" : addScore < 0 ? "bearish" : "neutral",
-      detail: internals.addLine > 0 ? "More advancing than declining issues" :
-        internals.addLine < 0 ? "More declining than advancing issues" :
-          "Flat advance-decline line",
-      autoChecked: addScore > 0,
-    });
+  // ── Sector Breadth (replaces dead ^TICK/^TRIN/^ADD internals) ──
+  if (sectorBreadth != null) {
+    const { advancing, declining } = sectorBreadth;
+    const total = advancing + declining;
+    if (total > 0) {
+      const ratio = advancing / total;
+      let breadthScore = 0;
+      let breadthStatus: "bullish" | "bearish" | "neutral" = "neutral";
+      if (ratio >= 0.7) {
+        breadthScore = 1;
+        breadthStatus = "bullish";
+      } else if (ratio <= 0.3) {
+        breadthScore = -1;
+        breadthStatus = "bearish";
+      }
+      score += breadthScore;
+      checklist.push({
+        id: "sector-breadth",
+        category: "sectors",
+        label: `Breadth: ${advancing}/${total} advancing`,
+        status: breadthStatus,
+        detail: ratio >= 0.7 ? "Strong sector breadth — broad participation"
+          : ratio <= 0.3 ? "Weak sector breadth — narrow participation"
+          : "Mixed sector breadth",
+        autoChecked: breadthScore > 0,
+      });
+    }
   }
 
   // Clamp score to -10..+10
