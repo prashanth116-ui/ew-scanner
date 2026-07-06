@@ -17,7 +17,7 @@ npm run build             # Production build
 - **Framework:** Next.js 16.2.3 + React 19 + TypeScript
 - **Database:** Supabase (PostgreSQL) via `@supabase/supabase-js`
 - **Hosting:** Vercel (serverless functions, 300s maxDuration)
-- **Alerts:** Telegram bot integration (`src/lib/ew-telegram.ts`)
+- **Alerts:** Telegram bot integration (`src/lib/ew-wave/telegram.ts`)
 - **Payments:** Stripe subscriptions
 - **Path alias:** `@/*` maps to `./src/*`
 
@@ -26,6 +26,17 @@ npm run build             # Production build
 |-----------|---------|
 | `src/app/` | Next.js App Router pages + API routes |
 | `src/lib/` | Shared logic — scanners, scoring, persistence |
+| `src/lib/ew-wave/` | Elliott Wave scanner — types, scoring, wave counting, fibonacci, momentum, volume, alerts, telegram |
+| `src/lib/squeeze/` | Squeeze scanner — scoring, data fetching, FTD, options, storage, watchlists |
+| `src/lib/earnings/` | Earnings — calendar fetching, data utils, export |
+| `src/lib/wave-scanner/` | Wave scanner (phase 2) — wave detection, scanner modes, watchlists, saved scans |
+| `src/lib/hooks/` | React hooks — collapsible sections, debounce, filter persistence, sidebar state |
+| `src/lib/prerun/` | PreRun scanner — scoring, data fetching, presets |
+| `src/lib/sector-rotation/` | Sector rotation — scoring, regime, config, rotation tracking, stock enrichment |
+| `src/lib/premarket/` | Pre-market — futures fetching, trading bias, scoring |
+| `src/lib/crypto-rotation/` | Crypto rotation — scoring, regime, token enrichment |
+| `src/lib/catalyst/` | Catalyst scanner — data, calendar, scoring |
+| `src/lib/supabase/` | Supabase client + persistence functions |
 | `src/data/` | Universe definitions (ticker lists, index tiers) |
 | `src/components/` | React components |
 | `supabase/migrations/` | SQL migration files (001-012) |
@@ -207,7 +218,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/lib/daily-format.ts` | `fmtNum()` — safe number formatter for daily pages |
 | `src/components/table-error-boundary.tsx` | React error boundary for data tables |
 | `src/components/nav.tsx` | Navigation with prerun sub-nav links |
-| `src/lib/ew-telegram.ts` | `sendTelegramMessage()` for Telegram bot alerts |
+| `src/lib/ew-wave/telegram.ts` | `sendTelegramMessage()` for Telegram bot alerts |
 
 ## Patterns & Conventions
 
