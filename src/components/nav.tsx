@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from "react";
 import { AuthButton } from "@/components/auth-button";
 
 const scannerTabs = [
-  { id: "ew", label: "QuantRadar", href: "/" },
+  { id: "ew", label: "EW Scanner", href: "/" },
   { id: "squeeze", label: "Squeeze", href: "/squeeze" },
   { id: "prerun", label: "Pre-Run", href: "/prerun" },
   { id: "sectors", label: "Sectors", href: "/sectors" },
