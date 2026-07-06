@@ -10,7 +10,7 @@ import {
   countActivePromotions,
 } from "@/lib/discovery/promotion";
 import type { PromotionCandidate } from "@/lib/discovery/promotion";
-import { sendTelegramMessage } from "@/lib/ew-telegram";
+import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import type { PreRunResult } from "@/lib/prerun/types";
 import { MAX_SCORE } from "@/lib/prerun/types";
 import { calculateSectorRotation, formatSectorRotationTelegram } from "@/lib/sector-rotation/sector-rotation";

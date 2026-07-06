@@ -19,10 +19,10 @@ import {
   deleteWatchlist,
   renameWatchlist,
   removeFromWatchlist,
-} from "@/lib/ew-watchlists";
-import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-scoring";
-import { applyModeFilters } from "@/lib/ew-scanner-modes";
-import type { Watchlist, WatchlistItem, ScannerMode, ConfidenceTier } from "@/lib/ew-types";
+} from "@/lib/ew-wave/watchlists";
+import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-wave/scoring";
+import { applyModeFilters } from "@/lib/ew-wave/scanner-modes";
+import type { Watchlist, WatchlistItem, ScannerMode, ConfidenceTier } from "@/lib/ew-wave/types";
 
 const CONFIDENCE_COLORS: Record<ConfidenceTier, string> = {
   high: "text-green-400",

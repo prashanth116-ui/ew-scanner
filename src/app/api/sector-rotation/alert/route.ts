@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
 import { detectTransitions, formatRotationAlert } from "@/lib/sector-rotation/transitions";
-import { sendTelegramMessage } from "@/lib/ew-telegram";
+import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import { logError } from "@/lib/error-logger";
 
 /**

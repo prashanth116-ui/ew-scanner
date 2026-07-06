@@ -5,12 +5,12 @@
  * Usage: npx tsx scripts/verify-structural-fixes.ts
  */
 
-import { countWaves, getWaveStatusInfo, computeForwardTargets } from "../src/lib/ew-wave-counter";
-import { computeReliabilityScore } from "../src/lib/ew-reliability";
-import { applyModeFilters } from "../src/lib/ew-scanner-modes";
-import { analyzeVolume } from "../src/lib/ew-volume";
-import { analyzeMomentum } from "../src/lib/ew-momentum";
-import type { EnhancedScoredCandidate, PriceSeries } from "../src/lib/ew-types";
+import { countWaves, getWaveStatusInfo, computeForwardTargets } from "../src/lib/ew-wave/wave-counter";
+import { computeReliabilityScore } from "../src/lib/ew-wave/reliability";
+import { applyModeFilters } from "../src/lib/ew-wave/scanner-modes";
+import { analyzeVolume } from "../src/lib/ew-wave/volume";
+import { analyzeMomentum } from "../src/lib/ew-wave/momentum";
+import type { EnhancedScoredCandidate, PriceSeries } from "../src/lib/ew-wave/types";
 
 const BASE_URL = "https://quantradar.com";
 

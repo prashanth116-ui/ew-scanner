@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { ChevronDown, ChevronUp, FileDown, Zap } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { type StockPhase, phaseBadge, PHASE_RANK } from "@/lib/phase-utils";
-import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/hooks/use-filter-persistence";
 import type { StockInSector, SmaFilter, VolFilter, VerdictFilter, RsAccelFilter, PhaseFilter } from "./types";
 import { VERDICT_RANK } from "./constants";
 import { getStockPhase, getEntryQuality, rsColor, rsAccelColor } from "./helpers";

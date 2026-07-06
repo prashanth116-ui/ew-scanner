@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { computePreRunnerRadar } from "@/lib/prerunner/scoring";
-import { sendTelegramMessage } from "@/lib/ew-telegram";
+import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import {
   upsertPreRunnerDaily,
   purgeOldPreRunnerDaily,

@@ -42,8 +42,8 @@ import {
 import type { StratWatchlist } from "@/lib/strat/types";
 import { getStratTickers, getTickersForSector, getSectorBuckets, getSectorForTicker } from "@/data/strat-universe";
 import { ScannerCTA } from "@/components/scanner-cta";
-import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
-import { useSidebarState } from "@/lib/use-sidebar-state";
+import { useCollapsibleSections } from "@/lib/hooks/use-collapsible-sections";
+import { useSidebarState } from "@/lib/hooks/use-sidebar-state";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SidebarSection } from "@/components/sidebar-section";
 import { PresetList } from "@/components/preset-list";
@@ -54,7 +54,7 @@ import { CopyButton } from "@/components/copy-button";
 import { TickerSearchInput } from "@/components/ticker-search-input";
 import { StalenessLabel } from "@/components/staleness-label";
 import { HitRateDashboard } from "@/components/hit-rate-dashboard";
-import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/hooks/use-filter-persistence";
 
 const ACCENT = "#f97316"; // orange
 const BATCH_SIZE = 10;

@@ -5,8 +5,8 @@ import { X, Send, Loader2, Copy, Check } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
 import { UNIVERSE_KEYS, UNIVERSES } from "@/data/ew-universes";
-import { SCANNER_MODES } from "@/lib/ew-scanner-modes";
-import type { ScannerMode, ConfidenceTier, AlertConfig } from "@/lib/ew-types";
+import { SCANNER_MODES } from "@/lib/ew-wave/scanner-modes";
+import type { ScannerMode, ConfidenceTier, AlertConfig } from "@/lib/ew-wave/types";
 
 interface Props {
   open: boolean;

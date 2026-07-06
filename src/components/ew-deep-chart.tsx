@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { PriceSeries, WavePoint, FibLevel, FibExtension, DeepAnalysisResult } from "@/lib/ew-types";
+import type { PriceSeries, WavePoint, FibLevel, FibExtension, DeepAnalysisResult } from "@/lib/ew-wave/types";
 
 interface DeepChartProps {
   series: PriceSeries;

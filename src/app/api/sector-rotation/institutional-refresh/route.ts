@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { getAllSectorSymbols } from "@/data/sector-universe";
 import { upsertInstitutionalCache } from "@/lib/supabase/persistence";
-import { getYahooCrumb, invalidateCrumbCache } from "@/lib/squeeze-fetch";
+import { getYahooCrumb, invalidateCrumbCache } from "@/lib/squeeze/fetch";
 import { fetchWithRetry } from "@/lib/yahoo-utils";
 
 export const maxDuration = 300;

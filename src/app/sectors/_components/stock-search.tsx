@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from "react";
 import { Search, X } from "lucide-react";
-import { useDebounce } from "@/lib/use-debounce";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { StockInSector } from "./types";
 import { rsColor, rsAccelColor } from "./helpers";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { EnhancedScoredCandidate } from "@/lib/ew-types";
+import type { EnhancedScoredCandidate } from "@/lib/ew-wave/types";
 
 interface SectorHeatmapProps {
   candidates: EnhancedScoredCandidate[];

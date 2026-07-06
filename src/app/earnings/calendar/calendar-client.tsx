@@ -34,8 +34,8 @@ import {
   addToEarningsWatchlist,
   removeFromEarningsWatchlist,
   type MomentumQuality,
-} from "@/lib/earnings-utils";
-import { exportEarningsToExcel } from "@/lib/earnings-export";
+} from "@/lib/earnings/utils";
+import { exportEarningsToExcel } from "@/lib/earnings/export";
 
 // ── Types ──
 

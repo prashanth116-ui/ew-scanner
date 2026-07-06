@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { validateTicker } from "@/lib/api-utils";
-import { fetchEarningsData } from "@/lib/earnings-fetch";
+import { fetchEarningsData } from "@/lib/earnings/fetch";
 
 export async function GET(request: NextRequest) {
   // Rate limit: 60 req/min per IP

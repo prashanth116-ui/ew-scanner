@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { validateTicker } from "@/lib/api-utils";
-import { fetchSqueezeData, fetchBulkFTDMap } from "@/lib/squeeze-fetch";
+import { fetchSqueezeData, fetchBulkFTDMap } from "@/lib/squeeze/fetch";
 import { recordSIHistoryBatch } from "@/lib/supabase/persistence";
 import { fetchSITrendBatch } from "@/lib/supabase/query";
-import { normalizeSiPercent, computeSITrend } from "@/lib/squeeze-scoring";
+import { normalizeSiPercent, computeSITrend } from "@/lib/squeeze/scoring";
 
 export async function GET(request: NextRequest) {
   const rl = rateLimit(`squeeze:${getClientKey(request)}`, 200, 60_000);

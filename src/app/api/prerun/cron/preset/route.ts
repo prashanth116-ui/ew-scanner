@@ -6,7 +6,7 @@ import { computeQFE, computeMarketEnvironment } from "@/lib/prerun/qfe-scoring";
 import type { MarketEnvironment } from "@/lib/prerun/qfe-scoring";
 import { SP500_MEMBERS, NDX100_MEMBERS, SP400_MEMBERS } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
-import { sendTelegramMessage } from "@/lib/ew-telegram";
+import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import { createAdminClient } from "@/lib/supabase/server";
 import {
   upsertPreRunDaily,

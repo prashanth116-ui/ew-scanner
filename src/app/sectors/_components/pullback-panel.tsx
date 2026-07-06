@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { PullbackWatchStock, ExtensionTier } from "@/lib/sector-rotation/types";
-import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/hooks/use-filter-persistence";
 import type { PullbackSortKey } from "./types";
 import { TIER_ORDER, TIER_STYLE } from "./constants";
 import { CollapsiblePanel } from "./shared";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { PriceSeries, WavePoint } from "@/lib/ew-types";
+import type { PriceSeries, WavePoint } from "@/lib/ew-wave/types";
 
 interface SparklineProps {
   series: PriceSeries;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { P2ImpulsePattern } from "@/lib/phase2-wave-detector";
+import type { P2ImpulsePattern } from "@/lib/wave-scanner/wave-detector";
 
 interface WaveSparklineProps {
   pattern: P2ImpulsePattern;

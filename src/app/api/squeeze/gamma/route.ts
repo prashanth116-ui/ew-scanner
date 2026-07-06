@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
-import { detectGammaBatch } from "@/lib/squeeze-options";
+import { detectGammaBatch } from "@/lib/squeeze/options";
 
 export const maxDuration = 30;
 

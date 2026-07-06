@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
-import { computeSqueezeScore, normalizeSiPercent } from "@/lib/squeeze-scoring";
-import { fetchSqueezeData } from "@/lib/squeeze-fetch";
-import { sendTelegramMessage } from "@/lib/ew-telegram";
+import { computeSqueezeScore, normalizeSiPercent } from "@/lib/squeeze/scoring";
+import { fetchSqueezeData } from "@/lib/squeeze/fetch";
+import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import { logError } from "@/lib/error-logger";
-import type { SqueezeWatchlist, SqueezeData } from "@/lib/ew-types";
+import type { SqueezeWatchlist, SqueezeData } from "@/lib/ew-wave/types";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 300;

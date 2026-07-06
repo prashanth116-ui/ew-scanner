@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { validateTicker } from "@/lib/api-utils";
-import { fetchEWQuoteData } from "@/lib/ew-quote-fetch";
+import { fetchEWQuoteData } from "@/lib/ew-wave/quote-fetch";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
 

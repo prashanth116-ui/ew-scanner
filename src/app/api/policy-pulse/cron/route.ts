@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ingestPolicyPulse } from "@/lib/policy-pulse/ingest";
 import { loadRecentThemeEvents } from "@/lib/policy-pulse/persistence";
 import { getThemeLabel } from "@/data/theme-map";
-import { sendTelegramMessage } from "@/lib/ew-telegram";
+import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 
 export const maxDuration = 60;
 

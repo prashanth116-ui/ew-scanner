@@ -6,8 +6,8 @@
  * Usage: npx tsx scripts/spot-check.ts
  */
 
-import { countWaves, countWavesMultiCycle, getWaveStatusInfo } from "../src/lib/ew-wave-counter";
-import { findRecentCyclePivot } from "../src/lib/ew-structural";
+import { countWaves, countWavesMultiCycle, getWaveStatusInfo } from "../src/lib/ew-wave/wave-counter";
+import { findRecentCyclePivot } from "../src/lib/ew-wave/structural";
 
 const BASE_URL = "https://quantradar.com";
 

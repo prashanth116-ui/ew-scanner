@@ -6,7 +6,7 @@
 import "server-only";
 
 import { fetchWithRetry, deduplicatedChartFetch, extractRaw } from "@/lib/yahoo-utils";
-import { getYahooCrumb, invalidateCrumbCache } from "@/lib/squeeze-fetch";
+import { getYahooCrumb, invalidateCrumbCache } from "@/lib/squeeze/fetch";
 import type { CatalystRawData, ETFPriceData } from "./types";
 
 const UA =

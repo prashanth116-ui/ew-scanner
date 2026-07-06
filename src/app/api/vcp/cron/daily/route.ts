@@ -4,7 +4,7 @@ import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { scoreVCP } from "@/lib/prerun/vcp-scoring";
 import { SP500_MEMBERS, NDX100_MEMBERS } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
-import { sendTelegramMessage } from "@/lib/ew-telegram";
+import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import {
   upsertVCPDaily,
   purgeOldVCPDaily,

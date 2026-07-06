@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
-import { fetchEarningsCalendar } from "@/lib/earnings-calendar";
+import { fetchEarningsCalendar } from "@/lib/earnings/calendar";
 
 /** Validate YYYY-MM-DD date string. */
 function isValidDate(s: string): boolean {

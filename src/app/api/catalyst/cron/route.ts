@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { runCatalystScan } from "@/lib/catalyst/scan";
-import { sendTelegramMessage } from "@/lib/ew-telegram";
+import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import { recordSignalBatch } from "@/lib/supabase/persistence";
 import type { CatalystResult, CatalystCalendarEvent } from "@/lib/catalyst/types";
 

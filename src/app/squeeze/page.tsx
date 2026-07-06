@@ -23,29 +23,29 @@ import {
   DEFAULT_SQUEEZE_FILTERS,
   isSqueezeAlignedWavePosition,
   normalizeSiPercent,
-} from "@/lib/squeeze-scoring";
+} from "@/lib/squeeze/scoring";
 import {
   saveSqueezeScan,
   loadSqueezeScans,
   deleteSqueezeScan,
-} from "@/lib/squeeze-storage";
+} from "@/lib/squeeze/storage";
 import {
   loadSqueezeWatchlists,
   addToSqueezeWatchlist,
-} from "@/lib/squeeze-watchlists";
-import { exportSqueezeToExcel } from "@/lib/squeeze-export";
+} from "@/lib/squeeze/watchlists";
+import { exportSqueezeToExcel } from "@/lib/squeeze/export";
 import type {
   SqueezeData,
   ScoredSqueezeCandidate,
   SqueezeFilters,
   SavedSqueezeScan,
   SqueezeWatchlist,
-} from "@/lib/ew-types";
-import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-scoring";
+} from "@/lib/ew-wave/types";
+import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-wave/scoring";
 import { recordSignals } from "@/lib/signal-client";
-import { useDebounce } from "@/lib/use-debounce";
-import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
-import { useSidebarState } from "@/lib/use-sidebar-state";
+import { useDebounce } from "@/lib/hooks/use-debounce";
+import { useCollapsibleSections } from "@/lib/hooks/use-collapsible-sections";
+import { useSidebarState } from "@/lib/hooks/use-sidebar-state";
 import { formatM, formatNum, formatDate } from "@/lib/format-utils";
 import { tierColor } from "@/lib/color-utils";
 import { ScannerCTA } from "@/components/scanner-cta";
@@ -60,7 +60,7 @@ import { TickerSearchInput } from "@/components/ticker-search-input";
 import { ScanButton } from "@/components/scan-button";
 import { StalenessLabel } from "@/components/staleness-label";
 import { HitRateDashboard } from "@/components/hit-rate-dashboard";
-import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/hooks/use-filter-persistence";
 import { getSectorForTicker, getSectorBuckets } from "@/data/prerun-universe";
 import { loadSectorRotation } from "@/lib/sector-rotation/storage";
 import { RRG_QUADRANTS } from "@/lib/sector-quadrant-map";

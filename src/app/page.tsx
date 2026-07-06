@@ -36,30 +36,30 @@ import { ScannerCTA } from "@/components/scanner-cta";
 import {
   scoreBatchEnhanced,
   type EnrichedQuoteInput,
-} from "@/lib/ew-scoring";
-import { exportEnhancedToExcel, exportEnhancedToCsv } from "@/lib/ew-export";
+} from "@/lib/ew-wave/scoring";
+import { exportEnhancedToExcel, exportEnhancedToCsv } from "@/lib/ew-wave/export";
 import type {
   ScannerMode,
   EnhancedScoredCandidate,
   DeepAnalysisResult,
   PriceSeries,
   SavedScan,
-} from "@/lib/ew-types";
-import { SCANNER_MODES, getModeConfig, applyModeFilters } from "@/lib/ew-scanner-modes";
-import { saveScan, loadScans, deleteScan, loadCustomUniverses, type CustomUniverse } from "@/lib/ew-watchlist";
-import { loadWatchlists, addToWatchlist } from "@/lib/ew-watchlists";
-import { confirmMultiTimeframe, getWaveStatusInfo, countWaves, computeForwardTargets } from "@/lib/ew-wave-counter";
-import { computeReliabilityScore } from "@/lib/ew-reliability";
+} from "@/lib/ew-wave/types";
+import { SCANNER_MODES, getModeConfig, applyModeFilters } from "@/lib/ew-wave/scanner-modes";
+import { saveScan, loadScans, deleteScan, loadCustomUniverses, type CustomUniverse } from "@/lib/ew-wave/watchlist";
+import { loadWatchlists, addToWatchlist } from "@/lib/ew-wave/watchlists";
+import { confirmMultiTimeframe, getWaveStatusInfo, countWaves, computeForwardTargets } from "@/lib/ew-wave/wave-counter";
+import { computeReliabilityScore } from "@/lib/ew-wave/reliability";
 import { EWSparkline } from "@/components/ew-sparkline";
 import { EWFibBar } from "@/components/ew-fib-bar";
 import { EWSectorHeatmap } from "@/components/ew-sector-heatmap";
 import { EWDeepChart } from "@/components/ew-deep-chart";
 import { EWUniverseBuilder } from "@/components/ew-universe-builder";
 import { EWAlertConfig } from "@/components/ew-alert-config";
-import { useDebounce } from "@/lib/use-debounce";
-import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
+import { useDebounce } from "@/lib/hooks/use-debounce";
+import { useCollapsibleSections } from "@/lib/hooks/use-collapsible-sections";
 import { recordSignals, fetchClientHitRates, type HitRateEntry } from "@/lib/signal-client";
-import { checkTargetResistance } from "@/lib/ew-resistance";
+import { checkTargetResistance } from "@/lib/ew-wave/resistance";
 import { ProgressBar } from "@/components/progress-bar";
 import { loadFromCache, saveToCache } from "@/lib/scan-cache";
 import { StalenessLabel } from "@/components/staleness-label";

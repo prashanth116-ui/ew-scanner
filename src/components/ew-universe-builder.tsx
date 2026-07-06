@@ -8,7 +8,7 @@ import {
   loadCustomUniverses,
   deleteCustomUniverse,
   type CustomUniverse,
-} from "@/lib/ew-watchlist";
+} from "@/lib/ew-wave/watchlist";
 
 interface UniverseBuilderProps {
   open: boolean;

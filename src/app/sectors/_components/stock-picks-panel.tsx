@@ -10,7 +10,7 @@ import type {
   StockCategory,
   StockPhase as RotationStockPhase,
 } from "@/lib/sector-rotation/types";
-import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/hooks/use-filter-persistence";
 import type { PicksSortKey } from "./types";
 import { CONVICTION_STYLE, CATEGORY_STYLE, CONV_ORDER, CAT_ORDER, PHASE_ORDER } from "./constants";
 import { quadrantColor } from "./helpers";

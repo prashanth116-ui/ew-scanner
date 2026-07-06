@@ -6,7 +6,7 @@
 import "server-only";
 
 import type { PreRunStockData, EmaTimeframe, M2TimeframeResult } from "./types";
-import { getYahooCrumb, invalidateCrumbCache } from "../squeeze-fetch";
+import { getYahooCrumb, invalidateCrumbCache } from "../squeeze/fetch";
 import { getSectorForTicker, getSectorETF } from "@/data/prerun-universe";
 import { fetchWithRetry, extractRaw, deduplicatedChartFetch } from "@/lib/yahoo-utils";
 import { logError } from "@/lib/error-logger";

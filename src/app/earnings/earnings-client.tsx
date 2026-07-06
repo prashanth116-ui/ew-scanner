@@ -24,7 +24,7 @@ import {
   FileDown,
   type LucideIcon,
 } from "lucide-react";
-import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
+import { useCollapsibleSections } from "@/lib/hooks/use-collapsible-sections";
 import { tierColor, verdictColor, scoreDotColor } from "@/lib/color-utils";
 import type { ConfluenceResult } from "@/lib/confluence/types";
 import type { SectorRotationResult } from "@/lib/sector-rotation/types";
@@ -42,9 +42,9 @@ import {
   type MomentumQuality,
   type EarningsPreRunDetail,
   type EarningsEdgeSignals,
-} from "@/lib/earnings-utils";
+} from "@/lib/earnings/utils";
 import { HitRateDashboard } from "@/components/hit-rate-dashboard";
-import { exportSingleEarningsToExcel } from "@/lib/earnings-export";
+import { exportSingleEarningsToExcel } from "@/lib/earnings/export";
 
 // ── Types ──
 

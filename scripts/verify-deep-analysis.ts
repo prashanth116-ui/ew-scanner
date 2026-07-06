@@ -40,7 +40,7 @@ async function runDeepAnalysis(ticker: string): Promise<DeepResult> {
   const isStructural = quote.trueAth != null;
 
   // Import wave counter to compute targets locally (same as page.tsx does)
-  const { countWaves, getWaveStatusInfo, computeForwardTargets } = await import("../src/lib/ew-wave-counter");
+  const { countWaves, getWaveStatusInfo, computeForwardTargets } = await import("../src/lib/ew-wave/wave-counter");
 
   let waveCount = null;
   try {

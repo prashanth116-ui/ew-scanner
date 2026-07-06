@@ -21,9 +21,9 @@ import {
   deleteSqueezeWatchlist,
   renameSqueezeWatchlist,
   removeFromSqueezeWatchlist,
-} from "@/lib/squeeze-watchlists";
-import { computeSqueezeScore, normalizeSiPercent } from "@/lib/squeeze-scoring";
-import type { SqueezeWatchlist, SqueezeWatchlistItem, SqueezeData, SqueezeTier } from "@/lib/ew-types";
+} from "@/lib/squeeze/watchlists";
+import { computeSqueezeScore, normalizeSiPercent } from "@/lib/squeeze/scoring";
+import type { SqueezeWatchlist, SqueezeWatchlistItem, SqueezeData, SqueezeTier } from "@/lib/ew-wave/types";
 
 const TIER_COLORS: Record<SqueezeTier, string> = {
   high: "text-red-400",

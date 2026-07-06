@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
-import { fetchMarketRegime } from "@/lib/ew-regime";
+import { fetchMarketRegime } from "@/lib/ew-wave/regime";
 
 export async function GET(request: NextRequest) {
   const rl = rateLimit(`regime:${getClientKey(request)}`, 30, 60_000);

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
-import { fetchQuote } from "@/lib/ew-alert-core";
-import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-scoring";
-import { sendTelegramMessage } from "@/lib/ew-telegram";
+import { fetchQuote } from "@/lib/ew-wave/alert-core";
+import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-wave/scoring";
+import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import { logError } from "@/lib/error-logger";
-import type { Watchlist, ScannerMode } from "@/lib/ew-types";
+import type { Watchlist, ScannerMode } from "@/lib/ew-wave/types";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 300;

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { logError } from "@/lib/error-logger";
 import { validateTickers } from "@/lib/api-utils";
-import { fetchEWQuoteData } from "@/lib/ew-quote-fetch";
-import { detectElliottWaves, type P2ImpulsePattern } from "@/lib/phase2-wave-detector";
-import type { PriceSeries } from "@/lib/ew-types";
+import { fetchEWQuoteData } from "@/lib/ew-wave/quote-fetch";
+import { detectElliottWaves, type P2ImpulsePattern } from "@/lib/wave-scanner/wave-detector";
+import type { PriceSeries } from "@/lib/ew-wave/types";
 
 const FETCH_TIMEOUT = 15000;
 

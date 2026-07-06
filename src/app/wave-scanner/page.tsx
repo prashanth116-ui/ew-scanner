@@ -17,7 +17,7 @@ import {
   Star,
   List,
 } from "lucide-react";
-import type { PriceSeries } from "@/lib/ew-types";
+import type { PriceSeries } from "@/lib/ew-wave/types";
 import {
   detectElliottWaves,
   detectNearMisses,
@@ -26,7 +26,7 @@ import {
   type P2FibTargets,
   type P2NearMissPattern,
   waveLength,
-} from "@/lib/phase2-wave-detector";
+} from "@/lib/wave-scanner/wave-detector";
 import {
   WAVE_SCANNER_MODES,
   filterByMode,
@@ -34,11 +34,11 @@ import {
   type WaveScannerMode,
   type WaveScanResult,
   type NearMissScanResult,
-} from "@/lib/phase2-scanner-modes";
+} from "@/lib/wave-scanner/scanner-modes";
 import { WAVE_UNIVERSES, WAVE_UNIVERSE_KEYS, type WaveUniverseKey } from "@/data/phase2-universes";
 import { ScannerCTA } from "@/components/scanner-cta";
-import { useSidebarState } from "@/lib/use-sidebar-state";
-import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
+import { useSidebarState } from "@/lib/hooks/use-sidebar-state";
+import { useCollapsibleSections } from "@/lib/hooks/use-collapsible-sections";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SidebarSection } from "@/components/sidebar-section";
 import { ProgressBar } from "@/components/progress-bar";
@@ -46,7 +46,7 @@ import { TickerSearchInput } from "@/components/ticker-search-input";
 import { loadFromCache, saveToCache } from "@/lib/scan-cache";
 import { CopyButton } from "@/components/copy-button";
 import { StalenessLabel } from "@/components/staleness-label";
-import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/hooks/use-filter-persistence";
 import { WaveSparkline } from "@/components/wave-sparkline";
 import {
   loadWatchlists,
@@ -54,13 +54,13 @@ import {
   deleteWatchlist,
   addTickerToWatchlist,
   type P2Watchlist,
-} from "@/lib/phase2-watchlist";
+} from "@/lib/wave-scanner/watchlist";
 import {
   loadSavedScans,
   saveScan,
   deleteScan,
   type P2SavedScan,
-} from "@/lib/phase2-saved-scans";
+} from "@/lib/wave-scanner/saved-scans";
 
 const ACCENT = "#8b5cf6"; // purple for wave scanner
 const BATCH_SIZE = 15;

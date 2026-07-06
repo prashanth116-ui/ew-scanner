@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
-import { runAlertPipeline } from "@/lib/ew-alert-core";
+import { runAlertPipeline } from "@/lib/ew-wave/alert-core";
 import { logError } from "@/lib/error-logger";
-import type { AlertConfig } from "@/lib/ew-types";
+import type { AlertConfig } from "@/lib/ew-wave/types";
 
 export async function POST(request: NextRequest) {
   // Rate limit: 5 req/min per IP

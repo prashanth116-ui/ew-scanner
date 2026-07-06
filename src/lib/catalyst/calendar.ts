@@ -5,7 +5,7 @@
 
 import "server-only";
 
-import { fetchEarningsCalendar } from "@/lib/earnings-calendar";
+import { fetchEarningsCalendar } from "@/lib/earnings/calendar";
 import type { CatalystCalendarEvent, CatalystEventType } from "./types";
 
 // ── Static Macro Events (update quarterly) ──

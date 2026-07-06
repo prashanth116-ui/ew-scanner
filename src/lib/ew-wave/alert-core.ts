@@ -1,0 +1,240 @@
+/**
+ * Shared alert logic used by both /api/alert (manual) and /api/alert/cron (scheduled).
+ * Extracts the common fetch → score → filter → send pipeline.
+ *
+ * SERVER-ONLY: This module uses Node.js APIs (fs). Never import from client components.
+ */
+
+import "server-only";
+
+import { scoreBatchEnhanced, type EnrichedQuoteInput } from "./scoring";
+import { applyModeFilters } from "./scanner-modes";
+import { formatAlertMessage, sendTelegramMessage } from "./telegram";
+import { UNIVERSES, type UniverseKey } from "@/data/ew-universes";
+import type { AlertConfig, ConfidenceTier, ScannerMode, EnhancedScoredCandidate } from "./types";
+import { logError } from "@/lib/error-logger";
+import { findStructuralReferences } from "./structural";
+
+const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
+const BATCH_SIZE = 10;
+const BATCH_DELAY = 300;
+
+const CONFIDENCE_ORDER: Record<ConfidenceTier, number> = {
+  high: 0,
+  probable: 1,
+  speculative: 2,
+};
+
+// In-memory cache for alert diff tracking (survives within a warm serverless instance)
+let lastAlertTickers: string[] = [];
+let lastAlertTimestamp = 0;
+const ALERT_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function loadPreviousAlertTickers(): string[] {
+  // If in-memory cache is fresh (within 24h), use it
+  if (lastAlertTimestamp > 0 && Date.now() - lastAlertTimestamp < ALERT_CACHE_TTL) {
+    return lastAlertTickers;
+  }
+  return [];
+}
+
+function savePreviousAlertTickers(tickers: string[]): void {
+  lastAlertTickers = tickers;
+  lastAlertTimestamp = Date.now();
+}
+
+export async function fetchQuote(ticker: string): Promise<EnrichedQuoteInput | null> {
+  try {
+    const url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?interval=1wk&range=5y&includePrePost=false`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
+
+    const timestamps: number[] = result.timestamp ?? [];
+    const quote = result.indicators?.quote?.[0];
+    if (!quote || !timestamps.length) return null;
+
+    const highs: (number | null)[] = quote.high ?? [];
+    const lows: (number | null)[] = quote.low ?? [];
+    const closes: (number | null)[] = quote.close ?? [];
+    const current: number = result.meta?.regularMarketPrice ?? 0;
+
+    let athIdx = 0, athValue = -Infinity;
+    for (let i = 0; i < highs.length; i++) {
+      if (highs[i] != null && highs[i]! > athValue) { athValue = highs[i]!; athIdx = i; }
+    }
+
+    let lowIdx = athIdx, lowValue = Infinity;
+    for (let i = athIdx; i < lows.length; i++) {
+      if (lows[i] != null && lows[i]! < lowValue) { lowValue = lows[i]!; lowIdx = i; }
+    }
+    if (lowValue === Infinity) lowValue = current;
+
+    const toYear = (ts: number) => new Date(ts * 1000).getFullYear();
+
+    // Structural fallback for stocks at/near ATH
+    let trueAth: number | undefined;
+    let trueAthYear: number | undefined;
+    let trueLow: number | undefined;
+    let trueLowYear: number | undefined;
+
+    // Build clean series
+    const cleanOpen: number[] = [], cleanHigh: number[] = [], cleanLow: number[] = [];
+    const cleanClose: number[] = [], cleanVolume: number[] = [], cleanTs: number[] = [];
+    const rawToClean = new Map<number, number>();
+    const opens: (number | null)[] = quote.open ?? [];
+    const volumes: (number | null)[] = quote.volume ?? [];
+
+    for (let i = 0; i < timestamps.length; i++) {
+      if (closes[i] == null) continue;
+      rawToClean.set(i, cleanClose.length);
+      cleanTs.push(timestamps[i]);
+      cleanOpen.push(opens[i] ?? closes[i]!);
+      cleanHigh.push(highs[i] ?? closes[i]!);
+      cleanLow.push(lows[i] ?? closes[i]!);
+      cleanClose.push(closes[i]!);
+      cleanVolume.push(volumes[i] ?? 0);
+    }
+
+    let cleanAthIdx = rawToClean.get(athIdx) ?? 0;
+    let cleanLowIdx = rawToClean.get(lowIdx) ?? cleanAthIdx;
+    if (cleanLowIdx <= cleanAthIdx && cleanClose.length > 0) {
+      cleanLowIdx = Math.min(cleanAthIdx + 1, cleanClose.length - 1);
+    }
+
+    // Structural fallback: detect stocks at/near ATH
+    const structural = findStructuralReferences(
+      cleanHigh, cleanLow, cleanAthIdx, cleanLowIdx, athValue, lowValue,
+    );
+    if (structural) {
+      trueAth = Math.round(athValue * 100) / 100;
+      trueAthYear = toYear(timestamps[athIdx]);
+      trueLow = Math.round(lowValue * 100) / 100;
+      trueLowYear = toYear(cleanTs[cleanLowIdx] ?? timestamps[lowIdx]);
+      // Replace with structural references (already in clean-array space)
+      athValue = structural.peakPrice;
+      lowValue = structural.troughPrice;
+      cleanAthIdx = structural.peakIdx;
+      cleanLowIdx = structural.troughIdx;
+    }
+
+    return {
+      ticker,
+      name: ticker,
+      ath: Math.round(athValue * 100) / 100,
+      low: Math.round(lowValue * 100) / 100,
+      current: Math.round(current * 100) / 100,
+      athYear: toYear(cleanTs[cleanAthIdx] ?? timestamps[athIdx]),
+      lowYear: toYear(cleanTs[cleanLowIdx] ?? timestamps[lowIdx]),
+      series: {
+        timestamps: cleanTs,
+        open: cleanOpen,
+        high: cleanHigh,
+        low: cleanLow,
+        close: cleanClose,
+        volume: cleanVolume,
+      },
+      athIdx: cleanAthIdx,
+      lowIdx: cleanLowIdx,
+      trueAth,
+      trueAthYear,
+      trueLow,
+      trueLowYear,
+    };
+  } catch (err) {
+    logError("fetchQuote", err, { ticker });
+    return null;
+  }
+}
+
+export async function runAlertPipeline(config: AlertConfig): Promise<{
+  sent: boolean;
+  candidateCount: number;
+  newCount: number;
+  filtered: EnhancedScoredCandidate[];
+  error?: string;
+}> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!botToken || !chatId) {
+    return { sent: false, candidateCount: 0, newCount: 0, filtered: [], error: "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set" };
+  }
+
+  const { mode, universe, minConfidence, filters } = config;
+
+  // Resolve tickers
+  const tickers = UNIVERSES[universe as UniverseKey] ?? [];
+  if (tickers.length === 0) {
+    return { sent: false, candidateCount: 0, newCount: 0, filtered: [], error: `Unknown universe: ${universe}` };
+  }
+
+  // Fetch quotes in batches
+  const quotes: EnrichedQuoteInput[] = [];
+  for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+    const batch = tickers.slice(i, i + BATCH_SIZE);
+    const settled = await Promise.allSettled(
+      batch.map((t) => fetchQuote(t.symbol).then((q) => {
+        if (q) { q.name = t.name; q.sector = t.sector; }
+        return q;
+      }))
+    );
+    for (const r of settled) {
+      if (r.status === "fulfilled" && r.value) quotes.push(r.value);
+    }
+    if (i + BATCH_SIZE < tickers.length) {
+      await new Promise((r) => setTimeout(r, BATCH_DELAY));
+    }
+  }
+
+  if (quotes.length === 0) {
+    return { sent: false, candidateCount: 0, newCount: 0, filtered: [], error: "No quotes fetched" };
+  }
+
+  // Score
+  const scored = scoreBatchEnhanced(quotes, {
+    minDecline: filters.minDecline,
+    minDuration: filters.minMonths,
+    minRecovery: filters.minRecovery,
+    mode: mode as ScannerMode,
+  });
+
+  const passed = scored.filter((s) => s.passed);
+  const modeFiltered = applyModeFilters(passed, mode as ScannerMode);
+
+  // Filter by confidence
+  const minConf = CONFIDENCE_ORDER[minConfidence] ?? 2;
+  const filtered = modeFiltered.filter(
+    (c) => CONFIDENCE_ORDER[c.confidenceTier] <= minConf
+  );
+
+  // Load previous alert tickers for diff (in-memory cache)
+  const previousTickers = loadPreviousAlertTickers();
+
+  const currentTickers = filtered.map((c) => c.ticker);
+  const prevSet = new Set(previousTickers);
+  const newTickers = currentTickers.filter((t) => !prevSet.has(t));
+
+  // Format and send
+  const message = formatAlertMessage(filtered, mode as ScannerMode, universe, newTickers, {});
+  const tgResult = await sendTelegramMessage(botToken, chatId, message);
+
+  // Save current tickers for next diff
+  savePreviousAlertTickers(currentTickers);
+
+  return {
+    sent: tgResult.ok,
+    candidateCount: filtered.length,
+    newCount: newTickers.length,
+    filtered,
+    ...(tgResult.error ? { error: tgResult.error } : {}),
+  };
+}

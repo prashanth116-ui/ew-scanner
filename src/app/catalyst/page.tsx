@@ -34,8 +34,8 @@ import {
 } from "@/lib/catalyst/storage";
 import { ScoreBar } from "@/components/score-bar";
 import { ScannerCTA } from "@/components/scanner-cta";
-import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
-import { useSidebarState } from "@/lib/use-sidebar-state";
+import { useCollapsibleSections } from "@/lib/hooks/use-collapsible-sections";
+import { useSidebarState } from "@/lib/hooks/use-sidebar-state";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SidebarSection } from "@/components/sidebar-section";
 

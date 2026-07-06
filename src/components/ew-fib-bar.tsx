@@ -1,6 +1,6 @@
 "use client";
 
-import type { FibExtension } from "@/lib/ew-types";
+import type { FibExtension } from "@/lib/ew-wave/types";
 
 interface FibBarProps {
   retracementDepth: number; // 0 = at low, 1 = at ATH

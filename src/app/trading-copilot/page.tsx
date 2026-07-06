@@ -2,9 +2,9 @@
 
 import { Suspense, useMemo } from "react";
 import { SidebarShell } from "@/components/sidebar-shell";
-import { useSidebarState } from "@/lib/use-sidebar-state";
-import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
-import { usePersistedFilter } from "@/lib/use-filter-persistence";
+import { useSidebarState } from "@/lib/hooks/use-sidebar-state";
+import { useCollapsibleSections } from "@/lib/hooks/use-collapsible-sections";
+import { usePersistedFilter } from "@/lib/hooks/use-filter-persistence";
 import type { CopilotInput } from "@/lib/tradingCopilot/types";
 import { DEFAULT_COPILOT_INPUT } from "@/lib/tradingCopilot/types";
 import { evaluateCopilot } from "@/lib/tradingCopilot/ruleEngine";

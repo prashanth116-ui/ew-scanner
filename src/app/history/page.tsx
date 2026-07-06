@@ -15,9 +15,9 @@ import {
   Filter,
   ExternalLink,
 } from "lucide-react";
-import { loadScans, deleteScan, updateScan } from "@/lib/ew-watchlist";
-import { compareScansPair } from "@/lib/ew-scan-compare";
-import type { SavedScan, ScanComparison, ScannerMode } from "@/lib/ew-types";
+import { loadScans, deleteScan, updateScan } from "@/lib/ew-wave/watchlist";
+import { compareScansPair } from "@/lib/ew-wave/scan-compare";
+import type { SavedScan, ScanComparison, ScannerMode } from "@/lib/ew-wave/types";
 
 const MODE_COLORS: Record<ScannerMode, string> = {
   wave2: "bg-blue-500/20 text-blue-400 border-blue-500/30",

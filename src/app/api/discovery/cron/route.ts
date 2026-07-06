@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
-import { sendTelegramMessage } from "@/lib/ew-telegram";
+import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import { getAllSectorSymbols } from "@/data/sector-universe";
 import { getAllCryptoSymbols } from "@/data/crypto-sector-universe";
 import { getAllCatalystSymbols } from "@/data/catalyst-universe";

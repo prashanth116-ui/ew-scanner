@@ -69,8 +69,8 @@ import {
   loadInflectionScanResultsWithDate,
 } from "@/lib/prerun/storage";
 import { exportPreRunToExcel, exportVCPToExcel, exportInstitutionalToExcel, exportInflectionToExcel } from "@/lib/prerun/export";
-import { InstitutionalResultCard } from "./institutional-card";
-import { InflectionResultCard } from "./inflection-card";
+import { InstitutionalResultCard } from "./_components/institutional-card";
+import { InflectionResultCard } from "./_components/inflection-card";
 import {
   getTickersForSector,
   getSectorBuckets,
@@ -80,8 +80,8 @@ import {
   getTotalTickerCount,
 } from "@/data/prerun-universe";
 import { ScannerCTA } from "@/components/scanner-cta";
-import { useCollapsibleSections } from "@/lib/use-collapsible-sections";
-import { useSidebarState } from "@/lib/use-sidebar-state";
+import { useCollapsibleSections } from "@/lib/hooks/use-collapsible-sections";
+import { useSidebarState } from "@/lib/hooks/use-sidebar-state";
 import { formatMktCap } from "@/lib/format-utils";
 import { verdictColor, scoreBarGradient, scoreDotColor } from "@/lib/color-utils";
 import { SidebarShell } from "@/components/sidebar-shell";
@@ -94,7 +94,7 @@ import { TickerSearchInput } from "@/components/ticker-search-input";
 import { ScanButton } from "@/components/scan-button";
 import { StalenessLabel } from "@/components/staleness-label";
 import { HitRateDashboard } from "@/components/hit-rate-dashboard";
-import { usePersistedFilter, clearPersistedFilters } from "@/lib/use-filter-persistence";
+import { usePersistedFilter, clearPersistedFilters } from "@/lib/hooks/use-filter-persistence";
 import { recordSignals, type ClientSignal } from "@/lib/signal-client";
 import { loadSectorRotation } from "@/lib/sector-rotation/storage";
 import { RRG_QUADRANTS } from "@/lib/sector-quadrant-map";

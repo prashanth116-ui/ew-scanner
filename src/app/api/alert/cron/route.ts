@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runAlertPipeline } from "@/lib/ew-alert-core";
+import { runAlertPipeline } from "@/lib/ew-wave/alert-core";
 import { logError } from "@/lib/error-logger";
-import type { AlertConfig } from "@/lib/ew-types";
+import type { AlertConfig } from "@/lib/ew-wave/types";
 
 export const maxDuration = 60;
 
