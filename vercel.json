@@ -1,24 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/alert/cron",
-      "schedule": "0 21 * * 1-5"
-    },
-    {
-      "path": "/api/prerun/cron/nightly",
-      "schedule": "30 21 * * 1-5"
-    },
-    {
       "path": "/api/sector-rotation/alert",
       "schedule": "0 22 * * 1-5"
-    },
-    {
-      "path": "/api/cron/outcomes",
-      "schedule": "30 22 * * 1-5"
-    },
-    {
-      "path": "/api/cron/targets",
-      "schedule": "0 21 * * 1-5"
     },
     {
       "path": "/api/catalyst/cron",
@@ -30,7 +14,7 @@
     },
     {
       "path": "/api/discovery/cron",
-      "schedule": "0 0 * * *"
+      "schedule": "0 0 * * 2-6"
     },
     {
       "path": "/api/inflection/cron/daily",

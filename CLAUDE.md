@@ -51,14 +51,20 @@ npm run build             # Production build
 | `scanner_signals` | various | Cross-scanner signal persistence |
 | `sector_snapshots` | `/api/sector-rotation/alert` | Sector rotation quadrants |
 
-### Nightly Cron Schedule (UTC, Tue-Sat = Mon-Fri ET)
-| UTC | ET | Route | Notes |
-|-----|-----|-------|-------|
-| 01:45 | 9:45 PM | `/api/inflection/cron/daily` | Inflection scan |
-| 02:00 | 10:00 PM | `/api/prerun/cron/preset` | Preset scan pass 1 (~708 tickers) |
-| 02:06 | 10:06 PM | `/api/prerun/cron/preset-resume` | Preset scan pass 2 (remaining tickers) |
-| 02:15 | 10:15 PM | `/api/vcp/cron/daily` | VCP scan |
-| 02:30 | 10:30 PM | `/api/institutional/cron/daily` | Institutional scan |
+### Cron Schedule (11 jobs)
+| UTC | ET | Days | Route | Notes |
+|-----|-----|------|-------|-------|
+| 00:00 | 8:00 PM | Tue-Sat | `/api/discovery/cron` | Trending ticker discovery (CoinGecko + Yahoo) |
+| 22:00 | 6:00 PM | Mon-Fri | `/api/sector-rotation/alert` | Sector quadrant transition alerts |
+| 01:15 | 9:15 PM | Tue-Sat | `/api/catalyst/cron` | AI catalyst/spike detection |
+| 01:45 | 9:45 PM | Tue-Sat | `/api/inflection/cron/daily` | Inflection scan |
+| 02:00 | 10:00 PM | Tue-Sat | `/api/prerun/cron/preset` | Preset scan pass 1 (~869 tickers) |
+| 02:06 | 10:06 PM | Tue-Sat | `/api/prerun/cron/preset-resume` | Preset scan pass 2 (remaining tickers) |
+| 02:15 | 10:15 PM | Tue-Sat | `/api/vcp/cron/daily` | VCP scan |
+| 02:30 | 10:30 PM | Tue-Sat | `/api/institutional/cron/daily` | Institutional scan |
+| 02:45 | 10:45 PM | Tue-Sat | `/api/qfe/cron/backfill` | QFE forward return backfill |
+| 02:50 | 10:50 PM | Tue-Sat | `/api/prerunner/cron/daily` | Rotation leaders/turnarounds radar |
+| 06:00 Sun | 2:00 AM Sun | Sunday | `/api/sector-rotation/institutional-refresh` | Weekly institutional data refresh |
 
 ### Preset Cron Details
 - **Universe:** SP500 + NDX100 + SP400 (~869 unique tickers)
