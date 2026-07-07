@@ -21,6 +21,8 @@ import type { LeadershipHealth } from "@/lib/sector-rotation/leadership-health";
 import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import { COMPOSITE } from "@/lib/sector-rotation/config";
 import { createAdminClient } from "@/lib/supabase/server";
+import { recordSectorSnapshotBatch } from "@/lib/supabase/persistence";
+import type { SectorSnapshotRecord } from "@/lib/supabase/persistence";
 import type { SectorRotationResult, SectorRotationScore, RRGQuadrant } from "@/lib/sector-rotation/types";
 import type { RotationTrackerResult, LifecycleStage, ConvictionResult, RegimeData, PairSignalData } from "@/lib/sector-rotation/rotation-types";
 import type { SectorBreadth, MarketBias, DayType } from "@/lib/premarket/types";
@@ -58,9 +60,14 @@ function synthesizeDirection(
     return "BEAR";
   }
 
-  // LEAN BEAR: posture=DEFENSIVE OR bias is bearish
-  if (posture === "DEFENSIVE" || isBearish) {
+  // LEAN BEAR: structural defensiveness confirmed by bearish bias
+  if (posture === "DEFENSIVE" && isBearish) {
     return "LEAN BEAR";
+  }
+
+  // DEFENSIVE posture without bearish bias — mixed signals, lean cautious
+  if (posture === "DEFENSIVE") {
+    return "NEUTRAL";
   }
 
   // BULL: posture=AGGRESSIVE + bullish bias + >=2 ENTER rotations
@@ -68,7 +75,7 @@ function synthesizeDirection(
     return "BULL";
   }
 
-  // LEAN BULL: posture=SELECTIVE/AGGRESSIVE + not bearish + >=1 ENTER
+  // LEAN BULL: posture=SELECTIVE/AGGRESSIVE + bullish or neutral bias + >=1 ENTER
   if (
     (posture === "SELECTIVE" || posture === "AGGRESSIVE") &&
     !isBearish &&
@@ -77,7 +84,7 @@ function synthesizeDirection(
     return "LEAN BULL";
   }
 
-  // NEUTRAL: fallback
+  // NEUTRAL: fallback (includes AGGRESSIVE/SELECTIVE + bearish bias = conflict, stay flat)
   return "NEUTRAL";
 }
 
@@ -431,18 +438,24 @@ export async function GET(request: NextRequest) {
       vixBounds,
     );
 
-    // #5 Detect bias conflict (macro vs futures)
+    // #5 Detect bias conflict (structural posture vs futures bias)
+    // Posture reflects structure (regime, rotations, leadership health).
+    // Trading bias reflects tactical futures momentum.
+    // Conflict = structural signal says one direction, futures say the opposite.
     let biasConflict = false;
     let biasConflictDetail: string | null = null;
-    if (tradingBias && sectorResult && regime) {
-      const biasLevels: Record<string, number> = {
-        "Strong Bear": -2, "Lean Bear": -1, "Neutral": 0, "Lean Bull": 1, "Strong Bull": 2,
-      };
-      const macroLevel = biasLevels[biasLabel] ?? 0;
-      const futuresLevel = biasLevels[tradingBias.bias] ?? 0;
-      if (macroLevel !== 0 && futuresLevel !== 0 && Math.sign(macroLevel) !== Math.sign(futuresLevel)) {
+    if (tradingBias) {
+      const postureIsBullish = posture.posture === "AGGRESSIVE" || posture.posture === "SELECTIVE";
+      const postureIsBearish = posture.posture === "DEFENSIVE" || posture.posture === "CASH";
+      const futuresAreBearish = tradingBias.bias === "Strong Bear" || tradingBias.bias === "Lean Bear";
+      const futuresAreBullish = tradingBias.bias === "Strong Bull" || tradingBias.bias === "Lean Bull";
+
+      if (postureIsBullish && futuresAreBearish) {
         biasConflict = true;
-        biasConflictDetail = `Macro "${biasLabel}" vs Futures "${tradingBias.bias}" \u2014 reduce size`;
+        biasConflictDetail = `Posture ${posture.posture} vs Futures "${tradingBias.bias}" \u2014 reduce size`;
+      } else if (postureIsBearish && futuresAreBullish) {
+        biasConflict = true;
+        biasConflictDetail = `Posture ${posture.posture} vs Futures "${tradingBias.bias}" \u2014 don't chase`;
       }
     }
 
@@ -571,6 +584,28 @@ export async function GET(request: NextRequest) {
     const whatChanged = sectorResult
       ? computeWhatChangedFromSnapshots(sectorResult.sectors, previousSnapshot)
       : null;
+
+    // Persist today's snapshot so tomorrow's briefing can compare
+    if (sectorResult) {
+      const today = new Date().toISOString().slice(0, 10);
+      const allScores = [
+        ...sectorResult.sectors,
+        ...(sectorResult.subSectorScores ?? []),
+        ...(sectorResult.crossAssetScores ?? []),
+        ...(sectorResult.leadershipBasketScores ?? []),
+      ];
+      const snapshots: SectorSnapshotRecord[] = allScores.map((s) => ({
+        snapshot_date: today,
+        sector: s.sector,
+        etf_symbol: s.etf,
+        rs_ratio: s.rsRatio,
+        rs_momentum: s.rsMomentum,
+        quadrant: s.quadrant,
+        momentum_score: s.compositeScore,
+        breadth_pct: s.breadthPct ?? undefined,
+      }));
+      await recordSectorSnapshotBatch(snapshots).catch(() => {});
+    }
 
     // 12. Format and send Telegram message
     const briefingData: BriefingData = {
