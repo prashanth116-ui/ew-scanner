@@ -207,6 +207,7 @@ function formatDailyBriefing(data: BriefingData): string {
     day: "numeric",
     year: "numeric",
   });
+  const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
 
   const lines: string[] = [];
   lines.push(`<b>DAILY BRIEFING \u2014 ${date}</b>`);
@@ -214,9 +215,11 @@ function formatDailyBriefing(data: BriefingData): string {
   lines.push(`<b>DIRECTION: ${data.direction}</b>`);
   lines.push("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501");
 
-  // L1 MACRO
+  // ── DAY TRADE ──
+
+  // MACRO
   lines.push("");
-  lines.push("<b>L1 MACRO</b>");
+  lines.push("<b>MACRO</b>");
   const vixStr = data.vix != null ? `VIX: ${data.vix.toFixed(1)} (${data.vixSlope ?? "?"})` : "VIX: N/A";
   const regimeConf = data.regimeConfidence != null ? ` (${data.regimeConfidence}%)` : "";
   lines.push(`Regime: ${data.regimeLabel}${regimeConf} | ${vixStr}`);
@@ -224,37 +227,20 @@ function formatDailyBriefing(data: BriefingData): string {
     ? `Today: ${data.bias}${data.biasConfidence != null ? ` (${data.biasConfidence}%)` : ""}`
     : "Today: N/A";
   lines.push(`Structure: ${data.posture} | ${todayStr}`);
-
-  // #1 Leadership Health
-  if (data.leadershipHealth) {
-    lines.push(`Leadership: ${data.leadershipHealth.score} (${data.leadershipHealth.label})${data.leadershipHealth.megaCapDominant ? " | mega-cap led" : ""}${data.leadershipHealth.broadening ? " | broadening" : ""}`);
-  }
-
-  const highFlags = data.riskFlags.filter((f) => f.severity === "high").length;
-  const medFlags = data.riskFlags.filter((f) => f.severity === "medium").length;
-  lines.push(`Risk Flags: ${data.riskFlags.length} (${highFlags} high, ${medFlags} med)`);
-
-  // #5 Structure vs Today conflict
   if (data.biasConflict && data.biasConflictDetail) {
     lines.push(`\u26a0 CONFLICT: ${data.biasConflictDetail}`);
   }
-
-  const macroGo = data.posture !== "CASH" && data.posture !== "DEFENSIVE" && highFlags < 3;
-  lines.push(`\u2192 ${macroGo ? "GO \u2713" : "CAUTION \u2717"}`);
 
   // FUTURES
   if (data.futures.length > 0) {
     lines.push("");
     lines.push("<b>FUTURES</b>");
-    const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
     const labels: Record<string, string> = { "ES=F": "ES", "NQ=F": "NQ", "YM=F": "YM", "RTY=F": "RTY", "CL=F": "Oil", "GC=F": "Gold" };
-    const equitySymbols = ["ES=F", "NQ=F", "YM=F", "RTY=F"];
-    const equities = data.futures.filter((f) => equitySymbols.includes(f.symbol));
+    const equities = data.futures.filter((f) => ["ES=F", "NQ=F", "YM=F", "RTY=F"].includes(f.symbol));
     if (equities.length > 0) {
       lines.push(equities.map((f) => `${labels[f.symbol] ?? f.symbol} ${fmtPct(f.changePct)}`).join(" | "));
     }
-    const commoditySymbols = ["CL=F", "GC=F"];
-    const commodities = data.futures.filter((f) => commoditySymbols.includes(f.symbol));
+    const commodities = data.futures.filter((f) => ["CL=F", "GC=F"].includes(f.symbol));
     if (commodities.length > 0) {
       lines.push(commodities.map((f) => `${labels[f.symbol] ?? f.symbol} ${fmtPct(f.changePct)}`).join(" | "));
     }
@@ -266,21 +252,59 @@ function formatDailyBriefing(data: BriefingData): string {
     if (parts.length > 0) lines.push(parts.join(" | "));
   }
 
-  // L2 SECTORS
+  // SECTORS (day-trade: breadth + top actionable)
   lines.push("");
-  lines.push("<b>L2 SECTORS</b>");
-
-  // #2 Sector Tier Counts + Breadth
-  const tc = data.sectorTierCounts;
-  const breadthStr = data.sectorBreadth ? ` | Breadth: ${data.sectorBreadth.advancing}/${data.sectorBreadth.total}` : "";
-  lines.push(`${tc.actionable} actionable | ${tc.watch} watch | ${tc.avoid} avoid${breadthStr}`);
-
-  // #7 Dispersion Index
-  if (data.dispersionIndex != null) {
-    lines.push(`Dispersion: ${data.dispersionIndex.toFixed(1)}${data.dispersionIndex > 5 ? " (high \u2014 rotation opportunity)" : data.dispersionIndex < 2 ? " (low \u2014 sectors converging)" : ""}`);
+  const breadthTag = data.sectorBreadth ? ` (${data.sectorBreadth.advancing}/${data.sectorBreadth.total})` : "";
+  lines.push(`<b>SECTORS</b>${breadthTag}`);
+  if (data.topSectors.length === 0) {
+    lines.push("No actionable sectors");
+  } else {
+    for (const s of data.topSectors.slice(0, 3)) {
+      lines.push(
+        `${s.sector}: ${s.quadrant} | accel ${s.acceleration.toFixed(2)} | CMF ${s.cmf >= 0 ? "+" : ""}${s.cmf.toFixed(2)}`
+      );
+    }
   }
 
-  // #3 Cross-Sector Pairs
+  // TOP PICKS (capped at 3)
+  lines.push("");
+  lines.push("<b>TOP PICKS</b>");
+  if (data.topPicks.length === 0) {
+    lines.push("No qualifying picks");
+  } else {
+    for (const p of data.topPicks.slice(0, 3)) {
+      lines.push(
+        `${p.symbol} \u2014 accel ${p.acceleration.toFixed(2)} | ${p.category} | ${p.conviction}`
+      );
+    }
+  }
+
+  // ── SWING CONTEXT ──
+
+  lines.push("");
+  lines.push("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501");
+  lines.push("<b>SWING CONTEXT</b>");
+
+  // Rotations
+  if (data.rotationAnalyses.length === 0) {
+    lines.push("No active rotations");
+  } else {
+    const enterCount = data.rotationAnalyses.filter((r) => r.action.action === "ENTER").length;
+    lines.push(`Rotations: ${data.rotationAnalyses.length} active | ${enterCount} ENTER`);
+    for (const r of data.rotationAnalyses.slice(0, 2)) {
+      const actionIcon = r.action.action === "ENTER" ? " \u2713" : "";
+      const perfStr = `${r.performancePct >= 0 ? "+" : ""}${r.performancePct.toFixed(1)}%`;
+      lines.push(
+        `${r.sectorName}: ${r.lifecycle} (${r.daysActive}d, ${perfStr}) | ${r.conviction.level} | ${r.action.action}${actionIcon}`
+      );
+    }
+  }
+
+  // Dispersion + Cross-Sector Pairs
+  const swingParts: string[] = [];
+  if (data.dispersionIndex != null) {
+    swingParts.push(`Disp: ${data.dispersionIndex.toFixed(1)}${data.dispersionIndex > 5 ? " (high)" : data.dispersionIndex < 2 ? " (low)" : ""}`);
+  }
   const pairParts: string[] = [];
   if (data.crossPairs.xlyXlp) {
     const signal = data.pairSignals?.xlyXlp;
@@ -292,69 +316,32 @@ function formatDailyBriefing(data: BriefingData): string {
     const extreme = signal?.isExtreme ? ` [${signal.signal === "extreme_risk_on" ? "RISK ON" : "RISK OFF"}]` : "";
     pairParts.push(`XLK/XLU: ${data.crossPairs.xlkXlu.trend}${extreme}`);
   }
-  if (pairParts.length > 0) {
-    lines.push(pairParts.join(" | "));
+  if (swingParts.length > 0 || pairParts.length > 0) {
+    lines.push([...swingParts, ...pairParts].join(" | "));
   }
 
-  if (data.topSectors.length === 0) {
-    lines.push("No actionable sectors");
-  } else {
-    for (const s of data.topSectors.slice(0, 4)) {
-      const stealthTag = s.stealth ? " | stealth" : "";
-      lines.push(
-        `${s.sector}: ${s.quadrant} | accel ${s.acceleration.toFixed(2)} | CMF ${s.cmf >= 0 ? "+" : ""}${s.cmf.toFixed(2)}${stealthTag}`
-      );
-    }
+  // Leadership + Pullback Watch
+  const contextParts: string[] = [];
+  if (data.leadershipHealth) {
+    contextParts.push(`Leadership: ${data.leadershipHealth.score} (${data.leadershipHealth.label})`);
+  }
+  if (data.pullbackWatchCount > 0) {
+    contextParts.push(`Pullbacks: ${data.pullbackWatchCount}`);
+  }
+  if (contextParts.length > 0) {
+    lines.push(contextParts.join(" | "));
   }
 
-  // #6 What Changed
+  // What Changed
   if (data.whatChanged && (data.whatChanged.upgrades > 0 || data.whatChanged.downgrades > 0)) {
     const wc = data.whatChanged;
     const changeParts: string[] = [];
-    if (wc.upgrades > 0) changeParts.push(`${wc.upgrades} upgrade${wc.upgrades !== 1 ? "s" : ""}`);
-    if (wc.downgrades > 0) changeParts.push(`${wc.downgrades} downgrade${wc.downgrades !== 1 ? "s" : ""}`);
-    lines.push(`Changed: ${changeParts.join(", ")}`);
-    // Show up to 3 notable transitions
-    for (const t of wc.quadrantTransitions.slice(0, 3)) {
-      lines.push(`  ${t.sector}: ${t.from} \u2192 ${t.to}`);
-    }
+    if (wc.upgrades > 0) changeParts.push(`${wc.upgrades}\u2191`);
+    if (wc.downgrades > 0) changeParts.push(`${wc.downgrades}\u2193`);
+    lines.push(`Quadrants: ${changeParts.join(" ")}`);
   }
 
-  // L3 ROTATIONS
-  lines.push("");
-  lines.push("<b>L3 ROTATIONS</b>");
-  if (data.rotationAnalyses.length === 0) {
-    lines.push("No active rotations");
-  } else {
-    for (const r of data.rotationAnalyses.slice(0, 4)) {
-      // #4 Rotation Performance %
-      const actionIcon = r.action.action === "ENTER" ? " \u2713" : "";
-      const perfStr = `${r.performancePct >= 0 ? "+" : ""}${r.performancePct.toFixed(1)}%`;
-      lines.push(
-        `${r.sectorName}: ${r.lifecycle} (${r.daysActive}d, ${perfStr}) | ${r.conviction.level} | ${r.action.action}${actionIcon}`
-      );
-    }
-  }
-
-  // L4 TOP PICKS
-  lines.push("");
-  lines.push("<b>L4 TOP PICKS</b>");
-  if (data.topPicks.length === 0) {
-    lines.push("No qualifying picks");
-  } else {
-    for (const p of data.topPicks.slice(0, 5)) {
-      lines.push(
-        `${p.symbol} \u2014 accel ${p.acceleration.toFixed(2)} | ${p.category} | ${p.conviction}`
-      );
-    }
-  }
-
-  // #8 Pullback Watch
-  if (data.pullbackWatchCount > 0) {
-    lines.push(`Pullback watch: ${data.pullbackWatchCount} stock${data.pullbackWatchCount !== 1 ? "s" : ""}`);
-  }
-
-  // Watchlist
+  // Watchlist (shared)
   if (data.watchlist.length > 0) {
     lines.push("");
     lines.push(`<b>WATCHLIST:</b> ${data.watchlist.join(", ")}`);
