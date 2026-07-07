@@ -60,12 +60,13 @@ function synthesizeDirection(
     return "BEAR";
   }
 
-  // LEAN BEAR: structural defensiveness confirmed by bearish bias
-  if (posture === "DEFENSIVE" && isBearish) {
+  // LEAN BEAR: Strong Bear bias always demands respect — unanimous futures conviction
+  // overrides even bullish structure. Also: DEFENSIVE + any bearish.
+  if (bias === "Strong Bear" || (posture === "DEFENSIVE" && isBearish)) {
     return "LEAN BEAR";
   }
 
-  // DEFENSIVE posture without bearish bias — mixed signals, lean cautious
+  // DEFENSIVE posture without bearish bias — cautious structure, neutral futures
   if (posture === "DEFENSIVE") {
     return "NEUTRAL";
   }
@@ -75,7 +76,7 @@ function synthesizeDirection(
     return "BULL";
   }
 
-  // LEAN BULL: posture=SELECTIVE/AGGRESSIVE + bullish or neutral bias + >=1 ENTER
+  // LEAN BULL: posture=SELECTIVE/AGGRESSIVE + not bearish + >=1 ENTER
   if (
     (posture === "SELECTIVE" || posture === "AGGRESSIVE") &&
     !isBearish &&
@@ -84,7 +85,7 @@ function synthesizeDirection(
     return "LEAN BULL";
   }
 
-  // NEUTRAL: fallback (includes AGGRESSIVE/SELECTIVE + bearish bias = conflict, stay flat)
+  // NEUTRAL: fallback (includes AGGRESSIVE/SELECTIVE + Lean Bear = mild conflict)
   return "NEUTRAL";
 }
 
