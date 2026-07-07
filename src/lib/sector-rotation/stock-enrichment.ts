@@ -91,8 +91,13 @@ export function applyQualityGates(
       failedExtension = true;
     }
 
-    // Gate 5: Above 50-SMA or turnaround signal
-    if (!above50ma && !(rsAccel != null && rsAccel > QUALITY_GATES.TURNAROUND_RS_ACCEL && volRatio >= QUALITY_GATES.TURNAROUND_VOL_RATIO)) {
+    // Gate 5: Above 50-SMA or turnaround signal.
+    // Graduated exception: strong RS acceleration alone (>2x threshold) qualifies
+    // without volume confirmation — a stock clearly accelerating relative to its
+    // sector shouldn't be rejected for having average volume.
+    const strongRsAccel = rsAccel != null && rsAccel > QUALITY_GATES.TURNAROUND_RS_ACCEL * 2;
+    const standardTurnaround = rsAccel != null && rsAccel > QUALITY_GATES.TURNAROUND_RS_ACCEL && volRatio >= QUALITY_GATES.TURNAROUND_VOL_RATIO;
+    if (!above50ma && !strongRsAccel && !standardTurnaround) {
       otherReasons.push("below_50MA_no_turnaround");
     }
 

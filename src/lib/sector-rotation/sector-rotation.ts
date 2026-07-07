@@ -381,9 +381,12 @@ export async function calculateSectorRotation(
 
     const normalized: Record<string, number> = {
       momentum: momentumPercentile,
+      // When all sectors have identical acceleration (accelMin == accelMax),
+      // returning 50 masks uniform deterioration. Use the sign of the common
+      // value: negative → 25 (below midpoint), positive → 75, zero → 50.
       acceleration: accelMax !== accelMin
         ? ((raw.acceleration - accelMin) / (accelMax - accelMin)) * 100
-        : 50,
+        : raw.acceleration < 0 ? 25 : raw.acceleration > 0 ? 75 : 50,
       mansfield: clampNormalize(raw.mansfieldRS, -20, 20),
       cmf: clampNormalize(raw.cmf20, -1, 1),
       breadth: raw.breadthPct ?? 50,

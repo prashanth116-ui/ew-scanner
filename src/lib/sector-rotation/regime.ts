@@ -80,10 +80,14 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     const vixSlope: "rising" | "falling" | "flat" =
       vix - vix5dAgo > REGIME_CFG.VIX_SLOPE_THRESHOLD ? "rising" : vix - vix5dAgo < -REGIME_CFG.VIX_SLOPE_THRESHOLD ? "falling" : "flat";
 
-    const yield10y = tnxCloses ? tnxCloses[tnxCloses.length - 1] : 0;
+    // Missing TNX/DXY data: default to 0 but track for confidence penalty.
+    // yield10y=0 makes INFLATIONARY unreachable; dxy=0 makes dxyTrend="flat".
+    const hasTnx = tnxCloses != null && tnxCloses.length > 0;
+    const hasDxy = dxyCloses != null && dxyCloses.length > 0;
+    const yield10y = hasTnx ? tnxCloses[tnxCloses.length - 1] : 0;
 
-    const dxy = dxyCloses ? dxyCloses[dxyCloses.length - 1] : 0;
-    const dxy20dAgo = dxyCloses ? dxyCloses[Math.max(0, dxyCloses.length - 21)] : 0;
+    const dxy = hasDxy ? dxyCloses[dxyCloses.length - 1] : 0;
+    const dxy20dAgo = hasDxy ? dxyCloses[Math.max(0, dxyCloses.length - 21)] : 0;
     const dxyTrend: "rising" | "falling" | "flat" =
       dxy - dxy20dAgo > REGIME_CFG.DXY_TREND_THRESHOLD ? "rising" : dxy - dxy20dAgo < -REGIME_CFG.DXY_TREND_THRESHOLD ? "falling" : "flat";
 
@@ -92,9 +96,16 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     const sortedVix = [...vixCloses].sort((a, b) => a - b);
     const vixP25 = sortedVix[Math.floor(sortedVix.length * 0.25)] ?? REGIME_CFG.VIX_RISK_ON;
     const vixP75 = sortedVix[Math.floor(sortedVix.length * 0.75)] ?? REGIME_CFG.VIX_RISK_OFF;
-    // Clamp adaptive thresholds to sensible bounds
-    const vixLow = Math.max(REGIME_CFG.VIX_ADAPTIVE_LOW_MIN, Math.min(REGIME_CFG.VIX_ADAPTIVE_LOW_MAX, vixP25));
-    const vixHigh = Math.max(REGIME_CFG.VIX_ADAPTIVE_HIGH_MIN, Math.min(REGIME_CFG.VIX_ADAPTIVE_HIGH_MAX, vixP75));
+    // Clamp adaptive thresholds to sensible bounds.
+    // Guard against inversion: config ranges overlap (LOW_MAX=22, HIGH_MIN=20),
+    // so when P25≈P75 (compressed VIX range), vixLow can equal or exceed vixHigh.
+    // If inverted, fall back to static defaults to avoid undefined classification.
+    let vixLow = Math.max(REGIME_CFG.VIX_ADAPTIVE_LOW_MIN, Math.min(REGIME_CFG.VIX_ADAPTIVE_LOW_MAX, vixP25));
+    let vixHigh = Math.max(REGIME_CFG.VIX_ADAPTIVE_HIGH_MIN, Math.min(REGIME_CFG.VIX_ADAPTIVE_HIGH_MAX, vixP75));
+    if (vixLow >= vixHigh) {
+      vixLow = REGIME_CFG.VIX_RISK_ON;
+      vixHigh = REGIME_CFG.VIX_RISK_OFF;
+    }
 
     // Classify regime using adaptive thresholds.
     // Order matters: INFLATIONARY checked before RISK_OFF so rising-VIX
@@ -120,6 +131,9 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     else if (regime === "INFLATIONARY" && yield10y > REGIME_CFG.YIELD_EXTREME) regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_SMALL;
     if (vixSlope === "rising" && regime === "RISK_OFF") regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_SMALL;
     if (vixSlope === "falling" && regime === "RISK_ON") regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_SMALL;
+    // Confidence penalty when macro data is incomplete — classification is less reliable
+    if (!hasTnx) regimeConfidence -= 5;
+    if (!hasDxy) regimeConfidence -= 5;
 
     const sectorMap = REGIME_SECTOR_MAP[regime];
     const data: MacroRegimeData = {
@@ -198,6 +212,12 @@ export function enhanceRegimeWithCrossAsset(
     case "RISK_OFF":
       if (gldRising || tltRising) bonus += 10;
       if (gldRising && tltRising) bonus += 5;
+      // GLD rising + TLT falling = classic inflation signal (gold as inflation hedge,
+      // bonds selling off on yield concerns). Upgrade RISK_OFF → INFLATIONARY.
+      if (gldRising && tltFalling) {
+        updatedRegime = "INFLATIONARY";
+        bonus = 5;
+      }
       break;
     case "RISK_ON":
       if (gldFalling && tltFalling) bonus += 10;
@@ -215,9 +235,8 @@ export function enhanceRegimeWithCrossAsset(
       if (gldStrongRising && tltStrongRising) {
         updatedRegime = "RISK_OFF";
         bonus += 10;
-      }
       // Both safe havens falling in MIXED → upgrade to RISK_ON
-      if (gldFalling && tltFalling && gldAccel < REGIME_CFG.CROSS_ASSET_STRONG_FALLING && tltAccel < REGIME_CFG.CROSS_ASSET_STRONG_FALLING) {
+      } else if (gldFalling && tltFalling && gldAccel < REGIME_CFG.CROSS_ASSET_STRONG_FALLING && tltAccel < REGIME_CFG.CROSS_ASSET_STRONG_FALLING) {
         updatedRegime = "RISK_ON";
         bonus += 5;
       }

@@ -229,8 +229,10 @@ function computeConfidence(
   }
 
   // Factor 5: Data completeness (0-10)
-  const dataPoints = totalFutures + (vixData != null ? 1 : 0) + (sectorBreadth != null ? 1 : 0);
-  const maxDataPoints = 8; // 6 futures + VIX + breadth
+  // Use equities.length (actual non-null equity futures) not totalFutures (raw count
+  // which may include nulls), to avoid inflating the data quality score.
+  const dataPoints = equities.length + (vixData != null ? 1 : 0) + (sectorBreadth != null ? 1 : 0);
+  const maxDataPoints = 6; // 4 equity futures + VIX + breadth
   confidence += Math.round((dataPoints / maxDataPoints) * 10);
 
   return Math.min(100, Math.max(0, confidence));
@@ -251,8 +253,11 @@ function classifyDayType(
   const allSameDir = dirs.every((d) => d === dirs[0]) && dirs[0] !== "flat";
   const avgAbsChange = equities.reduce((s, e) => s + Math.abs(e.changePct), 0) / equities.length;
 
-  // Trend Day: all aligned, high magnitude, confirming VIX or extreme breadth
-  const highMag = avgAbsChange > 0.5;
+  // Trend Day: all aligned, high magnitude, confirming VIX or extreme breadth.
+  // Threshold lowered from 0.5% to 0.3% — pre-market sessions rarely produce
+  // 0.5%+ avg moves, so most strong overnight trends (0.3-0.4%) were classified
+  // as "Uncertain" instead of "Trend Day", undercutting the playbook guidance.
+  const highMag = avgAbsChange > 0.3;
   const vixConfirms = vixData != null && (
     (avgEquityChange > 0 && vixData.level < vixBounds.low) ||
     (avgEquityChange < 0 && vixData.level > vixBounds.high)
@@ -289,26 +294,25 @@ function pickBestWorst(
 
   const isBullish = bias === "Strong Bull" || bias === "Lean Bull";
   const isBearish = bias === "Strong Bear" || bias === "Lean Bear";
-  const direction: "long" | "short" = isBearish ? "short" : "long";
 
-  let reason: string;
-  if (isBearish) {
-    reason = best.changePct < 0
-      ? `weakest at ${fmt(best.changePct)}, most short momentum`
-      : `strongest contrarian at ${fmt(best.changePct)}, but bias is bearish`;
-  } else if (isBullish) {
-    reason = best.changePct > 0
-      ? `leading at ${fmt(best.changePct)}, most long momentum`
-      : `least negative at ${fmt(best.changePct)}, but bias is bullish`;
-  } else {
-    reason = `highest magnitude at ${fmt(best.changePct)}, bias neutral`;
+  // Don't recommend a specific trade direction when bias is Neutral —
+  // defaulting to "long" was misleading and could imply bullish conviction
+  // when the system has no directional edge.
+  let bestToTrade: BestToTradeInfo | null = null;
+  if (isBullish || isBearish) {
+    const direction: "long" | "short" = isBearish ? "short" : "long";
+    let reason: string;
+    if (isBearish) {
+      reason = best.changePct < 0
+        ? `weakest at ${fmt(best.changePct)}, most short momentum`
+        : `strongest contrarian at ${fmt(best.changePct)}, but bias is bearish`;
+    } else {
+      reason = best.changePct > 0
+        ? `leading at ${fmt(best.changePct)}, most long momentum`
+        : `least negative at ${fmt(best.changePct)}, but bias is bullish`;
+    }
+    bestToTrade = { symbol: best.symbol, direction, reason };
   }
-
-  const bestToTrade: BestToTradeInfo = {
-    symbol: best.symbol,
-    direction,
-    reason,
-  };
 
   // Avoid = the one diverging from the others
   let assetToAvoid: string | null = null;

@@ -103,13 +103,23 @@ export function computeMarketPosture(
   const isRiskOff = regime?.regime === "RISK_OFF";
   const vixRising = regime?.vixSlope === "rising";
   const vixHigh = (regime?.vix ?? 0) > REGIME_CFG.VIX_EXTREME;
+  // Use adaptive bounds when available — VIX > adaptive high covers sustained
+  // elevated-vol regimes (25-29 range) where the static 30 threshold is too rigid.
+  const vixAboveAdaptiveHigh = regime?.vixBounds
+    ? regime.vix > regime.vixBounds.high
+    : vixHigh;
 
-  // CASH: RISK_OFF + VIX>30 + 0 active rotations with positive conviction
-  if (isRiskOff && vixHigh && positiveConviction.length === 0) {
+  // CASH: RISK_OFF + elevated VIX + no rotations showing positive direction.
+  // Two paths: (1) VIX > 30 (extreme), or (2) VIX > adaptive high + rising
+  // (sustained stress). EXIT-conviction rotations now support CASH instead
+  // of blocking it — they signal capital is leaving, not entering.
+  const nonExitConviction = convictions.filter((c) => c.level !== "EXIT" && c.level !== "LOW");
+  if (isRiskOff && nonExitConviction.length === 0 && (vixHigh || (vixAboveAdaptiveHigh && vixRising))) {
     return {
       posture: "CASH",
-      reasoning:
-        "Risk-off regime with elevated VIX and no active rotations showing positive conviction. Capital preservation is priority.",
+      reasoning: vixHigh
+        ? "Risk-off regime with extreme VIX and no active rotations showing conviction. Capital preservation is priority."
+        : "Risk-off regime with VIX above adaptive ceiling and rising. No rotations with conviction — reduce exposure.",
     };
   }
 
