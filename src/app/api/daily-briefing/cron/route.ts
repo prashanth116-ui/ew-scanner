@@ -217,10 +217,10 @@ function formatDailyBriefing(data: BriefingData): string {
   lines.push("<b>L1 MACRO</b>");
   const vixStr = data.vix != null ? `VIX: ${data.vix.toFixed(1)} (${data.vixSlope ?? "?"})` : "VIX: N/A";
   lines.push(`Regime: ${data.regimeLabel} | ${vixStr}`);
-  const biasStr = data.bias
-    ? `Bias: ${data.bias}${data.biasConfidence != null ? ` (${data.biasConfidence}%)` : ""}`
-    : "Bias: N/A";
-  lines.push(`Posture: ${data.posture} | ${biasStr}`);
+  const todayStr = data.bias
+    ? `Today: ${data.bias}${data.biasConfidence != null ? ` (${data.biasConfidence}%)` : ""}`
+    : "Today: N/A";
+  lines.push(`Structure: ${data.posture} | ${todayStr}`);
 
   // #1 Leadership Health
   if (data.leadershipHealth) {
@@ -231,9 +231,9 @@ function formatDailyBriefing(data: BriefingData): string {
   const medFlags = data.riskFlags.filter((f) => f.severity === "medium").length;
   lines.push(`Risk Flags: ${data.riskFlags.length} (${highFlags} high, ${medFlags} med)`);
 
-  // #5 Bias Conflict
+  // #5 Structure vs Today conflict
   if (data.biasConflict && data.biasConflictDetail) {
-    lines.push(`\u26a0 BIAS CONFLICT: ${data.biasConflictDetail}`);
+    lines.push(`\u26a0 CONFLICT: ${data.biasConflictDetail}`);
   }
 
   const macroGo = data.posture !== "CASH" && data.posture !== "DEFENSIVE" && highFlags < 3;
@@ -453,10 +453,10 @@ export async function GET(request: NextRequest) {
 
       if (postureIsBullish && futuresAreBearish) {
         biasConflict = true;
-        biasConflictDetail = `Posture ${posture.posture} vs Futures "${tradingBias.bias}" \u2014 reduce size`;
+        biasConflictDetail = `Structure ${posture.posture} but today ${tradingBias.bias} \u2014 reduce size`;
       } else if (postureIsBearish && futuresAreBullish) {
         biasConflict = true;
-        biasConflictDetail = `Posture ${posture.posture} vs Futures "${tradingBias.bias}" \u2014 don't chase`;
+        biasConflictDetail = `Structure ${posture.posture} but today ${tradingBias.bias} \u2014 don't chase`;
       }
     }
 
