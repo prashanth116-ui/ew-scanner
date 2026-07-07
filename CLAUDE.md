@@ -51,7 +51,7 @@ npm run build             # Production build
 | `scanner_signals` | various | Cross-scanner signal persistence |
 | `sector_snapshots` | `/api/sector-rotation/alert` | Sector rotation quadrants |
 
-### Cron Schedule (11 jobs)
+### Cron Schedule (12 jobs)
 | UTC | ET | Days | Route | Notes |
 |-----|-----|------|-------|-------|
 | 00:00 | 8:00 PM | Tue-Sat | `/api/discovery/cron` | Trending ticker discovery (CoinGecko + Yahoo) |
@@ -64,6 +64,7 @@ npm run build             # Production build
 | 02:30 | 10:30 PM | Tue-Sat | `/api/institutional/cron/daily` | Institutional scan |
 | 02:45 | 10:45 PM | Tue-Sat | `/api/qfe/cron/backfill` | QFE forward return backfill |
 | 02:50 | 10:50 PM | Tue-Sat | `/api/prerunner/cron/daily` | Rotation leaders/turnarounds radar |
+| 13:00 | 9:00 AM | Mon-Fri | `/api/daily-briefing/cron` | Pre-trade 4-level briefing + direction |
 | 06:00 Sun | 2:00 AM Sun | Sunday | `/api/sector-rotation/institutional-refresh` | Weekly institutional data refresh |
 
 ### Preset Cron Details

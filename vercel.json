@@ -43,6 +43,10 @@
     {
       "path": "/api/prerunner/cron/daily",
       "schedule": "50 2 * * 2-6"
+    },
+    {
+      "path": "/api/daily-briefing/cron",
+      "schedule": "0 13 * * 1-5"
     }
   ]
 }
