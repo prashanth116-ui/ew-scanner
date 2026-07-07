@@ -238,8 +238,10 @@ function classifyPhase(
   if (above50ma && (accel < CLASSIFICATION.P4_RS_ACCEL || sectorAcceleration < CLASSIFICATION.P4_SECTOR_ACCEL)) {
     return "P4_EXHAUSTING";
   }
+  // Fallback: enforce the same volume gate as the explicit P3 check —
+  // without it, low-volume stocks bypass the P3_MIN_VOL_RATIO requirement.
   return above50ma
-    ? (accel < 0 ? "P4_EXHAUSTING" : "P3_TRENDING")
+    ? (accel < 0 ? "P4_EXHAUSTING" : (volRatio >= CLASSIFICATION.P3_MIN_VOL_RATIO ? "P3_TRENDING" : "P1_BASING"))
     : "P1_BASING";
 }
 

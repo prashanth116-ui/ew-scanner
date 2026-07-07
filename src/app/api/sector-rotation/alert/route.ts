@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
             .filter((s) => VALID_QUADRANTS.has(s.quadrant))
             .map((s) => ({
               sector: s.sector,
+              etf: "",
               compositeScore: 0,
               acceleration: 0,
               quadrant: s.quadrant as "LEADING" | "WEAKENING" | "LAGGING" | "IMPROVING",

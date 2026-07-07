@@ -120,9 +120,9 @@ export default function DailyBriefPage() {
   const whatChanged = useMemo<WhatChangedResult | null>(
     () =>
       data && posture
-        ? computeWhatChanged(data, posture.posture, previousSnapshot, previousPosture)
+        ? computeWhatChanged(data, posture.posture, previousSnapshot, previousPosture, rotationData)
         : null,
-    [data, posture, previousSnapshot, previousPosture]
+    [data, posture, previousSnapshot, previousPosture, rotationData]
   );
 
   // Compute bias score from pre-market + existing regime/posture data

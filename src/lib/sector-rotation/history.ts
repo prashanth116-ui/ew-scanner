@@ -10,6 +10,7 @@ import type { SectorRotationResult, RRGQuadrant } from "./types";
 
 export interface SectorSnapshot {
   sector: string;
+  etf: string;
   compositeScore: number;
   acceleration: number;
   quadrant: RRGQuadrant;
@@ -35,7 +36,7 @@ interface HistoryStore {
 
 const STORAGE_KEY = "quantradar-sector-history";
 const MAX_DAYS = 60;
-const SCHEMA_VERSION = 2; // 2 = added leadershipBaskets
+const SCHEMA_VERSION = 3; // 3 = added etf to SectorSnapshot
 
 function isClient(): boolean {
   return typeof window !== "undefined";
@@ -49,8 +50,9 @@ export function saveSnapshot(data: SectorRotationResult): void {
 
   const date = new Date(data.calculatedAt).toISOString().slice(0, 10); // "YYYY-MM-DD"
 
-  const toSnapshot = (s: { sector: string; compositeScore: number; acceleration: number; quadrant: RRGQuadrant; mansfieldRS: number; breadthPct: number | null; trend: "UP" | "DOWN" | "FLAT" }): SectorSnapshot => ({
+  const toSnapshot = (s: { sector: string; etf: string; compositeScore: number; acceleration: number; quadrant: RRGQuadrant; mansfieldRS: number; breadthPct: number | null; trend: "UP" | "DOWN" | "FLAT" }): SectorSnapshot => ({
     sector: s.sector,
+    etf: s.etf,
     compositeScore: s.compositeScore,
     acceleration: s.acceleration,
     quadrant: s.quadrant,

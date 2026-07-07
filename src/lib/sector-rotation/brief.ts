@@ -451,7 +451,10 @@ function classifyTransition(from: RRGQuadrant, to: RRGQuadrant): TransitionCateg
   return "other";
 }
 
-function snapshotTier(s: SectorSnapshot): "actionable" | "watch" | "avoid" {
+function snapshotTier(
+  s: SectorSnapshot,
+  highConvictionETFs?: Set<string>,
+): "actionable" | "watch" | "avoid" {
   const action = getTradingAction({
     quadrant: s.quadrant,
     compositeScore: s.compositeScore,
@@ -459,14 +462,17 @@ function snapshotTier(s: SectorSnapshot): "actionable" | "watch" | "avoid" {
   });
   const inFavorableQuadrant =
     s.quadrant === "LEADING" || (s.quadrant === "IMPROVING" && s.acceleration > 0);
+  const hasConviction = highConvictionETFs?.has(s.etf) ?? false;
 
   if (action === "TRADE" || action === "BUILD") {
     const effectiveThreshold = s.acceleration > 0
       ? COMPOSITE.ACTIONABLE_THRESHOLD - COMPOSITE.ACTIONABLE_HYSTERESIS
       : COMPOSITE.ACTIONABLE_THRESHOLD;
-    return inFavorableQuadrant && s.compositeScore >= effectiveThreshold ? "actionable" : "watch";
+    return inFavorableQuadrant && (s.compositeScore >= effectiveThreshold || hasConviction) ? "actionable" : "watch";
   }
-  if (action === "WATCH") return "watch";
+  if (action === "WATCH") {
+    return inFavorableQuadrant && hasConviction ? "actionable" : "watch";
+  }
   return "avoid";
 }
 
@@ -474,7 +480,8 @@ export function computeWhatChanged(
   data: SectorRotationResult,
   currentPosture: MarketPosture,
   previousSnapshot: DailySnapshot | null,
-  previousPosture: MarketPosture | null
+  previousPosture: MarketPosture | null,
+  rotationData?: RotationTrackerResult | null,
 ): WhatChangedResult {
   if (!previousSnapshot) {
     return {
@@ -486,6 +493,17 @@ export function computeWhatChanged(
       dispersionChange: null,
       noHistory: true,
     };
+  }
+
+  // Build high-conviction ETF set from rotation data (used for tier classification)
+  const highConvictionETFs = new Set<string>();
+  if (rotationData) {
+    for (const r of rotationData.activeRotations) {
+      const conviction = computeConviction(r.event);
+      if (conviction.level === "HIGH" || conviction.level === "MODERATE") {
+        highConvictionETFs.add(r.event.etf);
+      }
+    }
   }
 
   // Build lookup from previous snapshot by sector name
@@ -524,23 +542,24 @@ export function computeWhatChanged(
     }
   }
 
-  // Tier changes
+  // Tier changes — use highConvictionETFs for both prev and curr tier to match computeSectorTiers
   const tierChanges: WhatChangedResult["tierChanges"] = [];
   for (const curr of data.sectors) {
     const prev = prevMap.get(curr.sector);
     if (!prev) continue;
-    const prevTier = snapshotTier(prev);
+    const prevTier = snapshotTier(prev, highConvictionETFs);
     const currAction = getTradingAction(curr);
     const currFavorable =
       curr.quadrant === "LEADING" || (curr.quadrant === "IMPROVING" && curr.acceleration > 0);
+    const currHasConviction = highConvictionETFs.has(curr.etf);
     let currTier: "actionable" | "watch" | "avoid";
     if (currAction === "TRADE" || currAction === "BUILD") {
       const currEffective = curr.acceleration > 0
         ? COMPOSITE.ACTIONABLE_THRESHOLD - COMPOSITE.ACTIONABLE_HYSTERESIS
         : COMPOSITE.ACTIONABLE_THRESHOLD;
-      currTier = currFavorable && curr.compositeScore >= currEffective ? "actionable" : "watch";
+      currTier = currFavorable && (curr.compositeScore >= currEffective || currHasConviction) ? "actionable" : "watch";
     } else if (currAction === "WATCH") {
-      currTier = "watch";
+      currTier = currFavorable && currHasConviction ? "actionable" : "watch";
     } else {
       currTier = "avoid";
     }
