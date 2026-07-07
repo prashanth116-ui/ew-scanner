@@ -173,6 +173,7 @@ interface BriefingData {
   posture: MarketPosture;
   postureReasoning: string;
   regimeLabel: string;
+  regimeConfidence: number | null;
   vix: number | null;
   vixSlope: string | null;
   bias: MarketBias | null;
@@ -186,6 +187,7 @@ interface BriefingData {
   weakestAsset: string | null;
   leadershipHealth: LeadershipHealth | null;
   sectorTierCounts: { actionable: number; watch: number; avoid: number };
+  sectorBreadth: { advancing: number; total: number } | null;
   crossPairs: { xlyXlp: { ratio: number; trend: string } | null; xlkXlu: { ratio: number; trend: string } | null };
   pairSignals: { xlyXlp: PairSignalData | null; xlkXlu: PairSignalData | null } | null;
   dispersionIndex: number | null;
@@ -216,7 +218,8 @@ function formatDailyBriefing(data: BriefingData): string {
   lines.push("");
   lines.push("<b>L1 MACRO</b>");
   const vixStr = data.vix != null ? `VIX: ${data.vix.toFixed(1)} (${data.vixSlope ?? "?"})` : "VIX: N/A";
-  lines.push(`Regime: ${data.regimeLabel} | ${vixStr}`);
+  const regimeConf = data.regimeConfidence != null ? ` (${data.regimeConfidence}%)` : "";
+  lines.push(`Regime: ${data.regimeLabel}${regimeConf} | ${vixStr}`);
   const todayStr = data.bias
     ? `Today: ${data.bias}${data.biasConfidence != null ? ` (${data.biasConfidence}%)` : ""}`
     : "Today: N/A";
@@ -243,12 +246,17 @@ function formatDailyBriefing(data: BriefingData): string {
   if (data.futures.length > 0) {
     lines.push("");
     lines.push("<b>FUTURES</b>");
+    const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+    const labels: Record<string, string> = { "ES=F": "ES", "NQ=F": "NQ", "YM=F": "YM", "RTY=F": "RTY", "CL=F": "Oil", "GC=F": "Gold" };
     const equitySymbols = ["ES=F", "NQ=F", "YM=F", "RTY=F"];
     const equities = data.futures.filter((f) => equitySymbols.includes(f.symbol));
-    const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
-    const labels: Record<string, string> = { "ES=F": "ES", "NQ=F": "NQ", "YM=F": "YM", "RTY=F": "RTY" };
     if (equities.length > 0) {
       lines.push(equities.map((f) => `${labels[f.symbol] ?? f.symbol} ${fmtPct(f.changePct)}`).join(" | "));
+    }
+    const commoditySymbols = ["CL=F", "GC=F"];
+    const commodities = data.futures.filter((f) => commoditySymbols.includes(f.symbol));
+    if (commodities.length > 0) {
+      lines.push(commodities.map((f) => `${labels[f.symbol] ?? f.symbol} ${fmtPct(f.changePct)}`).join(" | "));
     }
     const parts: string[] = [];
     if (data.dayType) parts.push(data.dayType);
@@ -262,9 +270,10 @@ function formatDailyBriefing(data: BriefingData): string {
   lines.push("");
   lines.push("<b>L2 SECTORS</b>");
 
-  // #2 Sector Tier Counts
+  // #2 Sector Tier Counts + Breadth
   const tc = data.sectorTierCounts;
-  lines.push(`${tc.actionable} actionable | ${tc.watch} watch | ${tc.avoid} avoid`);
+  const breadthStr = data.sectorBreadth ? ` | Breadth: ${data.sectorBreadth.advancing}/${data.sectorBreadth.total}` : "";
+  lines.push(`${tc.actionable} actionable | ${tc.watch} watch | ${tc.avoid} avoid${breadthStr}`);
 
   // #7 Dispersion Index
   if (data.dispersionIndex != null) {
@@ -534,9 +543,14 @@ export async function GET(request: NextRequest) {
     // 9. Collect top picks from enriched stocks
     const topPicks: { symbol: string; acceleration: number; category: string; conviction: string }[] = [];
     if (sectorResult?.enrichedStocks?.passed) {
+      const convictionOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
       const sorted = [...sectorResult.enrichedStocks.passed]
         .filter((s) => s.conviction === "HIGH" || s.conviction === "MEDIUM")
-        .sort((a, b) => (b.rsAccel ?? 0) - (a.rsAccel ?? 0));
+        .sort((a, b) => {
+          const tierDiff = (convictionOrder[a.conviction] ?? 99) - (convictionOrder[b.conviction] ?? 99);
+          if (tierDiff !== 0) return tierDiff;
+          return (b.rsAccel ?? 0) - (a.rsAccel ?? 0);
+        });
       for (const s of sorted.slice(0, 5)) {
         topPicks.push({
           symbol: s.symbol,
@@ -614,6 +628,7 @@ export async function GET(request: NextRequest) {
       posture: posture.posture,
       postureReasoning: posture.reasoning,
       regimeLabel: enhancedRegime?.regime ?? "UNKNOWN",
+      regimeConfidence: enhancedRegime?.regimeConfidence ?? null,
       vix: enhancedRegime?.vix ?? null,
       vixSlope: enhancedRegime?.vixSlope ?? null,
       bias,
@@ -627,6 +642,7 @@ export async function GET(request: NextRequest) {
       weakestAsset: tradingBias?.weakestAsset ?? null,
       leadershipHealth,
       sectorTierCounts,
+      sectorBreadth: sectorBreadth ? { advancing: sectorBreadth.advancing, total: sectorBreadth.advancing + sectorBreadth.declining } : null,
       crossPairs,
       pairSignals: rotationData?.pairSignals ?? null,
       dispersionIndex: sectorResult?.dispersionIndex ?? null,
