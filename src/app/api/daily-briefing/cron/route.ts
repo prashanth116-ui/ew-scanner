@@ -5,7 +5,7 @@ import { calculateRotationTracker } from "@/lib/sector-rotation/rotation-tracker
 import { fetchPremarketData } from "@/lib/premarket/fetch";
 import { fetchMacroRegime, enhanceRegimeWithCrossAsset } from "@/lib/sector-rotation/regime";
 import { computeMarketPosture, computeSectorTiers, computeRiskFlags } from "@/lib/sector-rotation/brief";
-import type { MarketPosture, PostureResult, RiskFlag } from "@/lib/sector-rotation/brief";
+import type { MarketPosture, PostureResult, RiskFlag, SectorTiers } from "@/lib/sector-rotation/brief";
 import { computeBiasScore } from "@/lib/premarket/scoring";
 import { computeTradingBias } from "@/lib/premarket/trading-bias";
 import type { VixBounds } from "@/lib/premarket/trading-bias";
@@ -16,11 +16,14 @@ import {
   isRegimeAligned,
 } from "@/lib/sector-rotation/rotation-helpers";
 import type { ActionSignal } from "@/lib/sector-rotation/rotation-helpers";
+import { computeLeadershipHealth } from "@/lib/sector-rotation/leadership-health";
+import type { LeadershipHealth } from "@/lib/sector-rotation/leadership-health";
 import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import { COMPOSITE } from "@/lib/sector-rotation/config";
-import type { SectorRotationResult, SectorRotationScore, EnrichedStock } from "@/lib/sector-rotation/types";
-import type { RotationTrackerResult, ActiveRotationDetail, LifecycleStage, ConvictionResult, RegimeData } from "@/lib/sector-rotation/rotation-types";
-import type { SectorBreadth, MarketBias, TradingBias, FuturesSnapshot, DayType } from "@/lib/premarket/types";
+import { createAdminClient } from "@/lib/supabase/server";
+import type { SectorRotationResult, SectorRotationScore, RRGQuadrant } from "@/lib/sector-rotation/types";
+import type { RotationTrackerResult, LifecycleStage, ConvictionResult, RegimeData, PairSignalData } from "@/lib/sector-rotation/rotation-types";
+import type { SectorBreadth, MarketBias, DayType } from "@/lib/premarket/types";
 
 export const maxDuration = 60;
 
@@ -32,6 +35,7 @@ interface RotationAnalysis {
   sectorName: string;
   etf: string;
   daysActive: number;
+  performancePct: number;
   lifecycle: LifecycleStage;
   conviction: ConvictionResult;
   action: ActionSignal;
@@ -77,6 +81,83 @@ function synthesizeDirection(
   return "NEUTRAL";
 }
 
+// ── Previous Snapshot Loading (Supabase) ──
+
+interface PreviousSnapshot {
+  sector: string;
+  quadrant: string;
+  compositeScore: number;
+}
+
+async function loadPreviousSnapshot(): Promise<PreviousSnapshot[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Find most recent snapshot date that isn't today
+    const { data: dates } = await supabase
+      .from("sector_snapshots")
+      .select("snapshot_date")
+      .neq("snapshot_date", today)
+      .order("snapshot_date", { ascending: false })
+      .limit(1);
+
+    if (!dates?.length) return [];
+
+    const { data } = await supabase
+      .from("sector_snapshots")
+      .select("sector, quadrant, momentum_score")
+      .eq("snapshot_date", dates[0].snapshot_date);
+
+    return (data ?? []).map((row) => ({
+      sector: row.sector,
+      quadrant: row.quadrant ?? "LAGGING",
+      compositeScore: row.momentum_score ?? 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ── What Changed (server-side, from Supabase snapshots) ──
+
+interface WhatChangedSummary {
+  upgrades: number;
+  downgrades: number;
+  quadrantTransitions: { sector: string; from: string; to: string }[];
+}
+
+function computeWhatChangedFromSnapshots(
+  currentSectors: SectorRotationScore[],
+  previousSnapshot: PreviousSnapshot[],
+): WhatChangedSummary {
+  if (previousSnapshot.length === 0) {
+    return { upgrades: 0, downgrades: 0, quadrantTransitions: [] };
+  }
+
+  const prevMap = new Map(previousSnapshot.map((s) => [s.sector, s]));
+  const quadrantRank: Record<string, number> = { LEADING: 3, IMPROVING: 2, WEAKENING: 1, LAGGING: 0 };
+  let upgrades = 0;
+  let downgrades = 0;
+  const transitions: { sector: string; from: string; to: string }[] = [];
+
+  for (const curr of currentSectors) {
+    const prev = prevMap.get(curr.sector);
+    if (!prev || prev.quadrant === curr.quadrant) continue;
+
+    const prevRank = quadrantRank[prev.quadrant] ?? 0;
+    const currRank = quadrantRank[curr.quadrant] ?? 0;
+    if (currRank > prevRank) upgrades++;
+    else downgrades++;
+
+    transitions.push({ sector: curr.sector, from: prev.quadrant, to: curr.quadrant });
+  }
+
+  return { upgrades, downgrades, quadrantTransitions: transitions };
+}
+
 // ── Telegram Formatter ──
 
 interface BriefingData {
@@ -88,15 +169,24 @@ interface BriefingData {
   vixSlope: string | null;
   bias: MarketBias | null;
   biasConfidence: number | null;
+  biasConflict: boolean;
+  biasConflictDetail: string | null;
   futures: { symbol: string; changePct: number }[];
   dayType: DayType | null;
   preferredDirection: "Long" | "Short" | "Flat" | null;
   leadingAsset: string | null;
   weakestAsset: string | null;
+  leadershipHealth: LeadershipHealth | null;
+  sectorTierCounts: { actionable: number; watch: number; avoid: number };
+  crossPairs: { xlyXlp: { ratio: number; trend: string } | null; xlkXlu: { ratio: number; trend: string } | null };
+  pairSignals: { xlyXlp: PairSignalData | null; xlkXlu: PairSignalData | null } | null;
+  dispersionIndex: number | null;
   riskFlags: RiskFlag[];
   topSectors: { sector: string; quadrant: string; acceleration: number; cmf: number; stealth: boolean }[];
   rotationAnalyses: RotationAnalysis[];
+  whatChanged: WhatChangedSummary | null;
   topPicks: { symbol: string; acceleration: number; category: string; conviction: string }[];
+  pullbackWatchCount: number;
   watchlist: string[];
 }
 
@@ -123,9 +213,21 @@ function formatDailyBriefing(data: BriefingData): string {
     ? `Bias: ${data.bias}${data.biasConfidence != null ? ` (${data.biasConfidence}%)` : ""}`
     : "Bias: N/A";
   lines.push(`Posture: ${data.posture} | ${biasStr}`);
+
+  // #1 Leadership Health
+  if (data.leadershipHealth) {
+    lines.push(`Leadership: ${data.leadershipHealth.score} (${data.leadershipHealth.label})${data.leadershipHealth.megaCapDominant ? " | mega-cap led" : ""}${data.leadershipHealth.broadening ? " | broadening" : ""}`);
+  }
+
   const highFlags = data.riskFlags.filter((f) => f.severity === "high").length;
   const medFlags = data.riskFlags.filter((f) => f.severity === "medium").length;
   lines.push(`Risk Flags: ${data.riskFlags.length} (${highFlags} high, ${medFlags} med)`);
+
+  // #5 Bias Conflict
+  if (data.biasConflict && data.biasConflictDetail) {
+    lines.push(`\u26a0 BIAS CONFLICT: ${data.biasConflictDetail}`);
+  }
+
   const macroGo = data.posture !== "CASH" && data.posture !== "DEFENSIVE" && highFlags < 3;
   lines.push(`\u2192 ${macroGo ? "GO \u2713" : "CAUTION \u2717"}`);
 
@@ -151,6 +253,32 @@ function formatDailyBriefing(data: BriefingData): string {
   // L2 SECTORS
   lines.push("");
   lines.push("<b>L2 SECTORS</b>");
+
+  // #2 Sector Tier Counts
+  const tc = data.sectorTierCounts;
+  lines.push(`${tc.actionable} actionable | ${tc.watch} watch | ${tc.avoid} avoid`);
+
+  // #7 Dispersion Index
+  if (data.dispersionIndex != null) {
+    lines.push(`Dispersion: ${data.dispersionIndex.toFixed(1)}${data.dispersionIndex > 5 ? " (high \u2014 rotation opportunity)" : data.dispersionIndex < 2 ? " (low \u2014 sectors converging)" : ""}`);
+  }
+
+  // #3 Cross-Sector Pairs
+  const pairParts: string[] = [];
+  if (data.crossPairs.xlyXlp) {
+    const signal = data.pairSignals?.xlyXlp;
+    const extreme = signal?.isExtreme ? ` [${signal.signal === "extreme_risk_on" ? "RISK ON" : "RISK OFF"}]` : "";
+    pairParts.push(`XLY/XLP: ${data.crossPairs.xlyXlp.trend}${extreme}`);
+  }
+  if (data.crossPairs.xlkXlu) {
+    const signal = data.pairSignals?.xlkXlu;
+    const extreme = signal?.isExtreme ? ` [${signal.signal === "extreme_risk_on" ? "RISK ON" : "RISK OFF"}]` : "";
+    pairParts.push(`XLK/XLU: ${data.crossPairs.xlkXlu.trend}${extreme}`);
+  }
+  if (pairParts.length > 0) {
+    lines.push(pairParts.join(" | "));
+  }
+
   if (data.topSectors.length === 0) {
     lines.push("No actionable sectors");
   } else {
@@ -162,6 +290,19 @@ function formatDailyBriefing(data: BriefingData): string {
     }
   }
 
+  // #6 What Changed
+  if (data.whatChanged && (data.whatChanged.upgrades > 0 || data.whatChanged.downgrades > 0)) {
+    const wc = data.whatChanged;
+    const changeParts: string[] = [];
+    if (wc.upgrades > 0) changeParts.push(`${wc.upgrades} upgrade${wc.upgrades !== 1 ? "s" : ""}`);
+    if (wc.downgrades > 0) changeParts.push(`${wc.downgrades} downgrade${wc.downgrades !== 1 ? "s" : ""}`);
+    lines.push(`Changed: ${changeParts.join(", ")}`);
+    // Show up to 3 notable transitions
+    for (const t of wc.quadrantTransitions.slice(0, 3)) {
+      lines.push(`  ${t.sector}: ${t.from} \u2192 ${t.to}`);
+    }
+  }
+
   // L3 ROTATIONS
   lines.push("");
   lines.push("<b>L3 ROTATIONS</b>");
@@ -169,9 +310,11 @@ function formatDailyBriefing(data: BriefingData): string {
     lines.push("No active rotations");
   } else {
     for (const r of data.rotationAnalyses.slice(0, 4)) {
+      // #4 Rotation Performance %
       const actionIcon = r.action.action === "ENTER" ? " \u2713" : "";
+      const perfStr = `${r.performancePct >= 0 ? "+" : ""}${r.performancePct.toFixed(1)}%`;
       lines.push(
-        `${r.sectorName}: ${r.lifecycle} (${r.daysActive}d) | ${r.conviction.level} | ${r.action.action}${actionIcon}`
+        `${r.sectorName}: ${r.lifecycle} (${r.daysActive}d, ${perfStr}) | ${r.conviction.level} | ${r.action.action}${actionIcon}`
       );
     }
   }
@@ -187,6 +330,11 @@ function formatDailyBriefing(data: BriefingData): string {
         `${p.symbol} \u2014 accel ${p.acceleration.toFixed(2)} | ${p.category} | ${p.conviction}`
       );
     }
+  }
+
+  // #8 Pullback Watch
+  if (data.pullbackWatchCount > 0) {
+    lines.push(`Pullback watch: ${data.pullbackWatchCount} stock${data.pullbackWatchCount !== 1 ? "s" : ""}`);
   }
 
   // Watchlist
@@ -213,12 +361,13 @@ export async function GET(request: NextRequest) {
   try {
     const startTime = Date.now();
 
-    // 1. Parallel fetch all data sources
-    const [premarketResult, sectorResult, regime, rotationData] = await Promise.all([
+    // 1. Parallel fetch all data sources + previous snapshot for "what changed"
+    const [premarketResult, sectorResult, regime, rotationData, previousSnapshot] = await Promise.all([
       fetchPremarketData(),
       calculateSectorRotation().catch(() => null),
       fetchMacroRegime().catch(() => null),
       calculateRotationTracker().catch(() => null),
+      loadPreviousSnapshot().catch(() => [] as PreviousSnapshot[]),
     ]);
 
     // 2. Enhance regime with cross-asset (GLD/TLT acceleration)
@@ -282,13 +431,45 @@ export async function GET(request: NextRequest) {
       vixBounds,
     );
 
+    // #5 Detect bias conflict (macro vs futures)
+    let biasConflict = false;
+    let biasConflictDetail: string | null = null;
+    if (tradingBias && sectorResult && regime) {
+      const biasLevels: Record<string, number> = {
+        "Strong Bear": -2, "Lean Bear": -1, "Neutral": 0, "Lean Bull": 1, "Strong Bull": 2,
+      };
+      const macroLevel = biasLevels[biasLabel] ?? 0;
+      const futuresLevel = biasLevels[tradingBias.bias] ?? 0;
+      if (macroLevel !== 0 && futuresLevel !== 0 && Math.sign(macroLevel) !== Math.sign(futuresLevel)) {
+        biasConflict = true;
+        biasConflictDetail = `Macro "${biasLabel}" vs Futures "${tradingBias.bias}" \u2014 reduce size`;
+      }
+    }
+
     // 7. Compute tiers and risk flags
     let riskFlags: RiskFlag[] = [];
     let actionableSectors: SectorRotationScore[] = [];
+    let sectorTierCounts = { actionable: 0, watch: 0, avoid: 0 };
     if (dataWithRegime) {
       const tiers = computeSectorTiers(dataWithRegime.sectors, rotationData);
       riskFlags = computeRiskFlags(dataWithRegime, rotationData);
       actionableSectors = tiers.actionable;
+      sectorTierCounts = {
+        actionable: tiers.actionable.length,
+        watch: tiers.watch.length,
+        avoid: tiers.avoid.length,
+      };
+    }
+
+    // #1 Leadership Health
+    let leadershipHealth: LeadershipHealth | null = null;
+    if (sectorResult?.leadershipBasketScores?.length) {
+      leadershipHealth = computeLeadershipHealth(
+        sectorResult.leadershipBasketScores,
+        sectorResult.crossAssetScores ?? [],
+        sectorResult.sectors,
+        sectorResult.subSectorScores ?? [],
+      );
     }
 
     // 8. Analyze active rotations
@@ -318,6 +499,7 @@ export async function GET(request: NextRequest) {
           sectorName: r.event.sectorName,
           etf: r.event.etf,
           daysActive: r.event.daysActive,
+          performancePct: r.event.etfPerformancePct,
           lifecycle,
           conviction,
           action,
@@ -351,6 +533,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // #8 Pullback Watch count
+    const pullbackWatchCount = sectorResult?.enrichedStocks?.pullbackWatch?.length ?? 0;
+
     // Build watchlist from top picks + rotation stock leaders
     const watchlistSet = new Set(topPicks.map((p) => p.symbol));
     if (rotationData) {
@@ -376,6 +561,17 @@ export async function GET(request: NextRequest) {
       stealth: s.stealthAccumulation,
     }));
 
+    // #3 Cross-sector pairs
+    const crossPairs = {
+      xlyXlp: sectorResult?.crossSectorPairs?.xlyXlp ?? null,
+      xlkXlu: sectorResult?.crossSectorPairs?.xlkXlu ?? null,
+    };
+
+    // #6 What Changed (quadrant transitions vs previous Supabase snapshot)
+    const whatChanged = sectorResult
+      ? computeWhatChangedFromSnapshots(sectorResult.sectors, previousSnapshot)
+      : null;
+
     // 12. Format and send Telegram message
     const briefingData: BriefingData = {
       direction,
@@ -386,15 +582,24 @@ export async function GET(request: NextRequest) {
       vixSlope: enhancedRegime?.vixSlope ?? null,
       bias,
       biasConfidence: tradingBias?.confidence ?? null,
+      biasConflict,
+      biasConflictDetail,
       futures: premarketResult.futures.map((f) => ({ symbol: f.symbol, changePct: f.changePct })),
       dayType: tradingBias?.dayType ?? null,
       preferredDirection: tradingBias?.preferredDirection ?? null,
       leadingAsset: tradingBias?.leadingAsset ?? null,
       weakestAsset: tradingBias?.weakestAsset ?? null,
+      leadershipHealth,
+      sectorTierCounts,
+      crossPairs,
+      pairSignals: rotationData?.pairSignals ?? null,
+      dispersionIndex: sectorResult?.dispersionIndex ?? null,
       riskFlags,
       topSectors,
       rotationAnalyses,
+      whatChanged,
       topPicks,
+      pullbackWatchCount,
       watchlist,
     };
 
@@ -418,11 +623,17 @@ export async function GET(request: NextRequest) {
       posture: posture.posture,
       bias,
       biasConfidence: tradingBias?.confidence ?? null,
+      biasConflict,
       regime: enhancedRegime?.regime ?? null,
+      leadershipHealth: leadershipHealth ? { score: leadershipHealth.score, label: leadershipHealth.label } : null,
+      sectorTierCounts,
+      dispersionIndex: sectorResult?.dispersionIndex ?? null,
       activeRotations: rotationAnalyses.length,
       enterSignals,
       riskFlags: riskFlags.length,
       highRiskFlags: riskFlags.filter((f) => f.severity === "high").length,
+      whatChanged: whatChanged ? { upgrades: whatChanged.upgrades, downgrades: whatChanged.downgrades } : null,
+      pullbackWatchCount,
       topPicks: topPicks.map((p) => p.symbol),
       watchlist,
       telegramSent,
