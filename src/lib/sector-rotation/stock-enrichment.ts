@@ -209,18 +209,22 @@ function classifyPhase(
   const pct = pctFrom50ma ?? 0;
   const accel = rsAccel ?? 0;
 
+  // P1: Below 50MA with positive acceleration — early basing
   if (!above50ma && accel > 0) {
     return "P1_BASING";
   }
+  // P2: Near 50MA crossover with strong acceleration + volume
   if (pct >= CLASSIFICATION.P2_PCT_LOW && pct <= CLASSIFICATION.P2_PCT_HIGH && accel > CLASSIFICATION.P2_RS_ACCEL && volRatio >= CLASSIFICATION.P2_VOL_RATIO) {
     return "P2_TURNAROUND";
   }
-  // Check exhaustion before trending — catches decelerating stocks that would otherwise fall through
-  if (accel < CLASSIFICATION.P4_RS_ACCEL || sectorAcceleration < CLASSIFICATION.P4_SECTOR_ACCEL) {
-    return "P4_EXHAUSTING";
-  }
-  if (pct > CLASSIFICATION.P3_PCT_LOW && accel >= 0) {
+  // P3: Clearly trending above 50MA with non-negative acceleration
+  if (above50ma && pct > CLASSIFICATION.P3_PCT_LOW && accel >= 0) {
     return "P3_TRENDING";
+  }
+  // P4: Above 50MA but deeply negative RS or sector acceleration — exhaustion
+  // Must be above 50MA: stocks below can't exhaust from a trend they're not in
+  if (above50ma && (accel < CLASSIFICATION.P4_RS_ACCEL || sectorAcceleration < CLASSIFICATION.P4_SECTOR_ACCEL)) {
+    return "P4_EXHAUSTING";
   }
   return above50ma ? "P3_TRENDING" : "P1_BASING";
 }

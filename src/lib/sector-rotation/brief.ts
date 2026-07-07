@@ -135,7 +135,9 @@ export function computeMarketPosture(
         data.subSectorScores ?? [],
       )
     : null;
-  const narrowLeadership = leadershipHealth && (leadershipHealth.score < RISK_FLAGS.NARROW_LEADERSHIP || leadershipHealth.megaCapDominant);
+  // Hysteresis buffer: leadership must drop clearly below threshold (50 - 3 = 47)
+  // to trigger narrow flag. Prevents posture oscillation from 1-2 point noise.
+  const narrowLeadership = leadershipHealth && (leadershipHealth.score < (RISK_FLAGS.NARROW_LEADERSHIP - RISK_FLAGS.NARROW_LEADERSHIP_BUFFER) || leadershipHealth.megaCapDominant);
 
   // AGGRESSIVE: RISK_ON + sufficient rotations + dispersion
   // Capped at SELECTIVE if leadership is narrow (mega-cap dominated or score < 50)
@@ -205,11 +207,16 @@ export function computeSectorTiers(
       s.quadrant === "LEADING" || (s.quadrant === "IMPROVING" && s.acceleration > 0);
 
     if (action === "TRADE" || action === "BUILD") {
-      // Path 1: Original strict criteria (composite >= 60 + favorable quadrant)
+      // Hysteresis: sectors with positive acceleration get a 2-point buffer on the
+      // actionable threshold, reducing tier oscillation from daily composite noise.
+      const effectiveThreshold = s.acceleration > 0
+        ? COMPOSITE.ACTIONABLE_THRESHOLD - COMPOSITE.ACTIONABLE_HYSTERESIS
+        : COMPOSITE.ACTIONABLE_THRESHOLD;
+      // Path 1: Composite meets (buffered) threshold + favorable quadrant
       // Path 2: Active rotation with HIGH/MODERATE conviction + favorable quadrant (composite waived)
       if (
         inFavorableQuadrant &&
-        (s.compositeScore >= COMPOSITE.ACTIONABLE_THRESHOLD || highConvictionETFs.has(s.etf))
+        (s.compositeScore >= effectiveThreshold || highConvictionETFs.has(s.etf))
       ) {
         actionable.push(s);
       } else {
@@ -434,7 +441,10 @@ function snapshotTier(s: SectorSnapshot): "actionable" | "watch" | "avoid" {
     s.quadrant === "LEADING" || (s.quadrant === "IMPROVING" && s.acceleration > 0);
 
   if (action === "TRADE" || action === "BUILD") {
-    return inFavorableQuadrant && s.compositeScore >= COMPOSITE.ACTIONABLE_THRESHOLD ? "actionable" : "watch";
+    const effectiveThreshold = s.acceleration > 0
+      ? COMPOSITE.ACTIONABLE_THRESHOLD - COMPOSITE.ACTIONABLE_HYSTERESIS
+      : COMPOSITE.ACTIONABLE_THRESHOLD;
+    return inFavorableQuadrant && s.compositeScore >= effectiveThreshold ? "actionable" : "watch";
   }
   if (action === "WATCH") return "watch";
   return "avoid";
@@ -496,7 +506,10 @@ export function computeWhatChanged(
       curr.quadrant === "LEADING" || (curr.quadrant === "IMPROVING" && curr.acceleration > 0);
     let currTier: "actionable" | "watch" | "avoid";
     if (currAction === "TRADE" || currAction === "BUILD") {
-      currTier = currFavorable && curr.compositeScore >= COMPOSITE.ACTIONABLE_THRESHOLD ? "actionable" : "watch";
+      const currEffective = curr.acceleration > 0
+        ? COMPOSITE.ACTIONABLE_THRESHOLD - COMPOSITE.ACTIONABLE_HYSTERESIS
+        : COMPOSITE.ACTIONABLE_THRESHOLD;
+      currTier = currFavorable && curr.compositeScore >= currEffective ? "actionable" : "watch";
     } else if (currAction === "WATCH") {
       currTier = "watch";
     } else {

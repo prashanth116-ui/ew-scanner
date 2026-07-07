@@ -53,6 +53,8 @@ export const REGIME = {
 export const COMPOSITE = {
   /** Sector composite >= this = actionable tier */
   ACTIONABLE_THRESHOLD: 60,
+  /** Hysteresis buffer: sectors with positive acceleration get this buffer on the actionable threshold */
+  ACTIONABLE_HYSTERESIS: 2,
   /** Sector composite >= this = watch tier */
   WATCH_THRESHOLD: 40,
   /** Weight redistribution base: momentum, accel, mansfield, cmf, breadth, smartMoney */
@@ -175,6 +177,8 @@ export const RISK_FLAGS = {
   ROLLOVER_ACCEL: -2,
   /** Leadership health score below this = risk flag */
   NARROW_LEADERSHIP: 50,
+  /** Hysteresis buffer for posture narrow-leadership gate (score must drop below NARROW_LEADERSHIP - buffer to trigger) */
+  NARROW_LEADERSHIP_BUFFER: 3,
   /** Leadership health score below this = high severity flag */
   DETERIORATING_LEADERSHIP: 35,
 } as const;
@@ -294,6 +298,8 @@ export const SCORING_SIGNALS = {
   MOMENTUM_WEIGHTS: { roc63: 0.4, roc126: 0.2, roc189: 0.2, roc252: 0.2 },
   /** OBV normalized slope threshold for accumulation/distribution */
   OBV_SLOPE_THRESHOLD: 0.01,
+  /** RRG quadrant dead zone: when both axes are within ±this of 100, use momentum as tiebreaker */
+  RRG_DEAD_ZONE: 0.5,
 } as const;
 
 // ── Rotation Lifecycle ──

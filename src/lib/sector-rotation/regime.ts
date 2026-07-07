@@ -96,14 +96,18 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     const vixLow = Math.max(REGIME_CFG.VIX_ADAPTIVE_LOW_MIN, Math.min(REGIME_CFG.VIX_ADAPTIVE_LOW_MAX, vixP25));
     const vixHigh = Math.max(REGIME_CFG.VIX_ADAPTIVE_HIGH_MIN, Math.min(REGIME_CFG.VIX_ADAPTIVE_HIGH_MAX, vixP75));
 
-    // Classify regime using adaptive thresholds
+    // Classify regime using adaptive thresholds.
+    // Order matters: INFLATIONARY checked before RISK_OFF so rising-VIX
+    // stagflation scenarios aren't swallowed by the RISK_OFF branch.
+    // VIX-rising only triggers RISK_OFF when VIX is at/above the adaptive
+    // low — rising from very low levels (e.g. 13→16) is mean-reversion, not stress.
     let regime: MacroRegime;
-    if (vix < vixLow && vixSlope !== "rising") {
-      regime = "RISK_ON";
-    } else if (vix > vixHigh || vixSlope === "rising") {
-      regime = "RISK_OFF";
-    } else if (dxyTrend === "rising" && yield10y > REGIME_CFG.YIELD_INFLATIONARY) {
+    if (dxyTrend === "rising" && yield10y > REGIME_CFG.YIELD_INFLATIONARY) {
       regime = "INFLATIONARY";
+    } else if (vix < vixLow && vixSlope !== "rising") {
+      regime = "RISK_ON";
+    } else if (vix > vixHigh || (vixSlope === "rising" && vix >= vixLow)) {
+      regime = "RISK_OFF";
     } else {
       regime = "MIXED";
     }

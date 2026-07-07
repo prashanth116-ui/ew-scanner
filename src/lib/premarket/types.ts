@@ -58,6 +58,8 @@ export interface TradingBias {
   vixInterpretation: string;    // Human-readable VIX cross-reference
   playbook: string;             // 2-3 sentence explanation
   whyThisBias: string[];        // bullet-point reasons (3-5 items)
+  biasConflict: boolean;        // true when macro bias (regime/posture) and futures bias diverge by 2+ levels
+  biasConflictDetail?: string;  // explanation when biasConflict is true
 }
 
 export interface PremarketData {

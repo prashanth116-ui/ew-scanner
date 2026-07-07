@@ -293,8 +293,10 @@ export async function calculateSectorRotation(
       flowPriceDivergence = positiveCount >= SCORING_SIGNALS.FLOW_DIVERGENCE_MIN_POSITIVE;
     }
 
-    // Breadth divergence: > 50% stocks healthy but sector ETF declining
-    const breadthDivergence = breadthPct !== null && breadthPct > SCORING_SIGNALS.BREADTH_DIVERGENCE_PCT && roc20d < 0;
+    // Breadth divergence: > 50% stocks healthy but sector ETF declining.
+    // Only valid with real stock-level breadth — sigmoid proxy inflates breadth near SMA,
+    // producing false divergence signals that cascade into stealth accumulation flags.
+    const breadthDivergence = !breadthEstimated && breadthPct !== null && breadthPct > SCORING_SIGNALS.BREADTH_DIVERGENCE_PCT && roc20d < 0;
 
     // Acceleration inflection: 2nd derivative positive but price flat-to-negative
     const accelerationInflection = accel > 0 && roc20d < SCORING_SIGNALS.ACCEL_INFLECTION_ROC_MAX;

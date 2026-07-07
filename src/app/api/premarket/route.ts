@@ -127,6 +127,22 @@ export async function GET(request: NextRequest) {
       vixBounds,
     );
 
+    // Detect conflict between macro bias (regime/posture-driven) and futures bias.
+    // Two independent classifiers can reach different conclusions — flag when they
+    // diverge by 2+ levels so the UI can surface the disagreement.
+    if (tradingBias) {
+      const biasLevels: Record<string, number> = {
+        "Strong Bear": -2, "Lean Bear": -1, "Neutral": 0, "Lean Bull": 1, "Strong Bull": 2,
+      };
+      const macroLevel = biasLevels[label] ?? 0;
+      const futuresLevel = biasLevels[tradingBias.bias] ?? 0;
+      const divergence = Math.abs(macroLevel - futuresLevel);
+      if (divergence >= 2) {
+        tradingBias.biasConflict = true;
+        tradingBias.biasConflictDetail = `Macro bias "${label}" (from regime + posture) conflicts with futures bias "${tradingBias.bias}" (from price action). Macro reflects structural positioning; futures reflect real-time sentiment. When they diverge, trust futures direction but reduce size.`;
+      }
+    }
+
     const response: PremarketData = {
       futures: premarketResult.futures,
       internals: premarketResult.internals,

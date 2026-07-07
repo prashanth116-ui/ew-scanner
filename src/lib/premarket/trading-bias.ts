@@ -114,30 +114,38 @@ function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
     return "Neutral";
   }
 
-  // Magnitude gate: tiny moves are noise, not signal
+  // Magnitude gate: tiny moves are noise, not signal.
+  // Threshold lowered from 0.15 to 0.08 — pre-market sessions often have
+  // legitimate directional signals in the 0.08-0.15% range that were
+  // previously masked, causing false Neutral readings on calm mornings.
   const avgAbsChange = equities.reduce((s, e) => s + Math.abs(e.changePct), 0) / equities.length;
-  if (avgAbsChange < 0.15) return "Neutral";
+  if (avgAbsChange < 0.08) return "Neutral";
 
   const dirs = equities.map((e) => sign(e.changePct));
-  const upCount = dirs.filter((d) => d === "up").length;
-  const downCount = dirs.filter((d) => d === "down").length;
   const avgChange = equities.reduce((s, e) => s + e.changePct, 0) / equities.length;
 
   // Unanimous direction
   if (dirs.every((d) => d === "up")) return "Strong Bull";
   if (dirs.every((d) => d === "down")) return "Strong Bear";
 
-  // Majority direction — leadership nuances don't override the tape
-  if (downCount > upCount) {
+  // Magnitude-weighted direction: a small +0.05% shouldn't offset a large -0.80%.
+  // Sum positive and negative contributions separately; one side must outweigh
+  // the other by 1.5x to claim majority. This prevents misleading bias when
+  // 3 futures are barely positive but 1 is strongly negative (or vice versa).
+  const bullWeight = equities.reduce((s, e) => s + Math.max(0, e.changePct), 0);
+  const bearWeight = equities.reduce((s, e) => s + Math.max(0, -e.changePct), 0);
+
+  if (bearWeight > bullWeight * 1.5) {
     return avgChange < -1.0 ? "Strong Bear" : "Lean Bear";
   }
-  if (upCount > downCount) {
+  if (bullWeight > bearWeight * 1.5) {
     return avgChange > 1.0 ? "Strong Bull" : "Lean Bull";
   }
 
-  // Evenly split — use average change as tiebreaker
-  if (avgChange > 0.3) return "Lean Bull";
-  if (avgChange < -0.3) return "Lean Bear";
+  // Close call — use average change as tiebreaker (lowered from ±0.3 to ±0.15
+  // since pre-market averages are typically 0.1-0.4%, making 0.3 too aggressive)
+  if (avgChange > 0.15) return "Lean Bull";
+  if (avgChange < -0.15) return "Lean Bear";
 
   // Fallback to biasScore
   if (biasScore >= 3) return "Lean Bull";
@@ -525,5 +533,6 @@ export function computeTradingBias(
     vixInterpretation: vixInterp,
     playbook,
     whyThisBias,
+    biasConflict: false, // set by API route after comparing with macro bias label
   };
 }

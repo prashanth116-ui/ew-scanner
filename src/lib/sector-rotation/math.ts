@@ -241,12 +241,27 @@ export function calcRRG(
   const rsRatio = rsRatioSeries[rsRatioSeries.length - 1];
   const rsMomentum = rsMomentumSeries[rsMomentumSeries.length - 1];
 
-  // Step 6: Quadrant classification at (100, 100)
+  // Step 6: Quadrant classification at (100, 100) with dead zone.
+  // Sectors near the center oscillate between quadrants on daily noise.
+  // When both axes are within ±0.5 of 100, use momentum as the tiebreaker
+  // since momentum leads ratio in the RRG cycle.
   let quadrant: RRGQuadrant;
-  if (rsRatio >= 100 && rsMomentum >= 100) quadrant = "LEADING";
-  else if (rsRatio >= 100 && rsMomentum < 100) quadrant = "WEAKENING";
-  else if (rsRatio < 100 && rsMomentum < 100) quadrant = "LAGGING";
-  else quadrant = "IMPROVING";
+  const dz = SCORING_SIGNALS.RRG_DEAD_ZONE;
+  const rInBand = Math.abs(rsRatio - 100) < dz;
+  const mInBand = Math.abs(rsMomentum - 100) < dz;
+
+  if (rInBand && mInBand) {
+    // Both axes in dead zone — bias toward momentum-positive quadrants
+    quadrant = rsMomentum >= 100 ? "IMPROVING" : "LAGGING";
+  } else if (rsRatio >= 100 && rsMomentum >= 100) {
+    quadrant = "LEADING";
+  } else if (rsRatio >= 100 && rsMomentum < 100) {
+    quadrant = "WEAKENING";
+  } else if (rsRatio < 100 && rsMomentum < 100) {
+    quadrant = "LAGGING";
+  } else {
+    quadrant = "IMPROVING";
+  }
 
   // Step 7: Trail — 5 snapshots at offsets [20, 15, 10, 5, 0] from end
   const trail: { rsRatio: number; rsMomentum: number }[] = [];
