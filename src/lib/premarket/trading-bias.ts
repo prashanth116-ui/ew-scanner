@@ -14,6 +14,7 @@ import type {
   VixData,
   BestToTradeInfo,
 } from "./types";
+import { PREMARKET_SCORING } from "@/lib/sector-rotation/config";
 
 // ── Helpers ──
 
@@ -82,7 +83,11 @@ function interpretVix(
     return `Bullish confirmation — risk appetite increasing with low fear${vixDirLabel}`;
   }
   if (equityUp && vixHigh) {
-    return `Suspicious rally — elevated fear despite positive futures, potential reversal risk${vixDirLabel}`;
+    // Only flag as "suspicious" when futures have meaningful magnitude — a +0.09%
+    // move with elevated VIX is noise, not a suspicious rally worth trading against.
+    return avgEquityChange > 0.3
+      ? `Suspicious rally — elevated fear despite significant positive futures, potential reversal risk${vixDirLabel}`
+      : `Weak rally with elevated fear — likely noise, wait for directional clarity${vixDirLabel}`;
   }
   if (equityUp && vixRising) {
     return `Cautious rally — futures up but VIX rising${vixDirLabel}, watch for intraday reversal`;
@@ -107,10 +112,11 @@ function interpretVix(
 
 function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
   if (equities.length < 2) {
-    if (biasScore >= 6) return "Strong Bull";
-    if (biasScore >= 3) return "Lean Bull";
-    if (biasScore <= -6) return "Strong Bear";
-    if (biasScore <= -3) return "Lean Bear";
+    // Insufficient futures data — only trust very high-conviction macro bias.
+    // Lower thresholds would let posture/regime alone drive bias, which defeats
+    // the purpose of real-time futures monitoring.
+    if (biasScore >= 7) return "Strong Bull";
+    if (biasScore <= -7) return "Strong Bear";
     return "Neutral";
   }
 
@@ -393,6 +399,10 @@ function generatePlaybook(
     return `Value/defensives leading with Dow futures out front. Favor large-cap value and dividend names.${weakest ? ` ${weakest} lagging — growth may underperform.` : ""}`;
   }
 
+  if (bias === "Lean Bull" && dayType === "Range Day") {
+    return `Futures lean positive but low magnitude — likely a choppy, range-bound session. Fade extremes, buy dips near support, and keep position sizes small until a directional breakout appears.`;
+  }
+
   if (bias === "Lean Bull") {
     return `Futures lean positive but not all aligned. Be selective with longs — favor names in leading sectors. Keep position sizes moderate until more signals confirm.`;
   }
@@ -412,6 +422,10 @@ function generatePlaybook(
 
   if (bias === "Lean Bear" && weakest === "RTY") {
     return `Small-caps weakest — risk appetite fading. Trim speculative positions and favor large-cap quality names if staying long.`;
+  }
+
+  if (bias === "Lean Bear" && dayType === "Range Day") {
+    return `Futures lean negative but low magnitude — expect choppy conditions. Avoid aggressive shorts. Look for failed breakdowns to fade and keep stops tight on any direction.`;
   }
 
   if (bias === "Lean Bear") {
@@ -511,7 +525,7 @@ export function computeTradingBias(
   // Need at least 2 equity futures to produce a meaningful bias
   if (equities.length < 2) return null;
 
-  const bounds: VixBounds = vixBounds ?? { low: 17, high: 20 };
+  const bounds: VixBounds = vixBounds ?? PREMARKET_SCORING.DEFAULT_VIX_BOUNDS;
   const breadth = sectorBreadth ?? null;
   const avgEquityChange = equities.reduce((s, e) => s + e.changePct, 0) / equities.length;
 

@@ -232,6 +232,7 @@ export async function calculateSectorRotation(
     // Breadth: 3-tier cascade — batch quotes (best), pre-run (good), ETF sigmoid (fallback)
     let breadthPct: number | null = null;
     let breadthEstimated = false;
+    let breadthUsingSigmoid = false; // tracks sigmoid specifically (not just "estimated")
 
     // Tier 1: Batch quote data (price vs 50d SMA for all sector stocks)
     const sectorDef = SECTOR_UNIVERSE.find((s) => s.id === group.id);
@@ -252,6 +253,7 @@ export async function calculateSectorRotation(
           const pctFromSma = ((lastClose - sma20) / sma20) * 100;
           breadthPct = sigmoidBreadth(pctFromSma);
           breadthEstimated = true;
+          breadthUsingSigmoid = true;
         }
       }
     } else {
@@ -280,13 +282,15 @@ export async function calculateSectorRotation(
           const pctFromSma = ((lastClose - sma20) / sma20) * 100;
           breadthPct = sigmoidBreadth(pctFromSma);
           breadthEstimated = true;
+          breadthUsingSigmoid = true;
         }
       }
     }
 
-    // Flow/price divergence — check that CMF was positive for 15+ of last 20 bars
+    // Flow/price divergence — check that CMF was positive for 15+ of last 20 bars.
+    // ROC must be meaningfully negative (< -1%) to avoid noise from near-flat sectors.
     let flowPriceDivergence = false;
-    if (cmf > 0 && roc20d < 0) {
+    if (cmf > 0 && roc20d < SCORING_SIGNALS.FLOW_DIVERGENCE_ROC_THRESHOLD) {
       const positiveCount = calcRollingCMFPositiveCount(
         chart.highs, chart.lows, chart.closes, chart.volumes, 20, 20
       );
@@ -294,9 +298,10 @@ export async function calculateSectorRotation(
     }
 
     // Breadth divergence: > 50% stocks healthy but sector ETF declining.
-    // Only valid with real stock-level breadth — sigmoid proxy inflates breadth near SMA,
-    // producing false divergence signals that cascade into stealth accumulation flags.
-    const breadthDivergence = !breadthEstimated && breadthPct !== null && breadthPct > SCORING_SIGNALS.BREADTH_DIVERGENCE_PCT && roc20d < 0;
+    // Only blocked when using sigmoid proxy — it inflates breadth near SMA,
+    // producing false divergence signals. Pre-run SMA-20 (breadthEstimated=true
+    // but not sigmoid) is real stock-level data and should be allowed.
+    const breadthDivergence = !breadthUsingSigmoid && breadthPct !== null && breadthPct > SCORING_SIGNALS.BREADTH_DIVERGENCE_PCT && roc20d < 0;
 
     // Acceleration inflection: 2nd derivative positive but price flat-to-negative
     const accelerationInflection = accel > 0 && roc20d < SCORING_SIGNALS.ACCEL_INFLECTION_ROC_MAX;
@@ -527,6 +532,8 @@ export async function calculateSectorRotation(
     if (aligned.length < 21) return { ratio: 0, trend: "N/A" };
     const now = aligned[aligned.length - 1];
     const past = aligned[aligned.length - 21];
+    // Guard against zero denominators from data errors (would produce Infinity)
+    if (now.denClose === 0 || past.denClose === 0) return { ratio: 0, trend: "N/A" };
     const currentRatio = now.numClose / now.denClose;
     const pastRatio = past.numClose / past.denClose;
     const change = pastRatio !== 0 ? ((currentRatio - pastRatio) / pastRatio) * 100 : 0;
@@ -568,8 +575,10 @@ export async function calculateSectorRotation(
 
     const ranked = sectorStocks
       .map((r) => {
-        const rsPercentile = sectorRSValues.length >= 3
-          ? percentileRank(sectorRSValues, r.data.relativeStrength20d ?? 0)
+        // Only compute RS percentile when actual RS data exists — null RS
+        // should be "unknown," not silently treated as worst-in-sector (0).
+        const rsPercentile = sectorRSValues.length >= 3 && r.data.relativeStrength20d != null
+          ? percentileRank(sectorRSValues, r.data.relativeStrength20d)
           : null;
 
         const W = TOP_STOCK_WEIGHTS;

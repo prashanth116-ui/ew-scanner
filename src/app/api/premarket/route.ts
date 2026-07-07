@@ -6,10 +6,12 @@ import { computeBiasScore } from "@/lib/premarket/scoring";
 import { computeTradingBias } from "@/lib/premarket/trading-bias";
 import type { VixBounds } from "@/lib/premarket/trading-bias";
 import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
+import { calculateRotationTracker } from "@/lib/sector-rotation/rotation-tracker";
 import { fetchMacroRegime, enhanceRegimeWithCrossAsset } from "@/lib/sector-rotation/regime";
 import { computeMarketPosture, computeSectorTiers, computeRiskFlags } from "@/lib/sector-rotation/brief";
 import type { PostureResult } from "@/lib/sector-rotation/brief";
 import type { PremarketData, SectorBreadth } from "@/lib/premarket/types";
+import { COMPOSITE } from "@/lib/sector-rotation/config";
 
 export const maxDuration = 30;
 
@@ -24,10 +26,11 @@ export async function GET(request: NextRequest) {
 
   try {
     // Fetch all data sources in parallel
-    const [premarketResult, sectorResult, regime] = await Promise.all([
+    const [premarketResult, sectorResult, regime, rotationData] = await Promise.all([
       fetchPremarketData(),
       calculateSectorRotation().catch(() => null),
       fetchMacroRegime().catch(() => null),
+      calculateRotationTracker().catch(() => null),
     ]);
 
     // Enhance regime if cross-asset data available
@@ -56,7 +59,7 @@ export async function GET(request: NextRequest) {
           vixBounds: enhancedRegime.vixBounds,
         } : undefined,
       };
-      posture = computeMarketPosture(dataWithRegime, null);
+      posture = computeMarketPosture(dataWithRegime, rotationData);
     }
 
     // Compute sector breadth from GICS sector ETF data (needed by both bias score and trading bias)
@@ -66,8 +69,8 @@ export async function GET(request: NextRequest) {
       let advancing = 0;
       let declining = 0;
       for (const s of gicsSectors) {
-        // Use momentum composite > 50 as "advancing" proxy (positive multi-TF momentum)
-        if (s.momentumComposite > 50) advancing++;
+        // Use composite score vs config threshold for consistency with sector tier classification
+        if (s.compositeScore >= COMPOSITE.ACTIONABLE_THRESHOLD) advancing++;
         else declining++;
       }
       const total = advancing + declining;
@@ -88,8 +91,8 @@ export async function GET(request: NextRequest) {
 
     // Add sector-level checklist items
     if (sectorResult) {
-      const tiers = computeSectorTiers(sectorResult.sectors, null);
-      const riskFlags = computeRiskFlags(sectorResult, null);
+      const tiers = computeSectorTiers(sectorResult.sectors, rotationData);
+      const riskFlags = computeRiskFlags(sectorResult, rotationData);
 
       checklist.push({
         id: "actionable-sectors",
@@ -130,14 +133,17 @@ export async function GET(request: NextRequest) {
     // Detect conflict between macro bias (regime/posture-driven) and futures bias.
     // Two independent classifiers can reach different conclusions — flag when they
     // diverge by 2+ levels so the UI can surface the disagreement.
-    if (tradingBias) {
+    // Only compare when both data sources are reliable — if sectorResult or regime
+    // failed, macro bias defaults to Neutral/SELECTIVE, producing false conflicts.
+    if (tradingBias && sectorResult && regime) {
       const biasLevels: Record<string, number> = {
         "Strong Bear": -2, "Lean Bear": -1, "Neutral": 0, "Lean Bull": 1, "Strong Bull": 2,
       };
       const macroLevel = biasLevels[label] ?? 0;
       const futuresLevel = biasLevels[tradingBias.bias] ?? 0;
-      const divergence = Math.abs(macroLevel - futuresLevel);
-      if (divergence >= 2) {
+      // Only flag conflict when macro has a directional view — Neutral macro
+      // is permissive and shouldn't conflict with any futures direction.
+      if (macroLevel !== 0 && futuresLevel !== 0 && Math.sign(macroLevel) !== Math.sign(futuresLevel)) {
         tradingBias.biasConflict = true;
         tradingBias.biasConflictDetail = `Macro bias "${label}" (from regime + posture) conflicts with futures bias "${tradingBias.bias}" (from price action). Macro reflects structural positioning; futures reflect real-time sentiment. When they diverge, trust futures direction but reduce size.`;
       }

@@ -140,7 +140,8 @@ export function applyQualityGates(
 
 export function buildExtendedWatch(extensionOnly: StockInput[]): PullbackWatchStock[] {
   return extensionOnly
-    .filter((s) => s.sma200 != null && s.sma200 > 0)
+    // Require both SMA200 and SMA50 — null SMA50 produces meaningless pctFrom50ma=0
+    .filter((s) => s.sma200 != null && s.sma200 > 0 && s.sma50 != null && s.sma50 > 0)
     .map((s) => {
       const pctFrom200ma = calcPctFrom(s.price, s.sma200) ?? 0;
       const pctFrom50ma = calcPctFrom(s.price, s.sma50) ?? 0;
@@ -222,8 +223,9 @@ function classifyPhase(
   if (pct >= CLASSIFICATION.P2_PCT_LOW && pct <= CLASSIFICATION.P2_PCT_HIGH && accel > CLASSIFICATION.P2_RS_ACCEL && volRatio >= CLASSIFICATION.P2_VOL_RATIO) {
     return "P2_TURNAROUND";
   }
-  // P3: Clearly trending above 50MA with non-negative acceleration
-  if (above50ma && pct > CLASSIFICATION.P3_PCT_LOW && accel >= 0) {
+  // P3: Clearly trending above 50MA with non-negative acceleration + minimum volume.
+  // Without the volume gate, stocks with 0.5x volume get P3 despite weak participation.
+  if (above50ma && pct > CLASSIFICATION.P3_PCT_LOW && accel >= 0 && volRatio >= CLASSIFICATION.P3_MIN_VOL_RATIO) {
     return "P3_TRENDING";
   }
   // P4: Above 50MA but deeply negative RS or sector acceleration — exhaustion
@@ -284,7 +286,9 @@ export function scoreConviction(
   if (sectorComposite >= CONVICTION.HIGH_COMPOSITE) { weightedScore += W.sectorComposite; signals++; }
   if (category === "TURNAROUND" || category === "LEADER") { weightedScore += W.stockCategory; signals++; }
   if (rsAccel != null && rsAccel >= CONVICTION.STRONG_RS_ACCEL) { weightedScore += W.rsAccel; signals++; }
-  if (sectorStealth) { weightedScore += W.sectorStealth; signals++; }
+  // Stealth credit only when the stock itself shows participation — a low-volume
+  // stock in a stealth sector isn't accumulating, it's just along for the ride.
+  if (sectorStealth && (volRatio >= 0.8 || category === "TURNAROUND" || category === "LEADER")) { weightedScore += W.sectorStealth; signals++; }
   if (volRatio >= CONVICTION.HIGH_VOL_RATIO) { weightedScore += W.volumeRatio; signals++; }
 
   let conviction: ConvictionLevel;

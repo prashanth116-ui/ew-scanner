@@ -17,6 +17,7 @@ import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 import type { FuturesSnapshot, ChecklistItem, TradingBias, SectorBreadth, VixData } from "@/lib/premarket/types";
 import { computeBiasScore } from "@/lib/premarket/scoring";
+import { PREMARKET_SCORING } from "@/lib/sector-rotation/config";
 import { loadHistory } from "@/lib/sector-rotation/history";
 import { SUB_SECTOR_PARENT, subSectorDivergenceTooltip, computeSubSectorDivergences } from "@/lib/sector-rotation/sub-sector-constants";
 import type { SubSectorDivergence } from "@/lib/sector-rotation/sub-sector-constants";
@@ -137,7 +138,7 @@ export default function DailyBriefPage() {
       dxyTrend: data.regime.dxyTrend,
       favoredSectors: data.regime.favoredSectors,
       avoidSectors: data.regime.avoidSectors,
-      vixBounds: data.regime.vixBounds ?? { low: 17, high: 20 },
+      vixBounds: data.regime.vixBounds ?? PREMARKET_SCORING.DEFAULT_VIX_BOUNDS,
     } : null;
     return computeBiasScore(futures, posture, regimeData, sectorBreadth);
   }, [futures, posture, data?.regime, sectorBreadth]);

@@ -288,8 +288,14 @@ export function computeRiskFlags(
     }
   }
 
-  // 3. VIX rising
-  if (data.regime?.vixSlope === "rising") {
+  // 3. VIX rising (or regime unavailable — flag incomplete risk assessment)
+  if (!data.regime) {
+    flags.push({
+      severity: "medium",
+      message: "Regime data unavailable",
+      detail: "Cannot assess VIX-based risk flags — macro regime fetch failed. Risk assessment is incomplete.",
+    });
+  } else if (data.regime.vixSlope === "rising") {
     flags.push({
       severity: "high",
       message: "VIX rising",
@@ -332,7 +338,8 @@ export function computeRiskFlags(
   }
 
   // 7. High dispersion + regime RISK_OFF (panic rotation)
-  if (data.dispersionIndex > RISK_FLAGS.PANIC_DISPERSION && data.regime?.regime === "RISK_OFF") {
+  // Only checks when regime is available — already flagged above when missing.
+  if (data.regime && data.dispersionIndex > RISK_FLAGS.PANIC_DISPERSION && data.regime.regime === "RISK_OFF") {
     flags.push({
       severity: "high",
       message: "Panic rotation detected",
@@ -490,7 +497,7 @@ export function computeWhatChanged(
       ? { from: previousPosture, to: currentPosture }
       : null;
 
-  // Quadrant transitions
+  // Quadrant transitions (including new sectors not in previous snapshot)
   const quadrantTransitions: WhatChangedResult["quadrantTransitions"] = [];
   for (const curr of data.sectors) {
     const prev = prevMap.get(curr.sector);
@@ -501,6 +508,15 @@ export function computeWhatChanged(
         from: prev.quadrant,
         to: curr.quadrant,
         category: classifyTransition(prev.quadrant, curr.quadrant),
+      });
+    } else if (!prev) {
+      // New sector not in previous snapshot — treat as entering from LAGGING
+      quadrantTransitions.push({
+        sector: curr.sector,
+        etf: curr.etf,
+        from: "LAGGING",
+        to: curr.quadrant,
+        category: classifyTransition("LAGGING", curr.quadrant),
       });
     }
   }

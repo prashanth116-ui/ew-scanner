@@ -265,6 +265,8 @@ export const CLASSIFICATION = {
   P2_VOL_RATIO: 1.2,
   /** Phase P3_TRENDING: pctFrom50ma lower bound */
   P3_PCT_LOW: 3,
+  /** Phase P3_TRENDING: minimum volume ratio (weak-volume stocks shouldn't be P3) */
+  P3_MIN_VOL_RATIO: 0.7,
   /** Phase P4_EXHAUSTING: RS accel threshold (negative) */
   P4_RS_ACCEL: -2.0,
   /** Phase P4_EXHAUSTING: sector accel threshold (negative) */
@@ -276,6 +278,8 @@ export const CLASSIFICATION = {
 export const SCORING_SIGNALS = {
   /** CMF positive count >= this out of 20 bars = flow/price divergence */
   FLOW_DIVERGENCE_MIN_POSITIVE: 15,
+  /** ROC must be below this (negative) for flow/price divergence — filters near-zero noise */
+  FLOW_DIVERGENCE_ROC_THRESHOLD: -1,
   /** Breadth % > this + declining ETF = breadth divergence */
   BREADTH_DIVERGENCE_PCT: 50,
   /** ROC20d < this + positive accel = acceleration inflection */
@@ -430,6 +434,8 @@ export const PREMARKET_SCORING = {
   REGIME_RISK_OFF: -2,
   REGIME_INFLATIONARY: -1,
   REGIME_MIXED: 0,
+  /** Default VIX bounds when regime data is unavailable */
+  DEFAULT_VIX_BOUNDS: { low: 17, high: 20 },
   /** Bias label thresholds */
   STRONG_BULL: 6,
   LEAN_BULL: 2,

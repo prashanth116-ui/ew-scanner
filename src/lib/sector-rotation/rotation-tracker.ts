@@ -700,6 +700,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
   const regime: RegimeData | null = regimeData
     ? {
         regime: regimeData.regime,
+        regimeConfidence: regimeData.regimeConfidence,
         vix: regimeData.vix,
         vixSlope: regimeData.vixSlope,
         yield10y: regimeData.yield10y,

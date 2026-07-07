@@ -138,7 +138,7 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     const sectorMap = REGIME_SECTOR_MAP[regime];
     const data: MacroRegimeData = {
       regime,
-      regimeConfidence: Math.min(100, regimeConfidence),
+      regimeConfidence: Math.max(0, Math.min(100, regimeConfidence)),
       vix,
       vixSlope,
       yield10y,
@@ -199,14 +199,18 @@ export function enhanceRegimeWithCrossAsset(
   let bonus = 0;
   let updatedRegime = regime.regime;
 
+  // Track data availability — missing data (undefined) should NOT be treated as 0 (flat).
+  // Missing GLD/TLT → false for all directional flags, preventing silent misclassification.
+  const hasGld = crossAssetROC.gld !== undefined;
+  const hasTlt = crossAssetROC.tlt !== undefined;
   const gldAccel = crossAssetROC.gld ?? 0;
   const tltAccel = crossAssetROC.tlt ?? 0;
-  const gldRising = gldAccel > REGIME_CFG.CROSS_ASSET_ACCEL;
-  const gldFalling = gldAccel < -REGIME_CFG.CROSS_ASSET_ACCEL;
-  const tltRising = tltAccel > REGIME_CFG.CROSS_ASSET_ACCEL;
-  const tltFalling = tltAccel < -REGIME_CFG.CROSS_ASSET_ACCEL;
-  const gldStrongRising = gldAccel > REGIME_CFG.CROSS_ASSET_STRONG_ACCEL;
-  const tltStrongRising = tltAccel > REGIME_CFG.CROSS_ASSET_STRONG_ACCEL;
+  const gldRising = hasGld && gldAccel > REGIME_CFG.CROSS_ASSET_ACCEL;
+  const gldFalling = hasGld && gldAccel < -REGIME_CFG.CROSS_ASSET_ACCEL;
+  const tltRising = hasTlt && tltAccel > REGIME_CFG.CROSS_ASSET_ACCEL;
+  const tltFalling = hasTlt && tltAccel < -REGIME_CFG.CROSS_ASSET_ACCEL;
+  const gldStrongRising = hasGld && gldAccel > REGIME_CFG.CROSS_ASSET_STRONG_ACCEL;
+  const tltStrongRising = hasTlt && tltAccel > REGIME_CFG.CROSS_ASSET_STRONG_ACCEL;
 
   switch (regime.regime) {
     case "RISK_OFF":

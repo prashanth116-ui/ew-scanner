@@ -93,6 +93,7 @@ export interface ConvictionResult {
 
 export interface RegimeData {
   regime: "RISK_ON" | "RISK_OFF" | "INFLATIONARY" | "MIXED";
+  regimeConfidence?: number; // 0-100, allows downstream to weight low-confidence signals
   vix: number;
   vixSlope: "rising" | "falling" | "flat";
   yield10y: number;

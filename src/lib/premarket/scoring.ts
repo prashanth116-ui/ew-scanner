@@ -73,7 +73,7 @@ export function computeBiasScore(
     });
 
     // ── Macro: VIX (adaptive bounds from 3-month percentiles) ──
-    const vb = regime.vixBounds ?? { low: 17, high: 20 };
+    const vb = regime.vixBounds ?? PREMARKET_SCORING.DEFAULT_VIX_BOUNDS;
     let vixScore = 0;
     let vixStatus: "bullish" | "bearish" | "neutral" = "neutral";
     let vixDetail: string;

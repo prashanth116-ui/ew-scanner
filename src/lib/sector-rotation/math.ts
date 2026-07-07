@@ -299,7 +299,10 @@ export function percentileRank(values: number[], target: number): number {
   if (values.length === 0) return 50;
   const sorted = [...values].sort((a, b) => a - b);
   const below = sorted.filter((v) => v < target).length;
-  return (below / sorted.length) * 100;
+  const equal = sorted.filter((v) => v === target).length;
+  // Standard statistical rank: count below + half of ties.
+  // Without this, identical scores all rank at 0th percentile.
+  return ((below + equal / 2) / sorted.length) * 100;
 }
 
 export function clampNormalize(value: number, min: number, max: number): number {
