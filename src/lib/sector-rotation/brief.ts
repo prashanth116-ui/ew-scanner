@@ -123,15 +123,17 @@ export function computeMarketPosture(
     };
   }
 
-  // DEFENSIVE: RISK_OFF OR VIX rising + majority sectors WEAKENING/LAGGING
+  // DEFENSIVE: RISK_OFF with no conviction OR VIX rising + majority weak.
+  // Mild RISK_OFF with high/moderate conviction rotations falls through to
+  // SELECTIVE — strong sector momentum can persist even in risk-off regimes.
   if (
-    isRiskOff ||
-    (vixRising && weakeningLagging.length > leadingImproving.length)
+    (isRiskOff && nonExitConviction.length === 0) ||
+    (!isRiskOff && vixRising && weakeningLagging.length > leadingImproving.length)
   ) {
     return {
       posture: "DEFENSIVE",
       reasoning: isRiskOff
-        ? "Risk-off macro regime. Favor defensive sectors, reduce equity exposure."
+        ? "Risk-off macro regime with no active rotations showing conviction. Favor defensive sectors, reduce equity exposure."
         : "VIX rising with majority of sectors weakening or lagging. Reduce risk.",
     };
   }
@@ -260,9 +262,10 @@ export function computeRiskFlags(
 ): RiskFlag[] {
   const flags: RiskFlag[] = [];
 
-  // 1. LEADING sector with negative acceleration
+  // 1. LEADING sector with negative acceleration (skip if flag #9 will cover with more specific rollover flag)
   for (const s of data.sectors) {
     if (s.quadrant === "LEADING" && s.acceleration < 0) {
+      if (s.rotationVelocity > RISK_FLAGS.HIGH_ROTATION_VELOCITY && s.acceleration < RISK_FLAGS.ROLLOVER_ACCEL) continue;
       flags.push({
         severity: "high",
         message: `${s.sector} losing momentum`,

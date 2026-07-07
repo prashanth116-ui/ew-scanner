@@ -111,10 +111,9 @@ function interpretVix(
 // ── 3c. Market Bias Classification ──
 
 function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
+  // Defensive guard — unreachable from computeTradingBias (which returns null
+  // when equities < 2), but kept as a safety net for any future callers.
   if (equities.length < 2) {
-    // Insufficient futures data — only trust very high-conviction macro bias.
-    // Lower thresholds would let posture/regime alone drive bias, which defeats
-    // the purpose of real-time futures monitoring.
     if (biasScore >= 7) return "Strong Bull";
     if (biasScore <= -7) return "Strong Bear";
     return "Neutral";
@@ -205,7 +204,7 @@ function computeConfidence(
     if ((bullBias && vixLow) || (bearBias && vixHigh)) {
       confidence += 15; // Confirming
     } else if ((bullBias && vixHigh) || (bearBias && vixLow)) {
-      confidence += 3; // Contradicting
+      confidence += 0; // Contradicting — no points
     } else {
       confidence += 8; // Neutral VIX
     }
@@ -294,10 +293,6 @@ function pickBestWorst(
 ): { bestToTrade: BestToTradeInfo | null; assetToAvoid: string | null } {
   if (equities.length < 2) return { bestToTrade: null, assetToAvoid: null };
 
-  // Best = highest absolute changePct (most momentum)
-  const sorted = [...equities].sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct));
-  const best = sorted[0];
-
   const isBullish = bias === "Strong Bull" || bias === "Lean Bull";
   const isBearish = bias === "Strong Bear" || bias === "Lean Bear";
 
@@ -306,17 +301,15 @@ function pickBestWorst(
   // when the system has no directional edge.
   let bestToTrade: BestToTradeInfo | null = null;
   if (isBullish || isBearish) {
+    // Sort by direction: bullish → most positive first (best long), bearish → most negative first (best short)
+    const sorted = [...equities].sort((a, b) =>
+      isBearish ? a.changePct - b.changePct : b.changePct - a.changePct
+    );
+    const best = sorted[0];
     const direction: "long" | "short" = isBearish ? "short" : "long";
-    let reason: string;
-    if (isBearish) {
-      reason = best.changePct < 0
-        ? `weakest at ${fmt(best.changePct)}, most short momentum`
-        : `strongest contrarian at ${fmt(best.changePct)}, but bias is bearish`;
-    } else {
-      reason = best.changePct > 0
-        ? `leading at ${fmt(best.changePct)}, most long momentum`
-        : `least negative at ${fmt(best.changePct)}, but bias is bullish`;
-    }
+    const reason = isBearish
+      ? `weakest at ${fmt(best.changePct)}, most short momentum`
+      : `leading at ${fmt(best.changePct)}, most long momentum`;
     bestToTrade = { symbol: best.symbol, direction, reason };
   }
 

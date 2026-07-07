@@ -708,6 +708,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
         dxyTrend: regimeData.dxyTrend,
         favoredSectors: regimeData.favoredSectors,
         avoidSectors: regimeData.avoidSectors,
+        vixBounds: regimeData.vixBounds,
       }
     : null;
 

@@ -98,7 +98,7 @@ function computeComposite(
 
 // ── Cache ──
 
-let cachedResult: { data: SectorRotationResult; ts: number } | null = null;
+let cachedResult: { data: SectorRotationResult; ts: number; hasPreRun: boolean } | null = null;
 const CACHE_TTL = 10 * 60 * 1000;
 
 // ── Sigmoid breadth proxy (Tier 3 fallback) ──
@@ -112,7 +112,8 @@ function sigmoidBreadth(pctFromSma: number): number {
 export async function calculateSectorRotation(
   preRunResults?: PreRunResult[]
 ): Promise<SectorRotationResult> {
-  if (cachedResult && Date.now() - cachedResult.ts < CACHE_TTL) {
+  const hasPreRun = !!preRunResults?.length;
+  if (cachedResult && Date.now() - cachedResult.ts < CACHE_TTL && cachedResult.hasPreRun === hasPreRun) {
     return cachedResult.data;
   }
 
@@ -757,7 +758,7 @@ export async function calculateSectorRotation(
     enrichedStocks,
   };
 
-  cachedResult = { data: result, ts: Date.now() };
+  cachedResult = { data: result, ts: Date.now(), hasPreRun };
   return result;
 }
 

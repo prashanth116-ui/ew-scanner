@@ -202,6 +202,10 @@ function classifyCategory(
   if (rsAccel != null && rsAccel > QUALITY_GATES.TURNAROUND_RS_ACCEL && volRatio >= QUALITY_GATES.TURNAROUND_VOL_RATIO) {
     return "TURNAROUND";
   }
+  // Strong RS acceleration passed quality gate without volume — classify consistently
+  if (rsAccel != null && rsAccel > QUALITY_GATES.TURNAROUND_RS_ACCEL * 2) {
+    return "TURNAROUND";
+  }
   return "AVOID";
 }
 
@@ -215,13 +219,14 @@ function classifyPhase(
   const pct = pctFrom50ma ?? 0;
   const accel = rsAccel ?? 0;
 
+  // P2: Near 50MA crossover with strong acceleration + volume (checked first —
+  // more specific than P1, catches below-50MA turnaround setups that P1 would swallow)
+  if (pct >= CLASSIFICATION.P2_PCT_LOW && pct <= CLASSIFICATION.P2_PCT_HIGH && accel > CLASSIFICATION.P2_RS_ACCEL && volRatio >= CLASSIFICATION.P2_VOL_RATIO) {
+    return "P2_TURNAROUND";
+  }
   // P1: Below 50MA with positive acceleration — early basing
   if (!above50ma && accel > 0) {
     return "P1_BASING";
-  }
-  // P2: Near 50MA crossover with strong acceleration + volume
-  if (pct >= CLASSIFICATION.P2_PCT_LOW && pct <= CLASSIFICATION.P2_PCT_HIGH && accel > CLASSIFICATION.P2_RS_ACCEL && volRatio >= CLASSIFICATION.P2_VOL_RATIO) {
-    return "P2_TURNAROUND";
   }
   // P3: Clearly trending above 50MA with non-negative acceleration + minimum volume.
   // Without the volume gate, stocks with 0.5x volume get P3 despite weak participation.
@@ -233,7 +238,9 @@ function classifyPhase(
   if (above50ma && (accel < CLASSIFICATION.P4_RS_ACCEL || sectorAcceleration < CLASSIFICATION.P4_SECTOR_ACCEL)) {
     return "P4_EXHAUSTING";
   }
-  return above50ma ? "P3_TRENDING" : "P1_BASING";
+  return above50ma
+    ? (accel < 0 ? "P4_EXHAUSTING" : "P3_TRENDING")
+    : "P1_BASING";
 }
 
 function rsAccelDescription(rsAccel: number | null): string {

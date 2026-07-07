@@ -101,6 +101,7 @@ export interface RegimeData {
   dxyTrend: "rising" | "falling" | "flat";
   favoredSectors: string[];
   avoidSectors: string[];
+  vixBounds?: { low: number; high: number };
 }
 
 export interface PairSignalData {

@@ -762,7 +762,7 @@ function PreMarketPulseContent({
   subSectorScores,
 }: {
   futures: FuturesSnapshot[];
-  regime: { vix: number; vixSlope: string; yield10y: number; dxy: number; dxyTrend: string; regimeConfidence: number } | null;
+  regime: { vix: number; vixSlope: "rising" | "falling" | "flat"; yield10y: number; dxy: number; dxyTrend: "rising" | "falling" | "flat"; regimeConfidence: number } | null;
   biasResult: { score: number; label: string; checklist: ChecklistItem[] } | null;
   loading: boolean;
   subSectorScores: SectorRotationScore[];

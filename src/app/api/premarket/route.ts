@@ -43,22 +43,22 @@ export async function GET(request: NextRequest) {
 
     // Compute posture (needs sector data with regime attached)
     let posture: PostureResult = { posture: "SELECTIVE", reasoning: "Sector data unavailable — defaulting to selective." };
-    if (sectorResult) {
-      const dataWithRegime = {
-        ...sectorResult,
-        regime: enhancedRegime ? {
-          regime: enhancedRegime.regime,
-          regimeConfidence: enhancedRegime.regimeConfidence,
-          vix: enhancedRegime.vix,
-          vixSlope: enhancedRegime.vixSlope,
-          yield10y: enhancedRegime.yield10y,
-          dxy: enhancedRegime.dxy,
-          dxyTrend: enhancedRegime.dxyTrend,
-          favoredSectors: enhancedRegime.favoredSectors,
-          avoidSectors: enhancedRegime.avoidSectors,
-          vixBounds: enhancedRegime.vixBounds,
-        } : undefined,
-      };
+    const dataWithRegime = sectorResult ? {
+      ...sectorResult,
+      regime: enhancedRegime ? {
+        regime: enhancedRegime.regime,
+        regimeConfidence: enhancedRegime.regimeConfidence,
+        vix: enhancedRegime.vix,
+        vixSlope: enhancedRegime.vixSlope,
+        yield10y: enhancedRegime.yield10y,
+        dxy: enhancedRegime.dxy,
+        dxyTrend: enhancedRegime.dxyTrend,
+        favoredSectors: enhancedRegime.favoredSectors,
+        avoidSectors: enhancedRegime.avoidSectors,
+        vixBounds: enhancedRegime.vixBounds,
+      } : undefined,
+    } : null;
+    if (dataWithRegime) {
       posture = computeMarketPosture(dataWithRegime, rotationData);
     }
 
@@ -90,9 +90,9 @@ export async function GET(request: NextRequest) {
     );
 
     // Add sector-level checklist items
-    if (sectorResult) {
-      const tiers = computeSectorTiers(sectorResult.sectors, rotationData);
-      const riskFlags = computeRiskFlags(sectorResult, rotationData);
+    if (dataWithRegime) {
+      const tiers = computeSectorTiers(dataWithRegime.sectors, rotationData);
+      const riskFlags = computeRiskFlags(dataWithRegime, rotationData);
 
       checklist.push({
         id: "actionable-sectors",

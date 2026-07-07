@@ -282,8 +282,8 @@ export const SCORING_SIGNALS = {
   FLOW_DIVERGENCE_ROC_THRESHOLD: -1,
   /** Breadth % > this + declining ETF = breadth divergence */
   BREADTH_DIVERGENCE_PCT: 50,
-  /** ROC20d < this + positive accel = acceleration inflection */
-  ACCEL_INFLECTION_ROC_MAX: 2,
+  /** ROC20d < this + positive accel = acceleration inflection (flat-to-negative) */
+  ACCEL_INFLECTION_ROC_MAX: 0,
   /** Minimum leading indicators for stealth accumulation */
   STEALTH_MIN_SIGNALS: 2,
   /** Trend classification breakpoints: strong up */

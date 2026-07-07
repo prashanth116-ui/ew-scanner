@@ -88,8 +88,13 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
 
     const dxy = hasDxy ? dxyCloses[dxyCloses.length - 1] : 0;
     const dxy20dAgo = hasDxy ? dxyCloses[Math.max(0, dxyCloses.length - 21)] : 0;
+    // Require at least 21 data points for a meaningful 20-day trend. With fewer
+    // entries, dxy20dAgo is clamped to index 0, compressing a multi-week move into
+    // a shorter window and potentially triggering false INFLATIONARY classification.
     const dxyTrend: "rising" | "falling" | "flat" =
-      dxy - dxy20dAgo > REGIME_CFG.DXY_TREND_THRESHOLD ? "rising" : dxy - dxy20dAgo < -REGIME_CFG.DXY_TREND_THRESHOLD ? "falling" : "flat";
+      hasDxy && dxyCloses.length >= 21
+        ? (dxy - dxy20dAgo > REGIME_CFG.DXY_TREND_THRESHOLD ? "rising" : dxy - dxy20dAgo < -REGIME_CFG.DXY_TREND_THRESHOLD ? "falling" : "flat")
+        : "flat";
 
     // Adaptive VIX thresholds: use 25th/75th percentile of 3-month range
     // Falls back to static thresholds (18/25) when data is insufficient
@@ -108,12 +113,14 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     }
 
     // Classify regime using adaptive thresholds.
-    // Order matters: INFLATIONARY checked before RISK_OFF so rising-VIX
-    // stagflation scenarios aren't swallowed by the RISK_OFF branch.
+    // INFLATIONARY checked before RISK_OFF so rising-VIX stagflation scenarios
+    // aren't swallowed by the RISK_OFF branch — but only when VIX is within
+    // adaptive bounds. During genuine market stress (VIX above adaptive high),
+    // RISK_OFF takes priority to ensure defensive sector guidance.
     // VIX-rising only triggers RISK_OFF when VIX is at/above the adaptive
     // low — rising from very low levels (e.g. 13→16) is mean-reversion, not stress.
     let regime: MacroRegime;
-    if (dxyTrend === "rising" && yield10y > REGIME_CFG.YIELD_INFLATIONARY) {
+    if (dxyTrend === "rising" && yield10y > REGIME_CFG.YIELD_INFLATIONARY && vix <= vixHigh) {
       regime = "INFLATIONARY";
     } else if (vix < vixLow && vixSlope !== "rising") {
       regime = "RISK_ON";

@@ -51,9 +51,10 @@ async function fetchQuote(symbol: string): Promise<YahooQuote | null> {
     if (!meta) return null;
 
     const price = meta.regularMarketPrice ?? meta.previousClose ?? 0;
-    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
+    const prevClose = meta.chartPreviousClose ?? meta.previousClose;
+    if (prevClose == null || prevClose === 0) return null;
     const change = price - prevClose;
-    const changePct = prevClose !== 0 ? (change / prevClose) * 100 : 0;
+    const changePct = (change / prevClose) * 100;
     const volume = meta.regularMarketVolume ?? 0;
     const timestamp = (meta.regularMarketTime ?? Math.floor(Date.now() / 1000)) * 1000;
 
@@ -105,14 +106,18 @@ export async function fetchPremarketData(): Promise<{
     ? {
         level: vixQuote.price,
         previousClose: vixQuote.previousClose,
-        change: vixQuote.price - vixQuote.previousClose,
-        changePct: vixQuote.previousClose !== 0
-          ? ((vixQuote.price - vixQuote.previousClose) / vixQuote.previousClose) * 100
-          : 0,
+        change: vixQuote.change,
+        changePct: vixQuote.changePct,
       }
     : null;
 
   const data = { futures, internals, vixData };
-  _cache = { data, ts: Date.now() };
+  // Only cache when all 4 equity futures successfully fetched — partial results
+  // would corrupt bias calculations for subsequent callers within the 2-min TTL.
+  const equitySymbols = ["ES=F", "NQ=F", "RTY=F", "YM=F"];
+  const hasAllEquity = equitySymbols.every((sym) => futures.some((f) => f.symbol === sym));
+  if (hasAllEquity) {
+    _cache = { data, ts: Date.now() };
+  }
   return data;
 }
