@@ -20,7 +20,7 @@ import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
 import { COMPOSITE } from "@/lib/sector-rotation/config";
 import type { SectorRotationResult, SectorRotationScore, EnrichedStock } from "@/lib/sector-rotation/types";
 import type { RotationTrackerResult, ActiveRotationDetail, LifecycleStage, ConvictionResult, RegimeData } from "@/lib/sector-rotation/rotation-types";
-import type { SectorBreadth, MarketBias, TradingBias } from "@/lib/premarket/types";
+import type { SectorBreadth, MarketBias, TradingBias, FuturesSnapshot, DayType } from "@/lib/premarket/types";
 
 export const maxDuration = 60;
 
@@ -88,6 +88,11 @@ interface BriefingData {
   vixSlope: string | null;
   bias: MarketBias | null;
   biasConfidence: number | null;
+  futures: { symbol: string; changePct: number }[];
+  dayType: DayType | null;
+  preferredDirection: "Long" | "Short" | "Flat" | null;
+  leadingAsset: string | null;
+  weakestAsset: string | null;
   riskFlags: RiskFlag[];
   topSectors: { sector: string; quadrant: string; acceleration: number; cmf: number; stealth: boolean }[];
   rotationAnalyses: RotationAnalysis[];
@@ -123,6 +128,25 @@ function formatDailyBriefing(data: BriefingData): string {
   lines.push(`Risk Flags: ${data.riskFlags.length} (${highFlags} high, ${medFlags} med)`);
   const macroGo = data.posture !== "CASH" && data.posture !== "DEFENSIVE" && highFlags < 3;
   lines.push(`\u2192 ${macroGo ? "GO \u2713" : "CAUTION \u2717"}`);
+
+  // FUTURES
+  if (data.futures.length > 0) {
+    lines.push("");
+    lines.push("<b>FUTURES</b>");
+    const equitySymbols = ["ES=F", "NQ=F", "YM=F", "RTY=F"];
+    const equities = data.futures.filter((f) => equitySymbols.includes(f.symbol));
+    const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+    const labels: Record<string, string> = { "ES=F": "ES", "NQ=F": "NQ", "YM=F": "YM", "RTY=F": "RTY" };
+    if (equities.length > 0) {
+      lines.push(equities.map((f) => `${labels[f.symbol] ?? f.symbol} ${fmtPct(f.changePct)}`).join(" | "));
+    }
+    const parts: string[] = [];
+    if (data.dayType) parts.push(data.dayType);
+    if (data.preferredDirection) parts.push(`Dir: ${data.preferredDirection}`);
+    if (data.leadingAsset) parts.push(`Lead: ${data.leadingAsset}`);
+    if (data.weakestAsset) parts.push(`Weak: ${data.weakestAsset}`);
+    if (parts.length > 0) lines.push(parts.join(" | "));
+  }
 
   // L2 SECTORS
   lines.push("");
@@ -362,6 +386,11 @@ export async function GET(request: NextRequest) {
       vixSlope: enhancedRegime?.vixSlope ?? null,
       bias,
       biasConfidence: tradingBias?.confidence ?? null,
+      futures: premarketResult.futures.map((f) => ({ symbol: f.symbol, changePct: f.changePct })),
+      dayType: tradingBias?.dayType ?? null,
+      preferredDirection: tradingBias?.preferredDirection ?? null,
+      leadingAsset: tradingBias?.leadingAsset ?? null,
+      weakestAsset: tradingBias?.weakestAsset ?? null,
       riskFlags,
       topSectors,
       rotationAnalyses,
