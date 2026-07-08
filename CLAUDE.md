@@ -188,6 +188,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/app/api/inflection/cron/daily/route.ts` | Inflection daily cron |
 | `src/app/api/vcp/cron/daily/route.ts` | VCP daily cron |
 | `src/app/api/institutional/cron/daily/route.ts` | Institutional daily cron |
+| `src/app/api/nightly-summary/cron/route.ts` | Consolidated nightly scan summary (2 Telegram messages) |
 
 ### Read API Routes
 | File | Purpose |
@@ -245,7 +246,31 @@ Each daily table has 5 standard functions in `persistence.ts`:
 All daily pages share: client component, date tabs, sortable table, filters, streak badges, score delta, dropped section, sector pills, CSV export, copy watchlist. Import `fmtNum` from `@/lib/daily-format` and wrap tables in `TableErrorBoundary`.
 
 ### Cron Route Pattern
-All cron routes: CRON_SECRET auth via Bearer token, batched scanning with time guard, incremental persist, purge old data, Telegram summary, full DB read for final counts.
+All cron routes: CRON_SECRET auth via Bearer token, batched scanning with time guard, incremental persist, purge old data, full DB read for final counts. Individual scanner crons do NOT send Telegram — all alerts are consolidated via the nightly summary cron.
+
+### Nightly Summary Cron
+Sends 2 Telegram messages at 11 PM ET after all scanners finish:
+- **Message 1 (Confluence):** Cross-scanner tiers (5/5 → 1/5), RS acceleration sorting, sector tags, new/dropped, copyable watchlist
+- **Message 2 (Scanner Detail):** Per-scanner breakdowns with sub-scores and classifications
+
+**Scanner label mapping (Telegram → internal):**
+| Telegram Label | Scanner | What It Does |
+|---------------|---------|-------------|
+| `Setup` | PreRun | 6-preset pattern/setup scanner (LD, ST, SNDK, EM, PB, E+) |
+| `Inflect` | Inflection | Inflection point detection (STARTER, ADD_ON, WATCH) |
+| `VCP` | VCP | Volatility contraction patterns (FOCUS, WATCH, EARLY) |
+| `Inst` | Institutional | Institutional flow quality (SL, WL, SPEC) |
+| `Rot` | PreRunner | Rotation leaders/turnarounds radar |
+| `QFE` | QFE | Quality-Factor-Entry rating (A+ → C) — badge only, not counted for confluence |
+
+**Confluence rules:**
+- 5 independent scanners counted: Setup, Inflect, VCP, Inst, Rot
+- QFE excluded (derived from PreRun data)
+- INF WATCH excluded from confluence count (badge only)
+- INF AVOID excluded entirely (negative signal)
+- Setup entries with score 0 excluded (noise)
+
+**Key file:** `src/app/api/nightly-summary/cron/route.ts`
 
 ## Open Items / Known Gaps
 - **OSCR not in universe:** Not in SP500/NDX100/SP400, so excluded from all scans. Would need manual addition to `index-tiers.ts` or a custom watchlist.
