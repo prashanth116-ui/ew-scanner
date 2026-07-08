@@ -90,7 +90,7 @@ function prerunLabel(r: PreRunDailyRecord): string {
   if (r.is_early_mover) presets.push("EM");
   if (r.is_pullback) presets.push("PB");
   if (r.is_early_plus) presets.push("E+");
-  return `PR ${r.final_score}${presets.length > 0 ? ` (${presets.join(",")})` : ""}`;
+  return `Setup ${r.final_score}${presets.length > 0 ? ` (${presets.join(",")})` : ""}`;
 }
 
 function inflectionLabel(r: InflectionDailyRecord): string {
@@ -99,7 +99,7 @@ function inflectionLabel(r: InflectionDailyRecord): string {
     ADD_ON_CONFIRMATION: "ADD_ON",
     WATCH: "WATCH",
   };
-  return `INF ${trMap[r.trade_read] ?? r.trade_read}`;
+  return `Inflect ${trMap[r.trade_read] ?? r.trade_read}`;
 }
 
 function vcpLabel(r: VCPDailyRecord): string {
@@ -123,11 +123,11 @@ function institutionalLabel(r: InstitutionalDailyRecord): string {
     ACCUMULATION: "ACCUM",
   };
   const raw = r.tier || r.classification || "?";
-  return `INST ${labelMap[raw] ?? raw}`;
+  return `Inst ${labelMap[raw] ?? raw}`;
 }
 
 function prerunnerLabel(r: PreRunnerDailyRecord): string {
-  return `RNR ${r.prerunner_score}`;
+  return `Rot ${r.prerunner_score}`;
 }
 
 function catalystLabel(r: CatalystSignalRow): string {
@@ -560,7 +560,7 @@ function formatScannerDetail(
   const infStarter = inflection.filter((r) => r.trade_read === "STARTER_POSITION_CANDIDATE");
   const infAddOn = inflection.filter((r) => r.trade_read === "ADD_ON_CONFIRMATION");
   const infWatch = inflection.filter((r) => r.trade_read === "WATCH");
-  lines.push(`<b>INF:</b> ${infStarter.length} STARTER \u00b7 ${infAddOn.length} ADD \u00b7 ${infWatch.length} WATCH`);
+  lines.push(`<b>INFLECTION:</b> ${infStarter.length} STARTER \u00b7 ${infAddOn.length} ADD \u00b7 ${infWatch.length} WATCH`);
   const infTop = infStarter.sort((a, b) => b.overall_score - a.overall_score).slice(0, DETAIL_CAP);
   for (const r of infTop) {
     const stage = STAGE_SHORT[r.stage] ?? r.stage;
@@ -573,7 +573,7 @@ function formatScannerDetail(
   const instSL = institutional.filter((r) => r.tier === "SHORTLIST");
   const instWL = institutional.filter((r) => r.tier === "WATCHLIST");
   const instSpec = institutional.filter((r) => r.tier === "SPECULATIVE");
-  lines.push(`<b>INST:</b> ${instSL.length} SL \u00b7 ${instWL.length} WL \u00b7 ${instSpec.length} SPEC`);
+  lines.push(`<b>INSTITUTIONAL:</b> ${instSL.length} SL \u00b7 ${instWL.length} WL \u00b7 ${instSpec.length} SPEC`);
   const instTop = instSL.sort((a, b) => b.composite_score - a.composite_score).slice(0, DETAIL_CAP);
   for (const r of instTop) {
     const cls = CLASS_SHORT[r.classification] ?? r.classification;
@@ -609,7 +609,7 @@ function formatScannerDetail(
   const presetParts = Object.entries(presetCounts)
     .filter(([, c]) => c > 0)
     .map(([k, c]) => `${k}:${c}`);
-  lines.push(`<b>PR:</b> ${prerun.length} total | ${presetParts.join(" ")}`);
+  lines.push(`<b>SETUP:</b> ${prerun.length} total | ${presetParts.join(" ")}`);
 
   // Multi-preset overlap: tickers qualifying for 2+ presets, sorted by score
   const multiPreset = prerun.filter((r) => {
@@ -642,7 +642,7 @@ function formatScannerDetail(
   // ── PreRunner ──
   const rnrLeaders = prerunner.filter((r) => r.type === "LEADER");
   const rnrTurnarounds = prerunner.filter((r) => r.type === "TURNAROUND");
-  lines.push(`<b>RNR:</b> ${prerunner.length} total | ${rnrLeaders.length} leaders \u00b7 ${rnrTurnarounds.length} turnarounds`);
+  lines.push(`<b>ROTATION:</b> ${prerunner.length} total | ${rnrLeaders.length} leaders \u00b7 ${rnrTurnarounds.length} turnarounds`);
   const rnrTop = [...prerunner].sort((a, b) => b.prerunner_score - a.prerunner_score).slice(0, 5);
   if (rnrTop.length > 0) {
     lines.push(rnrTop.map((r) => `${r.ticker} ${r.prerunner_score}`).join(" \u00b7 "));
@@ -702,13 +702,13 @@ export async function GET(request: NextRequest) {
 
     // Scanner counts for ribbon
     const scannerCounts: Record<string, number> = {
-      PR: prerun.length,
-      INF: inflection.length,
+      Setup: prerun.length,
+      Inflect: inflection.length,
       VCP: vcp.length,
-      INST: institutional.length,
-      RNR: prerunner.length,
+      Inst: institutional.length,
+      Rot: prerunner.length,
       QFE: qfe.length,
-      CAT: catalyst.length,
+      Cat: catalyst.length,
     };
 
     // Tier counts for JSON response
