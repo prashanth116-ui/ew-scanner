@@ -46,6 +46,8 @@ interface ConsolidatedTicker {
   hits: ScannerHit[];
   maxScore: number;
   rsAccel: number | null; // RS acceleration (positive = improving vs SPY)
+  sector: string | null;  // GICS sector for context
+  isNew: boolean;         // true if ticker is new today (not in yesterday's scans)
 }
 
 // ── Catalyst signal loader (no existing load function) ──
@@ -176,6 +178,7 @@ function consolidateResults(
   prerunner: PreRunnerDailyRecord[],
   qfe: QFEDailyRecord[],
   catalyst: CatalystSignalRow[],
+  newTickerSet: Set<string>,
 ): { tiers: Map<number, ConsolidatedTicker[]>; catalysts: ConsolidatedTicker[] } {
   // Independent scanner hits (count toward confluence)
   const map = new Map<string, ScannerHit[]>();
@@ -198,6 +201,14 @@ function consolidateResults(
   // RS acceleration lookup
   const rsAccelMap = buildRsAccelMap(qfe, prerunner, institutional);
 
+  // Sector lookup (first match wins — PreRun has widest coverage)
+  const sectorMap = new Map<string, string>();
+  for (const r of prerun) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
+  for (const r of inflection) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
+  for (const r of vcp) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
+  for (const r of institutional) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
+  for (const r of prerunner) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
+
   // Build consolidated list with tiers
   const tiers = new Map<number, ConsolidatedTicker[]>();
 
@@ -210,8 +221,9 @@ function consolidateResults(
     const independentCount = hits.filter((h) => h.scanner !== "QFE").length;
     const maxScore = Math.max(...hits.filter((h) => h.scanner !== "QFE").map((h) => h.score));
     const rsAccel = rsAccelMap.get(ticker) ?? null;
+    const sector = sectorMap.get(ticker) ?? null;
 
-    const entry: ConsolidatedTicker = { ticker, hits, maxScore, rsAccel };
+    const entry: ConsolidatedTicker = { ticker, hits, maxScore, rsAccel, sector, isNew: newTickerSet.has(ticker) };
 
     if (!tiers.has(independentCount)) tiers.set(independentCount, []);
     tiers.get(independentCount)!.push(entry);
@@ -233,6 +245,8 @@ function consolidateResults(
     hits: [{ scanner: "Catalyst", label: catalystLabel(r), score: r.score }],
     maxScore: r.score,
     rsAccel: null,
+    sector: null,
+    isNew: false,
   }));
   catalystEntries.sort((a, b) => b.maxScore - a.maxScore);
 
@@ -284,24 +298,54 @@ const TIER_CAPS: Record<number, number> = {
   5: 10, // 5/5 scanners — show all (very rare)
   4: 7,  // 4/5 — top 7
   3: 5,  // 3/5 — top 5
-  2: 3,  // 2/5 — top 3
 };
 const MAX_CATALYSTS = 3;
-const MAX_NEW = 10;
-const MAX_DROPPED = 8;
+const MAX_DROPPED = 5;
 
-function formatTickerLine(t: ConsolidatedTicker): string {
-  const labels = t.hits.map((h) => h.label).join(" \u00b7 ");
+/** Short sector labels for inline display */
+const SECTOR_SHORT: Record<string, string> = {
+  "Technology": "Tech",
+  "Information Technology": "Tech",
+  "Health Care": "HC",
+  "Healthcare": "HC",
+  "Financials": "Fin",
+  "Consumer Discretionary": "Disc",
+  "Consumer Staples": "Stpl",
+  "Communication Services": "Comm",
+  "Industrials": "Ind",
+  "Energy": "Enrg",
+  "Materials": "Mat",
+  "Real Estate": "RE",
+  "Utilities": "Util",
+};
+
+function shortSector(sector: string | null): string {
+  if (!sector) return "";
+  return SECTOR_SHORT[sector] ?? sector.slice(0, 4);
+}
+
+/**
+ * Two-line format for readability on mobile:
+ * Line 1: *HUBS [RS +2.3] Tech
+ * Line 2:   PR 22 (LD,ST) · INF STARTER · INST SL · QFE A+
+ */
+function formatTickerBlock(t: ConsolidatedTicker): string[] {
+  const newBadge = t.isNew ? "*" : "";
   const rsTag = t.rsAccel != null
     ? ` [RS ${t.rsAccel > 0 ? "+" : ""}${t.rsAccel.toFixed(1)}]`
     : "";
-  return `${t.ticker}${rsTag} \u2014 ${labels}`;
+  const sectorTag = t.sector ? ` ${shortSector(t.sector)}` : "";
+  const labels = t.hits.map((h) => h.label).join(" \u00b7 ");
+
+  return [
+    `${newBadge}<b>${t.ticker}</b>${rsTag}${sectorTag}`,
+    `  ${labels}`,
+  ];
 }
 
 function formatNightlySummary(
   tiers: Map<number, ConsolidatedTicker[]>,
   catalysts: ConsolidatedTicker[],
-  newTickers: string[],
   droppedTickers: string[],
   discoveryStocks: number,
   discoveryCrypto: number,
@@ -320,30 +364,25 @@ function formatNightlySummary(
     .reduce((sum, [, entries]) => sum + entries.length, 0);
 
   const lines: string[] = [];
-  lines.push(`<b>NIGHTLY SCAN</b> \u2014 ${date}`);
-  lines.push(`${totalTickers} tickers | ${multiCount} multi-scanner`);
 
-  // Scanner counts ribbon (compact)
+  // Header — merge scanner counts into one compact line
+  lines.push(`<b>NIGHTLY SCAN</b> \u2014 ${date}`);
   const countParts: string[] = [];
   for (const [scanner, count] of Object.entries(scannerCounts)) {
     if (count > 0) countParts.push(`${scanner}:${count}`);
   }
-  if (countParts.length > 0) {
-    lines.push(countParts.join(" | "));
-  }
+  lines.push(`${totalTickers} tickers \u00b7 ${multiCount} multi | ${countParts.join(" ")}`);
   lines.push("");
 
-  // Tiers from highest confluence down (5, 4, 3, 2)
-  for (const tierLevel of [5, 4, 3, 2]) {
+  // Tiers 5 and 4 — full two-line display (highest conviction)
+  for (const tierLevel of [5, 4]) {
     const entries = tiers.get(tierLevel);
     if (!entries || entries.length === 0) continue;
 
-    const cap = TIER_CAPS[tierLevel] ?? 5;
-    const tierLabel = tierLevel >= 4 ? `${tierLevel}/5 SCANNERS` : `${tierLevel}/5`;
-
-    lines.push(`<b>\u25c6 ${tierLabel} (${entries.length})</b>`);
+    const cap = TIER_CAPS[tierLevel] ?? 7;
+    lines.push(`<b>\u25c6 ${tierLevel}/5 SCANNERS (${entries.length})</b>`);
     for (const t of entries.slice(0, cap)) {
-      lines.push(formatTickerLine(t));
+      lines.push(...formatTickerBlock(t));
     }
     if (entries.length > cap) {
       lines.push(`... +${entries.length - cap} more`);
@@ -351,12 +390,40 @@ function formatNightlySummary(
     lines.push("");
   }
 
-  // 1-scanner tickers — just show count
-  const singleCount = tiers.get(1)?.length ?? 0;
-  if (singleCount > 0) {
-    lines.push(`<b>1 scanner only:</b> ${singleCount} tickers`);
+  // Tier 3 — two-line display with tighter cap
+  const tier3 = tiers.get(3);
+  if (tier3 && tier3.length > 0) {
+    const cap = TIER_CAPS[3] ?? 5;
+    lines.push(`<b>\u25c6 3/5 (${tier3.length})</b>`);
+    for (const t of tier3.slice(0, cap)) {
+      lines.push(...formatTickerBlock(t));
+    }
+    if (tier3.length > cap) {
+      lines.push(`... +${tier3.length - cap} more`);
+    }
     lines.push("");
   }
+
+  // Tier 2 — count only (too many to list)
+  const tier2Count = tiers.get(2)?.length ?? 0;
+  if (tier2Count > 0) {
+    // Surface new entries from tier 2
+    const tier2New = (tiers.get(2) ?? []).filter((t) => t.isNew);
+    if (tier2New.length > 0) {
+      const newNames = tier2New.slice(0, 5).map((t) => t.ticker).join(", ");
+      const extra = tier2New.length > 5 ? ` +${tier2New.length - 5}` : "";
+      lines.push(`<b>2/5:</b> ${tier2Count} tickers (${tier2New.length} new: ${newNames}${extra})`);
+    } else {
+      lines.push(`<b>2/5:</b> ${tier2Count} tickers`);
+    }
+  }
+
+  // 1-scanner count
+  const singleCount = tiers.get(1)?.length ?? 0;
+  if (singleCount > 0) {
+    lines.push(`<b>1/5:</b> ${singleCount} tickers`);
+  }
+  if (tier2Count > 0 || singleCount > 0) lines.push("");
 
   // Catalysts
   if (catalysts.length > 0) {
@@ -370,12 +437,22 @@ function formatNightlySummary(
     lines.push("");
   }
 
-  // New / Dropped
-  if (newTickers.length > 0) {
-    const display = newTickers.slice(0, MAX_NEW).join(", ");
-    const extra = newTickers.length > MAX_NEW ? ` (+${newTickers.length - MAX_NEW})` : "";
-    lines.push(`<b>NEW:</b> ${display}${extra}`);
+  // NEW — only multi-scanner new tickers (2+), sorted by tier then RS
+  const multiNew: ConsolidatedTicker[] = [];
+  for (const [level, entries] of tiers) {
+    if (level >= 2) {
+      for (const t of entries) {
+        if (t.isNew) multiNew.push(t);
+      }
+    }
   }
+  if (multiNew.length > 0) {
+    const newNames = multiNew.slice(0, 8).map((t) => t.ticker).join(", ");
+    const extra = multiNew.length > 8 ? ` (+${multiNew.length - 8})` : "";
+    lines.push(`<b>NEW (multi):</b> ${newNames}${extra}`);
+  }
+
+  // DROPPED — capped at 5
   if (droppedTickers.length > 0) {
     const display = droppedTickers.slice(0, MAX_DROPPED).join(", ");
     const extra = droppedTickers.length > MAX_DROPPED ? ` (+${droppedTickers.length - MAX_DROPPED})` : "";
@@ -384,8 +461,22 @@ function formatNightlySummary(
 
   // Discovery
   if (discoveryStocks > 0 || discoveryCrypto > 0) {
-    lines.push("");
     lines.push(`Discovery: ${discoveryStocks} stocks | ${discoveryCrypto} crypto`);
+  }
+
+  // TOP PICKS watchlist — top tickers from tier 3+ by RS accel, copyable
+  const topPicks: string[] = [];
+  for (const tierLevel of [5, 4, 3]) {
+    const entries = tiers.get(tierLevel) ?? [];
+    for (const t of entries) {
+      if (topPicks.length >= 10) break;
+      topPicks.push(t.ticker);
+    }
+    if (topPicks.length >= 10) break;
+  }
+  if (topPicks.length > 0) {
+    lines.push("");
+    lines.push(`<code>${topPicks.join(", ")}</code>`);
   }
 
   return lines.join("\n");
@@ -419,11 +510,6 @@ export async function GET(request: NextRequest) {
       loadDiscoveredTickers(),
     ]);
 
-    // Consolidate (QFE excluded from confluence count — derived from PreRun)
-    const { tiers, catalysts } = consolidateResults(
-      prerun, inflection, vcp, institutional, prerunner, qfe, catalyst,
-    );
-
     // Build today's ticker set for new/dropped
     const todayTickers = new Set<string>();
     for (const r of prerun) todayTickers.add(r.ticker);
@@ -432,8 +518,14 @@ export async function GET(request: NextRequest) {
     for (const r of institutional) todayTickers.add(r.ticker);
     for (const r of prerunner) todayTickers.add(r.ticker);
 
-    // Compute new/dropped
+    // Compute new/dropped BEFORE consolidation (so we can tag new tickers)
     const { newTickers, droppedTickers } = await computeNewDropped(today, todayTickers);
+    const newTickerSet = new Set(newTickers);
+
+    // Consolidate (QFE excluded from confluence count — derived from PreRun)
+    const { tiers, catalysts } = consolidateResults(
+      prerun, inflection, vcp, institutional, prerunner, qfe, catalyst, newTickerSet,
+    );
 
     // Discovery counts
     const discoveryStocks = discovered.filter((d) => d.asset_class === "stock").length;
@@ -464,7 +556,7 @@ export async function GET(request: NextRequest) {
     let telegramSent = false;
     if (botToken && chatId) {
       const message = formatNightlySummary(
-        tiers, catalysts, newTickers, droppedTickers,
+        tiers, catalysts, droppedTickers,
         discoveryStocks, discoveryCrypto, scannerCounts, todayTickers.size,
       );
       const tgResult = await sendTelegramMessage(botToken, chatId, message);
