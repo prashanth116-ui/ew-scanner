@@ -4,7 +4,7 @@ import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { scoreVCP } from "@/lib/prerun/vcp-scoring";
 import { SP500_MEMBERS, NDX100_MEMBERS } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
-import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
+
 import {
   upsertVCPDaily,
   purgeOldVCPDaily,
@@ -46,54 +46,6 @@ function resultToRecord(r: VCPResult, scanDate: string): VCPDailyRecord {
     target_3r: r.riskCalc.target3R,
     sma10_exit: r.riskCalc.sma10Exit,
   };
-}
-
-function formatTelegramSummary(
-  scannedCount: number,
-  records: VCPDailyRecord[],
-  newTickers: string[],
-): string {
-  const date = new Date().toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-
-  const lines: string[] = [];
-  lines.push("<b>VCP Daily Scan</b>");
-  lines.push(`${date} | ${scannedCount} scanned | ${records.length} qualifying`);
-  lines.push("");
-
-  const phaseCounts = {
-    FOCUS_LIST: records.filter((r) => r.phase === "FOCUS_LIST").length,
-    WATCHLIST_CANDIDATE: records.filter((r) => r.phase === "WATCHLIST_CANDIDATE").length,
-    EARLY_SETUP: records.filter((r) => r.phase === "EARLY_SETUP").length,
-  };
-
-  for (const [phase, count] of Object.entries(phaseCounts)) {
-    if (count > 0) {
-      lines.push(`<b>${phase.replace(/_/g, " ")}:</b> ${count}`);
-    }
-  }
-  lines.push("");
-
-  const top = [...records].sort((a, b) => b.total_score - a.total_score).slice(0, 10);
-  if (top.length > 0) {
-    lines.push("<b>Top 10:</b>");
-    for (const r of top) {
-      lines.push(`* ${r.ticker} ${r.total_score} | ${r.phase.replace(/_/g, " ")}`);
-    }
-    lines.push("");
-  }
-
-  if (newTickers.length > 0) {
-    lines.push(
-      `<b>New today:</b> ${newTickers.slice(0, 10).join(", ")}${newTickers.length > 10 ? ` (+${newTickers.length - 10} more)` : ""}`
-    );
-  }
-
-  return lines.join("\n");
 }
 
 export async function GET(request: NextRequest) {
@@ -187,20 +139,8 @@ export async function GET(request: NextRequest) {
       // Non-critical
     }
 
-    // Send Telegram summary (with time guard to avoid Vercel timeout)
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
     let telegramSent = false;
-    const elapsedMs = Date.now() - startTime;
-    const timedOut = elapsedMs > 240_000;
-    if (botToken && chatId && !timedOut) {
-      const message = formatTelegramSummary(universe.length, qualifying, newTickers);
-      const tgResult = await sendTelegramMessage(botToken, chatId, message);
-      telegramSent = tgResult.ok;
-      if (!tgResult.ok) {
-        logError("api/vcp/cron/daily/telegram", new Error(tgResult.error ?? "Telegram send failed"));
-      }
-    }
+    const timedOut = (Date.now() - startTime) > 240_000;
 
     return NextResponse.json({
       scannedCount: universe.length,

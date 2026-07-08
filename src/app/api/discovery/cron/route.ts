@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
-import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
+
 import { getAllSectorSymbols } from "@/data/sector-universe";
 import { getAllCryptoSymbols } from "@/data/crypto-sector-universe";
 import { getAllCatalystSymbols } from "@/data/catalyst-universe";
@@ -127,54 +127,6 @@ export async function GET(request: NextRequest) {
     stocks: stockCount,
     errors,
   };
-
-  // Telegram notification (if any new tickers found)
-  if (allDiscovered.length > 0) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
-    if (botToken && chatId) {
-      const lines: string[] = [];
-      lines.push("<b>Ticker Discovery</b>");
-      lines.push(
-        `${allDiscovered.length} new | ${cryptoCount} crypto, ${stockCount} stocks | ${purged} purged`
-      );
-      lines.push("");
-
-      if (cryptoCount > 0) {
-        lines.push("<b>Crypto:</b>");
-        for (const t of allDiscovered.filter((d) => d.asset_class === "crypto").slice(0, 10)) {
-          const pct = t.price_change_pct != null ? ` ${t.price_change_pct > 0 ? "+" : ""}${t.price_change_pct.toFixed(1)}%` : "";
-          lines.push(`${t.symbol}${pct} (${t.source.replace("coingecko_", "CG ")})`);
-        }
-        lines.push("");
-      }
-
-      if (stockCount > 0) {
-        lines.push("<b>Stocks:</b>");
-        for (const t of allDiscovered.filter((d) => d.asset_class === "stock").slice(0, 10)) {
-          const pct = t.price_change_pct != null ? ` +${t.price_change_pct.toFixed(1)}%` : "";
-          lines.push(`${t.symbol}${pct}`);
-        }
-      }
-
-      if (errors.length > 0) {
-        lines.push("");
-        lines.push(`\u26a0\ufe0f ${errors.length} error(s): ${errors.join(", ")}`);
-      }
-
-      const tgResult = await sendTelegramMessage(
-        botToken,
-        chatId,
-        lines.join("\n")
-      );
-      if (!tgResult.ok) {
-        logError(
-          "discovery/telegram",
-          new Error(tgResult.error ?? "Telegram send failed")
-        );
-      }
-    }
-  }
 
   return NextResponse.json(result);
 }

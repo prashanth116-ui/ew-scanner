@@ -6,7 +6,7 @@ import { computeQFE, computeMarketEnvironment } from "@/lib/prerun/qfe-scoring";
 import type { MarketEnvironment } from "@/lib/prerun/qfe-scoring";
 import { SP500_MEMBERS, NDX100_MEMBERS, SP400_MEMBERS } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
-import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
+
 import { createAdminClient } from "@/lib/supabase/server";
 import {
   upsertPreRunDaily,
@@ -202,107 +202,6 @@ async function loadSectorQuadrants(): Promise<Record<string, string>> {
     // Non-critical
   }
   return quadrants;
-}
-
-function formatTelegramSummary(
-  scannedCount: number,
-  records: PreRunDailyRecord[],
-  newTickers: string[],
-  partial = false,
-  qfeRecords?: QFEDailyRecord[],
-  marketRegime?: string,
-): string {
-  const date = new Date().toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-
-  const lines: string[] = [];
-  lines.push("<b>PreRun Daily Scan</b>");
-  lines.push(`${date} | ${scannedCount} scanned | ${records.length} qualifying${partial ? " (partial)" : ""}`);
-  lines.push("");
-
-  const presetCounts = {
-    SNDK: records.filter((r) => r.is_sndk).length,
-    "Early Mover": records.filter((r) => r.is_early_mover).length,
-    Pullback: records.filter((r) => r.is_pullback).length,
-    Leading: records.filter((r) => r.is_leading).length,
-    Stealth: records.filter((r) => r.is_stealth).length,
-    "Early+": records.filter((r) => r.is_early_plus).length,
-  };
-
-  for (const [name, count] of Object.entries(presetCounts)) {
-    if (count > 0) {
-      lines.push(`<b>${name}:</b> ${count}`);
-    }
-  }
-  lines.push("");
-
-  // Top tickers by score
-  const top = [...records].sort((a, b) => b.final_score - a.final_score).slice(0, 10);
-  if (top.length > 0) {
-    lines.push("<b>Top 10:</b>");
-    for (const r of top) {
-      const presets: string[] = [];
-      if (r.is_sndk) presets.push("SNDK");
-      if (r.is_early_mover) presets.push("EM");
-      if (r.is_pullback) presets.push("PB");
-      if (r.is_leading) presets.push("LD");
-      if (r.is_stealth) presets.push("ST");
-      if (r.is_early_plus) presets.push("E+");
-      lines.push(`* ${r.ticker} ${r.final_score} | ${presets.join(",")}`);
-    }
-    lines.push("");
-  }
-
-  // Multi-preset overlap: tickers in 3+ presets
-  const overlap = records
-    .map((r) => {
-      const presets: string[] = [];
-      if (r.is_sndk) presets.push("SNDK");
-      if (r.is_early_mover) presets.push("EM");
-      if (r.is_pullback) presets.push("PB");
-      if (r.is_leading) presets.push("LD");
-      if (r.is_stealth) presets.push("ST");
-      if (r.is_early_plus) presets.push("E+");
-      return { ticker: r.ticker, score: r.final_score, presets, count: presets.length };
-    })
-    .filter((r) => r.count >= 3)
-    .sort((a, b) => b.count - a.count || b.score - a.score);
-
-  if (overlap.length > 0) {
-    lines.push(`<b>Multi-Preset Overlap (${overlap.length}):</b>`);
-    for (const o of overlap) {
-      lines.push(`* ${o.ticker} ${o.score} | ${o.presets.join(",")}`);
-    }
-    lines.push("");
-  }
-
-  if (newTickers.length > 0) {
-    lines.push(
-      `<b>New today:</b> ${newTickers.slice(0, 10).join(", ")}${newTickers.length > 10 ? ` (+${newTickers.length - 10} more)` : ""}`
-    );
-    lines.push("");
-  }
-
-  // QFE section
-  if (qfeRecords && qfeRecords.length > 0) {
-    const aPlus = qfeRecords.filter((r) => r.rating === "A+").length;
-    const aRating = qfeRecords.filter((r) => r.rating === "A").length;
-    const buyNow = qfeRecords.filter((r) => r.action === "Buy Now").length;
-
-    lines.push(`<b>QFE Engine:</b> ${qfeRecords.length} rated | ${aPlus + aRating} A+/A | ${buyNow} Buy Now`);
-    if (marketRegime) lines.push(`Market: ${marketRegime}`);
-
-    const topQFE = [...qfeRecords].sort((a, b) => b.qfe_score - a.qfe_score).slice(0, 5);
-    for (const r of topQFE) {
-      lines.push(`* ${r.ticker} QFE:${r.qfe_score} ${r.rating} ${r.action}`);
-    }
-  }
-
-  return lines.join("\n");
 }
 
 export async function GET(request: NextRequest) {
@@ -503,18 +402,7 @@ export async function GET(request: NextRequest) {
       // Non-critical
     }
 
-    // Send Telegram summary using full DB data
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
     let telegramSent = false;
-    if (botToken && chatId) {
-      const message = formatTelegramSummary(universe.length, dbRecords, newTickers, timedOut, dbQFERecords, marketEnv.regime);
-      const tgResult = await sendTelegramMessage(botToken, chatId, message);
-      telegramSent = tgResult.ok;
-      if (!tgResult.ok) {
-        logError("api/prerun/cron/preset/telegram", new Error(tgResult.error ?? "Telegram send failed"));
-      }
-    }
 
     return NextResponse.json({
       scannedCount: universe.length,
