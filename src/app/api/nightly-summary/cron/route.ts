@@ -112,14 +112,18 @@ function vcpLabel(r: VCPDailyRecord): string {
 }
 
 function institutionalLabel(r: InstitutionalDailyRecord): string {
-  const tierMap: Record<string, string> = {
+  // Unified map covering both tier and classification values
+  const labelMap: Record<string, string> = {
     SHORTLIST: "SL",
     WATCHLIST: "WL",
     SPECULATIVE: "SPEC",
     TOO_EXTENDED: "EXT",
-    MOMENTUM_CHASER: "MCHSR",
+    MOMENTUM_CHASER: "MCH",
+    NEUTRAL_HOLD: "HOLD",
+    ACCUMULATION: "ACCUM",
   };
-  return `INST ${r.tier ? tierMap[r.tier] ?? r.tier : r.classification}`;
+  const raw = r.tier || r.classification || "?";
+  return `INST ${labelMap[raw] ?? raw}`;
 }
 
 function prerunnerLabel(r: PreRunnerDailyRecord): string {
@@ -190,9 +194,13 @@ function consolidateResults(
     map.get(ticker)!.push(hit);
   }
 
-  for (const r of prerun) add(r.ticker, { scanner: "PreRun", label: prerunLabel(r), score: r.final_score });
-  // INF WATCH is low-conviction — show as badge but don't count for confluence
+  // PR 0 is noise — preset qualified but no meaningful score
+  for (const r of prerun) {
+    if (r.final_score > 0) add(r.ticker, { scanner: "PreRun", label: prerunLabel(r), score: r.final_score });
+  }
+  // INF AVOID = negative signal, skip entirely. INF WATCH = low-conviction badge only.
   for (const r of inflection) {
+    if (r.trade_read === "AVOID") continue; // negative signal — exclude
     const isWatch = r.trade_read === "WATCH";
     add(r.ticker, { scanner: isWatch ? "INF_WATCH" : "Inflection", label: inflectionLabel(r), score: r.overall_score });
   }
