@@ -551,6 +551,7 @@ function formatScannerDetail(
   vcp: VCPDailyRecord[],
   institutional: InstitutionalDailyRecord[],
   prerunner: PreRunnerDailyRecord[],
+  qfe: QFEDailyRecord[],
 ): string {
   const lines: string[] = [];
   lines.push("<b>SCANNER DETAIL</b>");
@@ -595,6 +596,18 @@ function formatScannerDetail(
     lines.push(`${r.ticker} ${r.total_score} | ${phaseMap[r.phase] ?? r.phase}${entry}${stop}`);
   }
   if (vcp.length > DETAIL_CAP) lines.push(`... +${vcp.length - DETAIL_CAP} more`);
+  lines.push("");
+
+  // ── QFE ──
+  const qfeAPlus = qfe.filter((r) => r.rating === "A+");
+  const qfeA = qfe.filter((r) => r.rating === "A");
+  const qfeBPlus = qfe.filter((r) => r.rating === "B+");
+  const topRated = [...qfeAPlus, ...qfeA, ...qfeBPlus].sort((a, b) => b.qfe_score - a.qfe_score);
+  lines.push(`<b>QFE:</b> ${qfe.length} rated | ${qfeAPlus.length} A+ \u00b7 ${qfeA.length} A \u00b7 ${qfeBPlus.length} B+`);
+  for (const r of topRated.slice(0, DETAIL_CAP)) {
+    lines.push(`${r.ticker} ${r.qfe_score} | ${r.rating} | ${r.action}`);
+  }
+  if (topRated.length > DETAIL_CAP) lines.push(`... +${topRated.length - DETAIL_CAP} more`);
   lines.push("");
 
   // ── PreRun (preset counts + multi-preset overlap) ──
@@ -737,7 +750,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Message 2: Per-scanner detail with sub-scores and classifications
-      const detailMsg = formatScannerDetail(prerun, inflection, vcp, institutional, prerunner);
+      const detailMsg = formatScannerDetail(prerun, inflection, vcp, institutional, prerunner, qfe);
       const detailResult = await sendTelegramMessage(botToken, chatId, detailMsg);
       detailSent = detailResult.ok;
       if (!detailResult.ok) {
