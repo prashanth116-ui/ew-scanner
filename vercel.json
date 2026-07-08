@@ -29,6 +29,10 @@
       "schedule": "6 2 * * 2-6"
     },
     {
+      "path": "/api/prerun/cron/preset-4h",
+      "schedule": "12 2 * * 2-6"
+    },
+    {
       "path": "/api/vcp/cron/daily",
       "schedule": "15 2 * * 2-6"
     },

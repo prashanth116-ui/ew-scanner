@@ -580,17 +580,19 @@ function calcHigherLowsCount(lows: number[]): number {
 }
 
 /** Compute EMA reclaim data from closes. */
-function calcEmaReclaimData(closes: number[]): {
+function calcEmaReclaimData(closes: number[], barMultiplier = 1): {
   aboveEma21: boolean;
   aboveEma50: boolean;
   crossoverWithin20d: boolean;
 } {
-  if (closes.length < 50) {
+  const ema21Period = 21 * barMultiplier;
+  const ema50Period = 50 * barMultiplier;
+  if (closes.length < ema50Period) {
     return { aboveEma21: false, aboveEma50: false, crossoverWithin20d: false };
   }
 
-  const ema21 = calcEMA(closes, 21);
-  const ema50 = calcEMA(closes, 50);
+  const ema21 = calcEMA(closes, ema21Period);
+  const ema50 = calcEMA(closes, ema50Period);
   const lastIdx = closes.length - 1;
   const currentPrice = closes[lastIdx];
 
@@ -600,7 +602,7 @@ function calcEmaReclaimData(closes: number[]): {
   // Check if price crossed above both EMAs within last 20 trading days
   let crossoverWithin20d = false;
   if (aboveEma21 && aboveEma50) {
-    const lookback = Math.min(20, lastIdx);
+    const lookback = Math.min(20 * barMultiplier, lastIdx);
     for (let i = lastIdx - lookback; i <= lastIdx; i++) {
       // Check if price was below either EMA at this point
       if (closes[i] <= ema21[i] || closes[i] <= ema50[i]) {
@@ -751,52 +753,54 @@ export function calcDisplacementAndFVG(
 }
 
 /** Compute range coil data from chart. */
-function calcRangeCoilData(closes: number[], highs: number[], lows: number[]): {
+function calcRangeCoilData(closes: number[], highs: number[], lows: number[], barMultiplier = 1): {
   closesNearTop: boolean;
   atrContracting: boolean;
 } {
-  if (closes.length < 20) {
+  const minBars = 20 * barMultiplier;
+  if (closes.length < minBars) {
     return { closesNearTop: false, atrContracting: false };
   }
 
   // 13-week range (65 trading days, or use full available data up to that)
-  const rangeLen = Math.min(65, closes.length);
+  const rangeLen = Math.min(65 * barMultiplier, closes.length);
   const rangeHighs = highs.slice(-rangeLen);
   const rangeLows = lows.slice(-rangeLen);
   const rangeHigh = Math.max(...rangeHighs);
   const rangeLow = Math.min(...rangeLows.filter((l) => l > 0));
   const rangeSize = rangeHigh - rangeLow;
 
-  // Last 5 closes in upper 25% of range
+  // Last 5 bars in upper 25% of range (scaled)
   let closesNearTop = false;
   if (rangeSize > 0) {
     const threshold = rangeLow + rangeSize * 0.75; // upper 25%
-    const last5 = closes.slice(-5);
+    const last5 = closes.slice(-(5 * barMultiplier));
     closesNearTop = last5.every((c) => c >= threshold);
   }
 
   // ATR contraction: reuse calcVolatilitySqueeze
-  const { squeezed } = calcVolatilitySqueeze(highs, lows, closes);
+  const { squeezed } = calcVolatilitySqueeze(highs, lows, closes, barMultiplier);
 
   return { closesNearTop, atrContracting: squeezed === true };
 }
 
 /** Compute failed breakdown recovery score from chart data. */
-function calcFailedBreakdownRecovery(closes: number[], lows: number[], highs: number[]): number {
-  if (closes.length < 50) return 0;
+function calcFailedBreakdownRecovery(closes: number[], lows: number[], highs: number[], barMultiplier = 1): number {
+  const sma50Period = 50 * barMultiplier;
+  if (closes.length < sma50Period) return 0;
 
   const sma50Arr: number[] = [];
   for (let i = 0; i < closes.length; i++) {
-    if (i < 49) {
+    if (i < sma50Period - 1) {
       sma50Arr.push(0);
     } else {
-      const slice = closes.slice(i - 49, i + 1);
-      sma50Arr.push(slice.reduce((a, b) => a + b, 0) / 50);
+      const slice = closes.slice(i - sma50Period + 1, i + 1);
+      sma50Arr.push(slice.reduce((a, b) => a + b, 0) / sma50Period);
     }
   }
 
   const lastIdx = closes.length - 1;
-  const lookback = Math.min(20, lastIdx - 49);
+  const lookback = Math.min(20 * barMultiplier, lastIdx - (sma50Period - 1));
   const currentPrice = closes[lastIdx];
   const currentSma50 = sma50Arr[lastIdx];
 
@@ -805,7 +809,7 @@ function calcFailedBreakdownRecovery(closes: number[], lows: number[], highs: nu
 
   // Scan last 20 days for breakdown events
   for (let i = lastIdx - lookback; i <= lastIdx - 1; i++) {
-    if (i < 49) continue;
+    if (i < sma50Period - 1) continue;
     const sma50 = sma50Arr[i];
 
     // Check for close below SMA50 (full breakdown)
@@ -853,9 +857,11 @@ function calcFailedBreakdownRecovery(closes: number[], lows: number[], highs: nu
 function calcVolumeAccumulation(
   closes: number[],
   opens: number[],
-  volumes: number[]
+  volumes: number[],
+  barMultiplier = 1,
 ): { avgUp: number; avgDown: number } {
-  const n = Math.min(closes.length, 20);
+  const window = 20 * barMultiplier;
+  const n = Math.min(closes.length, window);
   const recent = closes.slice(-n);
   const recentOpens = opens.slice(-n);
   const recentVols = volumes.slice(-n);
@@ -892,9 +898,10 @@ function calcOBV(closes: number[], volumes: number[]): number[] {
 
 /** OBV-Price Divergence: OBV at/near its 20-bar high while price is NOT near its 20-bar high.
  *  This detects stealth accumulation — institutions buying while price stays flat. */
-function calcOBVPriceDivergence(closes: number[], volumes: number[]): { divergent: boolean; obvPctFromHigh: number; pricePctFromHigh: number } {
+function calcOBVPriceDivergence(closes: number[], volumes: number[], barMultiplier = 1): { divergent: boolean; obvPctFromHigh: number; pricePctFromHigh: number } {
   const obv = calcOBV(closes, volumes);
-  const n = Math.min(20, obv.length);
+  const window = 20 * barMultiplier;
+  const n = Math.min(window, obv.length);
   const recentOBV = obv.slice(-n);
   const recentCloses = closes.slice(-n);
 
@@ -913,12 +920,12 @@ function calcOBVPriceDivergence(closes: number[], volumes: number[]): { divergen
 }
 
 /** Volume-Price Divergence: price makes lower low but volume on down-moves decreases (seller exhaustion). */
-function calcVPDivergence(closes: number[], opens: number[], volumes: number[], lows: number[]): boolean {
+function calcVPDivergence(closes: number[], opens: number[], volumes: number[], lows: number[], barMultiplier = 1): boolean {
   const swings = findSwingLows(lows);
   if (swings.length < 2) return false;
   const [prev, curr] = swings.slice(-2);
   if (curr.value >= prev.value) return false; // No lower low
-  if (curr.index < closes.length - 25) return false; // Too old — second swing low must be within last 5 weeks
+  if (curr.index < closes.length - 25 * barMultiplier) return false; // Too old — second swing low must be within last 5 weeks
   // Avg down-day volume around each swing low (±2 bars)
   const avgDownVol = (center: number) => {
     let sum = 0, count = 0;
@@ -959,9 +966,11 @@ export function calcRSI(closes: number[], period = 14): number | null {
 /** Calculate avg down-day body size as % of price for two windows: last 10 bars and bars 11-20.
  *  Returns { recent, prev } where lower recent vs prev = sellers weakening. */
 function calcDownDayBodies(
-  closes: number[], opens: number[], price: number,
+  closes: number[], opens: number[], price: number, barMultiplier = 1,
 ): { recent: number | null; prev: number | null } {
-  if (closes.length < 20 || price <= 0) return { recent: null, prev: null };
+  const w10 = 10 * barMultiplier;
+  const w20 = 20 * barMultiplier;
+  if (closes.length < w20 || price <= 0) return { recent: null, prev: null };
   const calcWindow = (start: number, end: number): number | null => {
     let sum = 0;
     let count = 0;
@@ -975,16 +984,16 @@ function calcDownDayBodies(
   };
   const n = closes.length;
   return {
-    recent: calcWindow(n - 10, n),
-    prev: calcWindow(n - 20, n - 10),
+    recent: calcWindow(n - w10, n),
+    prev: calcWindow(n - w20, n - w10),
   };
 }
 
 /** Count accumulation days in last 20 bars: up days with above-avg volume.
  *  Mirror of calcDistributionDays but for bullish accumulation. */
-function calcAccumulationDays(closes: number[], volumes: number[]): number {
-  if (closes.length < 21) return 0;
-  const n = 20;
+function calcAccumulationDays(closes: number[], volumes: number[], barMultiplier = 1): number {
+  const n = 20 * barMultiplier;
+  if (closes.length < n + 1) return 0;
   const recentCloses = closes.slice(-n - 1);
   const recentVols = volumes.slice(-n);
   const avgVol = recentVols.reduce((a, b) => a + b, 0) / n;
@@ -1000,9 +1009,9 @@ function calcAccumulationDays(closes: number[], volumes: number[]): number {
 /** Count distribution days in last 20 bars.
  *  A distribution day = price closes down AND volume > 20-bar average volume.
  *  Zero distribution days = stealth strength; high count = institutional selling. */
-function calcDistributionDays(closes: number[], volumes: number[]): number {
-  if (closes.length < 21) return 0;
-  const n = 20;
+function calcDistributionDays(closes: number[], volumes: number[], barMultiplier = 1): number {
+  const n = 20 * barMultiplier;
+  if (closes.length < n + 1) return 0;
   const recentCloses = closes.slice(-n - 1); // need n+1 for close-to-close comparison
   const recentVols = volumes.slice(-n);
   const avgVol = recentVols.reduce((a, b) => a + b, 0) / n;
@@ -1324,17 +1333,20 @@ export function calcEmaConvergence(
 export function calcVolatilitySqueeze(
   highs: number[],
   lows: number[],
-  closes: number[]
+  closes: number[],
+  barMultiplier = 1,
 ): { squeezed: boolean | null; atrRatio: number | null } {
-  if (closes.length < 21) return { squeezed: null, atrRatio: null };
+  const w20 = 20 * barMultiplier;
+  const w5 = 5 * barMultiplier;
+  if (closes.length < w20 + 1) return { squeezed: null, atrRatio: null };
 
   const atr = calcATRArray(highs, lows, closes, 1); // individual TRs
-  if (atr.length < 20) return { squeezed: null, atrRatio: null };
+  if (atr.length < w20) return { squeezed: null, atrRatio: null };
 
-  const last5TR = atr.slice(-5);
-  const last20TR = atr.slice(-20);
-  const atr5 = last5TR.reduce((a, b) => a + b, 0) / 5;
-  const atr20 = last20TR.reduce((a, b) => a + b, 0) / 20;
+  const last5TR = atr.slice(-w5);
+  const last20TR = atr.slice(-w20);
+  const atr5 = last5TR.reduce((a, b) => a + b, 0) / w5;
+  const atr20 = last20TR.reduce((a, b) => a + b, 0) / w20;
 
   if (atr20 === 0) return { squeezed: null, atrRatio: null };
   const ratio = atr5 / atr20;
@@ -1345,10 +1357,12 @@ export function calcVolatilitySqueeze(
 
 /** Count of last 20 sessions where close > open AND volume > 50d avg volume.
  *  Measures persistent money flow (institutional buying). Returns 0-20. */
-export function calcMoneyFlowPersistence(closes: number[], opens: number[], volumes: number[]): number | null {
-  if (closes.length < 50 || volumes.length < 50) return null;
-  const n = Math.min(20, closes.length);
-  const avg50Vol = volumes.slice(-50).reduce((a, b) => a + b, 0) / 50;
+export function calcMoneyFlowPersistence(closes: number[], opens: number[], volumes: number[], barMultiplier = 1): number | null {
+  const w50 = 50 * barMultiplier;
+  const w20 = 20 * barMultiplier;
+  if (closes.length < w50 || volumes.length < w50) return null;
+  const n = Math.min(w20, closes.length);
+  const avg50Vol = volumes.slice(-w50).reduce((a, b) => a + b, 0) / w50;
   if (avg50Vol === 0) return null;
   let count = 0;
   for (let i = closes.length - n; i < closes.length; i++) {
@@ -1359,12 +1373,14 @@ export function calcMoneyFlowPersistence(closes: number[], opens: number[], volu
 
 /** Linear regression slope of relative volume (daily_vol / 50d_avg_vol) over last 5 bars.
  *  Positive slope = volume building (pre-breakout accumulation). */
-export function calcRvolTrajectory(volumes: number[]): number | null {
-  if (volumes.length < 55) return null;
-  const avg50 = volumes.slice(-55, -5).reduce((a, b) => a + b, 0) / 50;
+export function calcRvolTrajectory(volumes: number[], barMultiplier = 1): number | null {
+  const w50 = 50 * barMultiplier;
+  const w5 = 5 * barMultiplier;
+  if (volumes.length < w50 + w5) return null;
+  const avg50 = volumes.slice(-w50 - w5, -w5).reduce((a, b) => a + b, 0) / w50;
   if (avg50 === 0) return null;
   const rvolSeries: number[] = [];
-  for (let i = volumes.length - 5; i < volumes.length; i++) {
+  for (let i = volumes.length - w5; i < volumes.length; i++) {
     rvolSeries.push(volumes[i] / avg50);
   }
   // Simple linear regression slope over 5 points
@@ -1439,11 +1455,14 @@ export function aggregate4hOHLC(
 
 /** Main function: fetch all data for a single ticker.
  *  When targetDate is set (YYYY-MM-DD), chart arrays are truncated to that date
- *  and price-derived fields are recomputed from historical data. */
+ *  and price-derived fields are recomputed from historical data.
+ *  When scanner4h is true, uses 4h-aggregated chart as primary data with
+ *  barMultiplier=6 for all technical indicators. */
 export async function fetchPreRunData(
   ticker: string,
   emaTimeframe: EmaTimeframe = "15m",
   targetDate?: string,
+  scanner4h?: boolean,
 ): Promise<PreRunStockData | null> {
   // Fetch Yahoo summary + 3mo chart + 5y chart + Finnhub data in parallel
   // Use allSettled so a timeout on any source doesn't crash the entire ticker
@@ -1476,8 +1495,36 @@ export async function fetchPreRunData(
   const chart5yRaw = settled[2].status === "fulfilled" ? settled[2].value : null;
 
   // Backdate: truncate chart arrays to target date
-  const chart3mo = (targetDate && chart3moRaw) ? truncateChartToDate(chart3moRaw, targetDate) : chart3moRaw;
+  let chart3mo = (targetDate && chart3moRaw) ? truncateChartToDate(chart3moRaw, targetDate) : chart3moRaw;
   const chart5y = (targetDate && chart5yRaw) ? truncateChartToDate(chart5yRaw, targetDate) : chart5yRaw;
+
+  // 4h scanner: fetch 2y:1h chart and aggregate to 4h bars as primary chart
+  const bm = scanner4h ? 6 : 1; // barMultiplier for all indicator functions
+  if (scanner4h) {
+    try {
+      const chart1h = await fetchYahooChart(ticker, "2y", "1h");
+      if (chart1h && chart1h.closes.length >= 100) {
+        const agg = aggregate4hOHLC(chart1h.opens, chart1h.highs, chart1h.lows, chart1h.closes, 4);
+        const aggVol = aggregateVolumes(chart1h.volumes, 4);
+        // Use aggregated 4h data as primary chart (same timestamps approximation)
+        const aggTimestamps: number[] = [];
+        for (let i = 3; i < chart1h.timestamps.length; i += 4) {
+          aggTimestamps.push(chart1h.timestamps[i]);
+        }
+        chart3mo = {
+          opens: agg.opens,
+          highs: agg.highs,
+          lows: agg.lows,
+          closes: agg.closes,
+          volumes: aggVol,
+          timestamps: aggTimestamps.slice(0, agg.closes.length),
+        };
+      }
+    } catch {
+      // Fall back to daily chart3mo if 4h fetch fails
+    }
+  }
+
   const finnhubEarnings = settled[3].status === "fulfilled" ? settled[3].value : null;
   const insiderResult = settled[4].status === "fulfilled" ? settled[4].value : { buys90d: 0, buys45d: 0 };
   const insiderBuys = insiderResult.buys90d;
@@ -1538,11 +1585,11 @@ export async function fetchPreRunData(
     if (h > -Infinity) high52w = h;
     if (l < Infinity) low52w = l;
   }
-  if (targetDate && chart3mo && chart3mo.closes.length >= 50) {
-    vcpSma50 = calcSMA(chart3mo.closes, 50);
-    vcpAvgVolume50d = chart3mo.volumes.slice(-50).reduce((a, b) => a + b, 0) / 50;
-    vcpAvgVolume10d = chart3mo.volumes.length >= 10
-      ? chart3mo.volumes.slice(-10).reduce((a, b) => a + b, 0) / 10
+  if ((targetDate || scanner4h) && chart3mo && chart3mo.closes.length >= 50 * bm) {
+    vcpSma50 = calcSMA(chart3mo.closes, 50 * bm);
+    vcpAvgVolume50d = chart3mo.volumes.slice(-(50 * bm)).reduce((a, b) => a + b, 0) / (50 * bm);
+    vcpAvgVolume10d = chart3mo.volumes.length >= 10 * bm
+      ? chart3mo.volumes.slice(-(10 * bm)).reduce((a, b) => a + b, 0) / (10 * bm)
       : vcpAvgVolume10d;
   }
 
@@ -1620,16 +1667,16 @@ export async function fetchPreRunData(
     daysToEarnings = Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
   }
 
-  // Calculate from 3mo chart data
-  const sma20 = chart3mo ? calcSMA(chart3mo.closes, 20) : null;
+  // Calculate from 3mo chart data (or 4h chart when scanner4h)
+  const sma20 = chart3mo ? calcSMA(chart3mo.closes, 20 * bm) : null;
   const volAccum = chart3mo
-    ? calcVolumeAccumulation(chart3mo.closes, chart3mo.opens, chart3mo.volumes)
+    ? calcVolumeAccumulation(chart3mo.closes, chart3mo.opens, chart3mo.volumes, bm)
     : { avgUp: 0, avgDown: 0 };
 
   // Float turnover: cumulative 20d volume / float
   let floatTurnover20d: number | null = null;
   if (chart3mo && floatShares && floatShares > 0) {
-    const recentVols = chart3mo.volumes.slice(-20);
+    const recentVols = chart3mo.volumes.slice(-(20 * bm));
     const cumVol = recentVols.reduce((a, b) => a + b, 0);
     floatTurnover20d = cumVol / floatShares;
   }
@@ -1648,7 +1695,7 @@ export async function fetchPreRunData(
 
   // Relative strength: stock 20d return minus sector ETF 20d return
   let relativeStrength20d: number | null = null;
-  const stockReturn20d = chart3mo ? calc20dReturn(chart3mo.closes) : null;
+  const stockReturn20d = chart3mo ? calcNdReturn(chart3mo.closes, 20 * bm) : null;
   if (stockReturn20d !== null && sectorReturn20d !== null) {
     relativeStrength20d = stockReturn20d - sectorReturn20d;
   }
@@ -1700,7 +1747,13 @@ export async function fetchPreRunData(
       let emaHighs: number[] | null = null;
       let emaLows: number[] | null = null;
 
-      if (tfConfig.reuse === "chart3mo" && chart3mo) {
+      if (scanner4h && chart3mo) {
+        // 4h scanner: chart3mo is already 4h-aggregated data — reuse for M2
+        emaCloses = chart3mo.closes;
+        emaOpens = chart3mo.opens;
+        emaHighs = chart3mo.highs;
+        emaLows = chart3mo.lows;
+      } else if (tfConfig.reuse === "chart3mo" && chart3mo) {
         emaCloses = chart3mo.closes;
         emaOpens = chart3mo.opens;
         emaHighs = chart3mo.highs;
@@ -1751,23 +1804,23 @@ export async function fetchPreRunData(
     }
   }
 
-  if (chart3mo && chart3mo.closes.length >= 20) {
+  if (chart3mo && chart3mo.closes.length >= 20 * bm) {
     // L: Higher Lows
     higherLowsCount = calcHigherLowsCount(chart3mo.lows);
 
     // M: EMA Reclaim
-    const emaData = calcEmaReclaimData(chart3mo.closes);
+    const emaData = calcEmaReclaimData(chart3mo.closes, bm);
     aboveEma21 = emaData.aboveEma21;
     aboveEma50 = emaData.aboveEma50;
     emaCrossoverWithin20d = emaData.crossoverWithin20d;
 
     // N: Range Coil
-    const coilData = calcRangeCoilData(chart3mo.closes, chart3mo.highs, chart3mo.lows);
+    const coilData = calcRangeCoilData(chart3mo.closes, chart3mo.highs, chart3mo.lows, bm);
     closesNearRangeTop = coilData.closesNearTop;
     atrContracting = coilData.atrContracting;
 
     // O: Failed Breakdown Recovery
-    failedBreakdownRecovery = calcFailedBreakdownRecovery(chart3mo.closes, chart3mo.lows, chart3mo.highs);
+    failedBreakdownRecovery = calcFailedBreakdownRecovery(chart3mo.closes, chart3mo.lows, chart3mo.highs, bm);
   }
 
   // ── VCP fields ──
@@ -1799,14 +1852,14 @@ export async function fetchPreRunData(
     vcpDistFromSma200Pct = ((currentPrice - vcpSma200) / vcpSma200) * 100;
   }
 
-  if (chart3mo && chart3mo.closes.length >= 20 && currentPrice !== null) {
+  if (chart3mo && chart3mo.closes.length >= 20 * bm && currentPrice !== null) {
     const { closes, highs, lows, volumes } = chart3mo;
 
     // SMA(10)
-    vcpSma10 = calcSMA(closes, 10);
+    vcpSma10 = calcSMA(closes, 10 * bm);
 
     // ATR(14) %
-    const atrArr = calcATRArray(highs, lows, closes, 14);
+    const atrArr = calcATRArray(highs, lows, closes, 14 * bm);
     const lastAtr = atrArr.length > 0 ? atrArr[atrArr.length - 1] : 0;
     if (currentPrice > 0 && lastAtr > 0) {
       vcpAtrPct = (lastAtr / currentPrice) * 100;
@@ -1819,26 +1872,27 @@ export async function fetchPreRunData(
 
     // Range N-day (high-low range as % of price)
     const rangeCalc = (n: number): number | null => {
-      if (highs.length < n) return null;
-      const hi = Math.max(...highs.slice(-n));
-      const lo = Math.min(...lows.slice(-n).filter((l) => l > 0));
+      const bars = n * bm;
+      if (highs.length < bars) return null;
+      const hi = Math.max(...highs.slice(-bars));
+      const lo = Math.min(...lows.slice(-bars).filter((l) => l > 0));
       return currentPrice > 0 ? ((hi - lo) / currentPrice) * 100 : null;
     };
     vcpRange5d = rangeCalc(5);
     vcpRange10d = rangeCalc(10);
     vcpRange20d = rangeCalc(20);
 
-    // Tight closes: spread of last 5 closes < 1.5% of price
-    if (closes.length >= 5) {
-      const last5 = closes.slice(-5);
+    // Tight closes: spread of last 5 bars < 1.5% of price
+    if (closes.length >= 5 * bm) {
+      const last5 = closes.slice(-(5 * bm));
       const spread = Math.max(...last5) - Math.min(...last5);
       vcpTightCloses = currentPrice > 0 ? spread / currentPrice < 0.015 : null;
     }
 
     // Inside bar count in last 5 bars
-    if (highs.length >= 6) {
+    if (highs.length >= 5 * bm + 1) {
       let insideCount = 0;
-      for (let i = highs.length - 5; i < highs.length; i++) {
+      for (let i = highs.length - 5 * bm; i < highs.length; i++) {
         if (highs[i] <= highs[i - 1] && lows[i] >= lows[i - 1]) {
           insideCount++;
         }
@@ -1846,11 +1900,11 @@ export async function fetchPreRunData(
       vcpInsideBarCount = insideCount;
     }
 
-    // Dry volume days: days in last 10 with vol < 60% of 20d avg
-    if (volumes.length >= 20) {
-      const avg20Vol = volumes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+    // Dry volume days: bars in last 10 with vol < 60% of 20-bar avg
+    if (volumes.length >= 20 * bm) {
+      const avg20Vol = volumes.slice(-(20 * bm)).reduce((a, b) => a + b, 0) / (20 * bm);
       let dryCount = 0;
-      const last10Vols = volumes.slice(-10);
+      const last10Vols = volumes.slice(-(10 * bm));
       for (const v of last10Vols) {
         if (v < avg20Vol * 0.6) dryCount++;
       }
@@ -1883,14 +1937,14 @@ export async function fetchPreRunData(
   let vpDivergenceBullish: boolean | null = null;
   let distributionDays20d: number | null = null;
 
-  if (chart3mo && chart3mo.closes.length >= 20) {
+  if (chart3mo && chart3mo.closes.length >= 20 * bm) {
     const { closes, opens, volumes, lows } = chart3mo;
-    const obvResult = calcOBVPriceDivergence(closes, volumes);
+    const obvResult = calcOBVPriceDivergence(closes, volumes, bm);
     obvDivergent = obvResult.divergent;
     obvPctFromHigh = obvResult.obvPctFromHigh;
     pricePctFromHigh20d = obvResult.pricePctFromHigh;
-    vpDivergenceBullish = calcVPDivergence(closes, opens, volumes, lows);
-    distributionDays20d = calcDistributionDays(closes, volumes);
+    vpDivergenceBullish = calcVPDivergence(closes, opens, volumes, lows, bm);
+    distributionDays20d = calcDistributionDays(closes, volumes, bm);
   }
 
   // ── Inflection Engine fields ──
@@ -1901,18 +1955,18 @@ export async function fetchPreRunData(
   let atrRatio5v20: number | null = null;
   let volumeRecent5d: number[] | null = null;
 
-  if (chart3mo && chart3mo.closes.length >= 20) {
+  if (chart3mo && chart3mo.closes.length >= 20 * bm) {
     const { closes, opens, highs, lows, volumes } = chart3mo;
-    rsi14 = calcRSI(closes, 14);
-    const bodies = calcDownDayBodies(closes, opens, currentPrice ?? closes[closes.length - 1]);
+    rsi14 = calcRSI(closes, Math.round(14 * bm / 1.5));
+    const bodies = calcDownDayBodies(closes, opens, currentPrice ?? closes[closes.length - 1], bm);
     avgDownDayBody = bodies.recent;
     avgDownDayBodyPrev = bodies.prev;
-    accumulationDayCount = calcAccumulationDays(closes, volumes);
-    const squeeze = calcVolatilitySqueeze(highs, lows, closes);
+    accumulationDayCount = calcAccumulationDays(closes, volumes, bm);
+    const squeeze = calcVolatilitySqueeze(highs, lows, closes, bm);
     atrRatio5v20 = squeeze.atrRatio;
     // Last 5 daily volumes for trend display
-    if (volumes.length >= 5) {
-      volumeRecent5d = volumes.slice(-5);
+    if (volumes.length >= 5 * bm) {
+      volumeRecent5d = volumes.slice(-(5 * bm));
     }
   }
 
@@ -1930,7 +1984,7 @@ export async function fetchPreRunData(
     instRsVsQQQ = stockReturn20d - qqqReturn20d;
   }
 
-  if (chart3mo && chart3mo.closes.length >= 25) {
+  if (chart3mo && chart3mo.closes.length >= 25 * bm) {
     const { closes, opens, highs, lows } = chart3mo;
 
     // RS Acceleration: compare current RS (day 0) with RS 5 sessions ago
@@ -1945,8 +1999,8 @@ export async function fetchPreRunData(
     };
 
     const n = closes.length;
-    const stockRetNow = calcReturnAt(closes, n - 1, 20);
-    const stockRetPrev = calcReturnAt(closes, n - 6, 20); // 5 sessions ago
+    const stockRetNow = calcReturnAt(closes, n - 1, 20 * bm);
+    const stockRetPrev = calcReturnAt(closes, n - 1 - 6 * bm, 20 * bm); // 5 sessions ago (scaled)
 
     // Fetch SPY/QQQ closes from sector cache for acceleration
     const spyCache = sectorChartCache.get("SPY");
@@ -1969,8 +2023,8 @@ export async function fetchPreRunData(
         // then derive slope (newest - oldest) / (count - 1)
         const accelSeries: number[] = [];
         for (let offset = 0; offset <= 3; offset++) {
-          const sRetNow = calcReturnAt(closes, n - 1 - offset, 20);
-          const sRetPrev = calcReturnAt(closes, n - 6 - offset, 20);
+          const sRetNow = calcReturnAt(closes, n - 1 - offset * bm, 20 * bm);
+          const sRetPrev = calcReturnAt(closes, n - 1 - (6 + offset) * bm, 20 * bm);
           const spRetNow = calcReturnAt(spyCloses, spyN - 1 - offset, 20);
           const spRetPrev = calcReturnAt(spyCloses, spyN - 6 - offset, 20);
           if (sRetNow !== null && sRetPrev !== null && spRetNow !== null && spRetPrev !== null) {
@@ -2011,9 +2065,9 @@ export async function fetchPreRunData(
     }
 
     // Distance from EMA20 in ATR units
-    const ema20Arr = calcEMA(closes, 20);
+    const ema20Arr = calcEMA(closes, 20 * bm);
     const lastEma20 = ema20Arr.length > 0 ? ema20Arr[ema20Arr.length - 1] : null;
-    const atrArr = calcATRArray(highs, lows, closes, 14);
+    const atrArr = calcATRArray(highs, lows, closes, 14 * bm);
     const lastAtr = atrArr.length > 0 ? atrArr[atrArr.length - 1] : 0;
     instAtrDollar = lastAtr > 0 ? lastAtr : null;
 
@@ -2024,9 +2078,9 @@ export async function fetchPreRunData(
 
   // ── QFE: Multi-timeframe relative strength ──
   // All computed from already-fetched data — zero additional API calls
-  const stockReturn5d = chart3mo ? calcNdReturn(chart3mo.closes, 5) : null;
-  const stockReturn10d = chart3mo ? calcNdReturn(chart3mo.closes, 10) : null;
-  const stockReturn50d = chart3mo ? calcNdReturn(chart3mo.closes, 50) : null;
+  const stockReturn5d = chart3mo ? calcNdReturn(chart3mo.closes, 5 * bm) : null;
+  const stockReturn10d = chart3mo ? calcNdReturn(chart3mo.closes, 10 * bm) : null;
+  const stockReturn50d = chart3mo ? calcNdReturn(chart3mo.closes, 50 * bm) : null;
 
   const spyReturn5d = getSectorETFNdReturn("SPY", 5, targetDate);
   const spyReturn10d = getSectorETFNdReturn("SPY", 10, targetDate);
@@ -2049,16 +2103,16 @@ export async function fetchPreRunData(
   const rs50dVsSector = stockReturn50d !== null && sectorReturn50d !== null ? stockReturn50d - sectorReturn50d : null;
 
   // QFE signal fields — computed from already-fetched chart3mo/chart5y
-  const moneyFlowPersistence = chart3mo ? calcMoneyFlowPersistence(chart3mo.closes, chart3mo.opens, chart3mo.volumes) : null;
-  const rvolTrajectory = chart3mo ? calcRvolTrajectory(chart3mo.volumes) : null;
+  const moneyFlowPersistence = chart3mo ? calcMoneyFlowPersistence(chart3mo.closes, chart3mo.opens, chart3mo.volumes, bm) : null;
+  const rvolTrajectory = chart3mo ? calcRvolTrajectory(chart3mo.volumes, bm) : null;
   const weeklyReversal = chart5y ? calcWeeklyReversalSignal(chart5y.opens, chart5y.highs, chart5y.lows, chart5y.closes) : { signal: false, type: null };
 
   // Dist from EMA10 in ATR units
   let distFromEma10Atr: number | null = null;
-  if (chart3mo && chart3mo.closes.length >= 14 && currentPrice !== null) {
-    const ema10Arr = calcEMA(chart3mo.closes, 10);
+  if (chart3mo && chart3mo.closes.length >= 14 * bm && currentPrice !== null) {
+    const ema10Arr = calcEMA(chart3mo.closes, 10 * bm);
     const lastEma10 = ema10Arr.length > 0 ? ema10Arr[ema10Arr.length - 1] : null;
-    const atrArr14 = calcATRArray(chart3mo.highs, chart3mo.lows, chart3mo.closes, 14);
+    const atrArr14 = calcATRArray(chart3mo.highs, chart3mo.lows, chart3mo.closes, 14 * bm);
     const lastAtr14 = atrArr14.length > 0 ? atrArr14[atrArr14.length - 1] : 0;
     if (lastEma10 !== null && lastAtr14 > 0) {
       distFromEma10Atr = (currentPrice - lastEma10) / lastAtr14;

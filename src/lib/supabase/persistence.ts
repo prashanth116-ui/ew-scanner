@@ -846,6 +846,187 @@ export async function loadPreRunDailyMulti(
   }
 }
 
+// ── PreRun 4h Daily Scan ──
+// Same schema as prerun_daily, separate table for 4h-timeframe scanner.
+
+/** Batch upsert prerun 4h daily scan results. */
+export async function upsertPreRun4hDaily(records: PreRunDailyRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertPreRun4hDaily: no admin client");
+      return 0;
+    }
+
+    let upserted = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = records.slice(i, i + 500);
+      const { data, error } = await supabase
+        .from("prerun_4h_daily")
+        .upsert(batch, { onConflict: "scan_date,ticker" })
+        .select("id");
+
+      if (error) {
+        console.error("[persistence] upsertPreRun4hDaily error:", error.message);
+      } else {
+        upserted += data?.length ?? 0;
+      }
+    }
+    return upserted;
+  } catch (err) {
+    console.error("[persistence] upsertPreRun4hDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete prerun_4h_daily rows older than retentionDays. */
+export async function purgeOldPreRun4hDaily(retentionDays = 14): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("prerun_4h_daily")
+      .delete()
+      .lt("scan_date", cutoffStr)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] purgeOldPreRun4hDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] purgeOldPreRun4hDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete all prerun 4h daily results for a specific date. */
+export async function clearPreRun4hDaily(date: string): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const { data, error } = await supabase
+      .from("prerun_4h_daily")
+      .delete()
+      .eq("scan_date", date)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] clearPreRun4hDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] clearPreRun4hDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Load prerun 4h daily results for a given date. */
+export async function loadPreRun4hDaily(date: string): Promise<PreRunDailyRecord[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerun_4h_daily")
+      .select("*")
+      .eq("scan_date", date)
+      .order("final_score", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadPreRun4hDaily error:", error.message);
+      return [];
+    }
+    return (data ?? []) as PreRunDailyRecord[];
+  } catch (err) {
+    console.error("[persistence] loadPreRun4hDaily exception:", err);
+    return [];
+  }
+}
+
+/** Load just the ticker list for a given date (lightweight, for resume). */
+export async function loadPreRun4hDailyTickers(date: string): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerun_4h_daily")
+      .select("ticker")
+      .eq("scan_date", date);
+
+    if (error) {
+      console.error("[persistence] loadPreRun4hDailyTickers error:", error.message);
+      return [];
+    }
+    return (data ?? []).map((r) => r.ticker as string);
+  } catch (err) {
+    console.error("[persistence] loadPreRun4hDailyTickers exception:", err);
+    return [];
+  }
+}
+
+/** Load available prerun 4h daily scan dates. */
+export async function loadPreRun4hDailyDates(limit = 14): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerun_4h_daily")
+      .select("scan_date")
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadPreRun4hDailyDates error:", error.message);
+      return [];
+    }
+
+    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
+    return unique.slice(0, limit);
+  } catch (err) {
+    console.error("[persistence] loadPreRun4hDailyDates exception:", err);
+    return [];
+  }
+}
+
+/** Load prerun 4h daily results for multiple dates (for streak/delta). */
+export async function loadPreRun4hDailyMulti(
+  dates: string[]
+): Promise<Array<{ scan_date: string; ticker: string; final_score: number; is_sndk: boolean; is_early_mover: boolean; is_pullback: boolean; is_leading: boolean; is_stealth: boolean; is_early_plus: boolean }>> {
+  if (dates.length === 0) return [];
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerun_4h_daily")
+      .select("scan_date, ticker, final_score, is_sndk, is_early_mover, is_pullback, is_leading, is_stealth, is_early_plus")
+      .in("scan_date", dates)
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadPreRun4hDailyMulti error:", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; final_score: number; is_sndk: boolean; is_early_mover: boolean; is_pullback: boolean; is_leading: boolean; is_stealth: boolean; is_early_plus: boolean }>;
+  } catch (err) {
+    console.error("[persistence] loadPreRun4hDailyMulti exception:", err);
+    return [];
+  }
+}
+
 // ── VCP Daily Scan ──
 
 export interface VCPDailyRecord {

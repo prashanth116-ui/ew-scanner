@@ -14,6 +14,7 @@ import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { createAdminClient } from "@/lib/supabase/server";
 import {
   loadPreRunDaily,
+  loadPreRun4hDaily,
   loadInflectionDaily,
   loadVCPDaily,
   loadInstitutionalDaily,
@@ -178,6 +179,7 @@ function buildRsAccelMap(
  */
 function consolidateResults(
   prerun: PreRunDailyRecord[],
+  prerun4h: PreRunDailyRecord[],
   inflection: InflectionDailyRecord[],
   vcp: VCPDailyRecord[],
   institutional: InstitutionalDailyRecord[],
@@ -185,7 +187,7 @@ function consolidateResults(
   qfe: QFEDailyRecord[],
   catalyst: CatalystSignalRow[],
   newTickerSet: Set<string>,
-): { tiers: Map<number, ConsolidatedTicker[]>; catalysts: ConsolidatedTicker[] } {
+): { tiers: Map<number, ConsolidatedTicker[]>; catalysts: ConsolidatedTicker[]; fourHourOnly: string[] } {
   // Independent scanner hits (count toward confluence)
   const map = new Map<string, ScannerHit[]>();
 
@@ -207,6 +209,18 @@ function consolidateResults(
   for (const r of vcp) add(r.ticker, { scanner: "VCP", label: vcpLabel(r), score: r.total_score });
   for (const r of institutional) add(r.ticker, { scanner: "Institutional", label: institutionalLabel(r), score: r.composite_score });
   for (const r of prerunner) add(r.ticker, { scanner: "PreRunner", label: prerunnerLabel(r), score: r.prerunner_score });
+
+  // 4h setup lookup (badge only, not counted for confluence — same methodology as daily)
+  const setup4hMap = new Map<string, PreRunDailyRecord>();
+  for (const r of prerun4h) {
+    if (r.final_score > 0) setup4hMap.set(r.ticker, r);
+  }
+
+  // 4h-only picks: appear on 4h but NOT daily PreRun (early detections)
+  const dailyPrerunTickers = new Set(prerun.filter((r) => r.final_score > 0).map((r) => r.ticker));
+  const fourHourOnly = [...setup4hMap.keys()]
+    .filter((t) => !dailyPrerunTickers.has(t))
+    .sort((a, b) => (setup4hMap.get(b)?.final_score ?? 0) - (setup4hMap.get(a)?.final_score ?? 0));
 
   // QFE lookup (badge only, not counted for confluence)
   const qfeMap = new Map<string, string>();
@@ -235,7 +249,13 @@ function consolidateResults(
       hits.push({ scanner: "QFE", label: `QFE ${qfeRating}`, score: 0 }); // score 0 = badge only
     }
 
-    const NON_CONFLUENCE = new Set(["QFE", "INF_WATCH"]);
+    // 4h setup badge (not counted for confluence — same scoring methodology as daily)
+    const setup4hRec = setup4hMap.get(ticker);
+    if (setup4hRec) {
+      hits.push({ scanner: "Setup4h", label: `4h ${setup4hRec.final_score}`, score: 0 });
+    }
+
+    const NON_CONFLUENCE = new Set(["QFE", "INF_WATCH", "Setup4h"]);
     const independentCount = hits.filter((h) => !NON_CONFLUENCE.has(h.scanner)).length;
     const maxScore = Math.max(...hits.filter((h) => !NON_CONFLUENCE.has(h.scanner)).map((h) => h.score));
     const rsAccel = rsAccelMap.get(ticker) ?? null;
@@ -268,7 +288,7 @@ function consolidateResults(
   }));
   catalystEntries.sort((a, b) => b.maxScore - a.maxScore);
 
-  return { tiers, catalysts: catalystEntries };
+  return { tiers, catalysts: catalystEntries, fourHourOnly };
 }
 
 // ── New/Dropped computation ──
@@ -390,6 +410,7 @@ function formatNightlySummary(
   discoveryCrypto: number,
   scannerCounts: Record<string, number>,
   totalTickers: number,
+  fourHourOnly: string[],
 ): string {
   const date = new Date().toLocaleDateString("en-US", {
     weekday: "short",
@@ -498,6 +519,13 @@ function formatNightlySummary(
     lines.push(`<b>DROPPED:</b> ${display}${extra}`);
   }
 
+  // 4h-ONLY — tickers on 4h scanner but NOT daily (early detections)
+  if (fourHourOnly.length > 0) {
+    const display = fourHourOnly.slice(0, 8).join(", ");
+    const extra = fourHourOnly.length > 8 ? ` (+${fourHourOnly.length - 8})` : "";
+    lines.push(`<b>4h ONLY:</b> ${display}${extra}`);
+  }
+
   // Discovery
   if (discoveryStocks > 0 || discoveryCrypto > 0) {
     lines.push(`Discovery: ${discoveryStocks} stocks | ${discoveryCrypto} crypto`);
@@ -547,6 +575,7 @@ const CLASS_SHORT: Record<string, string> = {
 
 function formatScannerDetail(
   prerun: PreRunDailyRecord[],
+  prerun4h: PreRunDailyRecord[],
   inflection: InflectionDailyRecord[],
   vcp: VCPDailyRecord[],
   institutional: InstitutionalDailyRecord[],
@@ -661,6 +690,27 @@ function formatScannerDetail(
     lines.push(rnrTop.map((r) => `${r.ticker} ${r.prerunner_score}`).join(" \u00b7 "));
   }
 
+  // ── 4h Setup ──
+  if (prerun4h.length > 0) {
+    lines.push("");
+    const p4hCounts = {
+      LD: prerun4h.filter((r) => r.is_leading).length,
+      ST: prerun4h.filter((r) => r.is_stealth).length,
+      SNDK: prerun4h.filter((r) => r.is_sndk).length,
+      EM: prerun4h.filter((r) => r.is_early_mover).length,
+      PB: prerun4h.filter((r) => r.is_pullback).length,
+      "E+": prerun4h.filter((r) => r.is_early_plus).length,
+    };
+    const p4hParts = Object.entries(p4hCounts)
+      .filter(([, c]) => c > 0)
+      .map(([k, c]) => `${k}:${c}`);
+    lines.push(`<b>SETUP 4h:</b> ${prerun4h.length} total | ${p4hParts.join(" ")}`);
+
+    // Surface top 4h picks by score
+    const top4h = [...prerun4h].sort((a, b) => b.final_score - a.final_score).slice(0, 5);
+    lines.push(top4h.map((r) => `${r.ticker} ${r.final_score}`).join(" \u00b7 "));
+  }
+
   return lines.join("\n");
 }
 
@@ -681,8 +731,9 @@ export async function GET(request: NextRequest) {
     const today = new Date().toISOString().slice(0, 10);
 
     // Load all scanner results for today in parallel
-    const [prerun, inflection, vcp, institutional, prerunner, qfe, catalyst, discovered] = await Promise.all([
+    const [prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, discovered] = await Promise.all([
       loadPreRunDaily(today),
+      loadPreRun4hDaily(today),
       loadInflectionDaily(today),
       loadVCPDaily(today),
       loadInstitutionalDaily(today),
@@ -704,9 +755,9 @@ export async function GET(request: NextRequest) {
     const { newTickers, droppedTickers } = await computeNewDropped(today, todayTickers);
     const newTickerSet = new Set(newTickers);
 
-    // Consolidate (QFE excluded from confluence count — derived from PreRun)
-    const { tiers, catalysts } = consolidateResults(
-      prerun, inflection, vcp, institutional, prerunner, qfe, catalyst, newTickerSet,
+    // Consolidate (QFE + Setup4h excluded from confluence count — derived from PreRun)
+    const { tiers, catalysts, fourHourOnly } = consolidateResults(
+      prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, newTickerSet,
     );
 
     // Discovery counts
@@ -716,6 +767,7 @@ export async function GET(request: NextRequest) {
     // Scanner counts for ribbon
     const scannerCounts: Record<string, number> = {
       Setup: prerun.length,
+      "4h": prerun4h.length,
       Inflect: inflection.length,
       VCP: vcp.length,
       Inst: institutional.length,
@@ -742,6 +794,7 @@ export async function GET(request: NextRequest) {
       const message = formatNightlySummary(
         tiers, catalysts, droppedTickers,
         discoveryStocks, discoveryCrypto, scannerCounts, todayTickers.size,
+        fourHourOnly,
       );
       const tgResult = await sendTelegramMessage(botToken, chatId, message);
       telegramSent = tgResult.ok;
@@ -750,7 +803,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Message 2: Per-scanner detail with sub-scores and classifications
-      const detailMsg = formatScannerDetail(prerun, inflection, vcp, institutional, prerunner, qfe);
+      const detailMsg = formatScannerDetail(prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe);
       const detailResult = await sendTelegramMessage(botToken, chatId, detailMsg);
       detailSent = detailResult.ok;
       if (!detailResult.ok) {

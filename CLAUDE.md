@@ -39,19 +39,20 @@ npm run build             # Production build
 | `src/lib/supabase/` | Supabase client + persistence functions |
 | `src/data/` | Universe definitions (ticker lists, index tiers) |
 | `src/components/` | React components |
-| `supabase/migrations/` | SQL migration files (001-012) |
+| `supabase/migrations/` | SQL migration files (001-018) |
 
 ### Database Tables (Key)
 | Table | Cron | Purpose |
 |-------|------|---------|
 | `prerun_daily` | `/api/prerun/cron/preset` | 6-preset daily scan (SNDK, Early Mover, Pullback, Leading, Stealth, Early+) |
+| `prerun_4h_daily` | `/api/prerun/cron/preset-4h` | 4h-candle variant of prerun_daily (same presets, barMultiplier=6) |
 | `inflection_daily` | `/api/inflection/cron/daily` | Inflection point daily scan |
 | `vcp_daily` | `/api/vcp/cron/daily` | VCP pattern daily scan |
 | `institutional_daily` | `/api/institutional/cron/daily` | Institutional flow daily scan |
 | `scanner_signals` | various | Cross-scanner signal persistence |
 | `sector_snapshots` | `/api/sector-rotation/alert` | Sector rotation quadrants |
 
-### Cron Schedule (13 jobs)
+### Cron Schedule (14 jobs)
 | UTC | ET | Days | Route | Notes |
 |-----|-----|------|-------|-------|
 | 00:00 | 8:00 PM | Tue-Sat | `/api/discovery/cron` | Trending ticker discovery (CoinGecko + Yahoo) |
@@ -60,6 +61,7 @@ npm run build             # Production build
 | 01:45 | 9:45 PM | Tue-Sat | `/api/inflection/cron/daily` | Inflection scan |
 | 02:00 | 10:00 PM | Tue-Sat | `/api/prerun/cron/preset` | Preset scan pass 1 (~869 tickers) |
 | 02:06 | 10:06 PM | Tue-Sat | `/api/prerun/cron/preset-resume` | Preset scan pass 2 (remaining tickers) |
+| 02:12 | 10:12 PM | Tue-Sat | `/api/prerun/cron/preset-4h` | 4h-candle preset scan (same universe) |
 | 02:15 | 10:15 PM | Tue-Sat | `/api/vcp/cron/daily` | VCP scan |
 | 02:30 | 10:30 PM | Tue-Sat | `/api/institutional/cron/daily` | Institutional scan |
 | 02:45 | 10:45 PM | Tue-Sat | `/api/qfe/cron/backfill` | QFE forward return backfill |
@@ -185,6 +187,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 |------|---------|
 | `src/app/api/prerun/cron/preset/route.ts` | Preset daily cron (main scan) |
 | `src/app/api/prerun/cron/preset-resume/route.ts` | Preset resume pass |
+| `src/app/api/prerun/cron/preset-4h/route.ts` | 4h-candle preset cron (barMultiplier=6) |
 | `src/app/api/inflection/cron/daily/route.ts` | Inflection daily cron |
 | `src/app/api/vcp/cron/daily/route.ts` | VCP daily cron |
 | `src/app/api/institutional/cron/daily/route.ts` | Institutional daily cron |
@@ -193,7 +196,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 ### Read API Routes
 | File | Purpose |
 |------|---------|
-| `src/app/api/prerun/daily/route.ts` | Read preset daily data (?date=, ?preset=, ?dates=true) |
+| `src/app/api/prerun/daily/route.ts` | Read preset daily data (?date=, ?preset=, ?dates=true, ?scanner=4h) |
 | `src/app/api/inflection/daily/route.ts` | Read inflection daily data |
 | `src/app/api/vcp/daily/route.ts` | Read VCP daily data |
 | `src/app/api/institutional/daily/route.ts` | Read institutional daily data |
@@ -203,7 +206,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 ### UI Pages
 | File | Route |
 |------|-------|
-| `src/app/prerun/preset-daily/page.tsx` | `/prerun/preset-daily` — 6 preset tabs |
+| `src/app/prerun/preset-daily/page.tsx` | `/prerun/preset-daily` — 6 preset tabs + Daily/4h scanner toggle |
 | `src/app/prerun/inflection-daily/page.tsx` | `/prerun/inflection-daily` |
 | `src/app/prerun/vcp-daily/page.tsx` | `/prerun/vcp-daily` |
 | `src/app/prerun/institutional-daily/page.tsx` | `/prerun/institutional-daily` |
@@ -262,10 +265,12 @@ Sends 2 Telegram messages at 11 PM ET after all scanners finish:
 | `Inst` | Institutional | Institutional flow quality (SL, WL, SPEC) |
 | `Rot` | PreRunner | Rotation leaders/turnarounds radar |
 | `QFE` | QFE | Quality-Factor-Entry rating (A+ → C) — badge only, not counted for confluence |
+| `Setup4h` | PreRun 4h | 4h-candle variant of PreRun (barMultiplier=6) — badge only, not counted for confluence |
 
 **Confluence rules:**
 - 5 independent scanners counted: Setup, Inflect, VCP, Inst, Rot
 - QFE excluded (derived from PreRun data)
+- Setup4h excluded (same scoring methodology as Setup, different timeframe)
 - INF WATCH excluded from confluence count (badge only)
 - INF AVOID excluded entirely (negative signal)
 - Setup entries with score 0 excluded (noise)

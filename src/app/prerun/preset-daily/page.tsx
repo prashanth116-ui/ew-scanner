@@ -245,6 +245,7 @@ function SortHeader({
 // ── Main Page ──
 
 export default function PreRunPresetDailyPage() {
+  const [scannerMode, setScannerMode] = useState<"daily" | "4h">("daily");
   const [dates, setDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [preset, setPreset] = useState<Preset>("sndk");
@@ -265,12 +266,15 @@ export default function PreRunPresetDailyPage() {
 
   useEffect(() => {
     async function init() {
+      setLoading(true);
       try {
-        const res = await fetch("/api/prerun/daily?dates=true");
+        const scannerParam = scannerMode === "4h" ? "&scanner=4h" : "";
+        const res = await fetch(`/api/prerun/daily?dates=true${scannerParam}`);
         const json = await res.json();
         const d = json.dates ?? [];
         setDates(d);
         if (d.length > 0) setSelectedDate(d[0]);
+        else setSelectedDate(null);
       } catch {
         // No data yet
       } finally {
@@ -278,7 +282,7 @@ export default function PreRunPresetDailyPage() {
       }
     }
     init();
-  }, []);
+  }, [scannerMode]);
 
   // Fetch all results (unfiltered) for overlap computation
   useEffect(() => {
@@ -286,7 +290,8 @@ export default function PreRunPresetDailyPage() {
     let cancelled = false;
     async function loadAll() {
       try {
-        const res = await fetch(`/api/prerun/daily?date=${selectedDate}`);
+        const scannerParam = scannerMode === "4h" ? "&scanner=4h" : "";
+        const res = await fetch(`/api/prerun/daily?date=${selectedDate}${scannerParam}`);
         const json = await res.json();
         if (!cancelled) setAllResults(json.results ?? []);
       } catch {
@@ -295,7 +300,7 @@ export default function PreRunPresetDailyPage() {
     }
     loadAll();
     return () => { cancelled = true; };
-  }, [selectedDate]);
+  }, [selectedDate, scannerMode]);
 
   useEffect(() => {
     if (!selectedDate) return;
@@ -304,7 +309,8 @@ export default function PreRunPresetDailyPage() {
     async function load() {
       setLoadingResults(true);
       try {
-        const res = await fetch(`/api/prerun/daily?date=${selectedDate}&preset=${preset}`);
+        const scannerParam = scannerMode === "4h" ? "&scanner=4h" : "";
+        const res = await fetch(`/api/prerun/daily?date=${selectedDate}&preset=${preset}${scannerParam}`);
         const json = await res.json();
         if (!cancelled) {
           setResults(json.results ?? []);
@@ -326,7 +332,7 @@ export default function PreRunPresetDailyPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [selectedDate, preset]);
+  }, [selectedDate, preset, scannerMode]);
 
   const handleSort = useCallback((field: SortField) => {
     setSortField((prev) => {
@@ -434,6 +440,30 @@ export default function PreRunPresetDailyPage() {
           <p className="text-xs text-[#666] mt-1">S&P 500 + Nasdaq-100 + S&P 400 | 14-day rolling history</p>
         </div>
         <Link href="/prerun" className="text-sm text-[#666] hover:text-white transition-colors">&larr; Pre-Run Scanner</Link>
+      </div>
+
+      {/* Scanner mode toggle */}
+      <div className="flex items-center gap-1 mb-4">
+        <button
+          onClick={() => setScannerMode("daily")}
+          className={`px-3 py-1 rounded-l text-xs font-medium transition-colors border ${
+            scannerMode === "daily"
+              ? "bg-white text-black border-white"
+              : "bg-[#1a1a1a] text-[#a0a0a0] border-[#2a2a2a] hover:text-white"
+          }`}
+        >
+          Daily
+        </button>
+        <button
+          onClick={() => setScannerMode("4h")}
+          className={`px-3 py-1 rounded-r text-xs font-medium transition-colors border ${
+            scannerMode === "4h"
+              ? "bg-white text-black border-white"
+              : "bg-[#1a1a1a] text-[#a0a0a0] border-[#2a2a2a] hover:text-white"
+          }`}
+        >
+          4h
+        </button>
       </div>
 
       {/* Preset tabs */}

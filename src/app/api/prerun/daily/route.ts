@@ -3,6 +3,9 @@ import {
   loadPreRunDaily,
   loadPreRunDailyDates,
   loadPreRunDailyMulti,
+  loadPreRun4hDaily,
+  loadPreRun4hDailyDates,
+  loadPreRun4hDailyMulti,
 } from "@/lib/supabase/persistence";
 
 const PRESET_FLAG_MAP: Record<string, string> = {
@@ -17,9 +20,15 @@ const PRESET_FLAG_MAP: Record<string, string> = {
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
 
+  // ?scanner=4h switches to 4h table
+  const is4h = searchParams.get("scanner") === "4h";
+  const loadFn = is4h ? loadPreRun4hDaily : loadPreRunDaily;
+  const loadDatesFn = is4h ? loadPreRun4hDailyDates : loadPreRunDailyDates;
+  const loadMultiFn = is4h ? loadPreRun4hDailyMulti : loadPreRunDailyMulti;
+
   // GET ?dates=true → return available scan dates
   if (searchParams.get("dates") === "true") {
-    const dates = await loadPreRunDailyDates(14);
+    const dates = await loadDatesFn(14);
     return NextResponse.json({ dates });
   }
 
@@ -42,7 +51,7 @@ export async function GET(request: NextRequest) {
   const preset = searchParams.get("preset");
   const flagKey = preset ? PRESET_FLAG_MAP[preset] : null;
 
-  let results = await loadPreRunDaily(date);
+  let results = await loadFn(date);
 
   // Filter by preset flag if specified
   if (flagKey) {
@@ -51,13 +60,13 @@ export async function GET(request: NextRequest) {
   }
 
   // Load all available dates to compute streaks + deltas
-  const allDates = await loadPreRunDailyDates(14);
+  const allDates = await loadDatesFn(14);
   const currentIdx = allDates.indexOf(date);
   const prevDate = currentIdx >= 0 && currentIdx < allDates.length - 1 ? allDates[currentIdx + 1] : null;
 
   // Load multi-day data for streak computation
   const datesForStreaks = allDates.slice(currentIdx);
-  const multiDayRows = await loadPreRunDailyMulti(datesForStreaks);
+  const multiDayRows = await loadMultiFn(datesForStreaks);
 
   // Build lookup: date → ticker → row (for O(1) access)
   const rowByDateTicker = new Map<string, Map<string, (typeof multiDayRows)[number]>>();
@@ -131,6 +140,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     date,
+    scanner: is4h ? "4h" : "daily",
     preset: preset ?? null,
     count: results.length,
     results,
