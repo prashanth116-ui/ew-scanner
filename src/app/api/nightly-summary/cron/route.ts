@@ -626,7 +626,14 @@ function formatScannerDetail(
   if (multiPreset.length > 0) {
     const cap = Math.min(multiPreset.length, DETAIL_CAP);
     for (const r of multiPreset.slice(0, cap)) {
-      lines.push(`${r.ticker} ${r.final_score} | ${prerunLabel(r).replace("PR ", "")}`);
+      const presets: string[] = [];
+      if (r.is_leading) presets.push("LD");
+      if (r.is_stealth) presets.push("ST");
+      if (r.is_sndk) presets.push("SNDK");
+      if (r.is_early_mover) presets.push("EM");
+      if (r.is_pullback) presets.push("PB");
+      if (r.is_early_plus) presets.push("E+");
+      lines.push(`${r.ticker} ${r.final_score} | ${presets.join(",")}`);
     }
     if (multiPreset.length > cap) lines.push(`... +${multiPreset.length - cap} more`);
   }
