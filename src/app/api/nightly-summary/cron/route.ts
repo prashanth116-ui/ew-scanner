@@ -116,6 +116,8 @@ function institutionalLabel(r: InstitutionalDailyRecord): string {
     SHORTLIST: "SL",
     WATCHLIST: "WL",
     SPECULATIVE: "SPEC",
+    TOO_EXTENDED: "EXT",
+    MOMENTUM_CHASER: "MCHSR",
   };
   return `INST ${r.tier ? tierMap[r.tier] ?? r.tier : r.classification}`;
 }
@@ -189,7 +191,11 @@ function consolidateResults(
   }
 
   for (const r of prerun) add(r.ticker, { scanner: "PreRun", label: prerunLabel(r), score: r.final_score });
-  for (const r of inflection) add(r.ticker, { scanner: "Inflection", label: inflectionLabel(r), score: r.overall_score });
+  // INF WATCH is low-conviction — show as badge but don't count for confluence
+  for (const r of inflection) {
+    const isWatch = r.trade_read === "WATCH";
+    add(r.ticker, { scanner: isWatch ? "INF_WATCH" : "Inflection", label: inflectionLabel(r), score: r.overall_score });
+  }
   for (const r of vcp) add(r.ticker, { scanner: "VCP", label: vcpLabel(r), score: r.total_score });
   for (const r of institutional) add(r.ticker, { scanner: "Institutional", label: institutionalLabel(r), score: r.composite_score });
   for (const r of prerunner) add(r.ticker, { scanner: "PreRunner", label: prerunnerLabel(r), score: r.prerunner_score });
@@ -212,14 +218,18 @@ function consolidateResults(
   // Build consolidated list with tiers
   const tiers = new Map<number, ConsolidatedTicker[]>();
 
+  // Only show QFE badge for high-conviction ratings (A+, A, B+)
+  const QFE_SHOW_RATINGS = new Set(["A+", "A", "B+"]);
+
   for (const [ticker, hits] of map) {
     const qfeRating = qfeMap.get(ticker);
-    if (qfeRating) {
+    if (qfeRating && QFE_SHOW_RATINGS.has(qfeRating)) {
       hits.push({ scanner: "QFE", label: `QFE ${qfeRating}`, score: 0 }); // score 0 = badge only
     }
 
-    const independentCount = hits.filter((h) => h.scanner !== "QFE").length;
-    const maxScore = Math.max(...hits.filter((h) => h.scanner !== "QFE").map((h) => h.score));
+    const NON_CONFLUENCE = new Set(["QFE", "INF_WATCH"]);
+    const independentCount = hits.filter((h) => !NON_CONFLUENCE.has(h.scanner)).length;
+    const maxScore = Math.max(...hits.filter((h) => !NON_CONFLUENCE.has(h.scanner)).map((h) => h.score));
     const rsAccel = rsAccelMap.get(ticker) ?? null;
     const sector = sectorMap.get(ticker) ?? null;
 
@@ -302,21 +312,42 @@ const TIER_CAPS: Record<number, number> = {
 const MAX_CATALYSTS = 3;
 const MAX_DROPPED = 5;
 
-/** Short sector labels for inline display */
+/** Short sector labels for inline display — covers all 31 sector-universe.ts displayNames */
 const SECTOR_SHORT: Record<string, string> = {
   "Technology": "Tech",
   "Information Technology": "Tech",
+  "Software & Cloud": "SW",
+  "Semiconductors": "Semi",
   "Health Care": "HC",
   "Healthcare": "HC",
+  "Biotech": "Bio",
   "Financials": "Fin",
+  "Regional Banks": "Bank",
   "Consumer Discretionary": "Disc",
   "Consumer Staples": "Stpl",
   "Communication Services": "Comm",
   "Industrials": "Ind",
+  "Aerospace & Defense": "A&D",
+  "Space & Defense Innovation": "SpDf",
+  "Transports": "Trns",
   "Energy": "Enrg",
   "Materials": "Mat",
   "Real Estate": "RE",
   "Utilities": "Util",
+  "Homebuilders": "Home",
+  "Retail": "Rtl",
+  "AI & Robotics": "AI",
+  "Space": "Spce",
+  "Gold": "Gold",
+  "Treasuries 20Y+": "Bond",
+  "High Yield Corp": "HY",
+  "Emerging Markets": "EM",
+  "US Dollar": "USD",
+  "Magnificent 7": "MAG7",
+  "Nasdaq 100": "NDX",
+  "Russell 2000": "RUT",
+  "ARK Innovation": "ARKK",
+  "Other": "Othr",
 };
 
 function shortSector(sector: string | null): string {
