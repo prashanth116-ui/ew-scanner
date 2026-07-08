@@ -77,7 +77,7 @@ async function loadCatalystSignals(date: string): Promise<CatalystSignalRow[]> {
   }
 }
 
-// ── Scanner label formatters ──
+// ── Scanner label formatters (compact for Telegram) ──
 
 function prerunLabel(r: PreRunDailyRecord): string {
   const presets: string[] = [];
@@ -87,7 +87,7 @@ function prerunLabel(r: PreRunDailyRecord): string {
   if (r.is_early_mover) presets.push("EM");
   if (r.is_pullback) presets.push("PB");
   if (r.is_early_plus) presets.push("E+");
-  return `PreRun ${r.final_score}${presets.length > 0 ? ` (${presets.join(",")})` : ""}`;
+  return `PR ${r.final_score}${presets.length > 0 ? ` (${presets.join(",")})` : ""}`;
 }
 
 function inflectionLabel(r: InflectionDailyRecord): string {
@@ -96,7 +96,7 @@ function inflectionLabel(r: InflectionDailyRecord): string {
     ADD_ON_CONFIRMATION: "ADD_ON",
     WATCH: "WATCH",
   };
-  return `Inflect ${trMap[r.trade_read] ?? r.trade_read}`;
+  return `INF ${trMap[r.trade_read] ?? r.trade_read}`;
 }
 
 function vcpLabel(r: VCPDailyRecord): string {
@@ -109,15 +109,16 @@ function vcpLabel(r: VCPDailyRecord): string {
 }
 
 function institutionalLabel(r: InstitutionalDailyRecord): string {
-  return `Inst ${r.tier ?? r.classification}`;
+  const tierMap: Record<string, string> = {
+    SHORTLIST: "SL",
+    WATCHLIST: "WL",
+    SPECULATIVE: "SPEC",
+  };
+  return `INST ${r.tier ? tierMap[r.tier] ?? r.tier : r.classification}`;
 }
 
 function prerunnerLabel(r: PreRunnerDailyRecord): string {
-  return `Runner ${r.prerunner_score}`;
-}
-
-function qfeLabel(r: QFEDailyRecord): string {
-  return `QFE ${r.rating}`;
+  return `RNR ${r.prerunner_score}`;
 }
 
 function catalystLabel(r: CatalystSignalRow): string {
@@ -126,6 +127,11 @@ function catalystLabel(r: CatalystSignalRow): string {
 
 // ── Consolidation ──
 
+/**
+ * QFE is derived from PreRun data, so counting both inflates confluence.
+ * We count only 5 independent scanners (PreRun, Inflection, VCP, Institutional, PreRunner)
+ * for confluence ranking. QFE rating is appended as an inline badge when present.
+ */
 function consolidateResults(
   prerun: PreRunDailyRecord[],
   inflection: InflectionDailyRecord[],
@@ -134,7 +140,8 @@ function consolidateResults(
   prerunner: PreRunnerDailyRecord[],
   qfe: QFEDailyRecord[],
   catalyst: CatalystSignalRow[],
-): { multi: ConsolidatedTicker[]; singles: ConsolidatedTicker[]; catalysts: ConsolidatedTicker[] } {
+): { tiers: Map<number, ConsolidatedTicker[]>; catalysts: ConsolidatedTicker[] } {
+  // Independent scanner hits (count toward confluence)
   const map = new Map<string, ScannerHit[]>();
 
   function add(ticker: string, hit: ScannerHit) {
@@ -147,23 +154,33 @@ function consolidateResults(
   for (const r of vcp) add(r.ticker, { scanner: "VCP", label: vcpLabel(r), score: r.total_score });
   for (const r of institutional) add(r.ticker, { scanner: "Institutional", label: institutionalLabel(r), score: r.composite_score });
   for (const r of prerunner) add(r.ticker, { scanner: "PreRunner", label: prerunnerLabel(r), score: r.prerunner_score });
-  for (const r of qfe) add(r.ticker, { scanner: "QFE", label: qfeLabel(r), score: r.qfe_score });
 
-  // Build consolidated list (excluding catalyst — handled separately)
-  const all: ConsolidatedTicker[] = [];
+  // QFE lookup (badge only, not counted for confluence)
+  const qfeMap = new Map<string, string>();
+  for (const r of qfe) qfeMap.set(r.ticker, r.rating);
+
+  // Build consolidated list with tiers
+  const tiers = new Map<number, ConsolidatedTicker[]>();
+
   for (const [ticker, hits] of map) {
-    all.push({
-      ticker,
-      hits,
-      maxScore: Math.max(...hits.map((h) => h.score)),
-    });
+    const qfeRating = qfeMap.get(ticker);
+    if (qfeRating) {
+      hits.push({ scanner: "QFE", label: `QFE ${qfeRating}`, score: 0 }); // score 0 = badge only
+    }
+
+    const independentCount = hits.filter((h) => h.scanner !== "QFE").length;
+    const maxScore = Math.max(...hits.filter((h) => h.scanner !== "QFE").map((h) => h.score));
+
+    const entry: ConsolidatedTicker = { ticker, hits, maxScore };
+
+    if (!tiers.has(independentCount)) tiers.set(independentCount, []);
+    tiers.get(independentCount)!.push(entry);
   }
 
-  // Sort by hit count DESC, then max score DESC
-  all.sort((a, b) => b.hits.length - a.hits.length || b.maxScore - a.maxScore);
-
-  const multi = all.filter((t) => t.hits.length >= 2);
-  const singles = all.filter((t) => t.hits.length === 1);
+  // Sort each tier by maxScore DESC
+  for (const entries of tiers.values()) {
+    entries.sort((a, b) => b.maxScore - a.maxScore);
+  }
 
   // Catalyst entries (separate section)
   const catalystEntries: ConsolidatedTicker[] = catalyst.map((r) => ({
@@ -173,7 +190,7 @@ function consolidateResults(
   }));
   catalystEntries.sort((a, b) => b.maxScore - a.maxScore);
 
-  return { multi, singles, catalysts: catalystEntries };
+  return { tiers, catalysts: catalystEntries };
 }
 
 // ── New/Dropped computation ──
@@ -216,21 +233,31 @@ async function computeNewDropped(
 
 // ── Telegram formatter ──
 
-const MAX_MULTI = 5;
-const MAX_SINGLES = 3;
+// Per-tier display caps
+const TIER_CAPS: Record<number, number> = {
+  5: 10, // 5/5 scanners — show all (very rare)
+  4: 7,  // 4/5 — top 7
+  3: 5,  // 3/5 — top 5
+  2: 3,  // 2/5 — top 3
+};
 const MAX_CATALYSTS = 3;
-const MAX_NEW = 15;
-const MAX_DROPPED = 10;
+const MAX_NEW = 10;
+const MAX_DROPPED = 8;
+
+function formatTickerLine(t: ConsolidatedTicker): string {
+  const labels = t.hits.map((h) => h.label).join(" \u00b7 ");
+  return `${t.ticker} \u2014 ${labels}`;
+}
 
 function formatNightlySummary(
-  multi: ConsolidatedTicker[],
-  singles: ConsolidatedTicker[],
+  tiers: Map<number, ConsolidatedTicker[]>,
   catalysts: ConsolidatedTicker[],
   newTickers: string[],
   droppedTickers: string[],
   discoveryStocks: number,
   discoveryCrypto: number,
   scannerCounts: Record<string, number>,
+  totalTickers: number,
 ): string {
   const date = new Date().toLocaleDateString("en-US", {
     weekday: "short",
@@ -239,48 +266,46 @@ function formatNightlySummary(
     year: "numeric",
   });
 
-  const totalTickers = new Set([
-    ...multi.map((t) => t.ticker),
-    ...singles.map((t) => t.ticker),
-  ]).size;
+  const multiCount = [...tiers.entries()]
+    .filter(([count]) => count >= 2)
+    .reduce((sum, [, entries]) => sum + entries.length, 0);
 
   const lines: string[] = [];
   lines.push(`<b>NIGHTLY SCAN</b> \u2014 ${date}`);
-  lines.push(`${totalTickers} tickers | ${multi.length} multi-scanner`);
-  lines.push("");
+  lines.push(`${totalTickers} tickers | ${multiCount} multi-scanner`);
 
-  // Scanner counts ribbon
+  // Scanner counts ribbon (compact)
   const countParts: string[] = [];
   for (const [scanner, count] of Object.entries(scannerCounts)) {
-    if (count > 0) countParts.push(`${scanner}: ${count}`);
+    if (count > 0) countParts.push(`${scanner}:${count}`);
   }
   if (countParts.length > 0) {
     lines.push(countParts.join(" | "));
+  }
+  lines.push("");
+
+  // Tiers from highest confluence down (5, 4, 3, 2)
+  for (const tierLevel of [5, 4, 3, 2]) {
+    const entries = tiers.get(tierLevel);
+    if (!entries || entries.length === 0) continue;
+
+    const cap = TIER_CAPS[tierLevel] ?? 5;
+    const tierLabel = tierLevel >= 4 ? `${tierLevel}/5 SCANNERS` : `${tierLevel}/5`;
+
+    lines.push(`<b>\u25c6 ${tierLabel} (${entries.length})</b>`);
+    for (const t of entries.slice(0, cap)) {
+      lines.push(formatTickerLine(t));
+    }
+    if (entries.length > cap) {
+      lines.push(`... +${entries.length - cap} more`);
+    }
     lines.push("");
   }
 
-  // Multi-scanner section
-  if (multi.length > 0) {
-    lines.push(`<b>MULTI-SCANNER (${multi.length})</b>`);
-    for (const t of multi.slice(0, MAX_MULTI)) {
-      const labels = t.hits.map((h) => h.label).join(" + ");
-      lines.push(`${t.ticker} \u2014 ${labels}`);
-    }
-    if (multi.length > MAX_MULTI) {
-      lines.push(`... +${multi.length - MAX_MULTI} more`);
-    }
-    lines.push("");
-  }
-
-  // Top singles
-  if (singles.length > 0) {
-    lines.push(`<b>TOP SINGLES</b>`);
-    for (const t of singles.slice(0, MAX_SINGLES)) {
-      lines.push(`${t.ticker} \u2014 ${t.hits[0].label}`);
-    }
-    if (singles.length > MAX_SINGLES) {
-      lines.push(`... +${singles.length - MAX_SINGLES} more`);
-    }
+  // 1-scanner tickers — just show count
+  const singleCount = tiers.get(1)?.length ?? 0;
+  if (singleCount > 0) {
+    lines.push(`<b>1 scanner only:</b> ${singleCount} tickers`);
     lines.push("");
   }
 
@@ -345,8 +370,8 @@ export async function GET(request: NextRequest) {
       loadDiscoveredTickers(),
     ]);
 
-    // Consolidate
-    const { multi, singles, catalysts } = consolidateResults(
+    // Consolidate (QFE excluded from confluence count — derived from PreRun)
+    const { tiers, catalysts } = consolidateResults(
       prerun, inflection, vcp, institutional, prerunner, qfe, catalyst,
     );
 
@@ -376,14 +401,22 @@ export async function GET(request: NextRequest) {
       CAT: catalyst.length,
     };
 
+    // Tier counts for JSON response
+    const tierCounts: Record<string, number> = {};
+    let multiScannerCount = 0;
+    for (const [level, entries] of tiers) {
+      tierCounts[`tier_${level}`] = entries.length;
+      if (level >= 2) multiScannerCount += entries.length;
+    }
+
     // Send Telegram
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
     let telegramSent = false;
     if (botToken && chatId) {
       const message = formatNightlySummary(
-        multi, singles, catalysts, newTickers, droppedTickers,
-        discoveryStocks, discoveryCrypto, scannerCounts,
+        tiers, catalysts, newTickers, droppedTickers,
+        discoveryStocks, discoveryCrypto, scannerCounts, todayTickers.size,
       );
       const tgResult = await sendTelegramMessage(botToken, chatId, message);
       telegramSent = tgResult.ok;
@@ -394,7 +427,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       totalTickers: todayTickers.size,
-      multiScannerCount: multi.length,
+      multiScannerCount,
+      tierCounts,
       scannerCounts,
       newCount: newTickers.length,
       droppedCount: droppedTickers.length,
