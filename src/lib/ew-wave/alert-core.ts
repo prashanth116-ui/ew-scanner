@@ -9,7 +9,7 @@ import "server-only";
 
 import { scoreBatchEnhanced, type EnrichedQuoteInput } from "./scoring";
 import { applyModeFilters } from "./scanner-modes";
-import { formatAlertMessage, sendTelegramMessage } from "./telegram";
+import { formatAlertMessage, sendTelegramMessage, getTelegramChatId } from "./telegram";
 import { UNIVERSES, type UniverseKey } from "@/data/ew-universes";
 import type { AlertConfig, ConfidenceTier, ScannerMode, EnhancedScoredCandidate } from "./types";
 import { logError } from "@/lib/error-logger";
@@ -163,7 +163,7 @@ export async function runAlertPipeline(config: AlertConfig): Promise<{
   error?: string;
 }> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const chatId = getTelegramChatId("REALTIME");
 
   if (!botToken || !chatId) {
     return { sent: false, candidateCount: 0, newCount: 0, filtered: [], error: "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set" };

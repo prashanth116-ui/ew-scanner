@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
-import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
+import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { createAdminClient } from "@/lib/supabase/server";
 import {
   loadPreRunDaily,
@@ -734,7 +734,7 @@ export async function GET(request: NextRequest) {
 
     // Send Telegram (2 messages: confluence summary + scanner detail)
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const chatId = getTelegramChatId("NIGHTLY");
     let telegramSent = false;
     let detailSent = false;
     if (botToken && chatId) {

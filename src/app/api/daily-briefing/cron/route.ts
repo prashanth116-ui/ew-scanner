@@ -18,7 +18,7 @@ import {
 import type { ActionSignal } from "@/lib/sector-rotation/rotation-helpers";
 import { computeLeadershipHealth } from "@/lib/sector-rotation/leadership-health";
 import type { LeadershipHealth } from "@/lib/sector-rotation/leadership-health";
-import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
+import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { COMPOSITE } from "@/lib/sector-rotation/config";
 import { createAdminClient } from "@/lib/supabase/server";
 import { recordSectorSnapshotBatch } from "@/lib/supabase/persistence";
@@ -646,7 +646,7 @@ export async function GET(request: NextRequest) {
 
     let telegramSent = false;
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const chatId = getTelegramChatId("BRIEFING");
     if (botToken && chatId) {
       const tgResult = await sendTelegramMessage(botToken, chatId, message);
       telegramSent = tgResult.ok;

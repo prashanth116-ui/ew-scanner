@@ -280,7 +280,11 @@ Sends 2 Telegram messages at 11 PM ET after all scanners finish:
 ## Environment Variables
 Key env vars (set in Vercel + `.env.local`):
 - `CRON_SECRET` — Bearer token for cron auth
-- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` — Telegram alerts
+- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` — Telegram alerts (default channel)
+- `TELEGRAM_CHAT_ID_NIGHTLY` — Nightly summary channel (falls back to `TELEGRAM_CHAT_ID`)
+- `TELEGRAM_CHAT_ID_BRIEFING` — Daily briefing channel (falls back to `TELEGRAM_CHAT_ID`)
+- `TELEGRAM_CHAT_ID_SECTOR` — Sector rotation + policy pulse channel (falls back to `TELEGRAM_CHAT_ID`)
+- `TELEGRAM_CHAT_ID_REALTIME` — Real-time alerts: targets, watchlist, squeeze, EW (falls back to `TELEGRAM_CHAT_ID`)
 - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — DB access
 - `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` — Payments
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Client-side DB

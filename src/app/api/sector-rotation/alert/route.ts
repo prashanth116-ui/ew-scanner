@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
 import { detectTransitions, formatRotationAlert } from "@/lib/sector-rotation/transitions";
-import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
+import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
     let sent = false;
     if (transitions.length > 0) {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      const chatId = process.env.TELEGRAM_CHAT_ID;
+      const chatId = getTelegramChatId("SECTOR");
 
       if (botToken && chatId) {
         const message = formatRotationAlert(

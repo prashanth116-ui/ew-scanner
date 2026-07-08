@@ -65,6 +65,25 @@ export function formatAlertMessage(
   return lines.join("\n");
 }
 
+// ── Multi-channel routing ──
+
+export type TelegramChannel = "NIGHTLY" | "BRIEFING" | "SECTOR" | "REALTIME";
+
+const CHANNEL_ENV: Record<TelegramChannel, string> = {
+  NIGHTLY: "TELEGRAM_CHAT_ID_NIGHTLY",
+  BRIEFING: "TELEGRAM_CHAT_ID_BRIEFING",
+  SECTOR: "TELEGRAM_CHAT_ID_SECTOR",
+  REALTIME: "TELEGRAM_CHAT_ID_REALTIME",
+};
+
+/**
+ * Resolve the Telegram chat ID for a given channel.
+ * Falls back to the default TELEGRAM_CHAT_ID if the channel-specific var is not set.
+ */
+export function getTelegramChatId(channel: TelegramChannel): string | undefined {
+  return process.env[CHANNEL_ENV[channel]] || process.env.TELEGRAM_CHAT_ID;
+}
+
 export async function sendTelegramMessage(
   botToken: string,
   chatId: string,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientKey } from "@/lib/rate-limit";
 import { fetchQuote } from "@/lib/ew-wave/alert-core";
 import { scoreBatchEnhanced, type EnrichedQuoteInput } from "@/lib/ew-wave/scoring";
-import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
+import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { logError } from "@/lib/error-logger";
 import type { Watchlist, ScannerMode } from "@/lib/ew-wave/types";
 
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   }
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const chatId = getTelegramChatId("REALTIME");
 
   if (!botToken || !chatId) {
     return NextResponse.json(

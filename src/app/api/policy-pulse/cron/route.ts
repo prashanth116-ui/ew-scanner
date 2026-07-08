@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ingestPolicyPulse } from "@/lib/policy-pulse/ingest";
 import { loadRecentThemeEvents } from "@/lib/policy-pulse/persistence";
 import { getThemeLabel } from "@/data/theme-map";
-import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
+import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 
 export const maxDuration = 60;
 
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     // Telegram alert for high-impact events
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const chatId = getTelegramChatId("SECTOR");
 
     if (botToken && chatId && result.classified > 0) {
       // Check for high-impact events in last 4 hours

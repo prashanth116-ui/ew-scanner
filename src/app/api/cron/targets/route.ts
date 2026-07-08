@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
-import { sendTelegramMessage } from "@/lib/ew-wave/telegram";
+import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { fetchWithRetry } from "@/lib/yahoo-utils";
 import { createClient } from "@/lib/supabase/server";
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
   }
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const chatId = getTelegramChatId("REALTIME");
   if (!botToken || !chatId) {
     return NextResponse.json({ error: "Telegram not configured" }, { status: 500 });
   }
