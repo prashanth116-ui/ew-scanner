@@ -20,9 +20,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "ticker param required" }, { status: 400 });
   }
   const emaTimeframe = (request.nextUrl.searchParams.get("emaTimeframe") ?? "15m") as EmaTimeframe;
+  const scanner4h = request.nextUrl.searchParams.get("scanner") === "4h";
 
   try {
-    const data = await fetchPreRunData(ticker, emaTimeframe);
+    const data = await fetchPreRunData(ticker, scanner4h ? "4h" : emaTimeframe, undefined, scanner4h);
     if (!data) {
       return NextResponse.json({ error: "No data found" }, { status: 404 });
     }
