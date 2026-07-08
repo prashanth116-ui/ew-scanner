@@ -521,6 +521,129 @@ function formatNightlySummary(
   return lines.join("\n");
 }
 
+// ── Scanner Detail formatter (Message 2) ──
+
+const DETAIL_CAP = 10;
+
+/** Short classification labels for inflection stage */
+const STAGE_SHORT: Record<string, string> = {
+  SELLER_EXHAUSTION: "SE_EX",
+  EARLY_ACCUMULATION: "EARLY_ACCUM",
+  INFLECTION: "INFLECT",
+  EXPANSION: "EXPAN",
+  MOMENTUM: "MOM",
+};
+
+/** Short classification labels for institutional */
+const CLASS_SHORT: Record<string, string> = {
+  "CONSTRUCTIVE SETUP": "CONSTRUCT",
+  "CONTINUATION LEADER": "CONT_LEAD",
+  "RECOVERY LEADER": "REC_LEAD",
+  "BREAKOUT CANDIDATE": "BRKOUT",
+  "ACCUMULATION": "ACCUM",
+  "NEUTRAL HOLD": "HOLD",
+  "TOO EXTENDED": "EXT",
+};
+
+function formatScannerDetail(
+  prerun: PreRunDailyRecord[],
+  inflection: InflectionDailyRecord[],
+  vcp: VCPDailyRecord[],
+  institutional: InstitutionalDailyRecord[],
+  prerunner: PreRunnerDailyRecord[],
+): string {
+  const lines: string[] = [];
+  lines.push("<b>SCANNER DETAIL</b>");
+  lines.push("");
+
+  // ── Inflection ──
+  const infStarter = inflection.filter((r) => r.trade_read === "STARTER_POSITION_CANDIDATE");
+  const infAddOn = inflection.filter((r) => r.trade_read === "ADD_ON_CONFIRMATION");
+  const infWatch = inflection.filter((r) => r.trade_read === "WATCH");
+  lines.push(`<b>INF:</b> ${infStarter.length} STARTER \u00b7 ${infAddOn.length} ADD \u00b7 ${infWatch.length} WATCH`);
+  const infTop = infStarter.sort((a, b) => b.overall_score - a.overall_score).slice(0, DETAIL_CAP);
+  for (const r of infTop) {
+    const stage = STAGE_SHORT[r.stage] ?? r.stage;
+    lines.push(`${r.ticker} ${r.overall_score} | ${stage} | SE:${r.se_score} BE:${r.be_score} RS:${r.rs_score}`);
+  }
+  if (infStarter.length > DETAIL_CAP) lines.push(`... +${infStarter.length - DETAIL_CAP} more`);
+  lines.push("");
+
+  // ── Institutional ──
+  const instSL = institutional.filter((r) => r.tier === "SHORTLIST");
+  const instWL = institutional.filter((r) => r.tier === "WATCHLIST");
+  const instSpec = institutional.filter((r) => r.tier === "SPECULATIVE");
+  lines.push(`<b>INST:</b> ${instSL.length} SL \u00b7 ${instWL.length} WL \u00b7 ${instSpec.length} SPEC`);
+  const instTop = instSL.sort((a, b) => b.composite_score - a.composite_score).slice(0, DETAIL_CAP);
+  for (const r of instTop) {
+    const cls = CLASS_SHORT[r.classification] ?? r.classification;
+    lines.push(`${r.ticker} ${r.composite_score} | ${cls} | SL`);
+  }
+  if (instSL.length > DETAIL_CAP) lines.push(`... +${instSL.length - DETAIL_CAP} more`);
+  lines.push("");
+
+  // ── VCP ──
+  const vcpFocus = vcp.filter((r) => r.phase === "FOCUS_LIST");
+  const vcpWatch = vcp.filter((r) => r.phase === "WATCHLIST_CANDIDATE");
+  const vcpEarly = vcp.filter((r) => r.phase === "EARLY_SETUP");
+  lines.push(`<b>VCP:</b> ${vcpFocus.length} FOCUS \u00b7 ${vcpWatch.length} WATCH \u00b7 ${vcpEarly.length} EARLY`);
+  const vcpAll = [...vcp].sort((a, b) => b.total_score - a.total_score).slice(0, DETAIL_CAP);
+  for (const r of vcpAll) {
+    const phaseMap: Record<string, string> = { FOCUS_LIST: "FOCUS", WATCHLIST_CANDIDATE: "WATCH", EARLY_SETUP: "EARLY" };
+    const entry = r.entry != null ? ` | E:${r.entry.toFixed(2)}` : "";
+    const stop = r.stop != null ? ` S:${r.stop.toFixed(2)}` : "";
+    lines.push(`${r.ticker} ${r.total_score} | ${phaseMap[r.phase] ?? r.phase}${entry}${stop}`);
+  }
+  if (vcp.length > DETAIL_CAP) lines.push(`... +${vcp.length - DETAIL_CAP} more`);
+  lines.push("");
+
+  // ── PreRun (preset counts + multi-preset overlap) ──
+  const presetCounts = {
+    LD: prerun.filter((r) => r.is_leading).length,
+    ST: prerun.filter((r) => r.is_stealth).length,
+    SNDK: prerun.filter((r) => r.is_sndk).length,
+    EM: prerun.filter((r) => r.is_early_mover).length,
+    PB: prerun.filter((r) => r.is_pullback).length,
+    "E+": prerun.filter((r) => r.is_early_plus).length,
+  };
+  const presetParts = Object.entries(presetCounts)
+    .filter(([, c]) => c > 0)
+    .map(([k, c]) => `${k}:${c}`);
+  lines.push(`<b>PR:</b> ${prerun.length} total | ${presetParts.join(" ")}`);
+
+  // Multi-preset overlap: tickers qualifying for 2+ presets, sorted by score
+  const multiPreset = prerun.filter((r) => {
+    let count = 0;
+    if (r.is_leading) count++;
+    if (r.is_stealth) count++;
+    if (r.is_sndk) count++;
+    if (r.is_early_mover) count++;
+    if (r.is_pullback) count++;
+    if (r.is_early_plus) count++;
+    return count >= 2;
+  }).sort((a, b) => b.final_score - a.final_score);
+
+  if (multiPreset.length > 0) {
+    const cap = Math.min(multiPreset.length, DETAIL_CAP);
+    for (const r of multiPreset.slice(0, cap)) {
+      lines.push(`${r.ticker} ${r.final_score} | ${prerunLabel(r).replace("PR ", "")}`);
+    }
+    if (multiPreset.length > cap) lines.push(`... +${multiPreset.length - cap} more`);
+  }
+  lines.push("");
+
+  // ── PreRunner ──
+  const rnrLeaders = prerunner.filter((r) => r.type === "LEADER");
+  const rnrTurnarounds = prerunner.filter((r) => r.type === "TURNAROUND");
+  lines.push(`<b>RNR:</b> ${prerunner.length} total | ${rnrLeaders.length} leaders \u00b7 ${rnrTurnarounds.length} turnarounds`);
+  const rnrTop = [...prerunner].sort((a, b) => b.prerunner_score - a.prerunner_score).slice(0, 5);
+  if (rnrTop.length > 0) {
+    lines.push(rnrTop.map((r) => `${r.ticker} ${r.prerunner_score}`).join(" \u00b7 "));
+  }
+
+  return lines.join("\n");
+}
+
 // ── Route Handler ──
 
 export async function GET(request: NextRequest) {
@@ -589,11 +712,13 @@ export async function GET(request: NextRequest) {
       if (level >= 2) multiScannerCount += entries.length;
     }
 
-    // Send Telegram
+    // Send Telegram (2 messages: confluence summary + scanner detail)
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
     let telegramSent = false;
+    let detailSent = false;
     if (botToken && chatId) {
+      // Message 1: Cross-scanner confluence
       const message = formatNightlySummary(
         tiers, catalysts, droppedTickers,
         discoveryStocks, discoveryCrypto, scannerCounts, todayTickers.size,
@@ -602,6 +727,14 @@ export async function GET(request: NextRequest) {
       telegramSent = tgResult.ok;
       if (!tgResult.ok) {
         logError("api/nightly-summary/cron/telegram", new Error(tgResult.error ?? "Telegram send failed"));
+      }
+
+      // Message 2: Per-scanner detail with sub-scores and classifications
+      const detailMsg = formatScannerDetail(prerun, inflection, vcp, institutional, prerunner);
+      const detailResult = await sendTelegramMessage(botToken, chatId, detailMsg);
+      detailSent = detailResult.ok;
+      if (!detailResult.ok) {
+        logError("api/nightly-summary/cron/detail-telegram", new Error(detailResult.error ?? "Detail Telegram send failed"));
       }
     }
 
@@ -615,6 +748,7 @@ export async function GET(request: NextRequest) {
       discoveryStocks,
       discoveryCrypto,
       telegramSent,
+      detailSent,
       elapsedMs: Date.now() - startTime,
     });
   } catch (err) {
