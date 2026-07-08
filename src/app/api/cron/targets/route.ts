@@ -95,22 +95,25 @@ export async function GET(request: NextRequest) {
           : price <= target;  // Downside target
 
       const modeLabel = signal.mode ? ` ${signal.mode}` : "";
+      const entry = signal.price_at_signal;
+      const retPct = entry > 0 ? ((price - entry) / entry) * 100 : 0;
+      const retStr = `${retPct >= 0 ? "+" : ""}${retPct.toFixed(1)}%`;
 
       // Check target1
       if (signal.target1 != null && !signal.hit_target1 && checkHit(signal.target1)) {
-        alerts.push(`${signal.ticker} hit T1 ($${signal.target1.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}${modeLabel}]`);
+        alerts.push(`${signal.ticker} hit T1 ($${signal.target1.toFixed(2)}) — now $${price.toFixed(2)} [${retStr} from $${entry.toFixed(2)}] [${signal.scanner}${modeLabel}]`);
         updates.push({ id: signal.id, field: "hit_target1", value: true });
       }
 
       // Check target2
       if (signal.target2 != null && !signal.hit_target2 && checkHit(signal.target2)) {
-        alerts.push(`${signal.ticker} hit T2 ($${signal.target2.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}${modeLabel}]`);
+        alerts.push(`${signal.ticker} hit T2 ($${signal.target2.toFixed(2)}) — now $${price.toFixed(2)} [${retStr} from $${entry.toFixed(2)}] [${signal.scanner}${modeLabel}]`);
         updates.push({ id: signal.id, field: "hit_target2", value: true });
       }
 
       // Check target3
       if (signal.target3 != null && !signal.hit_target3 && checkHit(signal.target3)) {
-        alerts.push(`${signal.ticker} hit T3 ($${signal.target3.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}${modeLabel}]`);
+        alerts.push(`${signal.ticker} hit T3 ($${signal.target3.toFixed(2)}) — now $${price.toFixed(2)} [${retStr} from $${entry.toFixed(2)}] [${signal.scanner}${modeLabel}]`);
         updates.push({ id: signal.id, field: "hit_target3", value: true });
       }
 
@@ -120,7 +123,7 @@ export async function GET(request: NextRequest) {
           ? price <= signal.invalidation   // Below entry → bearish invalidation
           : price >= signal.invalidation;  // Above entry → bullish invalidation
         if (invalidationHit) {
-          alerts.push(`${signal.ticker} INVALIDATED ($${signal.invalidation.toFixed(2)}) — now $${price.toFixed(2)} [${signal.scanner}${modeLabel}]`);
+          alerts.push(`${signal.ticker} INVALIDATED ($${signal.invalidation.toFixed(2)}) — now $${price.toFixed(2)} [${retStr} from $${entry.toFixed(2)}] [${signal.scanner}${modeLabel}]`);
           updates.push({ id: signal.id, field: "hit_invalidation", value: true });
         }
       }
