@@ -45,6 +45,7 @@ interface ConsolidatedTicker {
   ticker: string;
   hits: ScannerHit[];
   maxScore: number;
+  rsAccel: number | null; // RS acceleration (positive = improving vs SPY)
 }
 
 // ── Catalyst signal loader (no existing load function) ──
@@ -125,12 +126,47 @@ function catalystLabel(r: CatalystSignalRow): string {
   return `${r.signal_strength} | ${r.score}`;
 }
 
+// ── RS Acceleration ──
+
+/**
+ * Build a Map<ticker, rsAccel> from all available RS data.
+ * Priority: QFE (widest coverage, multi-timeframe) > PreRunner > Institutional.
+ * QFE accel = rs_5d_spy - rs_20d_spy (short-term RS outpacing medium-term = accelerating).
+ */
+function buildRsAccelMap(
+  qfe: QFEDailyRecord[],
+  prerunner: PreRunnerDailyRecord[],
+  institutional: InstitutionalDailyRecord[],
+): Map<string, number> {
+  const rsMap = new Map<string, number>();
+
+  // Institutional rs_accel_spy (lowest priority, overwritten by better sources)
+  for (const r of institutional) {
+    if (r.rs_accel_spy != null) rsMap.set(r.ticker, r.rs_accel_spy);
+  }
+
+  // PreRunner rs_acceleration (mid priority)
+  for (const r of prerunner) {
+    if (r.rs_acceleration != null) rsMap.set(r.ticker, r.rs_acceleration);
+  }
+
+  // QFE: rs_5d_spy - rs_20d_spy (highest priority, widest coverage)
+  for (const r of qfe) {
+    if (r.rs_5d_spy != null && r.rs_20d_spy != null) {
+      rsMap.set(r.ticker, r.rs_5d_spy - r.rs_20d_spy);
+    }
+  }
+
+  return rsMap;
+}
+
 // ── Consolidation ──
 
 /**
  * QFE is derived from PreRun data, so counting both inflates confluence.
  * We count only 5 independent scanners (PreRun, Inflection, VCP, Institutional, PreRunner)
  * for confluence ranking. QFE rating is appended as an inline badge when present.
+ * Tickers within each tier are sorted by RS acceleration DESC.
  */
 function consolidateResults(
   prerun: PreRunDailyRecord[],
@@ -159,6 +195,9 @@ function consolidateResults(
   const qfeMap = new Map<string, string>();
   for (const r of qfe) qfeMap.set(r.ticker, r.rating);
 
+  // RS acceleration lookup
+  const rsAccelMap = buildRsAccelMap(qfe, prerunner, institutional);
+
   // Build consolidated list with tiers
   const tiers = new Map<number, ConsolidatedTicker[]>();
 
@@ -170,16 +209,22 @@ function consolidateResults(
 
     const independentCount = hits.filter((h) => h.scanner !== "QFE").length;
     const maxScore = Math.max(...hits.filter((h) => h.scanner !== "QFE").map((h) => h.score));
+    const rsAccel = rsAccelMap.get(ticker) ?? null;
 
-    const entry: ConsolidatedTicker = { ticker, hits, maxScore };
+    const entry: ConsolidatedTicker = { ticker, hits, maxScore, rsAccel };
 
     if (!tiers.has(independentCount)) tiers.set(independentCount, []);
     tiers.get(independentCount)!.push(entry);
   }
 
-  // Sort each tier by maxScore DESC
+  // Sort each tier by RS acceleration DESC (nulls last), then maxScore DESC as tiebreaker
   for (const entries of tiers.values()) {
-    entries.sort((a, b) => b.maxScore - a.maxScore);
+    entries.sort((a, b) => {
+      const rsA = a.rsAccel ?? -999;
+      const rsB = b.rsAccel ?? -999;
+      if (rsA !== rsB) return rsB - rsA;
+      return b.maxScore - a.maxScore;
+    });
   }
 
   // Catalyst entries (separate section)
@@ -187,6 +232,7 @@ function consolidateResults(
     ticker: r.ticker,
     hits: [{ scanner: "Catalyst", label: catalystLabel(r), score: r.score }],
     maxScore: r.score,
+    rsAccel: null,
   }));
   catalystEntries.sort((a, b) => b.maxScore - a.maxScore);
 
@@ -246,7 +292,10 @@ const MAX_DROPPED = 8;
 
 function formatTickerLine(t: ConsolidatedTicker): string {
   const labels = t.hits.map((h) => h.label).join(" \u00b7 ");
-  return `${t.ticker} \u2014 ${labels}`;
+  const rsTag = t.rsAccel != null
+    ? ` [RS ${t.rsAccel > 0 ? "+" : ""}${t.rsAccel.toFixed(1)}]`
+    : "";
+  return `${t.ticker}${rsTag} \u2014 ${labels}`;
 }
 
 function formatNightlySummary(
