@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No data found" }, { status: 404 });
     }
     const sectorQuadrant = request.nextUrl.searchParams.get("sectorQuadrant") ?? null;
-    const result = autoScorePreRun(data, sectorQuadrant);
+    const result = autoScorePreRun(data, sectorQuadrant, scanner4h ? 10 : undefined);
     return NextResponse.json(result);
   } catch (err) {
     logError("api/prerun/stock", err, { ticker });

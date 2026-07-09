@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
           if (!data) return null;
           const sector = getSectorForTicker(ticker);
           const quadrant = sector ? sectorQuadrants[sector] ?? null : null;
-          const result = autoScorePreRun(data, quadrant);
+          const result = autoScorePreRun(data, quadrant, 10);
           return { result, quadrant };
         })
       );

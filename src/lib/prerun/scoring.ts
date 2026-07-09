@@ -15,9 +15,9 @@ import type {
 import { matchBestPattern, type PatternMatchResult } from "./patterns";
 
 /** Gate 1: Has the run already happened? */
-export function evaluateGate1(data: PreRunStockData): boolean {
+export function evaluateGate1(data: PreRunStockData, threshold = 20): boolean {
   if (data.pctFromAth === null) return false;
-  return data.pctFromAth >= 20;
+  return data.pctFromAth >= threshold;
 }
 
 /** Gate 2: Existential risk? (manual — passed from watchlist). */
@@ -308,10 +308,11 @@ export function scorePreRun(
   gate2Pass: boolean,
   manualScoreC: number,
   manualScoreG: number,
-  sectorQuadrant?: string | null
+  sectorQuadrant?: string | null,
+  gate1Threshold?: number,
 ): PreRunResult {
   const gates: PreRunGates = {
-    gate1: evaluateGate1(data),
+    gate1: evaluateGate1(data, gate1Threshold),
     gate2: evaluateGate2(gate2Pass),
     gate3: evaluateGate3(data),
   };
@@ -400,8 +401,8 @@ export function scorePreRun(
 }
 
 /** Auto-score for nightly scan (uses default manual scores: C=1, G=auto). */
-export function autoScorePreRun(data: PreRunStockData, sectorQuadrant?: string | null): PreRunResult {
-  return scorePreRun(data, true, 1, suggestScoreG(data), sectorQuadrant);
+export function autoScorePreRun(data: PreRunStockData, sectorQuadrant?: string | null, gate1Threshold?: number): PreRunResult {
+  return scorePreRun(data, true, 1, suggestScoreG(data), sectorQuadrant, gate1Threshold);
 }
 
 /**
