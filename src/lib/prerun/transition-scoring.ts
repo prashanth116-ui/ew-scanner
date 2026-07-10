@@ -611,13 +611,13 @@ function classifyState(
   if (volume >= 55 && accum >= 40) return "DEMAND_INCREASING";
 
   // STATE 2: ACCUMULATION — range-bound with stealth buying
-  if (accum >= 40 && se >= 30) return "ACCUMULATION";
+  if (accum >= 35 && se >= 28) return "ACCUMULATION";
   // Alt: OBV divergence present with meaningful seller exhaustion
-  if (data.obvDivergent === true && se >= 30 && accum >= 25) return "ACCUMULATION";
+  if (data.obvDivergent === true && se >= 28 && accum >= 25) return "ACCUMULATION";
 
   // STATE 1: SELLING_EXHAUSTION — selling pressure declining
-  if (se >= 45) return "SELLING_EXHAUSTION";
-  if (se >= 35 && (data.vpDivergenceBullish === true)) return "SELLING_EXHAUSTION";
+  if (se >= 40) return "SELLING_EXHAUSTION";
+  if (se >= 30 && (data.vpDivergenceBullish === true)) return "SELLING_EXHAUSTION";
 
   // STATE 0: MARKDOWN — default
   return "MARKDOWN";
