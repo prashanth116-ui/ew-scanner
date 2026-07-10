@@ -338,6 +338,7 @@ export default function TransitionDailyPage() {
   const [streaks, setStreaks] = useState<Record<string, number>>({});
   const [deltas, setDeltas] = useState<Record<string, number>>({});
   const [dropped, setDropped] = useState<DroppedTicker[]>([]);
+  const [inflectionTickers, setInflectionTickers] = useState<Map<string, { trade_read: string; score: number }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
   const [alertFilter, setAlertFilter] = useState<AlertStateFilter>("ALL");
@@ -378,8 +379,11 @@ export default function TransitionDailyPage() {
     async function load() {
       setLoadingResults(true);
       try {
-        const res = await fetch(`/api/transition/daily?date=${selectedDate}`);
-        const json = await res.json();
+        const [transRes, infRes] = await Promise.all([
+          fetch(`/api/transition/daily?date=${selectedDate}`),
+          fetch(`/api/inflection/daily?date=${selectedDate}`).catch(() => null),
+        ]);
+        const json = await transRes.json();
         if (!cancelled) {
           setResults(json.results ?? []);
           setStreaks(json.streaks ?? {});
@@ -387,12 +391,24 @@ export default function TransitionDailyPage() {
           setDropped(json.dropped ?? []);
           setExpandedTicker(null);
         }
+        // Build inflection ticker map
+        if (infRes && infRes.ok) {
+          const infJson = await infRes.json();
+          const map = new Map<string, { trade_read: string; score: number }>();
+          for (const r of infJson.results ?? []) {
+            map.set(r.ticker, { trade_read: r.trade_read, score: r.overall_score });
+          }
+          if (!cancelled) setInflectionTickers(map);
+        } else {
+          if (!cancelled) setInflectionTickers(new Map());
+        }
       } catch {
         if (!cancelled) {
           setResults([]);
           setStreaks({});
           setDeltas({});
           setDropped([]);
+          setInflectionTickers(new Map());
         }
       } finally {
         if (!cancelled) setLoadingResults(false);
@@ -610,6 +626,9 @@ export default function TransitionDailyPage() {
                       {sBadge.label}
                     </span>
                     <div className="flex items-center gap-1">
+                      {inflectionTickers.has(r.ticker) && (
+                        <span className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[8px] font-bold text-sky-400">INF</span>
+                      )}
                       {isNew && (
                         <span className="text-[8px] font-bold text-green-400">NEW</span>
                       )}
@@ -975,6 +994,16 @@ export default function TransitionDailyPage() {
                               <span title="New Today" className="inline-flex items-center rounded border border-green-500/30 bg-green-500/10 px-1 py-0.5 text-[8px] font-bold text-green-400">
                                 NEW
                               </span>
+                            )}
+                            {inflectionTickers.has(row.ticker) && (
+                              <Link
+                                href="/prerun/inflection-daily"
+                                title={`Also on Inflection: ${inflectionTickers.get(row.ticker)!.trade_read} (${inflectionTickers.get(row.ticker)!.score})`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[8px] font-bold text-sky-400 hover:bg-sky-500/20 transition-colors"
+                              >
+                                INF
+                              </Link>
                             )}
                           </div>
                         </td>
