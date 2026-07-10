@@ -89,32 +89,34 @@ Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MIN_MARKET
 **Applied in 6 cron routes:** PreRun preset, PreRun 4h, Inflection, Transition, VCP, Institutional. NOT applied to single-ticker API routes (explicit user lookups) or PreRunner (uses `computePreRunnerRadar()`).
 
 ### Preset Cron Details
-- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS (~605 unique tickers)
+- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS (~615 unique tickers)
 - **SP400 dropped:** Removed from all scan universes. Notable SP400 stocks rescued to ADDITIONAL_MEMBERS.
+- **NDX100 updated:** Reflects June 22, 2026 quarterly rebalance (added ALAB, ALNY, CRWV, NBIS, RKLB, TER; removed CHTR, CTSH, VRSK, ZS)
 - **Universal quality gate:** Filters ~100+ stocks before scoring (price < $15, mcap < $8B, dollarVol < $100M, dataQuality < 40%)
 - **Vercel limit:** 300s maxDuration, 240s time guard for Telegram
-- **Single-pass system:** ~605 tickers typically fits in one pass. Resume pass available if needed.
+- **Single-pass system:** ~615 tickers typically fits in one pass. Resume pass available if needed.
 - **4h scanner:** May still need 2 passes (larger Yahoo 2y:1h chart responses slow each ticker)
 - **Batch settings:** BATCH_SIZE=15, BATCH_DELAY=500ms, PERSIST_INTERVAL=50
 - **Params:** `?clear=true` (delete today's data before scan), `?resume=true` (skip existing tickers)
 - **Telegram:** Always sends summary using full DB data (not in-memory partial)
 - **Noise guards:** `finalScore > 0` required for persistence, Leading preset uses `finalScore` not `totalScore`
 
-### ADDITIONAL_MEMBERS (81 curated tickers)
-Non-index stocks added to the scan universe for momentum/breakout relevance. Defined in `src/data/index-tiers.ts`. Tier 2 for `getTickerTier()`.
+### ADDITIONAL_MEMBERS (90 curated tickers)
+Non-index stocks added to the scan universe for momentum/breakout relevance. Defined in `src/data/index-tiers.ts`. Tier 2 for `getTickerTier()`. Last updated 2026-07-09.
 
 | Category | Tickers |
 |----------|---------|
-| Tech / Software / Cloud | TSM, SNOW, NET, MDB, HUBS, IOT, CYBR, MNDY, PSTG, TWLO, OKTA, NTNX, GTLB, S, ESTC, TOST |
+| Tech / Software / Cloud | TSM, SNOW, NET, MDB, HUBS, IOT, CYBR, MNDY, PSTG, TWLO, OKTA, NTNX, GTLB, S, ESTC, TOST, ZS |
 | Consumer / E-commerce | SHOP, SPOT, RBLX, DKNG, ONON, CAVA, CPNG, SE, CHWY, CELH, ELF |
-| Fintech / Payments | NU, SQ, SOFI, AFRM |
+| Fintech / Payments / Crypto | NU, SQ, SOFI, AFRM, CRCL |
 | Social / Media | PINS, SNAP, RDDT, ZG, ROKU, ZM |
-| Healthcare / Biotech | NVO, ALNY, NTRA, HALO, INSM, BMRN, VKTX, LEGN, SRPT |
-| Industrials / Defense | HEI, BAH |
+| Healthcare / Biotech / AI Medicine | NVO, NTRA, HALO, INSM, BMRN, VKTX, LEGN, SRPT, TEM |
+| Industrials / Defense / Aerospace | HEI, BAH, ASTS |
 | Energy / Materials | CCJ, SCCO, ENPH, AA |
 | Large ADRs | SAP, GSK, BHP, RIO, BABA, JD, LI, BIDU |
-| Notable ex-SP400 | MANH, DUOL, RBRK, MDGL, WING, CROX, DKS, ETSY, MOD, POWL, IESC, FND, NBIX, UTHR, CYTK, LNTH, ITCI, THC, SFM, GLOB |
-| Other | MTCH |
+| Recent IPOs / High Momentum | SPCX, MDLN, VIK, QNT |
+| Notable ex-SP400 | MANH, DUOL, RBRK, MDGL, WING, CROX, DKS, ETSY, MOD, POWL, IESC, FND, NBIX, UTHR, CYTK, LNTH, ITCI, THC, SFM, GLOB, CART |
+| Other | MTCH, DDOC |
 
 ### Preset Qualification Criteria
 | Preset | Key Criteria |
@@ -229,17 +231,18 @@ Detects market structure transitions from accumulation into early markup using s
 | `src/lib/prerun/market-structure.ts` | Swing detection, ChoCH/BOS detection, trigger/invalidation levels |
 | `src/lib/prerun/transition-scoring.ts` | 8-component scoring, state classification, alert state logic |
 | `src/lib/prerun/types.ts` | `TransitionState`, `TransitionAlertState`, `TransitionScores`, `TransitionResult` types |
-| `src/app/api/transition/cron/daily/route.ts` | Cron route (01:55 UTC, BATCH_SIZE=10, BATCH_DELAY=1100ms) |
+| `src/app/api/transition/cron/daily/route.ts` | Cron route (01:55 UTC, BATCH_SIZE=15, BATCH_DELAY=500ms) |
 | `src/app/api/transition/daily/route.ts` | Read API (?date=, ?dates=true) |
 | `src/app/prerun/transition-daily/page.tsx` | UI page with Top Picks banner, state distribution, INF cross-reference |
 | `supabase/migrations/019_transition_daily.sql` | DB table with 8 component scores, state, alert_state, trigger/invalidation |
 
 **Cron details:**
-- Uses same universe as other scanners (~605 tickers)
+- Uses same universe as other scanners (~615 tickers)
 - Fetches 3mo daily chart separately via `fetchYahooChart()` for OHLC data
 - Calls `scoreTransitionWithOHLC()` with raw highs/lows/closes + 3-bar pivot
 - Skips MARKDOWN state and gate failures before persisting
-- BATCH_SIZE=10, BATCH_DELAY=1100ms (slower than preset due to separate chart fetch)
+- BATCH_SIZE=15, BATCH_DELAY=500ms, PERSIST_INTERVAL=50
+- Supports `?clear=true` to wipe today's records before scanning (prevents stale data from previous runs)
 
 **UI features:**
 - Top Picks banner: top 10 TRIGGERED + READY cards with click-to-scroll
@@ -432,10 +435,11 @@ Sends 2 Telegram messages at 11 PM ET after all scanners finish:
 **Key file:** `src/app/api/nightly-summary/cron/route.ts`
 
 ## Open Items / Known Gaps
-- **Transition scanner is a trial:** Created to compare against Inflection for detecting accumulation → markup transitions. Badge-only in nightly summary. After several days of parallel output, decide whether to promote to confluence, merge with Inflection, or remove. First scan showed 376/508 qualifying (74% pass rate) — likely too permissive, may need tighter gating.
-- **VCP + Institutional crons untested:** Built but not manually triggered yet — universe is ~605, likely fits in one pass.
-- **Preset-resume may be redundant:** With SP400 dropped and universe at ~605, the preset cron likely completes in a single pass. The resume cron at 02:06 is still scheduled as a safety net but may not be needed. Monitor scan completion counts.
-- **ADDITIONAL_MEMBERS maintenance:** The 81 curated tickers in ADDITIONAL_MEMBERS need periodic review. Stocks may delist, change tickers (e.g., SQ→XYZ for Block), or fall below quality gate thresholds permanently.
+- **Transition scanner is a trial:** Created to compare against Inflection for detecting accumulation → markup transitions. Badge-only in nightly summary. After gating tuning, pass rate is ~45% (247/546). Produces 27 SE + 2 ACCUM stocks for early detection. After several days of parallel output, decide whether to promote to confluence, merge with Inflection, or remove.
+- **VCP + Institutional crons untested:** Built but not manually triggered yet — universe is ~615, likely fits in one pass.
+- **Preset-resume may be redundant:** With SP400 dropped and universe at ~615, the preset cron likely completes in a single pass. The resume cron at 02:06 is still scheduled as a safety net but may not be needed. Monitor scan completion counts.
+- **NDX100 rebalance maintenance:** NDX100_MEMBERS updated for June 22, 2026 rebalance. Next rebalance is September 2026 — update `src/data/index-tiers.ts` when announced. No automated rebalance cron (index changes are infrequent, ADDITIONAL_MEMBERS requires human judgment).
+- **ADDITIONAL_MEMBERS maintenance:** The 90 curated tickers in ADDITIONAL_MEMBERS need periodic review. Stocks may delist, change tickers, or fall below quality gate thresholds permanently. Review quarterly alongside NDX100 rebalance.
 
 ## Environment Variables
 Key env vars (set in Vercel + `.env.local`):
