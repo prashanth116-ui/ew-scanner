@@ -107,8 +107,10 @@ export async function GET(request: NextRequest) {
           fetchedCount++;
           const result = r.value;
 
-          // Skip MARKDOWN state (no signal value) and gate failures
-          if (!result.gates.allPass || result.state === "MARKDOWN") continue;
+          // Skip gate failures, MARKDOWN/SELLING_EXHAUSTION (too early), and low scores
+          if (!result.gates.allPass) continue;
+          if (result.state === "MARKDOWN" || result.state === "SELLING_EXHAUSTION") continue;
+          if (result.scores.overallScore < 25) continue;
 
           qualifying.push(result);
           pendingRecords.push(resultToRecord(result, today));

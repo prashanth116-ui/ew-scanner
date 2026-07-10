@@ -593,29 +593,31 @@ function classifyState(
   ) return "COMPRESSION";
 
   // STATE 6: BULLISH_BOS — break of structure confirmed
-  if (bosDetected && hlQuality >= 25) return "BULLISH_BOS";
+  // Require meaningful HL quality + volume support to avoid catching every stock in a bull market
+  if (bosDetected && hlQuality >= 40 && volume >= 30) return "BULLISH_BOS";
 
   // STATE 5: HIGHER_LOW_FORMATION — higher low after ChoCH
-  if (chochDetected && hlQuality >= 35) return "HIGHER_LOW_FORMATION";
+  if (chochDetected && hlQuality >= 45) return "HIGHER_LOW_FORMATION";
   // Alt: strong HL quality without explicit ChoCH detection
-  if (hlQuality >= 50 && accum >= 35 && structureBias === "bullish") return "HIGHER_LOW_FORMATION";
+  if (hlQuality >= 55 && accum >= 40 && structureBias === "bullish") return "HIGHER_LOW_FORMATION";
 
   // STATE 4: BULLISH_CHOCH — change of character detected
-  if (chochDetected) return "BULLISH_CHOCH";
+  // Require some accumulation evidence, not just a naked ChoCH
+  if (chochDetected && (accum >= 25 || se >= 30)) return "BULLISH_CHOCH";
 
   // STATE 3: DEMAND_INCREASING — buyers emerging
-  if (accum >= 40 && volume >= 40 && se >= 30) return "DEMAND_INCREASING";
-  // Alt: strong volume profile with some accumulation
-  if (volume >= 50 && accum >= 30) return "DEMAND_INCREASING";
+  if (accum >= 45 && volume >= 45 && se >= 35) return "DEMAND_INCREASING";
+  // Alt: strong volume profile with solid accumulation
+  if (volume >= 55 && accum >= 40) return "DEMAND_INCREASING";
 
   // STATE 2: ACCUMULATION — range-bound with stealth buying
-  if (accum >= 30 && se >= 25) return "ACCUMULATION";
-  // Alt: OBV divergence present
-  if (data.obvDivergent === true && se >= 20) return "ACCUMULATION";
+  if (accum >= 40 && se >= 30) return "ACCUMULATION";
+  // Alt: OBV divergence present with meaningful seller exhaustion
+  if (data.obvDivergent === true && se >= 30 && accum >= 25) return "ACCUMULATION";
 
   // STATE 1: SELLING_EXHAUSTION — selling pressure declining
-  if (se >= 35) return "SELLING_EXHAUSTION";
-  if (se >= 25 && (data.vpDivergenceBullish === true)) return "SELLING_EXHAUSTION";
+  if (se >= 45) return "SELLING_EXHAUSTION";
+  if (se >= 35 && (data.vpDivergenceBullish === true)) return "SELLING_EXHAUSTION";
 
   // STATE 0: MARKDOWN — default
   return "MARKDOWN";
@@ -635,22 +637,22 @@ function classifyAlertState(
   // INVALIDATED: markdown with no recovery signals
   if (stateNum === 0) return "INVALIDATED";
 
-  // TRIGGERED: in expansion states with decent score
-  if (stateNum >= 8 && overallScore >= 45) return "TRIGGERED";
+  // TRIGGERED: in expansion states with strong score
+  if (stateNum >= 8 && overallScore >= 50) return "TRIGGERED";
 
-  // READY: approaching trigger level
+  // READY: approaching trigger level with conviction
   if (stateNum >= 4 && triggerLevel !== null && currentPrice !== null && atrPct !== null) {
     const distToTrigger = ((triggerLevel - currentPrice) / currentPrice) * 100;
+    // Already above trigger with strong score = TRIGGERED
+    if (distToTrigger <= 0 && overallScore >= 40) return "TRIGGERED";
     // Within 2% or 2 ATR of trigger = READY
-    if (distToTrigger > 0 && distToTrigger <= Math.max(2.0, atrPct * 2)) {
+    if (distToTrigger > 0 && distToTrigger <= Math.max(2.0, atrPct * 2) && overallScore >= 35) {
       return "READY";
     }
-    // Already above trigger = TRIGGERED (if volume confirms)
-    if (distToTrigger <= 0) return "TRIGGERED";
   }
 
-  // ARMED: structural shift detected, trigger level computed
-  if (stateNum >= 4 && triggerLevel !== null) return "ARMED";
+  // ARMED: structural shift detected, trigger level computed, minimum score
+  if (stateNum >= 4 && triggerLevel !== null && overallScore >= 30) return "ARMED";
 
   // WATCH: early signals present
   if (stateNum >= 1) return "WATCH";
