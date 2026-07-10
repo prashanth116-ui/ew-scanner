@@ -14,6 +14,16 @@ import type {
 } from "./types";
 import { matchBestPattern, type PatternMatchResult } from "./patterns";
 
+/** Universal quality gate: filters low-quality stocks before scoring.
+ *  price >= $15, marketCap >= $8B, avgDollarVolume >= $100M/day. */
+export function passesUniverseQualityGates(data: PreRunStockData): boolean {
+  const price = data.currentPrice ?? 0;
+  const mcap = data.marketCap ?? 0;
+  const dollarVol = data.vcpAvgDollarVolume ?? 0;
+  const dq = data.dataQuality ?? 100; // treat missing as full quality
+  return price >= 15 && mcap >= 8_000_000_000 && dollarVol >= 100_000_000 && dq >= 40;
+}
+
 /** Gate 1: Has the run already happened? */
 export function evaluateGate1(data: PreRunStockData, threshold = 20): boolean {
   if (data.pctFromAth === null) return false;

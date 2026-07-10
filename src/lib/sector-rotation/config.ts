@@ -92,8 +92,12 @@ export const ROTATION = {
 // ── Stock Quality Gates ──
 
 export const QUALITY_GATES = {
+  /** Minimum stock price ($) */
+  MIN_PRICE: 15,
   /** Minimum market cap ($) */
-  MIN_MARKET_CAP: 2_000_000_000,
+  MIN_MARKET_CAP: 8_000_000_000,
+  /** Minimum average daily dollar volume ($) */
+  MIN_DOLLAR_VOLUME: 100_000_000,
   /** Minimum average daily volume */
   MIN_AVG_VOLUME: 1_000_000,
   /** Maximum volume spike ratio */

@@ -71,6 +71,17 @@ export function applyQualityGates(
     const above50ma = s.sma50 != null && s.price > s.sma50;
     let failedExtension = false;
 
+    // Gate 0a: Price >= minimum
+    if (s.price < QUALITY_GATES.MIN_PRICE) {
+      otherReasons.push(`price=$${s.price.toFixed(2)} (<$${QUALITY_GATES.MIN_PRICE})`);
+    }
+
+    // Gate 0b: Dollar volume >= minimum
+    const dollarVol = s.price * s.avgVolume10d;
+    if (dollarVol < QUALITY_GATES.MIN_DOLLAR_VOLUME) {
+      otherReasons.push(`dollarVol=$${(dollarVol / 1e6).toFixed(0)}M (<$${QUALITY_GATES.MIN_DOLLAR_VOLUME / 1e6}M)`);
+    }
+
     // Gate 1: Market cap >= minimum (skip if null)
     if (s.marketCap != null && s.marketCap < QUALITY_GATES.MIN_MARKET_CAP) {
       otherReasons.push(`market_cap=$${(s.marketCap / 1e9).toFixed(1)}B (<$${QUALITY_GATES.MIN_MARKET_CAP / 1e9}B)`);

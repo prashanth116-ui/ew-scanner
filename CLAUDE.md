@@ -59,8 +59,8 @@ npm run build             # Production build
 | 22:00 | 6:00 PM | Mon-Fri | `/api/sector-rotation/alert` | Sector quadrant transition alerts |
 | 01:15 | 9:15 PM | Tue-Sat | `/api/catalyst/cron` | AI catalyst/spike detection |
 | 01:45 | 9:45 PM | Tue-Sat | `/api/inflection/cron/daily` | Inflection scan |
-| 02:00 | 10:00 PM | Tue-Sat | `/api/prerun/cron/preset` | Preset scan pass 1 (~869 tickers) |
-| 02:06 | 10:06 PM | Tue-Sat | `/api/prerun/cron/preset-resume` | Preset scan pass 2 (remaining tickers) |
+| 02:00 | 10:00 PM | Tue-Sat | `/api/prerun/cron/preset` | Preset scan (~605 tickers, single pass) |
+| 02:06 | 10:06 PM | Tue-Sat | `/api/prerun/cron/preset-resume` | Preset resume (if needed for stragglers) |
 | 02:12 | 10:12 PM | Tue-Sat | `/api/prerun/cron/preset-4h` | 4h-candle preset scan (same universe) |
 | 02:15 | 10:15 PM | Tue-Sat | `/api/vcp/cron/daily` | VCP scan |
 | 02:30 | 10:30 PM | Tue-Sat | `/api/institutional/cron/daily` | Institutional scan |
@@ -70,15 +70,49 @@ npm run build             # Production build
 | 13:00 | 9:00 AM | Mon-Fri | `/api/daily-briefing/cron` | Pre-trade 4-level briefing + direction |
 | 06:00 Sun | 2:00 AM Sun | Sunday | `/api/sector-rotation/institutional-refresh` | Weekly institutional data refresh |
 
+### Universal Quality Gate
+All cron scanners and the sector rotation stock enrichment share a universal quality gate that filters low-quality stocks before scoring. Applied after data fetch but before any scoring logic runs.
+
+**Scanner gate** (`passesUniverseQualityGates()` in `src/lib/prerun/scoring.ts`):
+| Check | Threshold | Field |
+|-------|-----------|-------|
+| Price | >= $15 | `currentPrice` |
+| Market cap | >= $8B | `marketCap` |
+| Dollar volume | >= $100M/day | `vcpAvgDollarVolume` (50d avg) |
+| Data quality | >= 40% | `dataQuality` (% of API calls that succeeded) |
+
+**Sector rotation gate** (`applyQualityGates()` in `src/lib/sector-rotation/stock-enrichment.ts`):
+Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MIN_MARKET_CAP: 8B`, `MIN_DOLLAR_VOLUME: 100M`. Plus existing gates (volume spike, extension, institutional %, trend, sector correlation).
+
+**Applied in 5 cron routes:** PreRun preset, PreRun 4h, Inflection, VCP, Institutional. NOT applied to single-ticker API routes (explicit user lookups) or PreRunner (uses `computePreRunnerRadar()`).
+
 ### Preset Cron Details
-- **Universe:** SP500 + NDX100 + SP400 (~869 unique tickers)
+- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS (~605 unique tickers)
+- **SP400 dropped:** Removed from all scan universes. Notable SP400 stocks rescued to ADDITIONAL_MEMBERS.
+- **Universal quality gate:** Filters ~100+ stocks before scoring (price < $15, mcap < $8B, dollarVol < $100M, dataQuality < 40%)
 - **Vercel limit:** 300s maxDuration, 240s time guard for Telegram
-- **Two-pass system:** Pass 1 scans from beginning, pass 2 uses `?resume=true` to skip already-persisted tickers
-- **4h scanner:** Typically needs 3 passes (larger Yahoo 2y:1h chart responses slow each ticker)
+- **Single-pass system:** ~605 tickers typically fits in one pass. Resume pass available if needed.
+- **4h scanner:** May still need 2 passes (larger Yahoo 2y:1h chart responses slow each ticker)
 - **Batch settings:** BATCH_SIZE=15, BATCH_DELAY=500ms, PERSIST_INTERVAL=50
 - **Params:** `?clear=true` (delete today's data before scan), `?resume=true` (skip existing tickers)
 - **Telegram:** Always sends summary using full DB data (not in-memory partial)
 - **Noise guards:** `finalScore > 0` required for persistence, Leading preset uses `finalScore` not `totalScore`
+
+### ADDITIONAL_MEMBERS (81 curated tickers)
+Non-index stocks added to the scan universe for momentum/breakout relevance. Defined in `src/data/index-tiers.ts`. Tier 2 for `getTickerTier()`.
+
+| Category | Tickers |
+|----------|---------|
+| Tech / Software / Cloud | TSM, SNOW, NET, MDB, HUBS, IOT, CYBR, MNDY, PSTG, TWLO, OKTA, NTNX, GTLB, S, ESTC, TOST |
+| Consumer / E-commerce | SHOP, SPOT, RBLX, DKNG, ONON, CAVA, CPNG, SE, CHWY, CELH, ELF |
+| Fintech / Payments | NU, SQ, SOFI, AFRM |
+| Social / Media | PINS, SNAP, RDDT, ZG, ROKU, ZM |
+| Healthcare / Biotech | NVO, ALNY, NTRA, HALO, INSM, BMRN, VKTX, LEGN, SRPT |
+| Industrials / Defense | HEI, BAH |
+| Energy / Materials | CCJ, SCCO, ENPH, AA |
+| Large ADRs | SAP, GSK, BHP, RIO, BABA, JD, LI, BIDU |
+| Notable ex-SP400 | MANH, DUOL, RBRK, MDGL, WING, CROX, DKS, ETSY, MOD, POWL, IESC, FND, NBIX, UTHR, CYTK, LNTH, ITCI, THC, SFM, GLOB |
+| Other | MTCH |
 
 ### Preset Qualification Criteria
 | Preset | Key Criteria |
@@ -106,7 +140,7 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 
 ### Scanner Architecture & Value Map
 
-8 scanning engines, unified via nightly confluence. 5 count for confluence, 3 are badge-only.
+8 scanning engines, unified via nightly confluence. 5 count for confluence, 3 are badge-only. All scanners share a universal quality gate (`passesUniverseQualityGates()`) that filters stocks before scoring: price >= $15, mcap >= $8B, dollarVol >= $100M/day, dataQuality >= 40%.
 
 **Confluence scanners (5):**
 
@@ -158,7 +192,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | Cross-Asset | 5 | TLT, HYG, GLD, UUP, DBA |
 | Leadership Baskets | 4 | MAGS, QQQ, IWM, ARKK |
 
-**Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment.
+**Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment. Stock enrichment applies universal quality gates (price >= $15, mcap >= $8B, dollarVol >= $100M) plus sector-specific gates (volume spike, extension, institutional %, trend, correlation).
 
 **Centralized Config:** All thresholds live in `src/lib/sector-rotation/config.ts`. Sections: REGIME, COMPOSITE, ROTATION, QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, CLASSIFICATION, SCORING_SIGNALS, ROTATION_LIFECYCLE, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS. **Never hardcode thresholds** — always add to config.ts and import.
 
@@ -270,7 +304,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 |------|---------|
 | `src/lib/supabase/persistence.ts` | All DB read/write functions (upsert, load, purge, clear) |
 | `src/lib/supabase/server.ts` | `createAdminClient()` for server-side DB access |
-| `src/data/index-tiers.ts` | SP500_MEMBERS, NDX100_MEMBERS, SP400_MEMBERS arrays |
+| `src/data/index-tiers.ts` | SP500_MEMBERS, NDX100_MEMBERS, SP400_MEMBERS, ADDITIONAL_MEMBERS sets + `getTickerTier()` |
 | `src/data/prerun-universe.ts` | `getSectorForTicker()` mapping |
 
 ### Shared Utilities
@@ -329,10 +363,9 @@ Sends 2 Telegram messages at 11 PM ET after all scanners finish:
 **Key file:** `src/app/api/nightly-summary/cron/route.ts`
 
 ## Open Items / Known Gaps
-- **TSM not in universe:** ADR, not in SP500/NDX100/SP400. Would need manual addition to `index-tiers.ts` + sector mapping in `prerun-universe.ts`.
-- **OSCR not in universe:** Not in SP500/NDX100/SP400, so excluded from all scans. Would need manual addition to `index-tiers.ts` or a custom watchlist.
-- **VCP + Institutional crons untested:** Built but not manually triggered yet — may need the same resume treatment if they time out (universe is ~509, likely fits in one pass).
-- **Partial scan on single pass:** The preset cron covers ~708/869 tickers in one pass. The resume cron at 02:06 handles the rest. If the universe grows, may need a third pass or further batch tuning.
+- **VCP + Institutional crons untested:** Built but not manually triggered yet — universe is ~605, likely fits in one pass.
+- **Preset-resume may be redundant:** With SP400 dropped and universe at ~605, the preset cron likely completes in a single pass. The resume cron at 02:06 is still scheduled as a safety net but may not be needed. Monitor scan completion counts.
+- **ADDITIONAL_MEMBERS maintenance:** The 81 curated tickers in ADDITIONAL_MEMBERS need periodic review. Stocks may delist, change tickers (e.g., SQ→XYZ for Block), or fall below quality gate thresholds permanently.
 
 ## Environment Variables
 Key env vars (set in Vercel + `.env.local`):

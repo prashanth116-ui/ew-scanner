@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
-import { autoScorePreRun } from "@/lib/prerun/scoring";
-import { SP500_MEMBERS, NDX100_MEMBERS, SP400_MEMBERS } from "@/data/index-tiers";
+import { autoScorePreRun, passesUniverseQualityGates } from "@/lib/prerun/scoring";
+import { SP500_MEMBERS, NDX100_MEMBERS, ADDITIONAL_MEMBERS } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
 
 import { createAdminClient } from "@/lib/supabase/server";
@@ -150,8 +150,8 @@ export async function GET(request: NextRequest) {
     const startTime = Date.now();
     const TIME_LIMIT_MS = 240_000;
 
-    // Build universe: SP500 + NDX100 + SP400 (deduplicated)
-    const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...SP400_MEMBERS])];
+    // Build universe: SP500 + NDX100 + ADDITIONAL (deduplicated)
+    const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...ADDITIONAL_MEMBERS])];
     const today = new Date().toISOString().slice(0, 10);
 
     // Clear today's data if requested
@@ -198,6 +198,7 @@ export async function GET(request: NextRequest) {
           // scanner4h=true: uses 4h-aggregated chart with barMultiplier=6
           const data = await fetchPreRunData(ticker, "4h", undefined, true);
           if (!data) return null;
+          if (!passesUniverseQualityGates(data)) return null;
           const sector = getSectorForTicker(ticker);
           const quadrant = sector ? sectorQuadrants[sector] ?? null : null;
           const result = autoScorePreRun(data, quadrant, 10);

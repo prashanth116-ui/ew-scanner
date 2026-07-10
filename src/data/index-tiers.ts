@@ -156,6 +156,35 @@ export const SP400_MEMBERS: Set<string> = new Set([
   "ZD", "ZI", "ZWS",
 ]);
 
+// prettier-ignore
+export const ADDITIONAL_MEMBERS: Set<string> = new Set([
+  // Tech / Software / Cloud
+  "TSM", "SNOW", "NET", "MDB", "HUBS", "IOT", "CYBR", "MNDY", "PSTG",
+  "TWLO", "OKTA", "NTNX", "GTLB", "S", "ESTC", "TOST",
+  // Consumer / E-commerce / Platforms
+  "SHOP", "SPOT", "RBLX", "DKNG", "ONON", "CAVA",
+  "CPNG", "SE", "CHWY", "CELH", "ELF",
+  // Fintech / Payments
+  "NU", "SQ", "SOFI", "AFRM",
+  // Social / Media
+  "PINS", "SNAP", "RDDT", "ZG", "ROKU", "ZM",
+  // Healthcare / Biotech
+  "NVO", "ALNY", "NTRA", "HALO", "INSM",
+  "BMRN", "VKTX", "LEGN", "SRPT",
+  // Industrials / Defense
+  "HEI", "BAH",
+  // Energy / Materials
+  "CCJ", "SCCO", "ENPH", "AA",
+  // Large ADRs
+  "SAP", "GSK", "BHP", "RIO", "BABA", "JD", "LI", "BIDU",
+  // Other
+  "MTCH",
+  // Notable ex-SP400 (dropped SP400 from scan universe, rescued the best)
+  "MANH", "DUOL", "RBRK", "MDGL", "WING", "CROX", "DKS", "ETSY",
+  "MOD", "POWL", "IESC", "FND", "NBIX", "UTHR", "CYTK", "LNTH",
+  "ITCI", "THC", "SFM", "GLOB",
+]);
+
 /**
  * Returns the quality tier for a ticker symbol:
  *   1 = S&P 500 (institutional-grade large-cap)
@@ -166,6 +195,6 @@ export const SP400_MEMBERS: Set<string> = new Set([
  */
 export function getTickerTier(symbol: string): 1 | 2 | 3 {
   if (SP500_MEMBERS.has(symbol)) return 1;
-  if (NDX100_MEMBERS.has(symbol) || SP400_MEMBERS.has(symbol)) return 2;
+  if (NDX100_MEMBERS.has(symbol) || SP400_MEMBERS.has(symbol) || ADDITIONAL_MEMBERS.has(symbol)) return 2;
   return 3;
 }

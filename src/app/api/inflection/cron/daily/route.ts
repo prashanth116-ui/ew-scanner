@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { scoreInflection } from "@/lib/prerun/inflection-scoring";
-import { SP500_MEMBERS, NDX100_MEMBERS } from "@/data/index-tiers";
+import { passesUniverseQualityGates } from "@/lib/prerun/scoring";
+import { SP500_MEMBERS, NDX100_MEMBERS, ADDITIONAL_MEMBERS } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
 
 import {
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
     const startTime = Date.now();
 
     // Build universe: SP500 union NDX100 (deduplicated)
-    const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS])];
+    const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...ADDITIONAL_MEMBERS])];
     const today = new Date().toISOString().slice(0, 10);
 
     // Pre-warm sector ETF cache
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
         batch.map(async (ticker) => {
           const data = await fetchPreRunData(ticker);
           if (!data) return null;
+          if (!passesUniverseQualityGates(data)) return null;
           return scoreInflection(data);
         })
       );
