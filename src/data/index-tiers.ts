@@ -5,7 +5,7 @@
  * Tier 2: Nasdaq-100 + S&P 400 MidCap (not already in tier 1) — quality mid/large-cap
  * Tier 3: Everything else — small-cap, speculative
  *
- * Last updated: 2026-06-30 (refresh quarterly after index rebalances)
+ * Last updated: 2026-07-09 (refresh quarterly after index rebalances)
  */
 
 // prettier-ignore
@@ -74,12 +74,13 @@ export const SP500_MEMBERS: Set<string> = new Set([
 ]);
 
 // prettier-ignore
+// Updated for June 22, 2026 quarterly rebalance
 export const NDX100_MEMBERS: Set<string> = new Set([
-  "AAPL", "ABNB", "ADBE", "ADI", "ADP", "ADSK", "AEP", "AMAT", "AMD", "AMGN",
-  "AMZN", "ANSS", "APP", "ARM", "ASML", "AVGO", "AZN",
+  "AAPL", "ABNB", "ADBE", "ADI", "ADP", "ADSK", "AEP", "ALAB", "ALNY", "AMAT",
+  "AMD", "AMGN", "AMZN", "ANSS", "APP", "ARM", "ASML", "AVGO", "AZN",
   "BIIB", "BKNG", "BKR",
-  "CCEP", "CDNS", "CDW", "CEG", "CHTR", "CMCSA", "COIN", "COST", "CPRT", "CRWD",
-  "CSCO", "CSGP", "CTSH",
+  "CCEP", "CDNS", "CDW", "CEG", "CMCSA", "COIN", "COST", "CPRT", "CRWD", "CRWV",
+  "CSCO", "CSGP",
   "DASH", "DDOG", "DLTR", "DXCM",
   "EA", "EXC",
   "FANG", "FAST", "FTNT",
@@ -90,17 +91,16 @@ export const NDX100_MEMBERS: Set<string> = new Set([
   "LIN", "LRCX", "LULU",
   "MAR", "MCHP", "MDLZ", "MELI", "META", "MNST", "MRNA", "MRVL", "MSFT",
   "MSTR", "MU",
-  "NFLX", "NVDA", "NXPI",
+  "NBIS", "NFLX", "NVDA", "NXPI",
   "ODFL", "ON", "ORLY",
   "PANW", "PAYX", "PCAR", "PDD", "PEP", "PLTR", "PYPL",
   "QCOM",
-  "REGN", "ROP", "ROST",
+  "REGN", "RKLB", "ROP", "ROST",
   "SBUX", "SMCI", "SNPS",
-  "TEAM", "TMUS", "TSLA", "TTD", "TTWO", "TXN",
-  "VRSK", "VRTX",
+  "TEAM", "TER", "TMUS", "TSLA", "TTD", "TTWO", "TXN",
+  "VRTX",
   "WDAY",
   "XEL",
-  "ZS",
 ]);
 
 // prettier-ignore
@@ -160,31 +160,31 @@ export const SP400_MEMBERS: Set<string> = new Set([
 export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   // Tech / Software / Cloud
   "TSM", "SNOW", "NET", "MDB", "HUBS", "IOT", "CYBR", "MNDY", "PSTG",
-  "TWLO", "OKTA", "NTNX", "GTLB", "S", "ESTC", "TOST",
+  "TWLO", "OKTA", "NTNX", "GTLB", "S", "ESTC", "TOST", "ZS",
   // Consumer / E-commerce / Platforms
   "SHOP", "SPOT", "RBLX", "DKNG", "ONON", "CAVA",
   "CPNG", "SE", "CHWY", "CELH", "ELF",
-  // Fintech / Payments
-  "NU", "SQ", "SOFI", "AFRM",
+  // Fintech / Payments / Crypto
+  "NU", "SQ", "SOFI", "AFRM", "CRCL",
   // Social / Media
   "PINS", "SNAP", "RDDT", "ZG", "ROKU", "ZM",
-  // Healthcare / Biotech
-  "NVO", "ALNY", "NTRA", "HALO", "INSM",
-  "BMRN", "VKTX", "LEGN", "SRPT",
-  // Industrials / Defense
-  "HEI", "BAH",
+  // Healthcare / Biotech / AI Medicine
+  "NVO", "NTRA", "HALO", "INSM",
+  "BMRN", "VKTX", "LEGN", "SRPT", "TEM",
+  // Industrials / Defense / Aerospace
+  "HEI", "BAH", "ASTS",
   // Energy / Materials
   "CCJ", "SCCO", "ENPH", "AA",
   // Large ADRs
   "SAP", "GSK", "BHP", "RIO", "BABA", "JD", "LI", "BIDU",
-  // Other
-  "MTCH",
+  // Recent IPOs / High Momentum
+  "SPCX", "MDLN", "VIK", "QNT",
   // Notable ex-SP400 (dropped SP400 from scan universe, rescued the best)
   "MANH", "DUOL", "RBRK", "MDGL", "WING", "CROX", "DKS", "ETSY",
   "MOD", "POWL", "IESC", "FND", "NBIX", "UTHR", "CYTK", "LNTH",
-  "ITCI", "THC", "SFM", "GLOB",
+  "ITCI", "THC", "SFM", "GLOB", "CART",
   // Other
-  "DDOC", "CRWV",
+  "MTCH", "DDOC",
 ]);
 
 /**
