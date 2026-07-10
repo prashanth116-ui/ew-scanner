@@ -39,7 +39,7 @@ npm run build             # Production build
 | `src/lib/supabase/` | Supabase client + persistence functions |
 | `src/data/` | Universe definitions (ticker lists, index tiers) |
 | `src/components/` | React components |
-| `supabase/migrations/` | SQL migration files (001-018) |
+| `supabase/migrations/` | SQL migration files (001-019) |
 
 ### Database Tables (Key)
 | Table | Cron | Purpose |
@@ -49,16 +49,18 @@ npm run build             # Production build
 | `inflection_daily` | `/api/inflection/cron/daily` | Inflection point daily scan |
 | `vcp_daily` | `/api/vcp/cron/daily` | VCP pattern daily scan |
 | `institutional_daily` | `/api/institutional/cron/daily` | Institutional flow daily scan |
+| `transition_daily` | `/api/transition/cron/daily` | Market structure transition daily scan |
 | `scanner_signals` | various | Cross-scanner signal persistence |
 | `sector_snapshots` | `/api/sector-rotation/alert` | Sector rotation quadrants |
 
-### Cron Schedule (14 jobs)
+### Cron Schedule (15 jobs)
 | UTC | ET | Days | Route | Notes |
 |-----|-----|------|-------|-------|
 | 00:00 | 8:00 PM | Tue-Sat | `/api/discovery/cron` | Trending ticker discovery (CoinGecko + Yahoo) |
 | 22:00 | 6:00 PM | Mon-Fri | `/api/sector-rotation/alert` | Sector quadrant transition alerts |
 | 01:15 | 9:15 PM | Tue-Sat | `/api/catalyst/cron` | AI catalyst/spike detection |
 | 01:45 | 9:45 PM | Tue-Sat | `/api/inflection/cron/daily` | Inflection scan |
+| 01:55 | 9:55 PM | Tue-Sat | `/api/transition/cron/daily` | Transition scan (market structure) |
 | 02:00 | 10:00 PM | Tue-Sat | `/api/prerun/cron/preset` | Preset scan (~605 tickers, single pass) |
 | 02:06 | 10:06 PM | Tue-Sat | `/api/prerun/cron/preset-resume` | Preset resume (if needed for stragglers) |
 | 02:12 | 10:12 PM | Tue-Sat | `/api/prerun/cron/preset-4h` | 4h-candle preset scan (same universe) |
@@ -84,7 +86,7 @@ All cron scanners and the sector rotation stock enrichment share a universal qua
 **Sector rotation gate** (`applyQualityGates()` in `src/lib/sector-rotation/stock-enrichment.ts`):
 Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MIN_MARKET_CAP: 8B`, `MIN_DOLLAR_VOLUME: 100M`. Plus existing gates (volume spike, extension, institutional %, trend, sector correlation).
 
-**Applied in 5 cron routes:** PreRun preset, PreRun 4h, Inflection, VCP, Institutional. NOT applied to single-ticker API routes (explicit user lookups) or PreRunner (uses `computePreRunnerRadar()`).
+**Applied in 6 cron routes:** PreRun preset, PreRun 4h, Inflection, Transition, VCP, Institutional. NOT applied to single-ticker API routes (explicit user lookups) or PreRunner (uses `computePreRunnerRadar()`).
 
 ### Preset Cron Details
 - **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS (~605 unique tickers)
@@ -134,13 +136,14 @@ Non-index stocks added to the scan universe for momentum/breakout relevance. Def
 | PreRunner | `scorePreRunnerCandidates()` | 0-100 per candidate | Rotation leaders/turnarounds |
 | QFE | `computeQFE()` | 4 components, weighted 0-100 | QFE rating (derived from PreRun) |
 | Catalyst | `scoreCatalyst()` | 17 factors, normalized 0-100 | Catalyst spikes |
+| Transition | `scoreTransitionWithOHLC()` | 8 components, weighted 0-100 | Transition daily |
 | Squeeze | `calculateSqueezeScore()` | 7 components, max 100 | Squeeze setups |
 
 All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from `src/lib/prerun/data.ts`.
 
 ### Scanner Architecture & Value Map
 
-8 scanning engines, unified via nightly confluence. 5 count for confluence, 3 are badge-only. All scanners share a universal quality gate (`passesUniverseQualityGates()`) that filters stocks before scoring: price >= $15, mcap >= $8B, dollarVol >= $100M/day, dataQuality >= 40%.
+9 scanning engines, unified via nightly confluence. 5 count for confluence, 4 are badge-only. All scanners share a universal quality gate (`passesUniverseQualityGates()`) that filters stocks before scoring: price >= $15, mcap >= $8B, dollarVol >= $100M/day, dataQuality >= 40%.
 
 **Confluence scanners (5):**
 
@@ -159,6 +162,7 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 | QFE | `QFE` | Quality-Factor-Entry rating (A+ → D) + Buy/Wait/Avoid actions | 100% derived from PreRun data, no new information |
 | PreRun 4h | `Setup4h` | Same as Setup but on 4h candles (barMultiplier=6, Gate1=10%) | Same scoring methodology as Setup, different timeframe |
 | Inflection WATCH | `INF_WATCH` | Inflection WATCH trade reads | Low conviction signal |
+| Transition | `Trans` | Market structure transitions (accumulation → markup) | Trial scanner — comparing against Inflection for overlap/quality |
 
 **Other scanners (not in nightly confluence):**
 
@@ -180,6 +184,67 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 | QFE | Rating wrapper — no new data | 100% derived from PreRun, candidate for removal |
 | Catalyst | Only scanner for short-term catalysts | Unique timeframe and inputs |
 | Squeeze | Pure squeeze mechanics (SI%, FTD, float, DTC) | No overlap, niche use case |
+| Transition | Market structure state machine (ChoCH, BOS, swing pivots) | Significant overlap with Inflection (both detect accumulation → markup), uses structural confirmation (pivots) vs statistical (component scores) |
+
+### Transition Scanner
+Detects market structure transitions from accumulation into early markup using swing pivot analysis, Change of Character (ChoCH), and Break of Structure (BOS). Created as a trial scanner to compare against Inflection — badge-only in nightly summary, not counted for confluence.
+
+**11-state model** (ordered from bearish to bullish):
+
+| # | State | Description |
+|---|-------|-------------|
+| 0 | MARKDOWN | Active downtrend, lower highs + lower lows |
+| 1 | SELLING_EXHAUSTION | Down-volume declining, RSI recovering, candle bodies shrinking |
+| 2 | ACCUMULATION | Range-bound, OBV divergence, volume drying up |
+| 3 | DEMAND_INCREASING | Up-volume expanding, higher lows forming |
+| 4 | BULLISH_CHOCH | Price closes above most recent swing high (change of character) |
+| 5 | HIGHER_LOW_FORMATION | Higher low confirmed after ChoCH |
+| 6 | BULLISH_BOS | Price closes above preceding swing high (break of structure) |
+| 7 | COMPRESSION | Range tightening before expansion |
+| 8 | EARLY_EXPANSION | Breakout with volume confirmation |
+| 9 | SUSTAINED_MARKUP | Trending higher with healthy pullbacks |
+| 10 | EXTENDED | Overextended — caution |
+
+**5 alert states:** WATCH (states 1-3), ARMED (state 4+ with trigger level), READY (within 2 ATR of trigger), TRIGGERED (crosses trigger with volume), INVALIDATED (breaks below invalidation)
+
+**8 scoring components** (weighted, 0-100 scale):
+
+| Component | Weight | Measures |
+|-----------|--------|----------|
+| Seller Exhaustion (SE) | 10% | Down-volume decline, RSI recovery |
+| Accumulation Quality (Acc) | 15% | OBV divergence, volume dry-up |
+| ChoCH Confirmation (ChCH) | 15% | Close above swing high |
+| BOS Confirmation (BOS) | 10% | Break above preceding swing high |
+| Compression Quality (Cmp) | 10% | Range tightening |
+| Higher Low Quality (HL) | 10% | Higher low formation strength |
+| RS Trajectory (RS) | 10% | Relative strength trend |
+| Volume Profile (VP) | 20% | Volume confirmation quality |
+
+**Market structure detection:** Uses N-bar pivots (default 3-bar) to identify swing highs/lows. ChoCH requires downtrend context (lower highs) then close above most recent swing high. BOS requires higher low confirmed then close above preceding swing high.
+
+**Key files:**
+
+| File | Purpose |
+|------|---------|
+| `src/lib/prerun/market-structure.ts` | Swing detection, ChoCH/BOS detection, trigger/invalidation levels |
+| `src/lib/prerun/transition-scoring.ts` | 8-component scoring, state classification, alert state logic |
+| `src/lib/prerun/types.ts` | `TransitionState`, `TransitionAlertState`, `TransitionScores`, `TransitionResult` types |
+| `src/app/api/transition/cron/daily/route.ts` | Cron route (01:55 UTC, BATCH_SIZE=10, BATCH_DELAY=1100ms) |
+| `src/app/api/transition/daily/route.ts` | Read API (?date=, ?dates=true) |
+| `src/app/prerun/transition-daily/page.tsx` | UI page with Top Picks banner, state distribution, INF cross-reference |
+| `supabase/migrations/019_transition_daily.sql` | DB table with 8 component scores, state, alert_state, trigger/invalidation |
+
+**Cron details:**
+- Uses same universe as other scanners (~605 tickers)
+- Fetches 3mo daily chart separately via `fetchYahooChart()` for OHLC data
+- Calls `scoreTransitionWithOHLC()` with raw highs/lows/closes + 3-bar pivot
+- Skips MARKDOWN state and gate failures before persisting
+- BATCH_SIZE=10, BATCH_DELAY=1100ms (slower than preset due to separate chart fetch)
+
+**UI features:**
+- Top Picks banner: top 10 TRIGGERED + READY cards with click-to-scroll
+- State distribution bar: clickable state filter pills with counts
+- INF cross-reference badge: fetches inflection data in parallel, shows INF badge on overlapping tickers with hover tooltip showing inflection trade read + score
 
 ### Sector Rotation System
 Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo Finance v8 chart API.
@@ -274,6 +339,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/app/api/inflection/cron/daily/route.ts` | Inflection daily cron |
 | `src/app/api/vcp/cron/daily/route.ts` | VCP daily cron |
 | `src/app/api/institutional/cron/daily/route.ts` | Institutional daily cron |
+| `src/app/api/transition/cron/daily/route.ts` | Transition daily cron |
 | `src/app/api/nightly-summary/cron/route.ts` | Consolidated nightly scan summary (2 Telegram messages) |
 
 ### Read API Routes
@@ -283,6 +349,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/app/api/inflection/daily/route.ts` | Read inflection daily data |
 | `src/app/api/vcp/daily/route.ts` | Read VCP daily data |
 | `src/app/api/institutional/daily/route.ts` | Read institutional daily data |
+| `src/app/api/transition/daily/route.ts` | Read transition daily data |
 | `src/app/api/sector-rotation/route.ts` | Sector rotation scores (31 ETFs, leadership baskets, regime) |
 | `src/app/api/premarket/route.ts` | Pre-market futures, internals, trading bias, sector checklist |
 
@@ -293,6 +360,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/app/prerun/inflection-daily/page.tsx` | `/prerun/inflection-daily` |
 | `src/app/prerun/vcp-daily/page.tsx` | `/prerun/vcp-daily` |
 | `src/app/prerun/institutional-daily/page.tsx` | `/prerun/institutional-daily` |
+| `src/app/prerun/transition-daily/page.tsx` | `/prerun/transition-daily` — Transition scanner (market structure) |
 | `src/app/sectors/page.tsx` | `/sectors` — Sector rotation dashboard (RRG chart, cards, baskets) |
 | `src/app/sectors/brief/page.tsx` | `/sectors/brief` — Daily brief (posture, bias, health, tiers) |
 | `src/app/sectors/picks/page.tsx` | `/sectors/picks` — Enriched stock picks |
@@ -349,6 +417,7 @@ Sends 2 Telegram messages at 11 PM ET after all scanners finish:
 | `Rot` | PreRunner | Rotation leaders/turnarounds radar |
 | `QFE` | QFE | Quality-Factor-Entry rating (A+ → C) — badge only, not counted for confluence |
 | `Setup4h` | PreRun 4h | 4h-candle variant of PreRun (barMultiplier=6) — badge only, not counted for confluence |
+| `Trans` | Transition | Market structure transitions (TRIGGERED + READY by score) — badge only, not counted for confluence |
 
 **Confluence rules:**
 - 5 independent scanners counted: Setup, Inflect, VCP, Inst, Rot
@@ -363,6 +432,7 @@ Sends 2 Telegram messages at 11 PM ET after all scanners finish:
 **Key file:** `src/app/api/nightly-summary/cron/route.ts`
 
 ## Open Items / Known Gaps
+- **Transition scanner is a trial:** Created to compare against Inflection for detecting accumulation → markup transitions. Badge-only in nightly summary. After several days of parallel output, decide whether to promote to confluence, merge with Inflection, or remove. First scan showed 376/508 qualifying (74% pass rate) — likely too permissive, may need tighter gating.
 - **VCP + Institutional crons untested:** Built but not manually triggered yet — universe is ~605, likely fits in one pass.
 - **Preset-resume may be redundant:** With SP400 dropped and universe at ~605, the preset cron likely completes in a single pass. The resume cron at 02:06 is still scheduled as a safety net but may not be needed. Monitor scan completion counts.
 - **ADDITIONAL_MEMBERS maintenance:** The 81 curated tickers in ADDITIONAL_MEMBERS need periodic review. Stocks may delist, change tickers (e.g., SQ→XYZ for Block), or fall below quality gate thresholds permanently.
