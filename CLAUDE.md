@@ -74,9 +74,11 @@ npm run build             # Production build
 - **Universe:** SP500 + NDX100 + SP400 (~869 unique tickers)
 - **Vercel limit:** 300s maxDuration, 240s time guard for Telegram
 - **Two-pass system:** Pass 1 scans from beginning, pass 2 uses `?resume=true` to skip already-persisted tickers
+- **4h scanner:** Typically needs 3 passes (larger Yahoo 2y:1h chart responses slow each ticker)
 - **Batch settings:** BATCH_SIZE=15, BATCH_DELAY=500ms, PERSIST_INTERVAL=50
 - **Params:** `?clear=true` (delete today's data before scan), `?resume=true` (skip existing tickers)
 - **Telegram:** Always sends summary using full DB data (not in-memory partial)
+- **Noise guards:** `finalScore > 0` required for persistence, Leading preset uses `finalScore` not `totalScore`
 
 ### Preset Qualification Criteria
 | Preset | Key Criteria |
@@ -84,19 +86,66 @@ npm run build             # Production build
 | SNDK | pctFromAth >= 40, shortFloat >= 15, finalScore >= 18 |
 | Early Mover | pctFromAth >= 25, finalScore >= 14, M2+L+F all >= 1 |
 | Pullback | pctFromAth <= 40, finalScore >= 15, 2/3 of (M2, F, L) >= 1 |
-| Leading | totalScore >= 15, M >= 1, J >= 1, quadrant LEADING/IMPROVING |
+| Leading | finalScore >= 15 (daily) / >= 18 (4h), M >= 1, J >= 1, quadrant LEADING/IMPROVING |
 | Stealth | finalScore >= 11, M2 >= 1, OBV divergent or VP bullish |
 | Early+ | finalScore >= 10, M2 >= 1, N >= 1, OBV divergent or VP bullish |
 
 ### Scoring Engines
-| Engine | Function | Used By |
-|--------|----------|---------|
-| Standard PreRun | `autoScorePreRun()` | SNDK, Early Mover, Pullback, Leading, Stealth, Early+ |
-| VCP | `scoreVCP()` | VCP daily |
-| Institutional | `scoreInstitutionalAcceleration()` | Institutional daily |
-| Inflection | `scoreInflection()` | Inflection daily |
+| Engine | Function | Scale | Used By |
+|--------|----------|-------|---------|
+| Standard PreRun | `autoScorePreRun()` | 0-40 raw, 3 gates | Setup daily + 4h, QFE input |
+| Inflection | `scoreInflection()` | 6 components, weighted 0-100 | Inflection daily |
+| VCP | `scoreVCP()` | 5 components, max 100 | VCP daily |
+| Institutional | `scoreInstitutionalAcceleration()` | 4 weighted components, max 100 | Institutional daily |
+| PreRunner | `scorePreRunnerCandidates()` | 0-100 per candidate | Rotation leaders/turnarounds |
+| QFE | `computeQFE()` | 4 components, weighted 0-100 | QFE rating (derived from PreRun) |
+| Catalyst | `scoreCatalyst()` | 17 factors, normalized 0-100 | Catalyst spikes |
+| Squeeze | `calculateSqueezeScore()` | 7 components, max 100 | Squeeze setups |
 
 All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from `src/lib/prerun/data.ts`.
+
+### Scanner Architecture & Value Map
+
+8 scanning engines, unified via nightly confluence. 5 count for confluence, 3 are badge-only.
+
+**Confluence scanners (5):**
+
+| Scanner | Label | Detects | Gates | Output | Key Files |
+|---------|-------|---------|-------|--------|-----------|
+| PreRun Setup | `Setup` | Base breakouts from deep pullbacks (20%+ from ATH) | G1: pctFromAth >= 20% (10% for 4h), G2: no existential risk, G3: price > 92% SMA20 | 18 criteria A-Q+M2 (max 40), verdicts PRIORITY/KEEP/WATCH/DISCARD, 6 presets | `scoring.ts`, `data.ts` |
+| Inflection | `Inflect` | Accumulation cycle stage transitions (seller exhaustion → expansion) | Price >= $5, dollarVol >= $10M, mcap >= $500M | 6 components (SE/VC/BE/RS/LA/IP) weighted 0-100, stages + trade read (AVOID/WATCH/STARTER/ADD_ON) | `inflection-scoring.ts` |
+| VCP | `VCP` | Volatility contraction patterns before breakouts | Price >= $10, vol >= 500K, dollarVol >= $20M, mcap >= $1B, above SMA50+SMA200 | 5 components (trend/vol/compression/RS/risk) max 100, phases FOCUS/WATCHLIST/EARLY/IGNORE | `vcp-scoring.ts` |
+| Institutional | `Inst` | Large-cap institutional runners with momentum | Price >= $20, mcap >= $20B, dollarVol >= $100M, vol >= 1.5M | 4 weighted components (inst 35%/exec 25%/risk 25%/disc 15%), 12 classifications | `institutional-scoring.ts` |
+| PreRunner | `Rot` | Sector rotation leaders + turnaround candidates | Min score threshold | LEADERs (from enrichment) + TURNAROUNDs (from rotation tracker), 0-100 score | `src/lib/prerunner/scoring.ts` |
+
+**Badge-only (not counted for confluence):**
+
+| Scanner | Label | Detects | Why Badge-Only |
+|---------|-------|---------|----------------|
+| QFE | `QFE` | Quality-Factor-Entry rating (A+ → D) + Buy/Wait/Avoid actions | 100% derived from PreRun data, no new information |
+| PreRun 4h | `Setup4h` | Same as Setup but on 4h candles (barMultiplier=6, Gate1=10%) | Same scoring methodology as Setup, different timeframe |
+| Inflection WATCH | `INF_WATCH` | Inflection WATCH trade reads | Low conviction signal |
+
+**Other scanners (not in nightly confluence):**
+
+| Scanner | Detects | Key Scoring | Notes |
+|---------|---------|-------------|-------|
+| Catalyst | Near-term event-driven spikes (earnings, analyst, peer sympathy) | 17 factors normalized 0-100, verdicts PRE_SPIKE/WATCH/MONITOR/AVOID | Separate Telegram section, different timeframe from all others |
+| Squeeze | Short squeeze setups (high SI, low float, FTD, volume surge) | 7 components max 100, tiers HIGH/MEDIUM/LOW | Niche — only for squeeze traders |
+
+**Redundancy & overlap assessment:**
+
+| Scanner | Unique Value | Overlaps With |
+|---------|-------------|---------------|
+| Setup (Daily) | Core engine, backbone of system | Foundation for QFE |
+| Setup (4h) | Earlier momentum detection | Daily Setup (complementary) |
+| Inflection | Classifies WHERE in accumulation cycle (stage) vs HOW STRONG (score) | Shares some inputs with Setup (OBV, VP, HL, EMA) but answers a different question |
+| VCP | Tight contraction + entry/stop/targets + strict SMA gates | Partially covered by Setup criteria N (range coil) + L (higher lows) |
+| Institutional | Mega-cap focus ($20B+), 12 classifications, AVOID detection, entry triggers | Partially covered by Setup criteria F (volume) + M (EMA) + J (RS) |
+| Rot | Only scanner tying stocks to macro rotation signals | Unique pipeline — upstream from sector rotation engine |
+| QFE | Rating wrapper — no new data | 100% derived from PreRun, candidate for removal |
+| Catalyst | Only scanner for short-term catalysts | Unique timeframe and inputs |
+| Squeeze | Pure squeeze mechanics (SI%, FTD, float, DTC) | No overlap, niche use case |
 
 ### Sector Rotation System
 Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo Finance v8 chart API.
@@ -274,10 +323,13 @@ Sends 2 Telegram messages at 11 PM ET after all scanners finish:
 - INF WATCH excluded from confluence count (badge only)
 - INF AVOID excluded entirely (negative signal)
 - Setup entries with score 0 excluded (noise)
+- `resultToRecord()` guards: `finalScore > 0` required for persistence (prevents gate-failed stocks from being saved)
+- 4h-ONLY section in Message 1: tickers on 4h scanner but NOT daily Setup (early detections)
 
 **Key file:** `src/app/api/nightly-summary/cron/route.ts`
 
 ## Open Items / Known Gaps
+- **TSM not in universe:** ADR, not in SP500/NDX100/SP400. Would need manual addition to `index-tiers.ts` + sector mapping in `prerun-universe.ts`.
 - **OSCR not in universe:** Not in SP500/NDX100/SP400, so excluded from all scans. Would need manual addition to `index-tiers.ts` or a custom watchlist.
 - **VCP + Institutional crons untested:** Built but not manually triggered yet — may need the same resume treatment if they time out (universe is ~509, likely fits in one pass).
 - **Partial scan on single pass:** The preset cron covers ~708/869 tickers in one pass. The resume cron at 02:06 handles the rest. If the universe grows, may need a third pass or further batch tuning.
