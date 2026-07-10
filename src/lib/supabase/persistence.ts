@@ -1782,3 +1782,163 @@ export async function updateQFEForwardReturns(
     return 0;
   }
 }
+
+// ── Transition Daily Scan ──
+
+export interface TransitionDailyRecord {
+  scan_date: string;
+  ticker: string;
+  company_name: string;
+  sector: string;
+  price: number;
+  overall_score: number;
+  se_score: number;
+  accum_score: number;
+  choch_score: number;
+  bos_score: number;
+  compression_score: number;
+  hl_score: number;
+  rs_score: number;
+  volume_score: number;
+  state: string;
+  alert_state: string;
+  trigger_level: number | null;
+  invalidation: number | null;
+  is_primary: boolean;
+  is_stronger: boolean;
+  bullish_evidence: string[];
+  caution_evidence: string[];
+}
+
+/** Batch upsert transition daily scan results. */
+export async function upsertTransitionDaily(records: TransitionDailyRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertTransitionDaily: no admin client");
+      return 0;
+    }
+
+    let upserted = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = records.slice(i, i + 500);
+      const { data, error } = await supabase
+        .from("transition_daily")
+        .upsert(batch, { onConflict: "scan_date,ticker" })
+        .select("id");
+
+      if (error) {
+        console.error("[persistence] upsertTransitionDaily error:", error.message);
+      } else {
+        upserted += data?.length ?? 0;
+      }
+    }
+    return upserted;
+  } catch (err) {
+    console.error("[persistence] upsertTransitionDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete transition_daily rows older than retentionDays. */
+export async function purgeOldTransitionDaily(retentionDays = 14): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("transition_daily")
+      .delete()
+      .lt("scan_date", cutoffStr)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] purgeOldTransitionDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] purgeOldTransitionDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Load transition daily results for a given date. */
+export async function loadTransitionDaily(date: string): Promise<TransitionDailyRecord[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("transition_daily")
+      .select("*")
+      .eq("scan_date", date)
+      .order("overall_score", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadTransitionDaily error:", error.message);
+      return [];
+    }
+    return (data ?? []) as TransitionDailyRecord[];
+  } catch (err) {
+    console.error("[persistence] loadTransitionDaily exception:", err);
+    return [];
+  }
+}
+
+/** Load available scan dates (up to limit, most recent first). */
+export async function loadTransitionDailyDates(limit = 14): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("transition_daily")
+      .select("scan_date")
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadTransitionDailyDates error:", error.message);
+      return [];
+    }
+
+    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
+    return unique.slice(0, limit);
+  } catch (err) {
+    console.error("[persistence] loadTransitionDailyDates exception:", err);
+    return [];
+  }
+}
+
+/** Load transition daily results for multiple dates (for streak/delta). */
+export async function loadTransitionDailyMulti(
+  dates: string[]
+): Promise<Array<{ scan_date: string; ticker: string; overall_score: number }>> {
+  if (dates.length === 0) return [];
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("transition_daily")
+      .select("scan_date, ticker, overall_score")
+      .in("scan_date", dates)
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadTransitionDailyMulti error:", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; overall_score: number }>;
+  } catch (err) {
+    console.error("[persistence] loadTransitionDailyMulti exception:", err);
+    return [];
+  }
+}

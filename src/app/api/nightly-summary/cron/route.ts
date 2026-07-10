@@ -21,6 +21,7 @@ import {
   loadPreRunnerDaily,
   loadQFEDaily,
   loadPreRunDailyDates,
+  loadTransitionDaily,
 } from "@/lib/supabase/persistence";
 import type {
   PreRunDailyRecord,
@@ -29,6 +30,7 @@ import type {
   InstitutionalDailyRecord,
   PreRunnerDailyRecord,
   QFEDailyRecord,
+  TransitionDailyRecord,
 } from "@/lib/supabase/persistence";
 import { loadDiscoveredTickers } from "@/lib/discovery/storage";
 
@@ -581,6 +583,7 @@ function formatScannerDetail(
   institutional: InstitutionalDailyRecord[],
   prerunner: PreRunnerDailyRecord[],
   qfe: QFEDailyRecord[],
+  transition: TransitionDailyRecord[] = [],
 ): string {
   const lines: string[] = [];
   lines.push("<b>SCANNER DETAIL</b>");
@@ -690,6 +693,35 @@ function formatScannerDetail(
     lines.push(rnrTop.map((r) => `${r.ticker} ${r.prerunner_score}`).join(" \u00b7 "));
   }
 
+  // ── Transition (badge-only) ──
+  if (transition.length > 0) {
+    const STATE_SHORT: Record<string, string> = {
+      SELLING_EXHAUSTION: "SE",
+      ACCUMULATION: "ACCUM",
+      DEMAND_INCREASING: "DEMAND",
+      BULLISH_CHOCH: "ChoCH",
+      HIGHER_LOW_FORMATION: "HL",
+      BULLISH_BOS: "BOS",
+      COMPRESSION: "COMP",
+      EARLY_EXPANSION: "EXPAN",
+      SUSTAINED_MARKUP: "MARKUP",
+      EXTENDED: "EXT",
+    };
+    const triggered = transition.filter((r) => r.alert_state === "TRIGGERED");
+    const ready = transition.filter((r) => r.alert_state === "READY");
+    const armed = transition.filter((r) => r.alert_state === "ARMED");
+    const watch = transition.filter((r) => r.alert_state === "WATCH");
+    lines.push(`<b>TRANSITION:</b> ${triggered.length} TRIG \u00b7 ${ready.length} READY \u00b7 ${armed.length} ARMED \u00b7 ${watch.length} WATCH`);
+    // Show top TRIGGERED + READY by score
+    const transTop = [...triggered, ...ready].sort((a, b) => b.overall_score - a.overall_score).slice(0, DETAIL_CAP);
+    for (const r of transTop) {
+      const st = STATE_SHORT[r.state] ?? r.state;
+      lines.push(`${r.ticker} ${r.overall_score} | ${st} | SE:${r.se_score} ChoCH:${r.choch_score} VP:${r.volume_score}`);
+    }
+    if (triggered.length + ready.length > DETAIL_CAP) lines.push(`... +${triggered.length + ready.length - DETAIL_CAP} more`);
+    lines.push("");
+  }
+
   // ── 4h Setup ──
   if (prerun4h.length > 0) {
     lines.push("");
@@ -731,7 +763,7 @@ export async function GET(request: NextRequest) {
     const today = new Date().toISOString().slice(0, 10);
 
     // Load all scanner results for today in parallel
-    const [prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, discovered] = await Promise.all([
+    const [prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, discovered, transition] = await Promise.all([
       loadPreRunDaily(today),
       loadPreRun4hDaily(today),
       loadInflectionDaily(today),
@@ -741,6 +773,7 @@ export async function GET(request: NextRequest) {
       loadQFEDaily(today),
       loadCatalystSignals(today),
       loadDiscoveredTickers(),
+      loadTransitionDaily(today),
     ]);
 
     // Build today's ticker set for new/dropped
@@ -774,6 +807,7 @@ export async function GET(request: NextRequest) {
       Rot: prerunner.length,
       QFE: qfe.length,
       Cat: catalyst.length,
+      Trans: transition.length,
     };
 
     // Tier counts for JSON response
@@ -803,7 +837,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Message 2: Per-scanner detail with sub-scores and classifications
-      const detailMsg = formatScannerDetail(prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe);
+      const detailMsg = formatScannerDetail(prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, transition);
       const detailResult = await sendTelegramMessage(botToken, chatId, detailMsg);
       detailSent = detailResult.ok;
       if (!detailResult.ok) {

@@ -348,6 +348,75 @@ export interface InflectionResult {
 
 export const INFLECTION_MAX_SCORE = 100;
 
+// ── Transition Scanner types ──
+
+/** 11-state market transition model (ordered: each state requires prior state to have occurred) */
+export type TransitionState =
+  | "MARKDOWN"              // STATE 0: Active downtrend, lower highs + lower lows
+  | "SELLING_EXHAUSTION"    // STATE 1: Down-volume declining, RSI recovering, candle bodies shrinking
+  | "ACCUMULATION"          // STATE 2: Range-bound, OBV divergence, volume drying up
+  | "DEMAND_INCREASING"     // STATE 3: Up-volume expanding, higher lows forming
+  | "BULLISH_CHOCH"         // STATE 4: Price closes above most recent swing high (change of character)
+  | "HIGHER_LOW_FORMATION"  // STATE 5: First higher low forms after ChoCH
+  | "BULLISH_BOS"           // STATE 6: Price breaks above swing high preceding the higher low
+  | "COMPRESSION"           // STATE 7: ATR contracting, range tightening near highs
+  | "EARLY_EXPANSION"       // STATE 8: Breakout with volume, price above resistance
+  | "SUSTAINED_MARKUP"      // STATE 9: Trending higher, higher highs + higher lows confirmed
+  | "EXTENDED";             // STATE 10: Overextended from moving averages, late entry risk
+
+/** Numeric state ordering for comparison */
+export const TRANSITION_STATE_ORDER: Record<TransitionState, number> = {
+  MARKDOWN: 0,
+  SELLING_EXHAUSTION: 1,
+  ACCUMULATION: 2,
+  DEMAND_INCREASING: 3,
+  BULLISH_CHOCH: 4,
+  HIGHER_LOW_FORMATION: 5,
+  BULLISH_BOS: 6,
+  COMPRESSION: 7,
+  EARLY_EXPANSION: 8,
+  SUSTAINED_MARKUP: 9,
+  EXTENDED: 10,
+};
+
+/** Alert state for Transition scanner setups */
+export type TransitionAlertState =
+  | "WATCH"        // Stock enters a qualifying state (STATE 1-3)
+  | "ARMED"        // Reaches STATE 4+ and trigger level is computed
+  | "READY"        // Price approaches trigger level (within 2 ATR)
+  | "TRIGGERED"    // Price crosses trigger level with volume confirmation
+  | "INVALIDATED"; // Price breaks below invalidation level
+
+export interface TransitionScores {
+  sellerExhaustion: number;      // 0-100: Down-volume decline, RSI recovery, candle shrinking
+  accumulationQuality: number;   // 0-100: OBV divergence, volume dry-up, range formation
+  chochConfirmation: number;     // 0-100: Swing high break quality, volume on break, follow-through
+  bosConfirmation: number;       // 0-100: Higher-low + swing high break, structural confirmation
+  compressionQuality: number;    // 0-100: ATR contraction, range nesting, tight closes
+  higherLowQuality: number;      // 0-100: HL count, depth quality, hold duration
+  rsTrajectory: number;          // 0-100: RS acceleration, improving vs absolute
+  volumeProfile: number;         // 0-100: Accum/distrib ratio, OBV slope, money flow
+  overallScore: number;          // 0-100: Weighted composite of above 8 components
+}
+
+export interface TransitionResult {
+  data: PreRunStockData;
+  gates: InflectionGates;        // Reuses same gate structure (price, dollarVol, mcap)
+  scores: TransitionScores;
+  state: TransitionState;
+  alertState: TransitionAlertState;
+  triggerLevel: number | null;       // Price above which transition is confirmed
+  invalidationLevel: number | null;  // Price below which thesis fails
+  bullishEvidence: string[];
+  cautionEvidence: string[];
+  /** True if state >= BULLISH_CHOCH and score >= 45 */
+  isPrimarySignal: boolean;
+  /** True if state >= BULLISH_BOS and score >= 55 */
+  isStrongerSignal: boolean;
+}
+
+export const TRANSITION_MAX_SCORE = 100;
+
 export interface PreRunWatchlistItem {
   id: string;
   ticker: string;
