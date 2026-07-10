@@ -9,6 +9,7 @@ import { getSectorForTicker } from "@/data/prerun-universe";
 import {
   upsertTransitionDaily,
   purgeOldTransitionDaily,
+  clearTransitionDaily,
 } from "@/lib/supabase/persistence";
 import type { TransitionDailyRecord } from "@/lib/supabase/persistence";
 import type { TransitionResult } from "@/lib/prerun/types";
@@ -59,10 +60,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const startTime = Date.now();
+    const searchParams = request.nextUrl.searchParams;
 
     // Build universe: SP500 union NDX100 union ADDITIONAL (deduplicated)
     const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...ADDITIONAL_MEMBERS])];
     const today = new Date().toISOString().slice(0, 10);
+
+    // Clear today's data if requested (for full re-scan)
+    let cleared = 0;
+    if (searchParams.get("clear") === "true") {
+      cleared = await clearTransitionDaily(today);
+    }
 
     // Pre-warm sector ETF cache
     await prefetchSectorETFs();
@@ -179,6 +187,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       scannedCount: universe.length,
+      clearedCount: cleared,
       fetchedCount,
       qualifyingCount: qualifying.length,
       persistedCount: totalPersisted,

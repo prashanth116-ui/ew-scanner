@@ -1869,6 +1869,29 @@ export async function purgeOldTransitionDaily(retentionDays = 14): Promise<numbe
   }
 }
 
+/** Delete all transition daily results for a specific date. */
+export async function clearTransitionDaily(date: string): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const { data, error } = await supabase
+      .from("transition_daily")
+      .delete()
+      .eq("scan_date", date)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] clearTransitionDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] clearTransitionDaily exception:", err);
+    return 0;
+  }
+}
+
 /** Load transition daily results for a given date. */
 export async function loadTransitionDaily(date: string): Promise<TransitionDailyRecord[]> {
   try {
