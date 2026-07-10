@@ -44,6 +44,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/prerun/qfe-daily", label: "QFE" },
     { href: "/prerun/transition-daily", label: "Transition" },
     { href: "/prerun/runner-guide", label: "Runner Guide" },
+    { href: "/prerun/backtest", label: "Backtest" },
   ],
   sectors: [
     { href: "/sectors/brief", label: "Brief" },
