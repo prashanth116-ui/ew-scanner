@@ -15,6 +15,7 @@ import {
   TrendingDown,
   Copy,
   Check,
+  Target,
 } from "lucide-react";
 import Link from "next/link";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
@@ -102,6 +103,33 @@ function stageLabel(s: StageFilter): string {
     case "EXPANSION": return "Expansion";
     case "SELLER_EXHAUSTION": return "Seller Exhaust.";
   }
+}
+
+function quadrantBadge(quadrant: string): { label: string; color: string } | null {
+  switch (quadrant) {
+    case "LEADING":
+      return { label: "LD", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" };
+    case "IMPROVING":
+      return { label: "IM", color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" };
+    case "WEAKENING":
+      return { label: "WK", color: "text-amber-400 bg-amber-500/10 border-amber-500/30" };
+    case "LAGGING":
+      return { label: "LG", color: "text-red-400 bg-red-500/10 border-red-500/30" };
+    default:
+      return null;
+  }
+}
+
+function instBadgeColor(classification: string): string {
+  const green = ["STRONG_LEADER", "ACCUMULATION_SETUP", "BREAKOUT_SETUP", "MOMENTUM_LEADER", "WATCHLIST_LEADER"];
+  const red = ["AVOID", "DISTRIBUTION", "BREAKDOWN"];
+  if (green.some((g) => classification.includes(g))) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
+  if (red.some((r) => classification.includes(r))) return "text-red-400 bg-red-500/10 border-red-500/30";
+  return "text-amber-400 bg-amber-500/10 border-amber-500/30";
+}
+
+function instClassLabel(classification: string): string {
+  return classification.replace(/_/g, " ").split(" ").map((w) => w[0]).join("").slice(0, 3);
 }
 
 function scoreBarColor(score: number): string {
@@ -297,6 +325,10 @@ export default function InflectionDailyPage() {
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
   const [showDropped, setShowDropped] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [transitionTickers, setTransitionTickers] = useState<Map<string, { state: string; alert_state: string; score: number }>>(new Map());
+  const [sectorQuadrants, setSectorQuadrants] = useState<Map<string, string>>(new Map());
+  const [instTickers, setInstTickers] = useState<Map<string, { classification: string; score: number }>>(new Map());
+  const [highConvictionOnly, setHighConvictionOnly] = useState(false);
 
   // Load available dates on mount
   useEffect(() => {
@@ -318,7 +350,7 @@ export default function InflectionDailyPage() {
     init();
   }, []);
 
-  // Load results + enrichment when date changes
+  // Load results + cross-scanner enrichment when date changes
   useEffect(() => {
     if (!selectedDate) return;
     let cancelled = false;
@@ -326,8 +358,13 @@ export default function InflectionDailyPage() {
     async function load() {
       setLoadingResults(true);
       try {
-        const res = await fetch(`/api/inflection/daily?date=${selectedDate}`);
-        const json = await res.json();
+        const [infRes, transRes, sectorRes, instRes] = await Promise.all([
+          fetch(`/api/inflection/daily?date=${selectedDate}`),
+          fetch(`/api/transition/daily?date=${selectedDate}`).catch(() => null),
+          fetch("/api/sector-rotation").catch(() => null),
+          fetch(`/api/institutional/daily?date=${selectedDate}`).catch(() => null),
+        ]);
+        const json = await infRes.json();
         if (!cancelled) {
           setResults(json.results ?? []);
           setStreaks(json.streaks ?? {});
@@ -335,12 +372,48 @@ export default function InflectionDailyPage() {
           setDropped(json.dropped ?? []);
           setExpandedTicker(null);
         }
+        // Build transition ticker map
+        if (transRes && transRes.ok) {
+          const transJson = await transRes.json();
+          const map = new Map<string, { state: string; alert_state: string; score: number }>();
+          for (const r of transJson.results ?? []) {
+            map.set(r.ticker, { state: r.state, alert_state: r.alert_state, score: r.overall_score });
+          }
+          if (!cancelled) setTransitionTickers(map);
+        } else {
+          if (!cancelled) setTransitionTickers(new Map());
+        }
+        // Build sector quadrant map
+        if (sectorRes && sectorRes.ok) {
+          const sectorJson = await sectorRes.json();
+          const map = new Map<string, string>();
+          for (const s of [...(sectorJson.sectors ?? []), ...(sectorJson.subSectorScores ?? [])]) {
+            map.set(s.sector, s.quadrant);
+          }
+          if (!cancelled) setSectorQuadrants(map);
+        } else {
+          if (!cancelled) setSectorQuadrants(new Map());
+        }
+        // Build institutional ticker map
+        if (instRes && instRes.ok) {
+          const instJson = await instRes.json();
+          const map = new Map<string, { classification: string; score: number }>();
+          for (const r of instJson.results ?? []) {
+            map.set(r.ticker, { classification: r.classification, score: r.composite_score });
+          }
+          if (!cancelled) setInstTickers(map);
+        } else {
+          if (!cancelled) setInstTickers(new Map());
+        }
       } catch {
         if (!cancelled) {
           setResults([]);
           setStreaks({});
           setDeltas({});
           setDropped([]);
+          setTransitionTickers(new Map());
+          setSectorQuadrants(new Map());
+          setInstTickers(new Map());
         }
       } finally {
         if (!cancelled) setLoadingResults(false);
@@ -367,10 +440,29 @@ export default function InflectionDailyPage() {
     setTimeout(() => setCopied(false), 2000);
   }, [results]);
 
+  // High conviction tickers: on BOTH scanners with favorable conditions
+  const highConvictionTickers = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of results) {
+      if (r.trade_read !== "STARTER_POSITION_CANDIDATE" && r.trade_read !== "ADD_ON_CONFIRMATION") continue;
+      const trans = transitionTickers.get(r.ticker);
+      if (!trans) continue;
+      if (trans.alert_state !== "ARMED" && trans.alert_state !== "READY" && trans.alert_state !== "TRIGGERED") continue;
+      // Sector quadrant check (optional: if available, require IMPROVING or LEADING)
+      const q = sectorQuadrants.get(r.sector ?? "");
+      if (q && q !== "IMPROVING" && q !== "LEADING") continue;
+      set.add(r.ticker);
+    }
+    return set;
+  }, [results, transitionTickers, sectorQuadrants]);
+
   // Filter and sort results
   const filtered = useMemo(() => {
     let rows = results;
 
+    if (highConvictionOnly) {
+      rows = rows.filter((r) => highConvictionTickers.has(r.ticker));
+    }
     if (tradeReadFilter !== "ALL") {
       rows = rows.filter((r) => r.trade_read === tradeReadFilter);
     }
@@ -410,7 +502,7 @@ export default function InflectionDailyPage() {
     });
 
     return sorted;
-  }, [results, tradeReadFilter, stageFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas]);
+  }, [results, highConvictionOnly, highConvictionTickers, tradeReadFilter, stageFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas]);
 
   // Summary counts
   const starterCount = results.filter((r) => r.trade_read === "STARTER_POSITION_CANDIDATE").length;
@@ -642,8 +734,21 @@ export default function InflectionDailyPage() {
           </button>
         ))}
 
-        {/* Copy + CSV export */}
+        {/* High Conviction toggle + Copy + CSV export */}
         <div className="ml-auto flex items-center gap-2">
+          {highConvictionTickers.size > 0 && (
+            <button
+              onClick={() => setHighConvictionOnly((v) => !v)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs border transition-colors ${
+                highConvictionOnly
+                  ? "bg-violet-500/20 text-violet-300 border-violet-500/40"
+                  : "bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border-[#2a2a2a]"
+              }`}
+            >
+              <Target className="h-3 w-3" />
+              High Conviction ({highConvictionTickers.size})
+            </button>
+          )}
           <button
             onClick={handleCopy}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border border-[#2a2a2a] transition-colors"
@@ -739,8 +844,16 @@ export default function InflectionDailyPage() {
                         </td>
 
                         {/* Sector */}
-                        <td className="px-2 py-2 text-[#777] max-w-[100px] truncate text-[10px]">
-                          {row.sector || "-"}
+                        <td className="px-2 py-2 text-[10px] whitespace-nowrap">
+                          <span className="text-[#777]">{row.sector || "-"}</span>
+                          {(() => {
+                            const qb = quadrantBadge(sectorQuadrants.get(row.sector ?? "") ?? "");
+                            return qb ? (
+                              <span className={`ml-1 inline-flex items-center rounded border px-1 py-0 text-[7px] font-bold ${qb.color}`}>
+                                {qb.label}
+                              </span>
+                            ) : null;
+                          })()}
                         </td>
 
                         {/* Price */}
@@ -827,6 +940,26 @@ export default function InflectionDailyPage() {
                               <span title="Extension Risk" className="inline-flex items-center rounded border border-orange-500/30 bg-orange-500/10 px-1 py-0.5 text-[8px] font-semibold text-orange-400">
                                 EXT
                               </span>
+                            )}
+                            {transitionTickers.has(row.ticker) && (
+                              <Link
+                                href="/prerun/transition-daily"
+                                title={`Also on Transition: ${transitionTickers.get(row.ticker)!.state} / ${transitionTickers.get(row.ticker)!.alert_state} (${transitionTickers.get(row.ticker)!.score})`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center rounded border border-violet-500/30 bg-violet-500/10 px-1 py-0.5 text-[8px] font-bold text-violet-400 hover:bg-violet-500/20 transition-colors"
+                              >
+                                TRANS
+                              </Link>
+                            )}
+                            {instTickers.has(row.ticker) && (
+                              <Link
+                                href="/prerun/institutional-daily"
+                                title={`Institutional: ${instTickers.get(row.ticker)!.classification} (${instTickers.get(row.ticker)!.score})`}
+                                onClick={(e) => e.stopPropagation()}
+                                className={`inline-flex items-center rounded border px-1 py-0.5 text-[8px] font-bold hover:opacity-80 transition-colors ${instBadgeColor(instTickers.get(row.ticker)!.classification)}`}
+                              >
+                                INST
+                              </Link>
                             )}
                           </div>
                         </td>

@@ -15,6 +15,7 @@ import {
   TrendingDown,
   Copy,
   Check,
+  Target,
 } from "lucide-react";
 import Link from "next/link";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
@@ -116,6 +117,29 @@ function alertFilterLabel(f: AlertStateFilter): string {
   }
 }
 
+
+function quadrantBadge(quadrant: string): { label: string; color: string } | null {
+  switch (quadrant) {
+    case "LEADING":
+      return { label: "LD", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" };
+    case "IMPROVING":
+      return { label: "IM", color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" };
+    case "WEAKENING":
+      return { label: "WK", color: "text-amber-400 bg-amber-500/10 border-amber-500/30" };
+    case "LAGGING":
+      return { label: "LG", color: "text-red-400 bg-red-500/10 border-red-500/30" };
+    default:
+      return null;
+  }
+}
+
+function instBadgeColor(classification: string): string {
+  const green = ["STRONG_LEADER", "ACCUMULATION_SETUP", "BREAKOUT_SETUP", "MOMENTUM_LEADER", "WATCHLIST_LEADER"];
+  const red = ["AVOID", "DISTRIBUTION", "BREAKDOWN"];
+  if (green.some((g) => classification.includes(g))) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
+  if (red.some((r) => classification.includes(r))) return "text-red-400 bg-red-500/10 border-red-500/30";
+  return "text-amber-400 bg-amber-500/10 border-amber-500/30";
+}
 
 function scoreBarColor(score: number): string {
   if (score >= 55) return "bg-emerald-500";
@@ -323,6 +347,8 @@ export default function TransitionDailyPage() {
   const [deltas, setDeltas] = useState<Record<string, number>>({});
   const [dropped, setDropped] = useState<DroppedTicker[]>([]);
   const [inflectionTickers, setInflectionTickers] = useState<Map<string, { trade_read: string; score: number }>>(new Map());
+  const [sectorQuadrants, setSectorQuadrants] = useState<Map<string, string>>(new Map());
+  const [instTickers, setInstTickers] = useState<Map<string, { classification: string; score: number }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
   const [alertFilter, setAlertFilter] = useState<AlertStateFilter>("ALL");
@@ -334,6 +360,7 @@ export default function TransitionDailyPage() {
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
   const [showDropped, setShowDropped] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [highConvictionOnly, setHighConvictionOnly] = useState(false);
 
   // Load available dates on mount
   useEffect(() => {
@@ -355,7 +382,7 @@ export default function TransitionDailyPage() {
     init();
   }, []);
 
-  // Load results when date changes
+  // Load results + cross-scanner enrichment when date changes
   useEffect(() => {
     if (!selectedDate) return;
     let cancelled = false;
@@ -363,9 +390,11 @@ export default function TransitionDailyPage() {
     async function load() {
       setLoadingResults(true);
       try {
-        const [transRes, infRes] = await Promise.all([
+        const [transRes, infRes, sectorRes, instRes] = await Promise.all([
           fetch(`/api/transition/daily?date=${selectedDate}`),
           fetch(`/api/inflection/daily?date=${selectedDate}`).catch(() => null),
+          fetch("/api/sector-rotation").catch(() => null),
+          fetch(`/api/institutional/daily?date=${selectedDate}`).catch(() => null),
         ]);
         const json = await transRes.json();
         if (!cancelled) {
@@ -386,6 +415,28 @@ export default function TransitionDailyPage() {
         } else {
           if (!cancelled) setInflectionTickers(new Map());
         }
+        // Build sector quadrant map
+        if (sectorRes && sectorRes.ok) {
+          const sectorJson = await sectorRes.json();
+          const map = new Map<string, string>();
+          for (const s of [...(sectorJson.sectors ?? []), ...(sectorJson.subSectorScores ?? [])]) {
+            map.set(s.sector, s.quadrant);
+          }
+          if (!cancelled) setSectorQuadrants(map);
+        } else {
+          if (!cancelled) setSectorQuadrants(new Map());
+        }
+        // Build institutional ticker map
+        if (instRes && instRes.ok) {
+          const instJson = await instRes.json();
+          const map = new Map<string, { classification: string; score: number }>();
+          for (const r of instJson.results ?? []) {
+            map.set(r.ticker, { classification: r.classification, score: r.composite_score });
+          }
+          if (!cancelled) setInstTickers(map);
+        } else {
+          if (!cancelled) setInstTickers(new Map());
+        }
       } catch {
         if (!cancelled) {
           setResults([]);
@@ -393,6 +444,8 @@ export default function TransitionDailyPage() {
           setDeltas({});
           setDropped([]);
           setInflectionTickers(new Map());
+          setSectorQuadrants(new Map());
+          setInstTickers(new Map());
         }
       } finally {
         if (!cancelled) setLoadingResults(false);
@@ -413,10 +466,29 @@ export default function TransitionDailyPage() {
     });
   }, []);
 
+  // High conviction tickers: on BOTH scanners with favorable conditions
+  const highConvictionTickers = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of results) {
+      if (r.alert_state !== "ARMED" && r.alert_state !== "READY" && r.alert_state !== "TRIGGERED") continue;
+      const inf = inflectionTickers.get(r.ticker);
+      if (!inf) continue;
+      if (inf.trade_read !== "STARTER_POSITION_CANDIDATE" && inf.trade_read !== "ADD_ON_CONFIRMATION") continue;
+      // Sector quadrant check (optional: if available, require IMPROVING or LEADING)
+      const q = sectorQuadrants.get(r.sector ?? "");
+      if (q && q !== "IMPROVING" && q !== "LEADING") continue;
+      set.add(r.ticker);
+    }
+    return set;
+  }, [results, inflectionTickers, sectorQuadrants]);
+
   // Filter and sort results
   const filtered = useMemo(() => {
     let rows = results;
 
+    if (highConvictionOnly) {
+      rows = rows.filter((r) => highConvictionTickers.has(r.ticker));
+    }
     if (alertFilter !== "ALL") {
       rows = rows.filter((r) => r.alert_state === alertFilter);
     }
@@ -456,7 +528,7 @@ export default function TransitionDailyPage() {
     });
 
     return sorted;
-  }, [results, alertFilter, stateFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas]);
+  }, [results, highConvictionOnly, highConvictionTickers, alertFilter, stateFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
@@ -793,8 +865,21 @@ export default function TransitionDailyPage() {
           ))}
         </div>
 
-        {/* Copy + CSV export */}
+        {/* High Conviction toggle + Copy + CSV export */}
         <div className="ml-auto flex items-center gap-2">
+          {highConvictionTickers.size > 0 && (
+            <button
+              onClick={() => setHighConvictionOnly((v) => !v)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs border transition-colors ${
+                highConvictionOnly
+                  ? "bg-violet-500/20 text-violet-300 border-violet-500/40"
+                  : "bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border-[#2a2a2a]"
+              }`}
+            >
+              <Target className="h-3 w-3" />
+              High Conviction ({highConvictionTickers.size})
+            </button>
+          )}
           <button
             onClick={handleCopy}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border border-[#2a2a2a] transition-colors"
@@ -893,8 +978,16 @@ export default function TransitionDailyPage() {
                         </td>
 
                         {/* Sector */}
-                        <td className="px-2 py-2 text-[#777] max-w-[100px] truncate text-[10px]">
-                          {row.sector || "-"}
+                        <td className="px-2 py-2 text-[10px] whitespace-nowrap">
+                          <span className="text-[#777]">{row.sector || "-"}</span>
+                          {(() => {
+                            const qb = quadrantBadge(sectorQuadrants.get(row.sector ?? "") ?? "");
+                            return qb ? (
+                              <span className={`ml-1 inline-flex items-center rounded border px-1 py-0 text-[7px] font-bold ${qb.color}`}>
+                                {qb.label}
+                              </span>
+                            ) : null;
+                          })()}
                         </td>
 
                         {/* Price */}
@@ -987,6 +1080,16 @@ export default function TransitionDailyPage() {
                                 className="inline-flex items-center rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[8px] font-bold text-sky-400 hover:bg-sky-500/20 transition-colors"
                               >
                                 INF
+                              </Link>
+                            )}
+                            {instTickers.has(row.ticker) && (
+                              <Link
+                                href="/prerun/institutional-daily"
+                                title={`Institutional: ${instTickers.get(row.ticker)!.classification} (${instTickers.get(row.ticker)!.score})`}
+                                onClick={(e) => e.stopPropagation()}
+                                className={`inline-flex items-center rounded border px-1 py-0.5 text-[8px] font-bold hover:opacity-80 transition-colors ${instBadgeColor(instTickers.get(row.ticker)!.classification)}`}
+                              >
+                                INST
                               </Link>
                             )}
                           </div>
