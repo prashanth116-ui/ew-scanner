@@ -361,6 +361,11 @@ export default function TransitionDailyPage() {
   const [showDropped, setShowDropped] = useState(false);
   const [copied, setCopied] = useState(false);
   const [highConvictionOnly, setHighConvictionOnly] = useState(false);
+  const [enrichmentMap, setEnrichmentMap] = useState<Map<string, { phase: string; rsAccel: number | null; category: string; volRatio: number; conviction: string; sectorQuadrant: string }>>(new Map());
+  const [quadrantFilter, setQuadrantFilter] = useState<string>("ALL");
+  const [phaseFilter, setPhaseFilter] = useState<string>("ALL");
+  const [rsAccelFilter, setRsAccelFilter] = useState<string>("ALL");
+  const [volumeFilter, setVolumeFilter] = useState<string>("ALL");
 
   // Load available dates on mount
   useEffect(() => {
@@ -423,8 +428,22 @@ export default function TransitionDailyPage() {
             map.set(s.sector, s.quadrant);
           }
           if (!cancelled) setSectorQuadrants(map);
+          // Build enrichment map from enrichedStocks.passed
+          const eMap = new Map<string, { phase: string; rsAccel: number | null; category: string; volRatio: number; conviction: string; sectorQuadrant: string }>();
+          for (const s of sectorJson.enrichedStocks?.passed ?? []) {
+            eMap.set(s.symbol, {
+              phase: s.phase,
+              rsAccel: s.rsAccel ?? null,
+              category: s.category,
+              volRatio: s.volRatio,
+              conviction: s.conviction,
+              sectorQuadrant: s.sectorQuadrant,
+            });
+          }
+          if (!cancelled) setEnrichmentMap(eMap);
         } else {
           if (!cancelled) setSectorQuadrants(new Map());
+          if (!cancelled) setEnrichmentMap(new Map());
         }
         // Build institutional ticker map
         if (instRes && instRes.ok) {
@@ -446,6 +465,7 @@ export default function TransitionDailyPage() {
           setInflectionTickers(new Map());
           setSectorQuadrants(new Map());
           setInstTickers(new Map());
+          setEnrichmentMap(new Map());
         }
       } finally {
         if (!cancelled) setLoadingResults(false);
@@ -504,6 +524,38 @@ export default function TransitionDailyPage() {
         (r) => r.ticker.includes(q) || (r.company_name ?? "").toUpperCase().includes(q) || (r.sector ?? "").toUpperCase().includes(q)
       );
     }
+    if (quadrantFilter !== "ALL") {
+      rows = rows.filter((r) => enrichmentMap.get(r.ticker)?.sectorQuadrant === quadrantFilter);
+    }
+    if (phaseFilter !== "ALL") {
+      rows = rows.filter((r) => enrichmentMap.get(r.ticker)?.phase === phaseFilter);
+    }
+    if (rsAccelFilter !== "ALL") {
+      rows = rows.filter((r) => {
+        const v = enrichmentMap.get(r.ticker)?.rsAccel;
+        if (v == null) return false;
+        switch (rsAccelFilter) {
+          case "STRONG": return v >= 4.5;
+          case "MODERATE": return v >= 1.5 && v < 4.5;
+          case "NEUTRAL": return v >= -1.5 && v < 1.5;
+          case "DECEL": return v < -1.5;
+          default: return true;
+        }
+      });
+    }
+    if (volumeFilter !== "ALL") {
+      rows = rows.filter((r) => {
+        const v = enrichmentMap.get(r.ticker)?.volRatio;
+        if (v == null) return false;
+        switch (volumeFilter) {
+          case "HIGH": return v >= 1.5;
+          case "ABOVE_AVG": return v >= 1.2 && v < 1.5;
+          case "NORMAL": return v >= 1.0 && v < 1.2;
+          case "LOW": return v < 1.0;
+          default: return true;
+        }
+      });
+    }
 
     const sorted = [...rows].sort((a, b) => {
       let cmp: number;
@@ -528,7 +580,7 @@ export default function TransitionDailyPage() {
     });
 
     return sorted;
-  }, [results, highConvictionOnly, highConvictionTickers, alertFilter, stateFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas]);
+  }, [results, highConvictionOnly, highConvictionTickers, alertFilter, stateFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
@@ -896,6 +948,59 @@ export default function TransitionDailyPage() {
           </button>
         </div>
       </div>
+
+      {/* Enrichment filters row */}
+      {enrichmentMap.size > 0 && (
+        <div className="flex items-center gap-3 flex-wrap mb-4">
+          <select
+            value={quadrantFilter}
+            onChange={(e) => setQuadrantFilter(e.target.value)}
+            className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#a0a0a0] focus:outline-none"
+          >
+            <option value="ALL">RRG Quadrant</option>
+            <option value="LEADING">Leading</option>
+            <option value="IMPROVING">Improving</option>
+            <option value="WEAKENING">Weakening</option>
+            <option value="LAGGING">Lagging</option>
+          </select>
+          <select
+            value={phaseFilter}
+            onChange={(e) => setPhaseFilter(e.target.value)}
+            className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#a0a0a0] focus:outline-none"
+          >
+            <option value="ALL">Phase</option>
+            <option value="P1">P1 Basing</option>
+            <option value="P2">P2 Turnaround</option>
+            <option value="P3">P3 Trending</option>
+            <option value="P4">P4 Exhausting</option>
+          </select>
+          <select
+            value={rsAccelFilter}
+            onChange={(e) => setRsAccelFilter(e.target.value)}
+            className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#a0a0a0] focus:outline-none"
+          >
+            <option value="ALL">RS Accel</option>
+            <option value="STRONG">Strong (&ge;4.5)</option>
+            <option value="MODERATE">Moderate (&ge;1.5)</option>
+            <option value="NEUTRAL">Neutral</option>
+            <option value="DECEL">Decelerating</option>
+          </select>
+          <select
+            value={volumeFilter}
+            onChange={(e) => setVolumeFilter(e.target.value)}
+            className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-xs text-[#a0a0a0] focus:outline-none"
+          >
+            <option value="ALL">Volume</option>
+            <option value="HIGH">High (&ge;1.5x)</option>
+            <option value="ABOVE_AVG">Above Avg (&ge;1.2x)</option>
+            <option value="NORMAL">Normal (&ge;1.0x)</option>
+            <option value="LOW">Low (&lt;1.0x)</option>
+          </select>
+          <span className="ml-auto text-[10px] text-[#555]">
+            Enriched: <strong className="text-[#a0a0a0]">{results.filter((r) => enrichmentMap.has(r.ticker)).length}</strong>/{results.length}
+          </span>
+        </div>
+      )}
 
       {/* Loading state */}
       {loadingResults && (
