@@ -54,7 +54,7 @@ interface DroppedTicker {
 }
 
 type AlertStateFilter = "ALL" | "TRIGGERED" | "READY" | "ARMED" | "WATCH";
-type StateFilter = "ALL" | "BULLISH_BOS" | "BULLISH_CHOCH" | "EARLY_EXPANSION" | "COMPRESSION" | "HIGHER_LOW_FORMATION" | "SUSTAINED_MARKUP" | "DEMAND_INCREASING" | "ACCUMULATION" | "SELLING_EXHAUSTION";
+type StateFilter = "ALL" | "BULLISH_BOS" | "BULLISH_CHOCH" | "EARLY_EXPANSION" | "COMPRESSION" | "HIGHER_LOW_FORMATION" | "SUSTAINED_MARKUP" | "DEMAND_INCREASING" | "ACCUMULATION" | "SELLING_EXHAUSTION" | "EXTENDED";
 type SortField =
   | "overall_score" | "se_score" | "accum_score" | "choch_score" | "bos_score"
   | "compression_score" | "hl_score" | "rs_score" | "volume_score"
@@ -116,20 +116,6 @@ function alertFilterLabel(f: AlertStateFilter): string {
   }
 }
 
-function stateFilterLabel(s: StateFilter): string {
-  switch (s) {
-    case "ALL": return "All States";
-    case "BULLISH_BOS": return "BOS";
-    case "BULLISH_CHOCH": return "ChoCH";
-    case "EARLY_EXPANSION": return "Early Exp.";
-    case "COMPRESSION": return "Compress";
-    case "HIGHER_LOW_FORMATION": return "HL Form.";
-    case "SUSTAINED_MARKUP": return "Markup";
-    case "DEMAND_INCREASING": return "Demand+";
-    case "ACCUMULATION": return "Accum.";
-    case "SELLING_EXHAUSTION": return "Seller Exh.";
-  }
-}
 
 function scoreBarColor(score: number): string {
   if (score >= 55) return "bg-emerald-500";
@@ -251,13 +237,11 @@ function ExpandedEvidence({ row }: { row: TransitionDailyRow }) {
               {row.invalidation != null ? `$${fmtNum(row.invalidation, 2)}` : "-"}
             </p>
           </div>
-          {row.trigger_level != null && row.invalidation != null && (
+          {row.trigger_level != null && row.invalidation != null && row.price > row.invalidation && (
             <div className="shrink-0">
               <p className="text-[9px] uppercase tracking-wider text-[#555] mb-1">Risk/Reward</p>
               <p className="text-xs font-medium text-white">
-                {row.trigger_level > row.invalidation
-                  ? `${fmtNum(((row.trigger_level - row.price) / (row.price - row.invalidation)) * -1 + ((row.trigger_level * 1.1 - row.price) / (row.price - row.invalidation)), 1)}R`
-                  : "-"}
+                {`1:${fmtNum((row.trigger_level - row.price) / (row.price - row.invalidation), 1)}R`}
               </p>
             </div>
           )}
@@ -429,12 +413,6 @@ export default function TransitionDailyPage() {
     });
   }, []);
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, []);
-
   // Filter and sort results
   const filtered = useMemo(() => {
     let rows = results;
@@ -479,6 +457,12 @@ export default function TransitionDailyPage() {
 
     return sorted;
   }, [results, alertFilter, stateFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas]);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [filtered]);
 
   // Top picks: TRIGGERED + READY sorted by score, capped at 10
   const topPicks = useMemo(() => {
