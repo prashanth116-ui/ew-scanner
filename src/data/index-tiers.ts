@@ -183,6 +183,8 @@ export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   "MANH", "DUOL", "RBRK", "MDGL", "WING", "CROX", "DKS", "ETSY",
   "MOD", "POWL", "IESC", "FND", "NBIX", "UTHR", "CYTK", "LNTH",
   "ITCI", "THC", "SFM", "GLOB",
+  // Other
+  "DDOC", "CRWV",
 ]);
 
 /**
