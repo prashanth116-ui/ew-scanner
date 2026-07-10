@@ -16,8 +16,8 @@ import type { TransitionResult } from "@/lib/prerun/types";
 
 export const maxDuration = 300; // 5 minutes
 
-const BATCH_SIZE = 10;
-const BATCH_DELAY = 1100; // Respect Finnhub 60/min rate limit
+const BATCH_SIZE = 15;
+const BATCH_DELAY = 500;
 const PERSIST_INTERVAL = 50;
 
 function resultToRecord(r: TransitionResult, scanDate: string): TransitionDailyRecord {
