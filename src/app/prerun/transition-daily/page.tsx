@@ -464,6 +464,20 @@ export default function TransitionDailyPage() {
     return sorted;
   }, [results, alertFilter, stateFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas]);
 
+  // Top picks: TRIGGERED + READY sorted by score, capped at 10
+  const topPicks = useMemo(() => {
+    return results
+      .filter((r) => r.alert_state === "TRIGGERED" || r.alert_state === "READY")
+      .sort((a, b) => {
+        // TRIGGERED first, then READY; within same alert, by score desc
+        if (a.alert_state !== b.alert_state) {
+          return a.alert_state === "TRIGGERED" ? -1 : 1;
+        }
+        return b.overall_score - a.overall_score;
+      })
+      .slice(0, 10);
+  }, [results]);
+
   // Summary counts
   const triggeredCount = results.filter((r) => r.alert_state === "TRIGGERED").length;
   const readyCount = results.filter((r) => r.alert_state === "READY").length;
@@ -549,6 +563,67 @@ export default function TransitionDailyPage() {
           </button>
         ))}
       </div>
+
+      {/* Top Picks Banner */}
+      {!loadingResults && topPicks.length > 0 && (
+        <div className="mb-5 rounded-lg border border-emerald-500/20 bg-gradient-to-r from-emerald-500/[0.05] to-cyan-500/[0.05] p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="h-4 w-4 text-emerald-400" />
+            <h2 className="text-sm font-bold text-white">Top Picks</h2>
+            <span className="text-[10px] text-[#666]">Triggered + Ready, sorted by score</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            {topPicks.map((r) => {
+              const aBadge = alertBadge(r.alert_state);
+              const sBadge = stateBadge(r.state);
+              const streak = streaks[r.ticker] ?? 1;
+              const isNew = streak === 1;
+              return (
+                <button
+                  key={r.ticker}
+                  onClick={() => {
+                    setExpandedTicker(r.ticker);
+                    // Scroll to table
+                    document.querySelector(`[data-ticker="${r.ticker}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}
+                  className="rounded-lg border border-[#2a2a2a] bg-[#111] p-2.5 text-left hover:border-emerald-500/30 hover:bg-[#161616] transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-bold text-white">{r.ticker}</span>
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-semibold ${aBadge.color}`}>
+                      {aBadge.label}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className="flex-1 h-1.5 bg-[#0f0f0f] rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${scoreBarColor(r.overall_score)}`}
+                        style={{ width: `${r.overall_score}%` }}
+                      />
+                    </div>
+                    <span className={`text-[10px] font-bold tabular-nums ${scoreTextColor(r.overall_score)}`}>
+                      {r.overall_score}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-semibold ${sBadge.color}`}>
+                      {sBadge.label}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {isNew && (
+                        <span className="text-[8px] font-bold text-green-400">NEW</span>
+                      )}
+                      {r.trigger_level != null && (
+                        <span className="text-[9px] text-[#666] tabular-nums">${fmtNum(r.trigger_level, 0)}</span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Summary bar */}
       <div className="flex items-center gap-3 flex-wrap mb-4 text-xs">
@@ -789,6 +864,7 @@ export default function TransitionDailyPage() {
                   return (
                     <Fragment key={row.ticker}>
                       <tr
+                        data-ticker={row.ticker}
                         onClick={() => setExpandedTicker(isExpanded ? null : row.ticker)}
                         className={`border-b border-[#1a1a1a] cursor-pointer transition-colors ${
                           isExpanded ? "bg-[#161616]" : "hover:bg-[#141414]"
