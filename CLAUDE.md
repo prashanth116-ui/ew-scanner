@@ -94,13 +94,14 @@ Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 10`, `MAX_PRICE:
 **Applied in 6 cron routes:** PreRun preset, PreRun 4h, Inflection, Transition, VCP, Institutional. NOT applied to single-ticker API routes (explicit user lookups) or PreRunner (uses `computePreRunnerRadar()`).
 
 ### Preset Cron Details
-- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS (~615 unique tickers)
+- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS minus SCAN_EXCLUSIONS (~562 unique tickers). Built via `buildScanUniverse()` in `index-tiers.ts`.
+- **SCAN_EXCLUSIONS (38 tickers):** Structurally boring stocks excluded from scanning — ultra-low ATR%, secular decline, or utility-like behavior. Defined in `src/data/index-tiers.ts`. Includes: ROL, RSG, WM, CHRW, SWK, MMM, TXT, AOS, ALLE, PNR, NDSN, DOV (Industrials); BEN, IVZ, GL, CINF, AIZ, L, NTRS, PFG, STT, KEY, RF (Financials); F, GM, GPC, HAS, RL, MAS, TGT, LVS (Consumer Disc); JNJ, PFE, BAX, VTRS, HSIC, CVS, DVA (Health Care). Review quarterly.
 - **SP400 dropped:** Removed from all scan universes. Notable SP400 stocks rescued to ADDITIONAL_MEMBERS.
 - **NDX100 updated:** Reflects June 22, 2026 quarterly rebalance (added ALAB, ALNY, CRWV, NBIS, RKLB, TER; removed CHTR, CTSH, VRSK, ZS)
 - **Universal quality gate:** Filters ~100+ stocks before scoring (price < $10, mcap < $8B, dollarVol < $100M, dataQuality < 40%, maxAtrPct60d < 1.2%)
 - **Non-scorer gate:** Skips tickers never seen in any scanner table (saves API calls). Loaded once at cron start via `loadAllScoredTickers()`.
 - **Vercel limit:** 300s maxDuration, 240s time guard for Telegram
-- **Single-pass system:** ~615 tickers typically fits in one pass. Resume pass available if needed.
+- **Single-pass system:** ~562 tickers typically fits in one pass. Resume pass available if needed.
 - **4h scanner:** May still need 2 passes (larger Yahoo 2y:1h chart responses slow each ticker)
 - **Batch settings:** BATCH_SIZE=15, BATCH_DELAY=500ms, PERSIST_INTERVAL=50
 - **Params:** `?clear=true` (delete today's data before scan), `?resume=true` (skip existing tickers)
@@ -129,10 +130,10 @@ Non-index stocks added to the scan universe for momentum/breakout relevance. Def
 |--------|-------------|
 | SNDK | pctFromAth >= 40 *(stale 2-6d)*, shortFloat >= 15 *(stale 14-35d FINRA)*, finalScore >= 18, scoreF >= 1 *(fresh EOD)* |
 | Early Mover | pctFromAth >= 25 *(stale 2-6d)*, finalScore >= 14 (daily) / >= 16 (4h), M2+L+F all >= 1 *(fresh EOD)* |
-| Pullback | pctFromAth <= 40, finalScore >= 15, 2/3 of (M2, F, L) >= 1 |
-| Leading | finalScore >= 15 (daily) / >= 18 (4h), M >= 1, J >= 1, quadrant LEADING/IMPROVING |
-| Stealth | finalScore >= 11, M2 >= 1, OBV divergent or VP bullish |
-| Early+ | finalScore >= 10, M2 >= 1, N >= 1, OBV divergent or VP bullish |
+| Pullback | pctFromAth <= 40 *(stale 2-6d)*, finalScore >= 17 (daily) / >= 18 (4h), M2 >= 1 mandatory + (F >= 1 or L >= 1) *(fresh EOD)* |
+| Leading | finalScore >= 18 (daily) / >= 20 (4h), M >= 1, J >= 1, F >= 1 *(fresh EOD)*, quadrant LEADING only *(stale up to 24h)* |
+| Stealth | finalScore >= 14 (daily) / >= 15 (4h), M2 >= 1, OBV divergent or VP bullish *(all fresh EOD)* |
+| Early+ | **Deprecated** — merged into Stealth (was 100% redundant). DB flag kept for schema compat. |
 
 ### Scoring Engines
 | Engine | Function | Scale | Used By |

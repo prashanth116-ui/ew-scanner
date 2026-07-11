@@ -187,6 +187,63 @@ export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   "MTCH",
 ]);
 
+// prettier-ignore
+/** Tickers excluded from scan universe. These are SP500/NDX members that are
+ *  structurally unlikely to produce swing-tradeable breakouts due to ultra-low
+ *  volatility, secular decline, or utility-like price behavior.
+ *  Last updated: 2026-07-11. Review quarterly. */
+export const SCAN_EXCLUSIONS: Set<string> = new Set([
+  // Industrials — low ATR%, utility-like, conglomerate discount, or secular decline
+  "ROL",    // Rollins — pest control, ATR% ~1.0-1.5%, never pulls back enough
+  "RSG",    // Republic Services — waste hauler, utility-like volatility
+  "WM",     // Waste Management — waste monopoly, ATR% ~1.0-1.3%
+  "CHRW",   // C.H. Robinson — freight brokerage in secular decline
+  "SWK",    // Stanley Black & Decker — multi-year structural decline
+  "MMM",    // 3M — litigation overhang, low-growth conglomerate
+  "TXT",    // Textron — diversified conglomerate, no catalyst concentration
+  "AOS",    // A.O. Smith — water heaters, structurally boring
+  "ALLE",   // Allegion — door locks, ultra-stable, low-growth
+  "PNR",    // Pentair — water treatment, utility-adjacent
+  "NDSN",   // Nordson — precision dispensing, niche low-ATR%
+  "DOV",    // Dover — diversified industrial conglomerate
+  // Financials — secular decline, low ATR%, or governance risk
+  "BEN",    // Franklin Templeton — active management in secular decline
+  "IVZ",    // Invesco — same as BEN, persistent AUM outflows
+  "GL",     // Globe Life — under investigation, governance risk
+  "CINF",   // Cincinnati Financial — utility-like P&C insurer
+  "AIZ",    // Assurant — specialty insurance, no momentum profile
+  "L",      // Loews — holding company, conglomerate discount
+  "NTRS",   // Northern Trust — custody bank, low ATR%
+  "PFG",    // Principal Financial — insurance/asset mgmt, low-growth
+  "STT",    // State Street — custody bank, low ATR%
+  "KEY",    // KeyCorp — generic regional bank, no differentiation
+  "RF",     // Regions Financial — generic regional bank
+  // Consumer Discretionary — structural challenges, low ATR%, or no breakout DNA
+  "F",      // Ford — EV losses, legacy auto margin compression
+  "GM",     // General Motors — same as Ford
+  "GPC",    // Genuine Parts — auto parts distributor, utility-like
+  "HAS",    // Hasbro — toy company in secular decline
+  "RL",     // Ralph Lauren — mature luxury brand, low-growth
+  "MAS",    // Masco — faucets/cabinets, low ATR%, grinds not breaks
+  "TGT",    // Target — big-box retail, low ATR%, gap-driven only
+  "LVS",    // Las Vegas Sands — Macau recovery priced in, grinding
+  // Health Care — ultra-low ATR%, structural decline, or no catalyst
+  "JNJ",    // Johnson & Johnson — utility-like ATR% (~0.9-1.2%)
+  "PFE",    // Pfizer — post-COVID cliff, dead money
+  "BAX",    // Baxter — turnaround not working, low ATR%
+  "VTRS",   // Viatris — generic pharma, structural decline, high debt
+  "HSIC",   // Henry Schein — dental supply, low ATR% (~1.1%)
+  "CVS",    // CVS Health — too diversified, PBM reform risk, low ATR%
+  "DVA",    // DaVita — dialysis, regulatory ceiling, GLP-1 threat
+]);
+
+/** Build the scan universe: SP500 + NDX100 + ADDITIONAL minus SCAN_EXCLUSIONS. */
+export function buildScanUniverse(): string[] {
+  const all = new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...ADDITIONAL_MEMBERS]);
+  for (const t of SCAN_EXCLUSIONS) all.delete(t);
+  return [...all];
+}
+
 /**
  * Returns the quality tier for a ticker symbol:
  *   1 = S&P 500 (institutional-grade large-cap)

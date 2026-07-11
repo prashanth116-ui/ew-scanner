@@ -3,7 +3,7 @@ import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs, fetchYahooChart } from "@/lib/prerun/data";
 import { scoreTransitionWithOHLC } from "@/lib/prerun/transition-scoring";
 import { passesUniverseQualityGates } from "@/lib/prerun/scoring";
-import { SP500_MEMBERS, NDX100_MEMBERS, ADDITIONAL_MEMBERS } from "@/data/index-tiers";
+import { buildScanUniverse } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
 
 import {
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
 
     // Build universe: SP500 union NDX100 union ADDITIONAL (deduplicated)
-    const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...ADDITIONAL_MEMBERS])];
+    const universe = buildScanUniverse();
     const today = new Date().toISOString().slice(0, 10);
 
     // Clear today's data if requested (for full re-scan)

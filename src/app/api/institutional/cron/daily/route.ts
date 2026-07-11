@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { scoreInstitutionalAcceleration } from "@/lib/prerun/institutional-scoring";
-import { SP500_MEMBERS, NDX100_MEMBERS, ADDITIONAL_MEMBERS } from "@/data/index-tiers";
+import { buildScanUniverse } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
 
 import {
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
   try {
     const startTime = Date.now();
 
-    const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...ADDITIONAL_MEMBERS])];
+    const universe = buildScanUniverse();
     const today = new Date().toISOString().slice(0, 10);
 
     await prefetchSectorETFs();

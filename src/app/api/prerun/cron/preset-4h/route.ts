@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { autoScorePreRun, passesUniverseQualityGates } from "@/lib/prerun/scoring";
-import { SP500_MEMBERS, NDX100_MEMBERS, ADDITIONAL_MEMBERS } from "@/data/index-tiers";
+import { buildScanUniverse } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
 
 import { createAdminClient } from "@/lib/supabase/server";
@@ -41,18 +41,17 @@ function computePresetFlags(
     // Early Mover: Beaten-down + EMA timing + structure + volume (4h: tighter finalScore >= 16)
     // pctFromAth (stale 2-6d) | M2,L,F all fresh EOD
     early_mover: pctFromAth >= 25 && s.finalScore >= 16 && s.scoreM2 >= 1 && s.scoreL >= 1 && s.scoreF >= 1,
-    // Pullback: Near-ATH + strong score + 2/3 technical confirmation
-    // pctFromAth (stale 2-6d) | M2,F,L all fresh EOD
-    pullback: pctFromAth <= 40 && s.finalScore >= 15 && [s.scoreM2 >= 1, s.scoreF >= 1, s.scoreL >= 1].filter(Boolean).length >= 2,
-    // Leading: High score + momentum + RS + favorable sector rotation (4h: tighter finalScore >= 18)
-    // quadrant from sector_snapshots (stale up to 24h) | M,J fresh EOD
-    leading: s.finalScore >= 18 && s.scoreM >= 1 && s.scoreJ >= 1 && (quadrant === "LEADING" || quadrant === "IMPROVING"),
-    // Stealth: Moderate score + EMA timing + hidden accumulation divergence
-    // obvDivergent, vpDivergenceBullish fresh EOD | M2 fresh EOD
-    stealth: s.finalScore >= 11 && s.scoreM2 >= 1 && (d.obvDivergent === true || d.vpDivergenceBullish === true),
-    // Early+: Low floor + EMA timing + range coil + divergence
-    // All fresh EOD signals
-    early_plus: s.finalScore >= 10 && s.scoreM2 >= 1 && s.scoreN >= 1 && (d.obvDivergent === true || d.vpDivergenceBullish === true),
+    // Pullback: Near-ATH + strong score + EMA timing required + volume or structure (4h: tighter finalScore >= 18)
+    // pctFromAth (stale 2-6d) | M2 mandatory (fresh EOD) + at least one of F,L (fresh EOD)
+    pullback: pctFromAth <= 40 && s.finalScore >= 18 && s.scoreM2 >= 1 && (s.scoreF >= 1 || s.scoreL >= 1),
+    // Leading: High score + momentum + RS + volume + LEADING sector quadrant only (4h: tighter finalScore >= 20)
+    // quadrant from sector_snapshots (stale up to 24h) | M,J,F fresh EOD
+    leading: s.finalScore >= 20 && s.scoreM >= 1 && s.scoreJ >= 1 && s.scoreF >= 1 && quadrant === "LEADING",
+    // Stealth: Hidden accumulation — EMA timing + OBV/VP divergence (all fresh EOD, 4h: tighter finalScore >= 15)
+    // Merged with former Early+ preset (Early+ was 100% redundant)
+    stealth: s.finalScore >= 15 && s.scoreM2 >= 1 && (d.obvDivergent === true || d.vpDivergenceBullish === true),
+    // Early+ deprecated — merged into Stealth. Flag kept for DB schema compatibility.
+    early_plus: false,
   };
 }
 
@@ -164,7 +163,7 @@ export async function GET(request: NextRequest) {
     const TIME_LIMIT_MS = 240_000;
 
     // Build universe: SP500 + NDX100 + ADDITIONAL (deduplicated)
-    const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...ADDITIONAL_MEMBERS])];
+    const universe = buildScanUniverse();
     const today = new Date().toISOString().slice(0, 10);
 
     // Clear today's data if requested
