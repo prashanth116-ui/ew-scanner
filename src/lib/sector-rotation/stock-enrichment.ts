@@ -82,6 +82,11 @@ export function applyQualityGates(
       otherReasons.push(`dollarVol=$${(dollarVol / 1e6).toFixed(0)}M (<$${QUALITY_GATES.MIN_DOLLAR_VOLUME / 1e6}M)`);
     }
 
+    // Gate 0c: Price <= maximum (except Semiconductors)
+    if (s.price > QUALITY_GATES.MAX_PRICE && s.sector !== "Semiconductors") {
+      otherReasons.push(`price=$${s.price.toFixed(0)} (>$${QUALITY_GATES.MAX_PRICE})`);
+    }
+
     // Gate 1: Market cap >= minimum (skip if null)
     if (s.marketCap != null && s.marketCap < QUALITY_GATES.MIN_MARKET_CAP) {
       otherReasons.push(`market_cap=$${(s.marketCap / 1e9).toFixed(1)}B (<$${QUALITY_GATES.MIN_MARKET_CAP / 1e9}B)`);

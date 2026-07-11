@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
         batch.map(async (ticker) => {
           const data = await fetchPreRunData(ticker);
           if (!data) return null;
-          if (!passesUniverseQualityGates(data)) return null;
+          if (!passesUniverseQualityGates(data, ticker)) return null;
           return scoreVCP(data);
         })
       );

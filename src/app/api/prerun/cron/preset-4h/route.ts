@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
           // scanner4h=true: uses 4h-aggregated chart with barMultiplier=6
           const data = await fetchPreRunData(ticker, "4h", undefined, true);
           if (!data) return null;
-          if (!passesUniverseQualityGates(data)) return null;
+          if (!passesUniverseQualityGates(data, ticker)) return null;
           const sector = getSectorForTicker(ticker);
           const quadrant = sector ? sectorQuadrants[sector] ?? null : null;
           const result = autoScorePreRun(data, quadrant, 10);

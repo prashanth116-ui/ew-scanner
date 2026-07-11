@@ -5,7 +5,7 @@
  * Tier 2: Nasdaq-100 + S&P 400 MidCap (not already in tier 1) — quality mid/large-cap
  * Tier 3: Everything else — small-cap, speculative
  *
- * Last updated: 2026-07-09 (refresh quarterly after index rebalances)
+ * Last updated: 2026-07-11 (refresh quarterly after index rebalances)
  */
 
 // prettier-ignore
@@ -96,7 +96,7 @@ export const NDX100_MEMBERS: Set<string> = new Set([
   "PANW", "PAYX", "PCAR", "PDD", "PEP", "PLTR", "PYPL",
   "QCOM",
   "REGN", "RKLB", "ROP", "ROST",
-  "SBUX", "SMCI", "SNPS",
+  "SBUX", "SMCI", "SNPS", "SPCX",
   "TEAM", "TER", "TMUS", "TSLA", "TTD", "TTWO", "TXN",
   "VRTX",
   "WDAY",
@@ -160,17 +160,17 @@ export const SP400_MEMBERS: Set<string> = new Set([
 export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   // Tech / Software / Cloud
   "TSM", "SNOW", "NET", "MDB", "HUBS", "IOT", "CYBR", "MNDY", "PSTG",
-  "TWLO", "OKTA", "NTNX", "GTLB", "S", "ESTC", "TOST", "ZS",
+  "TWLO", "OKTA", "NTNX", "GTLB", "S", "ESTC", "TOST", "ZS", "TTAN",
   // Consumer / E-commerce / Platforms
   "SHOP", "SPOT", "RBLX", "DKNG", "ONON", "CAVA",
-  "CPNG", "SE", "CHWY", "CELH", "ELF",
+  "CPNG", "SE", "CHWY",
   // Fintech / Payments / Crypto
-  "NU", "SQ", "SOFI", "AFRM", "CRCL",
+  "NU", "XYZ", "SOFI", "AFRM", "CRCL",
   // Social / Media
   "PINS", "SNAP", "RDDT", "ZG", "ROKU", "ZM",
   // Healthcare / Biotech / AI Medicine
   "NVO", "NTRA", "HALO", "INSM",
-  "BMRN", "VKTX", "LEGN", "SRPT", "TEM",
+  "BMRN", "VKTX", "SRPT", "TEM",
   // Industrials / Defense / Aerospace
   "HEI", "BAH", "ASTS",
   // Energy / Materials
@@ -178,13 +178,13 @@ export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   // Large ADRs
   "SAP", "GSK", "BHP", "RIO", "BABA", "JD", "LI", "BIDU",
   // Recent IPOs / High Momentum
-  "SPCX", "MDLN", "VIK", "QNT",
+  "MDLN", "VIK", "QNT", "IONQ",
   // Notable ex-SP400 (dropped SP400 from scan universe, rescued the best)
   "MANH", "DUOL", "RBRK", "MDGL", "WING", "CROX", "DKS", "ETSY",
   "MOD", "POWL", "IESC", "FND", "NBIX", "UTHR", "CYTK", "LNTH",
   "ITCI", "THC", "SFM", "GLOB", "CART",
   // Other
-  "MTCH", "DDOC",
+  "MTCH",
 ]);
 
 /**

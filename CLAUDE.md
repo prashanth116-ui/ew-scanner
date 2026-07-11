@@ -79,12 +79,13 @@ All cron scanners and the sector rotation stock enrichment share a universal qua
 | Check | Threshold | Field |
 |-------|-----------|-------|
 | Price | >= $15 | `currentPrice` |
+| Price | <= $1000 (except Semiconductors) | `currentPrice` |
 | Market cap | >= $8B | `marketCap` |
 | Dollar volume | >= $100M/day | `vcpAvgDollarVolume` (50d avg) |
 | Data quality | >= 40% | `dataQuality` (% of API calls that succeeded) |
 
 **Sector rotation gate** (`applyQualityGates()` in `src/lib/sector-rotation/stock-enrichment.ts`):
-Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MIN_MARKET_CAP: 8B`, `MIN_DOLLAR_VOLUME: 100M`. Plus existing gates (volume spike, extension, institutional %, trend, sector correlation).
+Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MAX_PRICE: 1000 (except Semiconductors)`, `MIN_MARKET_CAP: 8B`, `MIN_DOLLAR_VOLUME: 100M`. Plus existing gates (volume spike, extension, institutional %, trend, sector correlation).
 
 **Applied in 6 cron routes:** PreRun preset, PreRun 4h, Inflection, Transition, VCP, Institutional. NOT applied to single-ticker API routes (explicit user lookups) or PreRunner (uses `computePreRunnerRadar()`).
 
@@ -101,22 +102,22 @@ Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MIN_MARKET
 - **Telegram:** Always sends summary using full DB data (not in-memory partial)
 - **Noise guards:** `finalScore > 0` required for persistence, Leading preset uses `finalScore` not `totalScore`
 
-### ADDITIONAL_MEMBERS (90 curated tickers)
-Non-index stocks added to the scan universe for momentum/breakout relevance. Defined in `src/data/index-tiers.ts`. Tier 2 for `getTickerTier()`. Last updated 2026-07-09.
+### ADDITIONAL_MEMBERS (86 curated tickers)
+Non-index stocks added to the scan universe for momentum/breakout relevance. Defined in `src/data/index-tiers.ts`. Tier 2 for `getTickerTier()`. Last updated 2026-07-11.
 
 | Category | Tickers |
 |----------|---------|
-| Tech / Software / Cloud | TSM, SNOW, NET, MDB, HUBS, IOT, CYBR, MNDY, PSTG, TWLO, OKTA, NTNX, GTLB, S, ESTC, TOST, ZS |
-| Consumer / E-commerce | SHOP, SPOT, RBLX, DKNG, ONON, CAVA, CPNG, SE, CHWY, CELH, ELF |
-| Fintech / Payments / Crypto | NU, SQ, SOFI, AFRM, CRCL |
+| Tech / Software / Cloud | TSM, SNOW, NET, MDB, HUBS, IOT, CYBR, MNDY, PSTG, TWLO, OKTA, NTNX, GTLB, S, ESTC, TOST, ZS, TTAN |
+| Consumer / E-commerce | SHOP, SPOT, RBLX, DKNG, ONON, CAVA, CPNG, SE, CHWY |
+| Fintech / Payments / Crypto | NU, XYZ, SOFI, AFRM, CRCL |
 | Social / Media | PINS, SNAP, RDDT, ZG, ROKU, ZM |
-| Healthcare / Biotech / AI Medicine | NVO, NTRA, HALO, INSM, BMRN, VKTX, LEGN, SRPT, TEM |
+| Healthcare / Biotech / AI Medicine | NVO, NTRA, HALO, INSM, BMRN, VKTX, SRPT, TEM |
 | Industrials / Defense / Aerospace | HEI, BAH, ASTS |
 | Energy / Materials | CCJ, SCCO, ENPH, AA |
 | Large ADRs | SAP, GSK, BHP, RIO, BABA, JD, LI, BIDU |
-| Recent IPOs / High Momentum | SPCX, MDLN, VIK, QNT |
+| Recent IPOs / High Momentum | MDLN, VIK, QNT, IONQ |
 | Notable ex-SP400 | MANH, DUOL, RBRK, MDGL, WING, CROX, DKS, ETSY, MOD, POWL, IESC, FND, NBIX, UTHR, CYTK, LNTH, ITCI, THC, SFM, GLOB, CART |
-| Other | MTCH, DDOC |
+| Other | MTCH |
 
 ### Preset Qualification Criteria
 | Preset | Key Criteria |
@@ -145,7 +146,7 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 
 ### Scanner Architecture & Value Map
 
-9 scanning engines, unified via nightly confluence. 5 count for confluence, 4 are badge-only. All scanners share a universal quality gate (`passesUniverseQualityGates()`) that filters stocks before scoring: price >= $15, mcap >= $8B, dollarVol >= $100M/day, dataQuality >= 40%.
+9 scanning engines, unified via nightly confluence. 5 count for confluence, 4 are badge-only. All scanners share a universal quality gate (`passesUniverseQualityGates()`) that filters stocks before scoring: price >= $15, price <= $1000 (except Semiconductors), mcap >= $8B, dollarVol >= $100M/day, dataQuality >= 40%.
 
 **Confluence scanners (5):**
 
@@ -475,8 +476,8 @@ Cross-scanner stock picker that replaces sequential AND gates with a composite s
 - **Transition scanner is a trial:** Created to compare against Inflection for detecting accumulation → markup transitions. Badge-only in nightly summary. After gating tuning, pass rate is ~45% (247/546). Produces 27 SE + 2 ACCUM stocks for early detection. After several days of parallel output, decide whether to promote to confluence, merge with Inflection, or remove.
 - **VCP + Institutional crons untested:** Built but not manually triggered yet — universe is ~615, likely fits in one pass.
 - **Preset-resume may be redundant:** With SP400 dropped and universe at ~615, the preset cron likely completes in a single pass. The resume cron at 02:06 is still scheduled as a safety net but may not be needed. Monitor scan completion counts.
-- **NDX100 rebalance maintenance:** NDX100_MEMBERS updated for June 22, 2026 rebalance. Next rebalance is September 2026 — update `src/data/index-tiers.ts` when announced. No automated rebalance cron (index changes are infrequent, ADDITIONAL_MEMBERS requires human judgment).
-- **ADDITIONAL_MEMBERS maintenance:** The 90 curated tickers in ADDITIONAL_MEMBERS need periodic review. Stocks may delist, change tickers, or fall below quality gate thresholds permanently. Review quarterly alongside NDX100 rebalance.
+- **NDX100 rebalance maintenance:** NDX100_MEMBERS updated for June 22, 2026 rebalance + July 7, 2026 SPCX addition. Next rebalance is September 2026 — update `src/data/index-tiers.ts` when announced. No automated rebalance cron (index changes are infrequent, ADDITIONAL_MEMBERS requires human judgment).
+- **ADDITIONAL_MEMBERS maintenance:** The 86 curated tickers in ADDITIONAL_MEMBERS need periodic review. Stocks may delist, change tickers, or fall below quality gate thresholds permanently. Review quarterly alongside NDX100 rebalance. Last cleanup 2026-07-11: removed CELH/ELF/LEGN (mcap), DDOC (invalid ticker), SPCX (promoted to NDX100); fixed SQ→XYZ; added TTAN, IONQ.
 
 ## Environment Variables
 Key env vars (set in Vercel + `.env.local`):

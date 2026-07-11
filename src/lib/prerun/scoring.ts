@@ -13,15 +13,18 @@ import type {
   PreRunResult,
 } from "./types";
 import { matchBestPattern, type PatternMatchResult } from "./patterns";
+import { getSectorForTicker } from "@/data/prerun-universe";
 
 /** Universal quality gate: filters low-quality stocks before scoring.
- *  price >= $15, marketCap >= $8B, avgDollarVolume >= $100M/day. */
-export function passesUniverseQualityGates(data: PreRunStockData): boolean {
+ *  price >= $15, price <= $1000 (except Semiconductors), marketCap >= $8B, avgDollarVolume >= $100M/day. */
+export function passesUniverseQualityGates(data: PreRunStockData, ticker: string): boolean {
   const price = data.currentPrice ?? 0;
   const mcap = data.marketCap ?? 0;
   const dollarVol = data.vcpAvgDollarVolume ?? 0;
   const dq = data.dataQuality ?? 100; // treat missing as full quality
-  return price >= 15 && mcap >= 8_000_000_000 && dollarVol >= 100_000_000 && dq >= 40;
+  if (price < 15 || mcap < 8_000_000_000 || dollarVol < 100_000_000 || dq < 40) return false;
+  if (price > 1000 && getSectorForTicker(ticker) !== "Semiconductors") return false;
+  return true;
 }
 
 /** Gate 1: Has the run already happened? */

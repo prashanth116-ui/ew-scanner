@@ -94,6 +94,8 @@ export const ROTATION = {
 export const QUALITY_GATES = {
   /** Minimum stock price ($) */
   MIN_PRICE: 15,
+  /** Maximum stock price ($) — excludes ultra-high-price stocks (except Semiconductors) */
+  MAX_PRICE: 1000,
   /** Minimum market cap ($) */
   MIN_MARKET_CAP: 8_000_000_000,
   /** Minimum average daily dollar volume ($) */
