@@ -133,6 +133,10 @@ function prerunnerLabel(r: PreRunnerDailyRecord): string {
   return `Rot ${r.prerunner_score}`;
 }
 
+function transLabel(r: TransitionDailyRecord): string {
+  return `Trans ${r.alert_state} ${r.overall_score}`;
+}
+
 function catalystLabel(r: CatalystSignalRow): string {
   return `${r.signal_strength} | ${r.score}`;
 }
@@ -174,10 +178,9 @@ function buildRsAccelMap(
 // ── Consolidation ──
 
 /**
- * QFE is derived from PreRun data, so counting both inflates confluence.
- * We count only 5 independent scanners (PreRun, Inflection, VCP, Institutional, PreRunner)
- * for confluence ranking. QFE rating is appended as an inline badge when present.
- * Tickers within each tier are sorted by RS acceleration DESC.
+ * 5 confluence scanners: PreRun, Inflection, Transition, Institutional, PreRunner.
+ * VCP + QFE + Setup4h are badge-only (not counted for confluence).
+ * INF_WATCH counts as 0.5 weight. Tickers within each tier sorted by RS acceleration DESC.
  */
 function consolidateResults(
   prerun: PreRunDailyRecord[],
@@ -189,6 +192,7 @@ function consolidateResults(
   qfe: QFEDailyRecord[],
   catalyst: CatalystSignalRow[],
   newTickerSet: Set<string>,
+  transition: TransitionDailyRecord[],
 ): { tiers: Map<number, ConsolidatedTicker[]>; catalysts: ConsolidatedTicker[]; fourHourOnly: string[] } {
   // Independent scanner hits (count toward confluence)
   const map = new Map<string, ScannerHit[]>();
@@ -211,6 +215,12 @@ function consolidateResults(
   for (const r of vcp) add(r.ticker, { scanner: "VCP", label: vcpLabel(r), score: r.total_score });
   for (const r of institutional) add(r.ticker, { scanner: "Institutional", label: institutionalLabel(r), score: r.composite_score });
   for (const r of prerunner) add(r.ticker, { scanner: "PreRunner", label: prerunnerLabel(r), score: r.prerunner_score });
+  // Transition: only TRIGGERED and READY count (ARMED/WATCH too low-conviction)
+  for (const r of transition) {
+    if (r.alert_state === "TRIGGERED" || r.alert_state === "READY") {
+      add(r.ticker, { scanner: "Transition", label: transLabel(r), score: r.overall_score });
+    }
+  }
 
   // 4h setup lookup (badge only, not counted for confluence — same methodology as daily)
   const setup4hMap = new Map<string, PreRunDailyRecord>();
@@ -238,6 +248,7 @@ function consolidateResults(
   for (const r of vcp) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
   for (const r of institutional) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
   for (const r of prerunner) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
+  for (const r of transition) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
 
   // Build consolidated list with tiers
   const tiers = new Map<number, ConsolidatedTicker[]>();
@@ -257,16 +268,22 @@ function consolidateResults(
       hits.push({ scanner: "Setup4h", label: `4h ${setup4hRec.final_score}`, score: 0 });
     }
 
-    const NON_CONFLUENCE = new Set(["QFE", "INF_WATCH", "Setup4h"]);
-    const independentCount = hits.filter((h) => !NON_CONFLUENCE.has(h.scanner)).length;
-    const maxScore = Math.max(...hits.filter((h) => !NON_CONFLUENCE.has(h.scanner)).map((h) => h.score));
+    const NON_CONFLUENCE = new Set(["QFE", "VCP", "Setup4h"]);
+    const HALF_WEIGHT = new Set(["INF_WATCH"]);
+    const independentCount = hits.reduce((sum, h) => {
+      if (NON_CONFLUENCE.has(h.scanner)) return sum;
+      if (HALF_WEIGHT.has(h.scanner)) return sum + 0.5;
+      return sum + 1;
+    }, 0);
+    const maxScore = Math.max(...hits.filter((h) => !NON_CONFLUENCE.has(h.scanner) && !HALF_WEIGHT.has(h.scanner)).map((h) => h.score), 0);
     const rsAccel = rsAccelMap.get(ticker) ?? null;
     const sector = sectorMap.get(ticker) ?? null;
 
     const entry: ConsolidatedTicker = { ticker, hits, maxScore, rsAccel, sector, isNew: newTickerSet.has(ticker) };
 
-    if (!tiers.has(independentCount)) tiers.set(independentCount, []);
-    tiers.get(independentCount)!.push(entry);
+    const tierKey = Math.floor(independentCount);
+    if (!tiers.has(tierKey)) tiers.set(tierKey, []);
+    tiers.get(tierKey)!.push(entry);
   }
 
   // Sort each tier by RS acceleration DESC (nulls last), then maxScore DESC as tiebreaker
@@ -307,12 +324,13 @@ async function computeNewDropped(
     }
 
     // Load yesterday's data from all main tables in parallel
-    const [prevPrerun, prevInflection, prevVcp, prevInstitutional, prevPrerunner] = await Promise.all([
+    const [prevPrerun, prevInflection, prevVcp, prevInstitutional, prevPrerunner, prevTransition] = await Promise.all([
       loadPreRunDaily(yesterday),
       loadInflectionDaily(yesterday),
       loadVCPDaily(yesterday),
       loadInstitutionalDaily(yesterday),
       loadPreRunnerDaily(yesterday),
+      loadTransitionDaily(yesterday),
     ]);
 
     const yesterdayTickers = new Set<string>();
@@ -321,6 +339,7 @@ async function computeNewDropped(
     for (const r of prevVcp) yesterdayTickers.add(r.ticker);
     for (const r of prevInstitutional) yesterdayTickers.add(r.ticker);
     for (const r of prevPrerunner) yesterdayTickers.add(r.ticker);
+    for (const r of prevTransition) yesterdayTickers.add(r.ticker);
 
     const newTickers = [...todayTickers].filter((t) => !yesterdayTickers.has(t));
     const droppedTickers = [...yesterdayTickers].filter((t) => !todayTickers.has(t));
@@ -783,14 +802,15 @@ export async function GET(request: NextRequest) {
     for (const r of vcp) todayTickers.add(r.ticker);
     for (const r of institutional) todayTickers.add(r.ticker);
     for (const r of prerunner) todayTickers.add(r.ticker);
+    for (const r of transition) todayTickers.add(r.ticker);
 
     // Compute new/dropped BEFORE consolidation (so we can tag new tickers)
     const { newTickers, droppedTickers } = await computeNewDropped(today, todayTickers);
     const newTickerSet = new Set(newTickers);
 
-    // Consolidate (QFE + Setup4h excluded from confluence count — derived from PreRun)
+    // Consolidate (QFE + VCP + Setup4h excluded from confluence count)
     const { tiers, catalysts, fourHourOnly } = consolidateResults(
-      prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, newTickerSet,
+      prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, newTickerSet, transition,
     );
 
     // Discovery counts

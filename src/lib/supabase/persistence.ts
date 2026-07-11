@@ -1756,6 +1756,33 @@ export async function loadPreRunnerDailyDates(limit = 14): Promise<string[]> {
   }
 }
 
+/** Load lightweight prerunner_daily rows for multiple dates (streaks/deltas). */
+export async function loadPreRunnerDailyMulti(
+  dates: string[]
+): Promise<Array<{ scan_date: string; ticker: string; prerunner_score: number }>> {
+  if (dates.length === 0) return [];
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("prerunner_daily")
+      .select("scan_date, ticker, prerunner_score")
+      .in("scan_date", dates)
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadPreRunnerDailyMulti error:", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; prerunner_score: number }>;
+  } catch (err) {
+    console.error("[persistence] loadPreRunnerDailyMulti exception:", err);
+    return [];
+  }
+}
+
 /** Update forward return for a batch of QFE rows. */
 export async function updateQFEForwardReturns(
   updates: { scan_date: string; ticker: string; fwd_pct: number }[],

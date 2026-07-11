@@ -169,19 +169,24 @@ function runFunnel(
   prerunner: PreRunnerDailyRecord[],
   transition: TransitionDailyRecord[],
 ): { counts: { step1: number; step2: number; step3: number; step4: number }; survivors: string[]; meta: Map<string, { confluenceCount: number }> } {
-  // Build per-ticker scanner hit counts (same rules as consolidateResults in nightly summary)
+  // Build per-ticker weighted scanner hit counts (same rules as consolidateResults in nightly summary)
+  // 5 confluence scanners: PreRun, Inflection, Transition, Institutional, PreRunner
+  // VCP is badge-only (not counted). INF WATCH = 0.5 weight.
   const hitCount = new Map<string, number>();
 
   for (const r of prerun) {
     if (r.final_score > 0) hitCount.set(r.ticker, (hitCount.get(r.ticker) ?? 0) + 1);
   }
   for (const r of inflection) {
-    if (r.trade_read !== "AVOID" && r.trade_read !== "WATCH") {
+    if (r.trade_read === "AVOID") continue;
+    const weight = r.trade_read === "WATCH" ? 0.5 : 1;
+    hitCount.set(r.ticker, (hitCount.get(r.ticker) ?? 0) + weight);
+  }
+  // Transition: only TRIGGERED and READY count
+  for (const r of transition) {
+    if (r.alert_state === "TRIGGERED" || r.alert_state === "READY") {
       hitCount.set(r.ticker, (hitCount.get(r.ticker) ?? 0) + 1);
     }
-  }
-  for (const r of vcp) {
-    hitCount.set(r.ticker, (hitCount.get(r.ticker) ?? 0) + 1);
   }
   for (const r of institutional) {
     hitCount.set(r.ticker, (hitCount.get(r.ticker) ?? 0) + 1);
@@ -190,8 +195,8 @@ function runFunnel(
     hitCount.set(r.ticker, (hitCount.get(r.ticker) ?? 0) + 1);
   }
 
-  // Step 1: confluence >= 3
-  const step1 = [...hitCount.entries()].filter(([, c]) => c >= 3).map(([t]) => t);
+  // Step 1: confluence >= 2.5 (weighted)
+  const step1 = [...hitCount.entries()].filter(([, c]) => c >= 2.5).map(([t]) => t);
   const meta = new Map<string, { confluenceCount: number }>();
   for (const t of step1) meta.set(t, { confluenceCount: hitCount.get(t)! });
 
