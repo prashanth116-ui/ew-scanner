@@ -130,7 +130,7 @@ Non-index stocks added to the scan universe for momentum/breakout relevance. Def
 |--------|-------------|
 | SNDK | pctFromAth >= 40 *(stale 2-6d)*, shortFloat >= 15 *(stale 14-35d FINRA)*, finalScore >= 18, scoreF >= 1 *(fresh EOD)* |
 | Early Mover | pctFromAth >= 25 *(stale 2-6d)*, finalScore >= 14 (daily) / >= 16 (4h), M2+L+F all >= 1 *(fresh EOD)* |
-| Pullback | pctFromAth <= 40 *(stale 2-6d)*, finalScore >= 17 (daily) / >= 18 (4h), M2 >= 1 mandatory + (F >= 1 or L >= 1) *(fresh EOD)* |
+| Pullback | pctFromAth <= 40 *(stale 2-6d)*, finalScore >= 17 (daily) / >= 18 (4h), F >= 1 + L >= 1 *(both fresh EOD)* — M2 intentionally excluded (late signal) |
 | Leading | finalScore >= 18 (daily) / >= 20 (4h), M >= 1, J >= 1, F >= 1 *(fresh EOD)*, quadrant LEADING only *(stale up to 24h)* |
 | Stealth | finalScore >= 14 (daily) / >= 15 (4h), M2 >= 1, OBV divergent or VP bullish *(all fresh EOD)* |
 | Early+ | **Deprecated** — merged into Stealth (was 100% redundant). DB flag kept for schema compat. |
@@ -267,22 +267,22 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | Cross-Asset | 5 | TLT, HYG, GLD, UUP, DBA |
 | Leadership Baskets | 4 | MAGS, QQQ, IWM, ARKK |
 
-**Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment. Stock enrichment applies universal quality gates (price >= $15, mcap >= $8B, dollarVol >= $100M) plus sector-specific gates (volume spike, extension, institutional %, trend, correlation).
+**Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment. Acceleration uses fixed-range normalization (clamped to `COMPOSITE.ACCEL_NORM_FLOOR` / `ACCEL_NORM_CEILING`, default [-10, 10]) instead of min-max, preventing inflation during broad deterioration. Momentum composite weights are graduated (`SCORING_SIGNALS.MOMENTUM_WEIGHTS`: 63d=0.35, 126d=0.25, 189d=0.25, 252d=0.15). Stock enrichment applies universal quality gates (price >= $15, mcap >= $8B, dollarVol >= $100M) plus sector-specific gates (volume spike, extension, institutional %, trend, correlation). Null gate bypasses (marketCap/institutional/ret20d) are tracked via `dataWarnings` on `EnrichedStock`.
 
-**Centralized Config:** All thresholds live in `src/lib/sector-rotation/config.ts`. Sections: REGIME, COMPOSITE, ROTATION, QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, CLASSIFICATION, SCORING_SIGNALS, ROTATION_LIFECYCLE, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS. **Never hardcode thresholds** — always add to config.ts and import.
+**Centralized Config:** All thresholds live in `src/lib/sector-rotation/config.ts`. Sections: REGIME, COMPOSITE, ROTATION, QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, CLASSIFICATION, SCORING_SIGNALS, ROTATION_LIFECYCLE, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS, PRERUNNER, CRYPTO_WEIGHTS, PREMARKET_SCORING, POLICY_PULSE. **Never hardcode thresholds** — always add to config.ts and import.
 
 **Key files:**
 | File | Purpose |
 |------|---------|
 | `src/lib/sector-rotation/config.ts` | All thresholds and scoring breakpoints |
 | `src/lib/sector-rotation/sector-rotation.ts` | Main scoring engine — `calculateSectorRotation()` |
-| `src/lib/sector-rotation/stock-enrichment.ts` | Stock quality gates, classification (LEADER/CATCH_UP/TURNAROUND/AVOID), phase (P1-P4), conviction scoring |
-| `src/lib/sector-rotation/rotation-tracker.ts` | Active rotation detection — signal history, lifecycle stages |
-| `src/lib/sector-rotation/rotation-helpers.ts` | Lifecycle stage, conviction level, action signals |
-| `src/lib/sector-rotation/regime.ts` | Macro regime classification (RISK_ON/OFF/INFLATIONARY/MIXED) with adaptive VIX bounds |
-| `src/lib/sector-rotation/brief.ts` | Market posture (AGGRESSIVE/ACTIVE/SELECTIVE/DEFENSIVE), sector tiers, risk flags |
+| `src/lib/sector-rotation/stock-enrichment.ts` | Stock quality gates, classification (LEADER/CATCH_UP/TURNAROUND/AVOID), phase (P1-P4), conviction scoring, null-data warnings |
+| `src/lib/sector-rotation/rotation-tracker.ts` | Active rotation detection — signal history, lifecycle stages (config-driven SMA periods, batch sizes) |
+| `src/lib/sector-rotation/rotation-helpers.ts` | Lifecycle stage (with soft exhaustion zone at `EXHAUSTING_SOFT_DAYS`), conviction level, action signals |
+| `src/lib/sector-rotation/regime.ts` | Macro regime classification (RISK_ON/OFF/INFLATIONARY/MIXED) with adaptive VIX bounds. All regimes have favored/avoid sectors (MIXED favors Health Care, Financials). |
+| `src/lib/sector-rotation/brief.ts` | Market posture (AGGRESSIVE/SELECTIVE/DEFENSIVE/CASH), sector tiers, risk flags. `computeMarketPosture()` and `computeRiskFlags()` accept optional pre-computed `LeadershipHealth` to avoid duplicate computation. |
 | `src/lib/sector-rotation/leadership-health.ts` | Leadership Health Score (0-100) from MAGS/QQQ/IWM/ARKK |
-| `src/lib/sector-rotation/math.ts` | Momentum scoring, RS ratios, CMF, OBV slope |
+| `src/lib/sector-rotation/math.ts` | Momentum scoring, RS ratios (Mansfield with `isFinite` guard), RRG trail (lookback margin 20), CMF, OBV slope |
 | `src/lib/sector-rotation/types.ts` | Core types: `SectorRotationScore`, `EnrichedStock`, `SectorRotationResult` |
 | `src/lib/sector-rotation/rotation-types.ts` | Rotation tracker types: `RotationEvent`, `ActiveRotationDetail` |
 | `src/lib/sector-rotation/sub-sector-constants.ts` | Sub-sector → parent GICS mapping, divergence threshold |
@@ -398,7 +398,46 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 ## Patterns & Conventions
 
 ### Centralized Config Pattern
-All scoring thresholds for the sector rotation system live in `src/lib/sector-rotation/config.ts`. **Never hardcode numeric thresholds** in scoring logic — add them to config.ts and import. The config has 17 exported sections (REGIME, COMPOSITE, ROTATION, QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, CLASSIFICATION, SCORING_SIGNALS, ROTATION_LIFECYCLE, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS).
+All scoring thresholds for the sector rotation system live in `src/lib/sector-rotation/config.ts`. **Never hardcode numeric thresholds** in scoring logic — add them to config.ts and import.
+
+**Key config sections and notable constants:**
+
+| Section | Notable Constants |
+|---------|-------------------|
+| `COMPOSITE` | `ACCEL_NORM_FLOOR: -10`, `ACCEL_NORM_CEILING: 10` (fixed-range acceleration normalization), `ACTIONABLE_THRESHOLD`, `ACTIONABLE_HYSTERESIS`, `WATCH_THRESHOLD` |
+| `SCORING_SIGNALS` | `MOMENTUM_WEIGHTS: { roc63: 0.35, roc126: 0.25, roc189: 0.25, roc252: 0.15 }`, `SIGMOID_EXPONENT: 0.4` |
+| `ROTATION` | `RS_SMA_SHORT: 10`, `RS_SMA_LONG: 30`, `MIN_ALIGNED_BARS: 50`, `TRACKER_BATCH_SIZE: 15`, `TRACKER_BATCH_DELAY: 200`, `VOLUME_SURGE`, `SIGNAL_START`, `SIGNAL_END_DAYS` |
+| `ROTATION_LIFECYCLE` | `EXHAUSTING_DAYS: 30` (hard cutoff), `EXHAUSTING_SOFT_DAYS: 25` (health-confirmed soft zone), `EARLY_MAX_DAYS`, `MATURING_MAX_DAYS` |
+| `REGIME` | `DXY_TREND_THRESHOLD: 1` (absolute point change, not percentage) |
+| `CLASSIFICATION` | `P4_RS_ACCEL`, `P4_SECTOR_ACCEL` (both must be negative — AND logic), `P3_MIN_VOL_RATIO` |
+
+Other sections: QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS.
+
+### Stock Enrichment Phase Classification
+Stocks passing quality gates are classified into phases in `stock-enrichment.ts`:
+
+| Phase | Criteria | Notes |
+|-------|----------|-------|
+| P4_EXHAUSTING | Above 50MA AND both RS accel < `P4_RS_ACCEL` AND sector accel < `P4_SECTOR_ACCEL` | Requires BOTH negative — single negative metric doesn't trigger |
+| P3_TRENDING | Above 50MA, positive accel, volRatio >= `P3_MIN_VOL_RATIO` | Strong trend with volume confirmation |
+| P2_TURNAROUND | Above 50MA, positive accel, low volume (fallback) OR below 50MA with positive RS accel + volume | Above-50MA low-volume stocks use P2 (not P1 — can't be "basing" above 50MA) |
+| P1_BASING | Below 50MA (fallback) | Early recovery, below key moving average |
+
+Null-data tracking: when `marketCap`, `institutionalPct`, or `ret20d` are null, the corresponding quality gates are bypassed (defensible — don't reject on missing data) but tracked via `dataWarnings: string[]` on `EnrichedStock`.
+
+### Trading Action Logic
+`getTradingAction()` in `src/app/sectors/_components/helpers.ts` maps sector quadrant + composite + acceleration to actions:
+
+| Priority | Condition | Action |
+|----------|-----------|--------|
+| 1 | IMPROVING + accel > 0 | BUILD |
+| 2 | LEADING + composite >= threshold + accel > 0 | TRADE |
+| 3 | LEADING + composite >= threshold + accel <= 0 | WATCH (decelerating leaders — monitor, don't add) |
+| 4 | LEADING (below threshold) | WATCH |
+| 5 | WEAKENING | TRIM |
+| 6 | IMPROVING (accel <= 0) | WATCH |
+| 7 | LAGGING + accel > 0 + composite >= watch threshold | WATCH |
+| 8 | Default | AVOID |
 
 ### Persistence Functions (per table)
 Each daily table has 5 standard functions in `persistence.ts`:
