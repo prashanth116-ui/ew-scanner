@@ -1734,10 +1734,12 @@ export async function fetchPreRunData(
   let emaM2FvgNearCross: boolean | null = null;
 
   const tfConfig = TIMEFRAME_CONFIG[emaTimeframe];
-  // Gate: for intraday timeframes (15m, 1h, 4h, 12h), only fetch if ≥30% from ATH
+  // Gate: for intraday timeframes (15m, 1h, 4h, 12h), only fetch if ≥25% from ATH
+  // Matches Early Mover preset gate (pctFromAth >= 25). Lowered from 30 to avoid
+  // inconsistency where stocks at 25-29% get daily-based M2 while 30%+ get intraday M2.
   // For 1d/1wk (reuse existing chart), no gate needed. For 1mo, low API cost.
   const needsApiGate = !tfConfig.reuse && emaTimeframe !== "1mo";
-  const gate1PassLocal = pctFromAth !== null && pctFromAth >= 30;
+  const gate1PassLocal = pctFromAth !== null && pctFromAth >= 25;
   const shouldFetchEma = !needsApiGate || gate1PassLocal;
 
   if (shouldFetchEma) {

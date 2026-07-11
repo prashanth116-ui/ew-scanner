@@ -44,7 +44,7 @@ npm run build             # Production build
 ### Database Tables (Key)
 | Table | Cron | Purpose |
 |-------|------|---------|
-| `prerun_daily` | `/api/prerun/cron/preset` | 6-preset daily scan (SNDK, Early Mover, Pullback, Leading, Stealth, Early+) |
+| `prerun_daily` | `/api/prerun/cron/preset` | 5-preset daily scan (SNDK, Early Mover, Pullback, Leading, Stealth). Early+ deprecated (merged into Stealth). |
 | `prerun_4h_daily` | `/api/prerun/cron/preset-4h` | 4h-candle variant of prerun_daily (same presets, barMultiplier=6) |
 | `inflection_daily` | `/api/inflection/cron/daily` | Inflection point daily scan |
 | `vcp_daily` | `/api/vcp/cron/daily` | VCP pattern daily scan |
@@ -158,7 +158,7 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 
 | Scanner | Label | Detects | Gates | Output | Key Files |
 |---------|-------|---------|-------|--------|-----------|
-| PreRun Setup | `Setup` | Base breakouts from deep pullbacks (20%+ from ATH) | G1: pctFromAth >= 20% (10% for 4h), G2: no existential risk, G3: price > 92% SMA20 | 18 criteria A-Q+M2 (max 40), verdicts PRIORITY/KEEP/WATCH/DISCARD, 6 presets | `scoring.ts`, `data.ts` |
+| PreRun Setup | `Setup` | Base breakouts from deep pullbacks (20%+ from ATH) | G1: pctFromAth >= 20% (10% for 4h), G2: no existential risk, G3: price > 92% SMA20 | 18 criteria A-Q+M2 (max 40), verdicts PRIORITY/KEEP/WATCH/DISCARD, 5 presets (Early+ deprecated) | `scoring.ts`, `data.ts` |
 | Inflection | `Inflect` | Accumulation cycle stage transitions (seller exhaustion → expansion) | Price >= $5, dollarVol >= $10M, mcap >= $500M | 6 components (SE/VC/BE/RS/LA/IP) weighted 0-100, stages + trade read (AVOID/WATCH/STARTER/ADD_ON) | `inflection-scoring.ts` |
 | VCP | `VCP` | Volatility contraction patterns before breakouts | Price >= $10, vol >= 500K, dollarVol >= $20M, mcap >= $1B, above SMA50+SMA200 | 5 components (trend/vol/compression/RS/risk) max 100, phases FOCUS/WATCHLIST/EARLY/IGNORE | `vcp-scoring.ts` |
 | Institutional | `Inst` | Large-cap institutional runners with momentum | Price >= $20, mcap >= $20B, dollarVol >= $100M, vol >= 1.5M | 4 weighted components (inst 35%/exec 25%/risk 25%/disc 15%), 12 classifications | `institutional-scoring.ts` |
@@ -263,8 +263,8 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | Category | Count | Examples |
 |----------|-------|---------|
 | GICS Sectors | 14 | XLK, XLF, XLE, XLV, XLI, XLY, XLP, XLU, XLB, XLRE, XLC, SMH, IGV, XBI |
-| Sub-Sectors | 8 | XHB, XME, KRE, XOP, IBB, HACK, KWEB, TAN |
-| Cross-Asset | 5 | TLT, HYG, GLD, UUP, DBA |
+| Sub-Sectors | 8 | KRE, XHB, XRT, IYT, ITA, ARKX, UFO, AIQ |
+| Cross-Asset | 5 | GLD, TLT, HYG, EEM, UUP |
 | Leadership Baskets | 4 | MAGS, QQQ, IWM, ARKK |
 
 **Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment. Acceleration uses fixed-range normalization (clamped to `COMPOSITE.ACCEL_NORM_FLOOR` / `ACCEL_NORM_CEILING`, default [-10, 10]) instead of min-max, preventing inflation during broad deterioration. Momentum composite weights are graduated (`SCORING_SIGNALS.MOMENTUM_WEIGHTS`: 63d=0.35, 126d=0.25, 189d=0.25, 252d=0.15). Stock enrichment applies universal quality gates (price >= $15, mcap >= $8B, dollarVol >= $100M) plus sector-specific gates (volume spike, extension, institutional %, trend, correlation). Null gate bypasses (marketCap/institutional/ret20d) are tracked via `dataWarnings` on `EnrichedStock`.
@@ -367,7 +367,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 ### UI Pages
 | File | Route |
 |------|-------|
-| `src/app/prerun/preset-daily/page.tsx` | `/prerun/preset-daily` — 6 preset tabs + Daily/4h scanner toggle |
+| `src/app/prerun/preset-daily/page.tsx` | `/prerun/preset-daily` — 5 preset tabs (Early+ deprecated) + Daily/4h scanner toggle |
 | `src/app/prerun/inflection-daily/page.tsx` | `/prerun/inflection-daily` |
 | `src/app/prerun/vcp-daily/page.tsx` | `/prerun/vcp-daily` |
 | `src/app/prerun/institutional-daily/page.tsx` | `/prerun/institutional-daily` |
@@ -461,7 +461,7 @@ Sends 2 Telegram messages at 11 PM ET after all scanners finish:
 **Scanner label mapping (Telegram → internal):**
 | Telegram Label | Scanner | What It Does |
 |---------------|---------|-------------|
-| `Setup` | PreRun | 6-preset pattern/setup scanner (LD, ST, SNDK, EM, PB, E+) |
+| `Setup` | PreRun | 5-preset pattern/setup scanner (LD, ST, SNDK, EM, PB). E+ deprecated, merged into ST. |
 | `Inflect` | Inflection | Inflection point detection (STARTER, ADD_ON, WATCH) |
 | `VCP` | VCP | Volatility contraction patterns (FOCUS, WATCH, EARLY) |
 | `Inst` | Institutional | Institutional flow quality (SL, WL, SPEC) |
@@ -491,7 +491,7 @@ Cross-scanner stock picker that replaces sequential AND gates with a composite s
 
 | Component | Max Pts | Source | Base Points |
 |-----------|---------|--------|-------------|
-| PreRun (A) | 25 | `prerun_daily` | final_score tiers (3-12) + preset bonus (best: EM/ST=5, E+/PB=4, LD/SNDK=3) + structural bonus (OBV+VP+HL+PRIORITY, cap 4) |
+| PreRun (A) | 25 | `prerun_daily` | final_score tiers (3-12) + preset bonus (best: EM/ST=5, PB=4, LD/SNDK=3) + structural bonus (OBV+VP+HL+PRIORITY, cap 4) |
 | Inflection (B) | 25 | `inflection_daily` | trade_read (STARTER=10, ADD_ON=8, WATCH=3, AVOID=-5) + stage bonus (INF=4, EA/SE=3, EXP=2) + score bonus (>=60=4, >=45=2, >=35=1) + quality (is_primary+2, is_stronger+2) |
 | Transition (C) | 20 | `transition_daily` | alert_state (TRIGGERED=8, READY=6, ARMED=3, WATCH=1) + score bonus (>=60=4, >=45=2, >=35=1) + state bonus (EARLY_EXP/MARKUP=3, BOS/COMP=2, CHOCH/HL=1) |
 | Institutional (D) | 15 | `institutional_daily` | tier (SHORTLIST=7, WATCHLIST=4, SPEC=2) + score bonus (>=60=3, >=45=2) + entry quality (HIGH=3, MOD=1) |

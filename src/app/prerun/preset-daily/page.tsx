@@ -91,7 +91,7 @@ const ACTIVE_PRESETS: Preset[] = ["sndk", "early_mover", "pullback", "leading", 
 const PRESET_DESCRIPTIONS: Record<Preset, string> = {
   sndk: "40%+ from ATH, 15%+ SI, score 18+, volume confirmed",
   early_mover: "25%+ from ATH, EMA timing + higher lows + volume",
-  pullback: "Up to 40% pullback, EMA timing + volume or structure",
+  pullback: "Up to 40% pullback, volume accumulation + higher lows",
   leading: "LEADING sector quadrant, score 18+, EMA + RS + volume",
   stealth: "OBV/VP divergence + EMA timing (includes former Early+)",
   early_plus: "(Deprecated — merged into Stealth)",

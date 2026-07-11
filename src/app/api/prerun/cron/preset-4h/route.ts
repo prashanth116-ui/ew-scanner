@@ -41,9 +41,10 @@ function computePresetFlags(
     // Early Mover: Beaten-down + EMA timing + structure + volume (4h: tighter finalScore >= 16)
     // pctFromAth (stale 2-6d) | M2,L,F all fresh EOD
     early_mover: pctFromAth >= 25 && s.finalScore >= 16 && s.scoreM2 >= 1 && s.scoreL >= 1 && s.scoreF >= 1,
-    // Pullback: Near-ATH + strong score + EMA timing required + volume or structure (4h: tighter finalScore >= 18)
-    // pctFromAth (stale 2-6d) | M2 mandatory (fresh EOD) + at least one of F,L (fresh EOD)
-    pullback: pctFromAth <= 40 && s.finalScore >= 18 && s.scoreM2 >= 1 && (s.scoreF >= 1 || s.scoreL >= 1),
+    // Pullback: Recovery from pullback — volume accumulation + structural higher lows (4h: tighter finalScore >= 18)
+    // pctFromAth (stale 2-6d) | F (volume, fresh EOD) + L (higher lows, fresh EOD)
+    // M2 intentionally NOT required — EMA timing is a late signal, wrong for early pullback recovery
+    pullback: pctFromAth <= 40 && s.finalScore >= 18 && s.scoreF >= 1 && s.scoreL >= 1,
     // Leading: High score + momentum + RS + volume + LEADING sector quadrant only (4h: tighter finalScore >= 20)
     // quadrant from sector_snapshots (stale up to 24h) | M,J,F fresh EOD
     leading: s.finalScore >= 20 && s.scoreM >= 1 && s.scoreJ >= 1 && s.scoreF >= 1 && quadrant === "LEADING",
