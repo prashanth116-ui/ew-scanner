@@ -14,6 +14,7 @@ import type {
   ConvictionLevel,
 } from "./types";
 import { CONVICTION, QUALITY_GATES, EXTENSION_TIERS, CLASSIFICATION } from "./config";
+import { SCAN_EXCLUSIONS } from "@/data/index-tiers";
 
 /** Raw input for a stock before enrichment. */
 export interface StockInput {
@@ -63,6 +64,12 @@ export function applyQualityGates(
   const extensionOnly: StockInput[] = [];
 
   for (const s of stocks) {
+    // Gate: SCAN_EXCLUSIONS — curated structurally boring stocks
+    if (QUALITY_GATES.APPLY_SCAN_EXCLUSIONS && SCAN_EXCLUSIONS.has(s.symbol)) {
+      rejected.push({ symbol: s.symbol, sector: s.sector, reasons: ["scan_exclusion"] });
+      continue;
+    }
+
     const otherReasons: string[] = [];
     const pctFrom50ma = calcPctFrom(s.price, s.sma50);
     const pctFrom200ma = calcPctFrom(s.price, s.sma200);
@@ -87,8 +94,10 @@ export function applyQualityGates(
       otherReasons.push(`price=$${s.price.toFixed(0)} (>$${QUALITY_GATES.MAX_PRICE})`);
     }
 
-    // Gate 1: Market cap >= minimum (skip if null)
-    if (s.marketCap != null && s.marketCap < QUALITY_GATES.MIN_MARKET_CAP) {
+    // Gate 1: Market cap >= minimum (null treated as failing when REJECT_NULL_MARKET_CAP is true)
+    if (QUALITY_GATES.REJECT_NULL_MARKET_CAP && s.marketCap == null) {
+      otherReasons.push("market_cap=null");
+    } else if (s.marketCap != null && s.marketCap < QUALITY_GATES.MIN_MARKET_CAP) {
       otherReasons.push(`market_cap=$${(s.marketCap / 1e9).toFixed(1)}B (<$${QUALITY_GATES.MIN_MARKET_CAP / 1e9}B)`);
     }
 

@@ -128,6 +128,10 @@ export const QUALITY_GATES = {
   TURNAROUND_VOL_RATIO: 1.0,
   /** Max deviation from ETF return (±%) */
   MAX_ETF_DEVIATION: 30,
+  /** Reject stocks with null market cap (aligns with PreRun treating null as 0) */
+  REJECT_NULL_MARKET_CAP: true,
+  /** Apply SCAN_EXCLUSIONS to sector rotation stock enrichment + rotation tracker */
+  APPLY_SCAN_EXCLUSIONS: true,
 } as const;
 
 // ── Conviction Scoring ──

@@ -32,6 +32,7 @@ import { fetchMacroRegime } from "./regime";
 import { computePairZScore } from "./pairs";
 import { calcAcceleration, calcCMF, calcRRG } from "./math";
 import { ROTATION, ROTATION_CONVICTION, ROTATION_LIFECYCLE, QUALITY_GATES } from "./config";
+import { SCAN_EXCLUSIONS } from "@/data/index-tiers";
 
 // ── Module-level cache (15 minutes) ──
 
@@ -384,10 +385,14 @@ async function fetchStockPerformance(
     etfTsMap.set(etfTimestamps[i], i);
   }
 
-  // Pre-filter: only fetch charts for stocks that have valid batch quotes
+  // Pre-filter: only fetch charts for stocks that have valid batch quotes + basic quality gates
   const quotedSymbols = symbols.filter((sym) => {
     const q = batchQuotes.get(sym);
-    return q && q.price > 0;
+    if (!q || q.price <= 0) return false;
+    if (q.price < QUALITY_GATES.MIN_PRICE) return false;
+    const dollarVol = q.price * q.avgVolume10d;
+    if (dollarVol < QUALITY_GATES.MIN_DOLLAR_VOLUME) return false;
+    return true;
   });
 
   // Fetch 6mo daily bars for each stock to find price at rotation start
@@ -629,6 +634,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     const sector = SECTOR_UNIVERSE.find((s) => s.id === event.sectorId);
     if (!sector || sector.stocks.length === 0) continue;
     for (const stock of sector.stocks) {
+      if (SCAN_EXCLUSIONS.has(stock.symbol)) continue;
       if (!allStockSymbols.includes(stock.symbol)) {
         allStockSymbols.push(stock.symbol);
         allStockNames.set(stock.symbol, stock.name);
@@ -648,7 +654,9 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     const sector = SECTOR_UNIVERSE.find((s) => s.id === event.sectorId);
     if (!sector) continue;
 
-    const sectorSymbols = sector.stocks.map((s) => s.symbol);
+    const sectorSymbols = sector.stocks
+      .filter((s) => !SCAN_EXCLUSIONS.has(s.symbol))
+      .map((s) => s.symbol);
     const etfChartEntry = etfCharts.find((c) => c.sectorId === event.sectorId);
     const sectorEtfCloses = etfChartEntry?.chart?.closes ?? [];
     const sectorEtfTimestamps = etfChartEntry?.chart?.timestamps ?? [];

@@ -44,7 +44,8 @@ import {
   clampNormalize,
   stddev,
 } from "./math";
-import { COMPOSITE, ROTATION, SMART_MONEY, TOP_STOCK_WEIGHTS, SCORING_SIGNALS } from "./config";
+import { COMPOSITE, ROTATION, SMART_MONEY, TOP_STOCK_WEIGHTS, SCORING_SIGNALS, QUALITY_GATES } from "./config";
+import { SCAN_EXCLUSIONS } from "@/data/index-tiers";
 
 // ── Chart data type ──
 
@@ -130,7 +131,10 @@ export async function calculateSectorRotation(
   const crossETFs = ["XLY", "XLP", "XLK", "XLU"];
   const sectorETFs = sectorGroups.map((s) => s.etf);
   const allETFs = [...new Set(["SPY", ...sectorETFs, ...crossETFs])];
-  const allStockSymbols = getAllSectorSymbols();
+  const allStockSymbolsRaw = getAllSectorSymbols();
+  const allStockSymbols = QUALITY_GATES.APPLY_SCAN_EXCLUSIONS
+    ? allStockSymbolsRaw.filter((s) => !SCAN_EXCLUSIONS.has(s))
+    : allStockSymbolsRaw;
 
   // Batch chart fetches to avoid Yahoo Finance rate limiting (max 15 concurrent)
   const CHART_BATCH_SIZE = 15;
@@ -649,6 +653,7 @@ export async function calculateSectorRotation(
     const preRunByTicker = new Map(preRunStocks.map((r) => [r.data.ticker, r]));
 
     for (const stock of sectorDef.stocks) {
+      if (QUALITY_GATES.APPLY_SCAN_EXCLUSIONS && SCAN_EXCLUSIONS.has(stock.symbol)) continue;
       const q = batchQuotes.get(stock.symbol);
       if (!q || q.price <= 0) continue;
 
