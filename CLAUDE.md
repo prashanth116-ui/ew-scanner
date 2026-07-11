@@ -355,6 +355,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/app/api/transition/daily/route.ts` | Read transition daily data |
 | `src/app/api/sector-rotation/route.ts` | Sector rotation scores (31 ETFs, leadership baskets, regime) |
 | `src/app/api/premarket/route.ts` | Pre-market futures, internals, trading bias, sector checklist |
+| `src/app/api/backtest/funnel/route.ts` | Funnel backtest — composite scoring across 5 scanners with forward returns |
 
 ### UI Pages
 | File | Route |
@@ -369,6 +370,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/app/sectors/picks/page.tsx` | `/sectors/picks` — Enriched stock picks |
 | `src/app/sectors/crypto/page.tsx` | `/sectors/crypto` — Crypto rotation dashboard |
 | `src/app/rotation/page.tsx` | `/rotation` — Active rotation tracker |
+| `src/app/prerun/backtest/page.tsx` | `/prerun/backtest` — Funnel backtest with composite scores and forward returns |
 
 ### Persistence & Data
 | File | Purpose |
@@ -433,6 +435,41 @@ Sends 2 Telegram messages at 11 PM ET after all scanners finish:
 - 4h-ONLY section in Message 1: tickers on 4h scanner but NOT daily Setup (early detections)
 
 **Key file:** `src/app/api/nightly-summary/cron/route.ts`
+
+### Funnel Backtest (Composite Scoring)
+Cross-scanner stock picker that replaces sequential AND gates with a composite scoring system. Each scanner contributes points proportionally — a stock doesn't need every scanner to flag it, just enough total conviction across whichever scanners do.
+
+**API:** `GET /api/backtest/funnel?days=14` — loads persisted scanner data for N days, computes composite scores, fetches Yahoo charts for forward returns.
+
+**Composite Score Formula (0-100 max):**
+
+| Component | Max Pts | Source | Base Points |
+|-----------|---------|--------|-------------|
+| PreRun (A) | 25 | `prerun_daily` | final_score tiers (3-12) + preset bonus (best: EM/ST=5, E+/PB=4, LD/SNDK=3) + structural bonus (OBV+VP+HL+PRIORITY, cap 4) |
+| Inflection (B) | 25 | `inflection_daily` | trade_read (STARTER=10, ADD_ON=8, WATCH=3, AVOID=-5) + stage bonus (INF=4, EA/SE=3, EXP=2) + score bonus (>=60=4, >=45=2, >=35=1) + quality (is_primary+2, is_stronger+2) |
+| Transition (C) | 20 | `transition_daily` | alert_state (TRIGGERED=8, READY=6, ARMED=3, WATCH=1) + score bonus (>=60=4, >=45=2, >=35=1) + state bonus (EARLY_EXP/MARKUP=3, BOS/COMP=2, CHOCH/HL=1) |
+| Institutional (D) | 15 | `institutional_daily` | tier (SHORTLIST=7, WATCHLIST=4, SPEC=2) + score bonus (>=60=3, >=45=2) + entry quality (HIGH=3, MOD=1) |
+| PreRunner (E) | 10 | `prerunner_daily` | type (LEADER=4, TURNAROUND=3) + RS bonus (improving+accel=3, improving=1) + conviction (HIGH=2, MED=1) |
+| Confluence (F) | 5 | weighted count | >=4=5, >=3=3, >=2.5=2, >=2=1 |
+
+**Pipeline:**
+1. Build weighted confluence per ticker (same rules as nightly summary)
+2. Pool: weighted confluence >= 2.0
+3. Score each ticker across 6 components (A-F)
+4. Filter: compositeScore >= 25
+5. Sort: compositeScore DESC, RS acceleration tiebreaker
+6. Cap: top 15 per day
+
+**Forward returns:** Fetches 6mo Yahoo daily charts, computes 1d/3d/5d returns + MFE/MAE from signal date close.
+
+**Diagnostics per day:** poolSize, qualifiedCount, pickedCount, avgCompositeScore, scannerCoverage (how many pool tickers each scanner contributed to).
+
+**Key files:**
+
+| File | Purpose |
+|------|---------|
+| `src/app/api/backtest/funnel/route.ts` | API route — composite scoring, chart fetching, forward returns |
+| `src/app/prerun/backtest/page.tsx` | UI — summary cards, score distribution bar, per-day table with expandable picks, score breakdown pills |
 
 ## Open Items / Known Gaps
 - **Transition scanner is a trial:** Created to compare against Inflection for detecting accumulation → markup transitions. Badge-only in nightly summary. After gating tuning, pass rate is ~45% (247/546). Produces 27 SE + 2 ACCUM stocks for early detection. After several days of parallel output, decide whether to promote to confluence, merge with Inflection, or remove.
