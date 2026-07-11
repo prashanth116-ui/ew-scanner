@@ -1,6 +1,7 @@
 /**
- * Funnel Backtest — runs the 5-step Pre-Run Playbook funnel against
- * persisted scanner data and computes forward returns from Yahoo charts.
+ * Funnel Backtest — composite scoring system that replaces sequential AND gates.
+ * Each scanner contributes points proportionally; a stock needs enough total
+ * conviction across whichever scanners flag it.
  *
  * GET /api/backtest/funnel?days=10
  */
@@ -120,6 +121,13 @@ interface FunnelPick {
   ticker: string;
   sector: string;
   price: number;
+  compositeScore: number;
+  prerunPts: number;
+  inflectionPts: number;
+  transitionPts: number;
+  instPts: number;
+  prerunnerPts: number;
+  confluencePts: number;
   presets: string[];
   prerunScore: number;
   tradeRead: string;
@@ -139,7 +147,19 @@ interface FunnelPick {
 
 interface FunnelDayResult {
   date: string;
-  funnelCounts: { step1: number; step2: number; step3: number; step4: number };
+  diagnostics: {
+    poolSize: number;
+    qualifiedCount: number;
+    pickedCount: number;
+    avgCompositeScore: number;
+    scannerCoverage: {
+      prerun: number;
+      inflection: number;
+      transition: number;
+      institutional: number;
+      prerunner: number;
+    };
+  };
   picks: FunnelPick[];
 }
 
@@ -147,6 +167,7 @@ interface FunnelSummary {
   totalDays: number;
   totalPicks: number;
   avgPicksPerDay: number;
+  avgCompositeScore: number;
   avgReturn1d: number;
   avgReturn3d: number;
   avgReturn5d: number;
@@ -159,7 +180,157 @@ interface FunnelSummary {
   worstTrade: { ticker: string; date: string; return5d: number } | null;
 }
 
+// ── Composite scoring components ──
+
+function scorePrerunComponent(r: PreRunDailyRecord | undefined): number {
+  if (!r || r.final_score <= 0) return 0;
+
+  // Base score
+  let pts = 0;
+  if (r.final_score >= 22) pts = 12;
+  else if (r.final_score >= 18) pts = 9;
+  else if (r.final_score >= 14) pts = 7;
+  else if (r.final_score >= 10) pts = 5;
+  else pts = 3;
+
+  // Preset bonus (best one)
+  let presetBonus = 0;
+  if (r.is_early_mover || r.is_stealth) presetBonus = Math.max(presetBonus, 5);
+  if (r.is_early_plus || r.is_pullback) presetBonus = Math.max(presetBonus, 4);
+  if (r.is_leading) presetBonus = Math.max(presetBonus, 3);
+  if (r.is_sndk) presetBonus = Math.max(presetBonus, 3);
+  pts += presetBonus;
+
+  // Structural bonus (cap +4)
+  let structural = 0;
+  if (r.obv_divergent) structural += 2;
+  if (r.vp_divergence_bullish) structural += 1;
+  if (r.higher_lows_count != null && r.higher_lows_count >= 3) structural += 1;
+  if (r.verdict === "PRIORITY") structural += 1;
+  pts += Math.min(structural, 4);
+
+  return Math.min(pts, 25);
+}
+
+function scoreInflectionComponent(r: InflectionDailyRecord | undefined): number {
+  if (!r) return 0;
+
+  // Base by trade_read
+  let pts = 0;
+  if (r.trade_read === "STARTER_POSITION_CANDIDATE") pts = 10;
+  else if (r.trade_read === "ADD_ON_CANDIDATE") pts = 8;
+  else if (r.trade_read === "WATCH") pts = 3;
+  else if (r.trade_read === "AVOID") pts = -5;
+  else return 0; // unknown trade_read, no points
+
+  // Stage bonus
+  if (r.stage === "INFLECTION") pts += 4;
+  else if (r.stage === "EARLY_ACCUMULATION" || r.stage === "SELLER_EXHAUSTION") pts += 3;
+  else if (r.stage === "EXPANSION") pts += 2;
+
+  // Score bonus
+  if (r.overall_score >= 60) pts += 4;
+  else if (r.overall_score >= 45) pts += 2;
+  else if (r.overall_score >= 35) pts += 1;
+
+  // Quality
+  if (r.is_primary) pts += 2;
+  if (r.is_stronger) pts += 2;
+
+  return Math.min(Math.max(pts, 0), 25);
+}
+
+function scoreTransitionComponent(r: TransitionDailyRecord | undefined): number {
+  if (!r) return 0;
+
+  // Base by alert_state
+  let pts = 0;
+  if (r.alert_state === "TRIGGERED") pts = 8;
+  else if (r.alert_state === "READY") pts = 6;
+  else if (r.alert_state === "ARMED") pts = 3;
+  else if (r.alert_state === "WATCH") pts = 1;
+  else return 0;
+
+  // Score bonus
+  if (r.overall_score >= 60) pts += 4;
+  else if (r.overall_score >= 45) pts += 2;
+  else if (r.overall_score >= 35) pts += 1;
+
+  // State bonus
+  if (r.state === "EARLY_EXPANSION" || r.state === "SUSTAINED_MARKUP") pts += 3;
+  else if (r.state === "BULLISH_BOS" || r.state === "COMPRESSION") pts += 2;
+  else if (r.state === "BULLISH_CHOCH" || r.state === "HIGHER_LOW_FORMATION") pts += 1;
+
+  return Math.min(pts, 20);
+}
+
+function scoreInstitutionalComponent(r: InstitutionalDailyRecord | undefined): number {
+  if (!r) return 0;
+
+  // Base by tier
+  let pts = 0;
+  if (r.tier === "SHORTLIST") pts = 7;
+  else if (r.tier === "WATCHLIST") pts = 4;
+  else if (r.tier === "SPECULATIVE") pts = 2;
+  else return 0;
+
+  // Score bonus
+  if (r.composite_score >= 60) pts += 3;
+  else if (r.composite_score >= 45) pts += 2;
+
+  // Entry quality
+  if (r.entry_quality === "HIGH") pts += 3;
+  else if (r.entry_quality === "MODERATE") pts += 1;
+
+  return Math.min(pts, 15);
+}
+
+function scorePrerunnerComponent(r: PreRunnerDailyRecord | undefined): number {
+  if (!r) return 0;
+
+  // Base by type
+  let pts = 0;
+  if (r.type === "LEADER") pts = 4;
+  else if (r.type === "TURNAROUND") pts = 3;
+  else return 0;
+
+  // RS bonus
+  if (r.rs_improving && r.rs_acceleration > 0) pts += 3;
+  else if (r.rs_improving) pts += 1;
+
+  // Conviction
+  if (r.conviction === "HIGH") pts += 2;
+  else if (r.conviction === "MEDIUM") pts += 1;
+
+  return Math.min(pts, 10);
+}
+
+function scoreConfluenceBonus(weightedConfluence: number): number {
+  if (weightedConfluence >= 4) return 5;
+  if (weightedConfluence >= 3) return 3;
+  if (weightedConfluence >= 2.5) return 2;
+  if (weightedConfluence >= 2) return 1;
+  return 0;
+}
+
 // ── Funnel logic ──
+
+interface CompositeResult {
+  diagnostics: {
+    poolSize: number;
+    qualifiedCount: number;
+    pickedCount: number;
+    avgCompositeScore: number;
+    scannerCoverage: {
+      prerun: number;
+      inflection: number;
+      transition: number;
+      institutional: number;
+      prerunner: number;
+    };
+  };
+  picks: Omit<FunnelPick, "forward">[];
+}
 
 function runFunnel(
   prerun: PreRunDailyRecord[],
@@ -168,12 +339,23 @@ function runFunnel(
   institutional: InstitutionalDailyRecord[],
   prerunner: PreRunnerDailyRecord[],
   transition: TransitionDailyRecord[],
-): { counts: { step1: number; step2: number; step3: number; step4: number }; survivors: string[]; meta: Map<string, { confluenceCount: number }> } {
-  // Build per-ticker weighted scanner hit counts (same rules as consolidateResults in nightly summary)
-  // 5 confluence scanners: PreRun, Inflection, Transition, Institutional, PreRunner
-  // VCP is badge-only (not counted). INF WATCH = 0.5 weight.
-  const hitCount = new Map<string, number>();
+): CompositeResult {
+  // Build per-ticker lookup maps
+  const prerunMap = new Map<string, PreRunDailyRecord>();
+  for (const r of prerun) if (r.final_score > 0) prerunMap.set(r.ticker, r);
+  const inflectionMap = new Map<string, InflectionDailyRecord>();
+  for (const r of inflection) inflectionMap.set(r.ticker, r);
+  const transitionMap = new Map<string, TransitionDailyRecord>();
+  for (const r of transition) transitionMap.set(r.ticker, r);
+  const instMap = new Map<string, InstitutionalDailyRecord>();
+  for (const r of institutional) instMap.set(r.ticker, r);
+  const prerunnerMap = new Map<string, PreRunnerDailyRecord>();
+  for (const r of prerunner) prerunnerMap.set(r.ticker, r);
+  const vcpMap = new Map<string, VCPDailyRecord>();
+  for (const r of vcp) vcpMap.set(r.ticker, r);
 
+  // Build weighted confluence per ticker (same rules as nightly summary)
+  const hitCount = new Map<string, number>();
   for (const r of prerun) {
     if (r.final_score > 0) hitCount.set(r.ticker, (hitCount.get(r.ticker) ?? 0) + 1);
   }
@@ -182,7 +364,6 @@ function runFunnel(
     const weight = r.trade_read === "WATCH" ? 0.5 : 1;
     hitCount.set(r.ticker, (hitCount.get(r.ticker) ?? 0) + weight);
   }
-  // Transition: only TRIGGERED and READY count
   for (const r of transition) {
     if (r.alert_state === "TRIGGERED" || r.alert_state === "READY") {
       hitCount.set(r.ticker, (hitCount.get(r.ticker) ?? 0) + 1);
@@ -195,46 +376,119 @@ function runFunnel(
     hitCount.set(r.ticker, (hitCount.get(r.ticker) ?? 0) + 1);
   }
 
-  // Step 1: confluence >= 2.5 (weighted)
-  const step1 = [...hitCount.entries()].filter(([, c]) => c >= 2.5).map(([t]) => t);
-  const meta = new Map<string, { confluenceCount: number }>();
-  for (const t of step1) meta.set(t, { confluenceCount: hitCount.get(t)! });
+  // Pool: weighted confluence >= 2.0
+  const pool = [...hitCount.entries()].filter(([, c]) => c >= 2.0).map(([t]) => t);
 
-  // Step 2: preset filter — early_mover OR stealth OR early_plus, AND final_score >= 18
-  const prerunMap = new Map<string, PreRunDailyRecord>();
-  for (const r of prerun) prerunMap.set(r.ticker, r);
+  // Score each ticker in pool
+  type ScoredPick = Omit<FunnelPick, "forward"> & { rsAccel: number };
+  const scored: ScoredPick[] = [];
+  let coveragePrerun = 0, coverageInflection = 0, coverageTransition = 0, coverageInst = 0, coveragePrerunner = 0;
 
-  const step2 = step1.filter((t) => {
-    const r = prerunMap.get(t);
-    if (!r) return false;
-    return (r.is_early_mover || r.is_stealth || r.is_early_plus) && r.final_score >= 18;
+  for (const ticker of pool) {
+    const pr = prerunMap.get(ticker);
+    const inf = inflectionMap.get(ticker);
+    const tr = transitionMap.get(ticker);
+    const inst = instMap.get(ticker);
+    const prr = prerunnerMap.get(ticker);
+    const vcpRec = vcpMap.get(ticker);
+    const confluence = hitCount.get(ticker) ?? 0;
+
+    const prerunPts = scorePrerunComponent(pr);
+    const inflectionPts = scoreInflectionComponent(inf);
+    const transitionPts = scoreTransitionComponent(tr);
+    const instPts = scoreInstitutionalComponent(inst);
+    const prerunnerPts = scorePrerunnerComponent(prr);
+    const confluencePts = scoreConfluenceBonus(confluence);
+
+    const compositeScore = prerunPts + inflectionPts + transitionPts + instPts + prerunnerPts + confluencePts;
+
+    // Track coverage
+    if (prerunPts > 0) coveragePrerun++;
+    if (inflectionPts > 0) coverageInflection++;
+    if (transitionPts > 0) coverageTransition++;
+    if (instPts > 0) coverageInst++;
+    if (prerunnerPts > 0) coveragePrerunner++;
+
+    // Minimum composite score gate
+    if (compositeScore < 25) continue;
+
+    // Build presets list
+    const presets: string[] = [];
+    if (pr) {
+      if (pr.is_early_mover) presets.push("early_mover");
+      if (pr.is_stealth) presets.push("stealth");
+      if (pr.is_early_plus) presets.push("early_plus");
+      if (pr.is_sndk) presets.push("sndk");
+      if (pr.is_leading) presets.push("leading");
+      if (pr.is_pullback) presets.push("pullback");
+    }
+
+    // RS acceleration for tiebreaker (prefer institutional rs_accel_spy, fallback to prerunner)
+    const rsAccel = inst?.rs_accel_spy ?? prr?.rs_acceleration ?? 0;
+
+    // Use price from whichever record is available
+    const price = pr?.price ?? inf?.price ?? tr?.price ?? inst?.price ?? prr?.price ?? 0;
+    const sector = pr?.sector ?? inf?.sector ?? tr?.sector ?? inst?.sector ?? prr?.sector ?? "";
+
+    scored.push({
+      ticker,
+      sector,
+      price,
+      compositeScore,
+      prerunPts,
+      inflectionPts,
+      transitionPts,
+      instPts,
+      prerunnerPts,
+      confluencePts,
+      presets,
+      prerunScore: pr?.final_score ?? 0,
+      tradeRead: inf?.trade_read ?? "-",
+      inflectionStage: inf?.stage ?? "-",
+      inflectionScore: inf?.overall_score ?? 0,
+      alertState: tr?.alert_state ?? "-",
+      transitionState: tr?.state ?? "-",
+      transitionScore: tr?.overall_score ?? 0,
+      triggerLevel: tr?.trigger_level ?? null,
+      confluenceCount: confluence,
+      onVcpFocus: vcpRec?.phase === "FOCUS_LIST",
+      vcpScore: vcpRec?.total_score ?? null,
+      onInstShortlist: inst?.tier === "SHORTLIST",
+      instScore: inst?.composite_score ?? null,
+      rsAccel,
+    });
+  }
+
+  // Sort by compositeScore DESC, RS acceleration tiebreaker DESC
+  scored.sort((a, b) => {
+    const diff = b.compositeScore - a.compositeScore;
+    if (diff !== 0) return diff;
+    return b.rsAccel - a.rsAccel;
   });
 
-  // Step 3: inflection filter — STARTER + qualifying stage
-  const inflectionMap = new Map<string, InflectionDailyRecord>();
-  for (const r of inflection) inflectionMap.set(r.ticker, r);
+  // Cap at 15, strip rsAccel
+  const picks: Omit<FunnelPick, "forward">[] = scored.slice(0, 15).map(({ rsAccel: _, ...rest }) => rest);
 
-  const QUALIFYING_STAGES = new Set(["INFLECTION", "EARLY_ACCUMULATION", "SELLER_EXHAUSTION"]);
-  const step3 = step2.filter((t) => {
-    const r = inflectionMap.get(t);
-    if (!r) return false;
-    return r.trade_read === "STARTER_POSITION_CANDIDATE" && QUALIFYING_STAGES.has(r.stage);
-  });
-
-  // Step 4: transition filter — TRIGGERED or READY
-  const transitionMap = new Map<string, TransitionDailyRecord>();
-  for (const r of transition) transitionMap.set(r.ticker, r);
-
-  const step4 = step3.filter((t) => {
-    const r = transitionMap.get(t);
-    if (!r) return false;
-    return r.alert_state === "TRIGGERED" || r.alert_state === "READY";
-  });
+  const qualifiedCount = scored.length;
+  const avgScore = qualifiedCount > 0
+    ? scored.reduce((a, b) => a + b.compositeScore, 0) / qualifiedCount
+    : 0;
 
   return {
-    counts: { step1: step1.length, step2: step2.length, step3: step3.length, step4: step4.length },
-    survivors: step4,
-    meta,
+    diagnostics: {
+      poolSize: pool.length,
+      qualifiedCount,
+      pickedCount: picks.length,
+      avgCompositeScore: Math.round(avgScore * 10) / 10,
+      scannerCoverage: {
+        prerun: coveragePrerun,
+        inflection: coverageInflection,
+        transition: coverageTransition,
+        institutional: coverageInst,
+        prerunner: coveragePrerunner,
+      },
+    },
+    picks,
   };
 }
 
@@ -266,65 +520,13 @@ export async function GET(req: NextRequest) {
         loadTransitionDaily(date),
       ]);
 
-      const { counts, survivors, meta } = runFunnel(prerun, inflection, vcp, institutional, prerunner, transition);
+      const { diagnostics, picks } = runFunnel(prerun, inflection, vcp, institutional, prerunner, transition);
 
-      // Build lookup maps for Step 5 bonus annotations
-      const prerunMap = new Map<string, PreRunDailyRecord>();
-      for (const r of prerun) prerunMap.set(r.ticker, r);
-      const inflectionMap = new Map<string, InflectionDailyRecord>();
-      for (const r of inflection) inflectionMap.set(r.ticker, r);
-      const transitionMap = new Map<string, TransitionDailyRecord>();
-      for (const r of transition) transitionMap.set(r.ticker, r);
-      const vcpMap = new Map<string, VCPDailyRecord>();
-      for (const r of vcp) vcpMap.set(r.ticker, r);
-      const instMap = new Map<string, InstitutionalDailyRecord>();
-      for (const r of institutional) instMap.set(r.ticker, r);
+      for (const p of picks) allUniqueTickers.add(p.ticker);
 
-      const picks: Omit<FunnelPick, "forward">[] = [];
-      for (const ticker of survivors) {
-        allUniqueTickers.add(ticker);
-        const pr = prerunMap.get(ticker)!;
-        const inf = inflectionMap.get(ticker)!;
-        const tr = transitionMap.get(ticker)!;
-        const vcpRec = vcpMap.get(ticker);
-        const instRec = instMap.get(ticker);
-
-        const presets: string[] = [];
-        if (pr.is_early_mover) presets.push("early_mover");
-        if (pr.is_stealth) presets.push("stealth");
-        if (pr.is_early_plus) presets.push("early_plus");
-        if (pr.is_sndk) presets.push("sndk");
-        if (pr.is_leading) presets.push("leading");
-        if (pr.is_pullback) presets.push("pullback");
-
-        picks.push({
-          ticker,
-          sector: pr.sector,
-          price: pr.price,
-          presets,
-          prerunScore: pr.final_score,
-          tradeRead: inf.trade_read,
-          inflectionStage: inf.stage,
-          inflectionScore: inf.overall_score,
-          alertState: tr.alert_state,
-          transitionState: tr.state,
-          transitionScore: tr.overall_score,
-          triggerLevel: tr.trigger_level,
-          confluenceCount: meta.get(ticker)?.confluenceCount ?? 0,
-          onVcpFocus: vcpRec?.phase === "FOCUS_LIST",
-          vcpScore: vcpRec?.total_score ?? null,
-          onInstShortlist: instRec?.tier === "SHORTLIST",
-          instScore: instRec?.composite_score ?? null,
-        });
-      }
-
-      // Sort picks by prerun score DESC
-      picks.sort((a, b) => b.prerunScore - a.prerunScore);
-
-      // Placeholder forward returns — will be filled after chart fetching
       funnelResults.push({
         date,
-        funnelCounts: counts,
+        diagnostics,
         picks: picks.map((p) => ({
           ...p,
           forward: { return1d: null, return3d: null, return5d: null, maxFavorable5d: null, maxAdverse5d: null },
@@ -332,7 +534,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Batch-fetch charts for all unique survivor tickers
+    // Batch-fetch charts for all unique picked tickers
     const tickerArray = [...allUniqueTickers];
     for (let i = 0; i < tickerArray.length; i++) {
       await getChart(tickerArray[i]);
@@ -382,6 +584,7 @@ function emptySummary(): FunnelSummary {
     totalDays: 0,
     totalPicks: 0,
     avgPicksPerDay: 0,
+    avgCompositeScore: 0,
     avgReturn1d: 0,
     avgReturn3d: 0,
     avgReturn5d: 0,
@@ -425,10 +628,13 @@ function computeSummary(
     }
   }
 
+  const compositeScores = allPicks.map((p) => p.compositeScore);
+
   return {
     totalDays: funnelResults.length,
     totalPicks: allPicks.length,
     avgPicksPerDay: allPicks.length / funnelResults.length,
+    avgCompositeScore: avg(compositeScores),
     avgReturn1d: avg(r1d),
     avgReturn3d: avg(r3d),
     avgReturn5d: avg(r5d),

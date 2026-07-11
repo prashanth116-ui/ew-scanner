@@ -20,6 +20,13 @@ interface FunnelPick {
   ticker: string;
   sector: string;
   price: number;
+  compositeScore: number;
+  prerunPts: number;
+  inflectionPts: number;
+  transitionPts: number;
+  instPts: number;
+  prerunnerPts: number;
+  confluencePts: number;
   presets: string[];
   prerunScore: number;
   tradeRead: string;
@@ -39,7 +46,19 @@ interface FunnelPick {
 
 interface FunnelDayResult {
   date: string;
-  funnelCounts: { step1: number; step2: number; step3: number; step4: number };
+  diagnostics: {
+    poolSize: number;
+    qualifiedCount: number;
+    pickedCount: number;
+    avgCompositeScore: number;
+    scannerCoverage: {
+      prerun: number;
+      inflection: number;
+      transition: number;
+      institutional: number;
+      prerunner: number;
+    };
+  };
   picks: FunnelPick[];
 }
 
@@ -47,6 +66,7 @@ interface FunnelSummary {
   totalDays: number;
   totalPicks: number;
   avgPicksPerDay: number;
+  avgCompositeScore: number;
   avgReturn1d: number;
   avgReturn3d: number;
   avgReturn5d: number;
@@ -92,7 +112,16 @@ const STAGE_SHORT: Record<string, string> = {
   INFLECTION: "INF",
   EARLY_ACCUMULATION: "EA",
   SELLER_EXHAUSTION: "SE",
+  EXPANSION: "EXP",
 };
+
+function scoreBarColor(pts: number, max: number): string {
+  const pct = max > 0 ? pts / max : 0;
+  if (pct >= 0.6) return "bg-emerald-500";
+  if (pct >= 0.3) return "bg-amber-500";
+  if (pts > 0) return "bg-blue-500";
+  return "bg-[#333]";
+}
 
 // ── Component ──
 
@@ -122,16 +151,6 @@ export default function FunnelBacktestPage() {
 
   const s = data?.summary;
 
-  // Compute average funnel counts for funnel bar
-  const avgFunnel = data?.funnelResults && data.funnelResults.length > 0
-    ? {
-        step1: data.funnelResults.reduce((a, d) => a + d.funnelCounts.step1, 0) / data.funnelResults.length,
-        step2: data.funnelResults.reduce((a, d) => a + d.funnelCounts.step2, 0) / data.funnelResults.length,
-        step3: data.funnelResults.reduce((a, d) => a + d.funnelCounts.step3, 0) / data.funnelResults.length,
-        step4: data.funnelResults.reduce((a, d) => a + d.funnelCounts.step4, 0) / data.funnelResults.length,
-      }
-    : null;
-
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
@@ -143,7 +162,7 @@ export default function FunnelBacktestPage() {
             </Link>
             <h1 className="mt-1 text-2xl font-bold tracking-tight">Funnel Backtest</h1>
             <p className="mt-1 text-sm text-[#666]">
-              5-step playbook funnel against persisted scanner data with forward returns
+              Composite scoring across 5 scanners with forward returns
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -174,7 +193,7 @@ export default function FunnelBacktestPage() {
         {loading && (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-6 w-6 animate-spin text-[#5ba3e6]" />
-            <span className="ml-3 text-[#a0a0a0]">Running funnel backtest...</span>
+            <span className="ml-3 text-[#a0a0a0]">Running composite backtest...</span>
           </div>
         )}
 
@@ -182,10 +201,10 @@ export default function FunnelBacktestPage() {
         {!loading && data && s && s.totalPicks === 0 && (
           <div className="rounded-lg border border-[#2a2a2a] bg-[#111] p-8 text-center">
             <p className="text-lg text-[#a0a0a0]">
-              No stocks passed all funnel steps in this period.
+              No stocks met the composite score threshold in this period.
             </p>
             <p className="mt-2 text-sm text-[#666]">
-              This is expected — the 5-step funnel is intentionally strict.
+              Minimum composite score is 25 (needs meaningful signals from at least 2 scanners).
             </p>
           </div>
         )}
@@ -194,7 +213,7 @@ export default function FunnelBacktestPage() {
         {!loading && data && s && (
           <>
             {/* Summary cards */}
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
               {/* Picks */}
               <div className="rounded-lg border border-[#2a2a2a] bg-[#111] p-4">
                 <div className="text-xs font-medium uppercase tracking-wider text-[#666]">Total Picks</div>
@@ -202,6 +221,13 @@ export default function FunnelBacktestPage() {
                 <div className="text-xs text-[#666]">
                   {fmtNum(s.avgPicksPerDay, 1)}/day over {s.totalDays} days
                 </div>
+              </div>
+
+              {/* Avg Composite */}
+              <div className="rounded-lg border border-[#2a2a2a] bg-[#111] p-4">
+                <div className="text-xs font-medium uppercase tracking-wider text-[#666]">Avg Composite</div>
+                <div className="mt-1 text-2xl font-bold text-[#5ba3e6]">{fmtNum(s.avgCompositeScore, 1)}</div>
+                <div className="text-xs text-[#666]">out of 100 max</div>
               </div>
 
               {/* Avg Returns */}
@@ -249,13 +275,13 @@ export default function FunnelBacktestPage() {
               </div>
             </div>
 
-            {/* Funnel bar */}
-            {avgFunnel && (
+            {/* Score Distribution Bar */}
+            {data.funnelResults.length > 0 && (
               <div className="mb-6 rounded-lg border border-[#2a2a2a] bg-[#111] p-4">
                 <div className="mb-3 text-xs font-medium uppercase tracking-wider text-[#666]">
-                  Average Funnel Narrowing
+                  Average Funnel Flow
                 </div>
-                <FunnelBar counts={avgFunnel} />
+                <ScoreDistributionBar results={data.funnelResults} />
               </div>
             )}
 
@@ -266,11 +292,10 @@ export default function FunnelBacktestPage() {
                   <thead>
                     <tr className="border-b border-[#2a2a2a] bg-[#111]">
                       <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-[#666]">Date</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-[#666]">Step 1</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-[#666]">Step 2</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-[#666]">Step 3</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-[#666]">Step 4</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-[#666]">Pool</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-[#666]">Qualified</th>
                       <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-[#666]">Picks</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-[#666]">Avg Score</th>
                       <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-[#666]">Avg 5d</th>
                       <th className="w-8" />
                     </tr>
@@ -278,8 +303,9 @@ export default function FunnelBacktestPage() {
                   <tbody>
                     {data.funnelResults.map((day) => {
                       const isExpanded = expandedDate === day.date;
-                      const avg5d = day.picks.length > 0
-                        ? day.picks.reduce((a, p) => a + (p.forward.return5d ?? 0), 0) / day.picks.filter((p) => p.forward.return5d != null).length
+                      const fwdArr = day.picks.filter((p) => p.forward.return5d != null);
+                      const avg5d = fwdArr.length > 0
+                        ? fwdArr.reduce((a, p) => a + (p.forward.return5d ?? 0), 0) / fwdArr.length
                         : null;
 
                       return (
@@ -289,12 +315,13 @@ export default function FunnelBacktestPage() {
                             onClick={() => setExpandedDate(isExpanded ? null : day.date)}
                           >
                             <td className="px-3 py-2 font-medium">{formatDateShort(day.date)}</td>
-                            <td className="px-3 py-2 text-right text-[#a0a0a0]">{day.funnelCounts.step1}</td>
-                            <td className="px-3 py-2 text-right text-[#a0a0a0]">{day.funnelCounts.step2}</td>
-                            <td className="px-3 py-2 text-right text-[#a0a0a0]">{day.funnelCounts.step3}</td>
-                            <td className="px-3 py-2 text-right text-[#a0a0a0]">{day.funnelCounts.step4}</td>
+                            <td className="px-3 py-2 text-right text-[#a0a0a0]">{day.diagnostics.poolSize}</td>
+                            <td className="px-3 py-2 text-right text-[#a0a0a0]">{day.diagnostics.qualifiedCount}</td>
                             <td className="px-3 py-2 text-right font-medium">
-                              {day.picks.length > 0 ? day.picks.length : <span className="text-[#666]">0</span>}
+                              {day.diagnostics.pickedCount > 0 ? day.diagnostics.pickedCount : <span className="text-[#666]">0</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right text-[#5ba3e6] font-medium">
+                              {day.diagnostics.pickedCount > 0 ? fmtNum(day.diagnostics.avgCompositeScore, 1) : "-"}
                             </td>
                             <td className={`px-3 py-2 text-right font-medium ${retColor(avg5d)}`}>
                               {avg5d != null && !isNaN(avg5d) ? `${fmtNum(avg5d, 2)}%` : "-"}
@@ -311,18 +338,18 @@ export default function FunnelBacktestPage() {
                           {/* Expanded picks sub-table */}
                           {isExpanded && day.picks.length > 0 && (
                             <tr>
-                              <td colSpan={8} className="bg-[#0d0d0d] p-0">
+                              <td colSpan={7} className="bg-[#0d0d0d] p-0">
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-xs">
                                     <thead>
                                       <tr className="border-b border-[#1a1a1a]">
                                         <th className="px-3 py-1.5 text-left text-[#666]">Ticker</th>
-                                        <th className="px-3 py-1.5 text-right text-[#666]">Price</th>
+                                        <th className="px-3 py-1.5 text-right text-[#666]">Composite</th>
+                                        <th className="px-3 py-1.5 text-center text-[#666]">Score Breakdown</th>
                                         <th className="px-3 py-1.5 text-left text-[#666]">Presets</th>
-                                        <th className="px-3 py-1.5 text-right text-[#666]">PR Score</th>
                                         <th className="px-3 py-1.5 text-left text-[#666]">Stage</th>
                                         <th className="px-3 py-1.5 text-left text-[#666]">Alert</th>
-                                        <th className="px-3 py-1.5 text-center text-[#666]">VCP/Inst</th>
+                                        <th className="px-3 py-1.5 text-center text-[#666]">Badges</th>
                                         <th className="px-3 py-1.5 text-right text-[#666]">1d</th>
                                         <th className="px-3 py-1.5 text-right text-[#666]">3d</th>
                                         <th className="px-3 py-1.5 text-right text-[#666]">5d</th>
@@ -335,9 +362,21 @@ export default function FunnelBacktestPage() {
                                         <tr key={pick.ticker} className="border-b border-[#1a1a1a] hover:bg-[#111]">
                                           <td className="px-3 py-1.5 font-medium text-[#5ba3e6]">
                                             {pick.ticker}
-                                            <span className="ml-1 text-[#444]">{pick.confluenceCount}/5</span>
+                                            <span className="ml-1 text-[#444]">${fmtNum(pick.price, 0)}</span>
                                           </td>
-                                          <td className="px-3 py-1.5 text-right text-[#a0a0a0]">${fmtNum(pick.price, 2)}</td>
+                                          <td className="px-3 py-1.5 text-right">
+                                            <span className="font-bold text-white">{pick.compositeScore}</span>
+                                          </td>
+                                          <td className="px-3 py-1.5">
+                                            <div className="flex items-center justify-center gap-0.5">
+                                              <ScorePill label="PR" pts={pick.prerunPts} max={25} />
+                                              <ScorePill label="INF" pts={pick.inflectionPts} max={25} />
+                                              <ScorePill label="TR" pts={pick.transitionPts} max={20} />
+                                              <ScorePill label="IN" pts={pick.instPts} max={15} />
+                                              <ScorePill label="RO" pts={pick.prerunnerPts} max={10} />
+                                              <ScorePill label="C" pts={pick.confluencePts} max={5} />
+                                            </div>
+                                          </td>
                                           <td className="px-3 py-1.5">
                                             <div className="flex flex-wrap gap-1">
                                               {pick.presets.map((p) => (
@@ -348,18 +387,29 @@ export default function FunnelBacktestPage() {
                                                   {PRESET_SHORT[p] ?? p}
                                                 </span>
                                               ))}
+                                              {pick.presets.length === 0 && <span className="text-[#444]">-</span>}
                                             </div>
                                           </td>
-                                          <td className="px-3 py-1.5 text-right font-medium">{pick.prerunScore}</td>
                                           <td className="px-3 py-1.5 text-cyan-400">
-                                            {STAGE_SHORT[pick.inflectionStage] ?? pick.inflectionStage}
-                                            <span className="ml-1 text-[#666]">{pick.inflectionScore}</span>
+                                            {pick.inflectionStage !== "-"
+                                              ? <>{STAGE_SHORT[pick.inflectionStage] ?? pick.inflectionStage}<span className="ml-1 text-[#666]">{pick.inflectionScore}</span></>
+                                              : <span className="text-[#444]">-</span>
+                                            }
                                           </td>
                                           <td className="px-3 py-1.5">
-                                            <span className={pick.alertState === "TRIGGERED" ? "text-emerald-400" : "text-amber-400"}>
-                                              {pick.alertState}
-                                            </span>
-                                            <span className="ml-1 text-[#666]">{pick.transitionScore}</span>
+                                            {pick.alertState !== "-"
+                                              ? <>
+                                                  <span className={
+                                                    pick.alertState === "TRIGGERED" ? "text-emerald-400"
+                                                    : pick.alertState === "READY" ? "text-amber-400"
+                                                    : "text-[#a0a0a0]"
+                                                  }>
+                                                    {pick.alertState}
+                                                  </span>
+                                                  <span className="ml-1 text-[#666]">{pick.transitionScore}</span>
+                                                </>
+                                              : <span className="text-[#444]">-</span>
+                                            }
                                           </td>
                                           <td className="px-3 py-1.5 text-center">
                                             {pick.onVcpFocus && (
@@ -413,23 +463,29 @@ export default function FunnelBacktestPage() {
   );
 }
 
-// ── Funnel Bar ──
+// ── Score Distribution Bar ──
 
-function FunnelBar({ counts }: { counts: { step1: number; step2: number; step3: number; step4: number } }) {
-  const max = Math.max(counts.step1, 1);
+function ScoreDistributionBar({ results }: { results: FunnelDayResult[] }) {
+  const n = results.length;
+  if (n === 0) return null;
+
+  const avgPool = results.reduce((a, d) => a + d.diagnostics.poolSize, 0) / n;
+  const avgQualified = results.reduce((a, d) => a + d.diagnostics.qualifiedCount, 0) / n;
+  const avgPicked = results.reduce((a, d) => a + d.diagnostics.pickedCount, 0) / n;
+  const max = Math.max(avgPool, 1);
+
   const steps = [
-    { label: "Confluence >= 3", value: counts.step1, color: "bg-blue-500" },
-    { label: "Preset + Score", value: counts.step2, color: "bg-cyan-500" },
-    { label: "Inflection", value: counts.step3, color: "bg-amber-500" },
-    { label: "Transition", value: counts.step4, color: "bg-emerald-500" },
+    { label: "Pool (conf >= 2.0)", value: avgPool, color: "bg-blue-500" },
+    { label: "Qualified (score >= 25)", value: avgQualified, color: "bg-amber-500" },
+    { label: "Picked (top 15)", value: avgPicked, color: "bg-emerald-500" },
   ];
 
   return (
     <div className="space-y-2">
       {steps.map((step, i) => (
         <div key={i} className="flex items-center gap-3">
-          <div className="w-28 shrink-0 text-right text-xs text-[#a0a0a0]">
-            Step {i + 1}
+          <div className="w-8 shrink-0 text-right text-xs font-medium text-[#a0a0a0]">
+            {i + 1}
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
@@ -441,9 +497,25 @@ function FunnelBar({ counts }: { counts: { step1: number; step2: number; step3: 
               </span>
             </div>
           </div>
-          <div className="w-32 shrink-0 text-xs text-[#666]">{step.label}</div>
+          <div className="w-40 shrink-0 text-xs text-[#666]">{step.label}</div>
         </div>
       ))}
     </div>
+  );
+}
+
+// ── Score Pill ──
+
+function ScorePill({ label, pts, max }: { label: string; pts: number; max: number }) {
+  const bg = scoreBarColor(pts, max);
+  return (
+    <span
+      className={`inline-block rounded px-1 py-0.5 text-[9px] font-medium ${
+        pts > 0 ? `${bg}/20 text-white` : "bg-[#1a1a1a] text-[#444]"
+      }`}
+      title={`${label}: ${pts}/${max}`}
+    >
+      {label}{pts > 0 ? ` ${pts}` : ""}
+    </span>
   );
 }
