@@ -85,13 +85,16 @@ const PRESET_LABELS: Record<Preset, string> = {
   early_plus: "Early+",
 };
 
+/** Active presets shown as tabs (Early+ merged into Stealth). */
+const ACTIVE_PRESETS: Preset[] = ["sndk", "early_mover", "pullback", "leading", "stealth"];
+
 const PRESET_DESCRIPTIONS: Record<Preset, string> = {
-  sndk: "40%+ from ATH, 15%+ SI, score 18+",
+  sndk: "40%+ from ATH, 15%+ SI, score 18+, volume confirmed",
   early_mover: "25%+ from ATH, EMA timing + higher lows + volume",
-  pullback: "Up to 40% pullback, 2/3 confirmation (EMA timing + higher lows + volume)",
-  leading: "Leading/Improving sectors, score 15+, EMA + relative strength",
-  stealth: "OBV/VP divergence + EMA timing",
-  early_plus: "Pre-breakout: volume divergence + range coil",
+  pullback: "Up to 40% pullback, EMA timing + volume or structure",
+  leading: "LEADING sector quadrant, score 18+, EMA + RS + volume",
+  stealth: "OBV/VP divergence + EMA timing (includes former Early+)",
+  early_plus: "(Deprecated — merged into Stealth)",
 };
 
 // ── Helpers ──
@@ -395,7 +398,7 @@ export default function PreRunPresetDailyPage() {
       { key: "is_pullback", label: "Pullback" },
       { key: "is_leading", label: "Leading" },
       { key: "is_stealth", label: "Stealth" },
-      { key: "is_early_plus", label: "Early+" },
+      // Early+ deprecated (merged into Stealth) — excluded from overlap counting
     ];
     return allResults
       .map((r) => {
@@ -468,7 +471,7 @@ export default function PreRunPresetDailyPage() {
 
       {/* Preset tabs */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-4 scrollbar-hide">
-        {(Object.keys(PRESET_LABELS) as Preset[]).map((p) => (
+        {ACTIVE_PRESETS.map((p) => (
           <button
             key={p}
             onClick={() => setPreset(p)}
