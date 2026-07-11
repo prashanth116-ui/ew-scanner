@@ -235,6 +235,50 @@ export const SCAN_EXCLUSIONS: Set<string> = new Set([
   "HSIC",   // Henry Schein — dental supply, low ATR% (~1.1%)
   "CVS",    // CVS Health — too diversified, PBM reform risk, low ATR%
   "DVA",    // DaVita — dialysis, regulatory ceiling, GLP-1 threat
+  // Utilities — regulated, ATR% < 1.5%, bond proxies (kept: CEG, VST, NRG, AES, PCG, EXC, SRE, NEE, XEL)
+  "AEE",    // Ameren — regulated Midwest utility, ATR% ~1.0%
+  "AEP",    // American Electric Power — regulated, ATR% ~1.1%
+  "ATO",    // Atmos Energy — gas distribution, ATR% ~1.0%
+  "AWK",    // American Water Works — water utility, ATR% ~1.0%
+  "CMS",    // CMS Energy — Michigan regulated, ATR% ~1.0%
+  "CNP",    // CenterPoint Energy — Gulf Coast utility, ATR% ~1.1%
+  "D",      // Dominion Energy — low-growth post-restructuring, ATR% ~1.1%
+  "DTE",    // DTE Energy — Michigan utility, ATR% ~1.0%
+  "DUK",    // Duke Energy — largest regulated utility, ATR% ~0.9%
+  "ED",     // Consolidated Edison — NYC utility, ATR% ~0.8-1.0%
+  "EIX",    // Edison International — SoCal, ATR% ~1.2%, fire-season only
+  "ES",     // Eversource Energy — New England, ATR% ~1.1%
+  "ETR",    // Entergy — Gulf Coast nuclear, ATR% ~1.1%
+  "EVRG",   // Evergy — Kansas/Missouri, ATR% ~1.0%
+  "FE",     // FirstEnergy — Ohio, past scandal, ATR% ~1.1%
+  "LNT",    // Alliant Energy — Iowa/Wisconsin, ATR% ~0.9%
+  "NI",     // NiSource — Indiana gas, ATR% ~1.0%
+  "PEG",    // Public Service Enterprise — NJ, ATR% ~1.1%
+  "PNW",    // Pinnacle West — Arizona, ATR% ~1.0%
+  "PPL",    // PPL Corp — Pennsylvania/Kentucky, ATR% ~1.0%
+  "SO",     // Southern Company — largest Southeast utility, ATR% ~0.8%
+  "WEC",    // WEC Energy — Wisconsin, ATR% ~0.9%
+  // Real Estate — traditional REITs, ATR% < 1.5%, rate-driven (kept: EQIX, DLR, AMT, CCI, SBAC, CBRE, CSGP, IRM, PLD, SPG, WELL)
+  "ARE",    // Alexandria Real Estate — life science REIT, lab oversupply
+  "AVB",    // AvalonBay — apartment REIT, ATR% ~1.2%
+  "BXP",    // BXP — office REIT, WFH structural decline
+  "CPT",    // Camden Property — apartment REIT, ATR% ~1.2%
+  "DOC",    // Healthpeak — healthcare REIT, ATR% ~1.2%
+  "EQR",    // Equity Residential — apartment REIT, ATR% ~1.1%
+  "ESS",    // Essex Property — West Coast apartments, ATR% ~1.2%
+  "EXR",    // Extra Space Storage — self-storage REIT, ATR% ~1.2%
+  "FRT",    // Federal Realty — retail REIT, ATR% ~1.3%
+  "HST",    // Host Hotels — hotel REIT, ATR% ~1.5%, grinding
+  "INVH",   // Invitation Homes — single-family rental, ATR% ~1.2%
+  "KIM",    // Kimco Realty — retail REIT, ATR% ~1.2%
+  "MAA",    // Mid-America Apartment — Sunbelt apartments, ATR% ~1.2%
+  "O",      // Realty Income — monthly dividend REIT, ATR% ~0.9%
+  "PSA",    // Public Storage — self-storage REIT, ATR% ~1.1%
+  "REG",    // Regency Centers — retail REIT, ATR% ~1.1%
+  "UDR",    // UDR — apartment REIT, ATR% ~1.2%
+  "VICI",   // VICI Properties — casino REIT, triple-net, ATR% ~1.1%
+  "VTR",    // Ventas — healthcare REIT, ATR% ~1.3%
+  "WY",     // Weyerhaeuser — timber REIT, ATR% ~1.3%
 ]);
 
 /** Build the scan universe: SP500 + NDX100 + ADDITIONAL minus SCAN_EXCLUSIONS. */

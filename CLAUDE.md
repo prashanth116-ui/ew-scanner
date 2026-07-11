@@ -94,14 +94,14 @@ Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 10`, `MAX_PRICE:
 **Applied in 6 cron routes:** PreRun preset, PreRun 4h, Inflection, Transition, VCP, Institutional. NOT applied to single-ticker API routes (explicit user lookups) or PreRunner (uses `computePreRunnerRadar()`).
 
 ### Preset Cron Details
-- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS minus SCAN_EXCLUSIONS (~562 unique tickers). Built via `buildScanUniverse()` in `index-tiers.ts`.
-- **SCAN_EXCLUSIONS (38 tickers):** Structurally boring stocks excluded from scanning — ultra-low ATR%, secular decline, or utility-like behavior. Defined in `src/data/index-tiers.ts`. Includes: ROL, RSG, WM, CHRW, SWK, MMM, TXT, AOS, ALLE, PNR, NDSN, DOV (Industrials); BEN, IVZ, GL, CINF, AIZ, L, NTRS, PFG, STT, KEY, RF (Financials); F, GM, GPC, HAS, RL, MAS, TGT, LVS (Consumer Disc); JNJ, PFE, BAX, VTRS, HSIC, CVS, DVA (Health Care). Review quarterly.
+- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS minus SCAN_EXCLUSIONS (~520 unique tickers). Built via `buildScanUniverse()` in `index-tiers.ts`.
+- **SCAN_EXCLUSIONS (80 tickers):** Structurally boring stocks excluded from scanning — ultra-low ATR%, secular decline, or utility-like behavior. Defined in `src/data/index-tiers.ts`. Includes: ROL, RSG, WM, CHRW, SWK, MMM, TXT, AOS, ALLE, PNR, NDSN, DOV (Industrials 12); BEN, IVZ, GL, CINF, AIZ, L, NTRS, PFG, STT, KEY, RF (Financials 11); F, GM, GPC, HAS, RL, MAS, TGT, LVS (Consumer Disc 8); JNJ, PFE, BAX, VTRS, HSIC, CVS, DVA (Health Care 7); AEE, AEP, ATO, AWK, CMS, CNP, D, DTE, DUK, ED, EIX, ES, ETR, EVRG, FE, LNT, NI, PEG, PNW, PPL, SO, WEC (Utilities 22, kept: CEG, VST, NRG, AES, PCG, EXC, SRE, NEE, XEL); ARE, AVB, BXP, CPT, DOC, EQR, ESS, EXR, FRT, HST, INVH, KIM, MAA, O, PSA, REG, UDR, VICI, VTR, WY (Real Estate 20, kept: EQIX, DLR, AMT, CCI, SBAC, CBRE, CSGP, IRM, PLD, SPG, WELL). Review quarterly.
 - **SP400 dropped:** Removed from all scan universes. Notable SP400 stocks rescued to ADDITIONAL_MEMBERS.
 - **NDX100 updated:** Reflects June 22, 2026 quarterly rebalance (added ALAB, ALNY, CRWV, NBIS, RKLB, TER; removed CHTR, CTSH, VRSK, ZS)
 - **Universal quality gate:** Filters ~100+ stocks before scoring (price < $10, mcap < $8B, dollarVol < $100M, dataQuality < 40%, maxAtrPct60d < 1.2%)
 - **Non-scorer gate:** Skips tickers never seen in any scanner table (saves API calls). Loaded once at cron start via `loadAllScoredTickers()`.
 - **Vercel limit:** 300s maxDuration, 240s time guard for Telegram
-- **Single-pass system:** ~562 tickers typically fits in one pass. Resume pass available if needed.
+- **Single-pass system:** ~520 tickers typically fits in one pass. Resume pass available if needed.
 - **4h scanner:** May still need 2 passes (larger Yahoo 2y:1h chart responses slow each ticker)
 - **Batch settings:** BATCH_SIZE=15, BATCH_DELAY=500ms, PERSIST_INTERVAL=50
 - **Params:** `?clear=true` (delete today's data before scan), `?resume=true` (skip existing tickers)
@@ -244,7 +244,7 @@ Detects market structure transitions from accumulation into early markup using s
 | `supabase/migrations/019_transition_daily.sql` | DB table with 8 component scores, state, alert_state, trigger/invalidation |
 
 **Cron details:**
-- Uses same universe as other scanners (~615 tickers)
+- Uses same universe as other scanners (~520 tickers)
 - Fetches 3mo daily chart separately via `fetchYahooChart()` for OHLC data
 - Calls `scoreTransitionWithOHLC()` with raw highs/lows/closes + 3-bar pivot
 - Skips MARKDOWN state and gate failures before persisting
@@ -480,8 +480,8 @@ Cross-scanner stock picker that replaces sequential AND gates with a composite s
 
 ## Open Items / Known Gaps
 - **Transition scanner is a trial:** Created to compare against Inflection for detecting accumulation → markup transitions. Badge-only in nightly summary. After gating tuning, pass rate is ~45% (247/546). Produces 27 SE + 2 ACCUM stocks for early detection. After several days of parallel output, decide whether to promote to confluence, merge with Inflection, or remove.
-- **VCP + Institutional crons untested:** Built but not manually triggered yet — universe is ~615, likely fits in one pass.
-- **Preset-resume may be redundant:** With SP400 dropped and universe at ~615, the preset cron likely completes in a single pass. The resume cron at 02:06 is still scheduled as a safety net but may not be needed. Monitor scan completion counts.
+- **VCP + Institutional crons untested:** Built but not manually triggered yet — universe is ~520, likely fits in one pass.
+- **Preset-resume may be redundant:** With SP400 dropped and universe at ~520, the preset cron likely completes in a single pass. The resume cron at 02:06 is still scheduled as a safety net but may not be needed. Monitor scan completion counts.
 - **NDX100 rebalance maintenance:** NDX100_MEMBERS updated for June 22, 2026 rebalance + July 7, 2026 SPCX addition. Next rebalance is September 2026 — update `src/data/index-tiers.ts` when announced. No automated rebalance cron (index changes are infrequent, ADDITIONAL_MEMBERS requires human judgment).
 - **ADDITIONAL_MEMBERS maintenance:** The 86 curated tickers in ADDITIONAL_MEMBERS need periodic review. Stocks may delist, change tickers, or fall below quality gate thresholds permanently. Review quarterly alongside NDX100 rebalance. Last cleanup 2026-07-11: removed CELH/ELF/LEGN (mcap), DDOC (invalid ticker), SPCX (promoted to NDX100); fixed SQ→XYZ; added TTAN, IONQ.
 
