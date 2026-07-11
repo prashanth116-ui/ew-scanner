@@ -90,6 +90,8 @@ export interface EnrichedStock {
   sectorStealth: boolean;
   inActiveRotation?: boolean;
   rotationPerfPct?: number | null;
+  /** Quality gates bypassed due to null data (e.g. "marketCap_null", "institutional_null") */
+  dataWarnings?: string[];
 }
 
 export interface RejectedStock {

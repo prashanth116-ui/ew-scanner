@@ -104,7 +104,7 @@ const CACHE_TTL = 10 * 60 * 1000;
 // ── Sigmoid breadth proxy (Tier 3 fallback) ──
 
 function sigmoidBreadth(pctFromSma: number): number {
-  return Math.round(100 / (1 + Math.exp(-0.4 * pctFromSma)));
+  return Math.round(100 / (1 + Math.exp(-SCORING_SIGNALS.SIGMOID_EXPONENT * pctFromSma)));
 }
 
 // ── Main calculation ──
@@ -375,11 +375,8 @@ export async function calculateSectorRotation(
     });
   }
 
-  // Percentile-rank and min-max normalization
+  // Percentile-rank and fixed-range normalization
   const allMomentums = rawScores.map((s) => s.momentumComposite);
-  const accels = rawScores.map((s) => s.acceleration);
-  const accelMin = accels.length > 0 ? Math.min(...accels) : 0;
-  const accelMax = accels.length > 0 ? Math.max(...accels) : 0;
 
   // Build final scored sectors
   const scoredSectors: SectorRotationScore[] = rawScores.map((raw) => {
@@ -387,12 +384,10 @@ export async function calculateSectorRotation(
 
     const normalized: Record<string, number> = {
       momentum: momentumPercentile,
-      // When all sectors have identical acceleration (accelMin == accelMax),
-      // returning 50 masks uniform deterioration. Use the sign of the common
-      // value: negative → 25 (below midpoint), positive → 75, zero → 50.
-      acceleration: accelMax !== accelMin
-        ? ((raw.acceleration - accelMin) / (accelMax - accelMin)) * 100
-        : raw.acceleration < 0 ? 25 : raw.acceleration > 0 ? 75 : 50,
+      // Fixed-range normalization: clamp to [-10, 10] so scores reflect absolute
+      // acceleration quality. Min-max was inflating scores during broad deterioration
+      // (least-negative sector got 100).
+      acceleration: clampNormalize(raw.acceleration, COMPOSITE.ACCEL_NORM_FLOOR, COMPOSITE.ACCEL_NORM_CEILING),
       mansfield: clampNormalize(raw.mansfieldRS, -20, 20),
       cmf: clampNormalize(raw.cmf20, -1, 1),
       breadth: raw.breadthPct ?? 50,
@@ -496,14 +491,16 @@ export async function calculateSectorRotation(
     // FROM: prefer WEAKENING (money actively leaving) over LAGGING (already left)
     const fromPool = activelyWeakening.length > 0 ? activelyWeakening : lagging;
     if (improving.length > 0 && fromPool.length > 0) {
-      // Pick most actively deteriorating FROM (lowest acceleration)
-      const fromSector = [...fromPool].sort((a, b) => a.acceleration - b.acceleration)[0];
-      // Pick most actively improving TO (highest acceleration)
-      const toSector = [...improving].sort((a, b) => b.acceleration - a.acceleration)[0];
-      rotationSummary = `Money flowing FROM ${fromSector.sector} TO ${toSector.sector}`;
+      // Show up to 2 FROM and 2 TO sectors for more complete rotation picture
+      const topFrom = [...fromPool].sort((a, b) => a.acceleration - b.acceleration).slice(0, 2);
+      const topTo = [...improving].sort((a, b) => b.acceleration - a.acceleration).slice(0, 2);
+      const fromNames = topFrom.map((s) => s.sector).join(", ");
+      const toNames = topTo.map((s) => s.sector).join(", ");
+      rotationSummary = `Money flowing FROM ${fromNames} TO ${toNames}`;
     } else if (improving.length > 0) {
-      const toSector = [...improving].sort((a, b) => b.acceleration - a.acceleration)[0];
-      rotationSummary = `Rotation INTO ${toSector.sector}`;
+      const topTo = [...improving].sort((a, b) => b.acceleration - a.acceleration).slice(0, 2);
+      const toNames = topTo.map((s) => s.sector).join(", ");
+      rotationSummary = `Rotation INTO ${toNames}`;
     } else {
       rotationSummary = "Sectors diverging \u2014 watch for rotation signal";
     }

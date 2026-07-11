@@ -65,7 +65,8 @@ export function calcMansfieldRS(sectorCloses: number[], benchmarkCloses: number[
 
   const sma200 = calcSMA(drs, 200) ?? 0;
   if (sma200 === 0) return 0;
-  return 100 * (drs[drs.length - 1] / sma200 - 1);
+  const result = 100 * (drs[drs.length - 1] / sma200 - 1);
+  return isFinite(result) ? result : 0;
 }
 
 // ── Chaikin Money Flow ──
@@ -222,8 +223,8 @@ export function calcRRG(
   const rsSmooth = ema(drs, 10);
 
   // Step 3: RS-Ratio = 100 + Z-score(rsSmooth, lookback)
-  // Cap at 200 (not 250) to ensure trail points at offset 20 have valid Z-scores
-  const lookback = Math.min(200, drs.length - 30);
+  // Cap at 200. Subtract 20 (not 30): trail max offset is 20 (line 268), so 20 is the minimum safe margin.
+  const lookback = Math.min(200, drs.length - 20);
   if (lookback < 20) return { rsRatio: 100, rsMomentum: 100, quadrant: "LAGGING", trail: [] };
   const rsRatioSeries = rollingZScore(rsSmooth, lookback).map((z) => 100 + z);
 

@@ -33,9 +33,18 @@ export const LIFECYCLE_MATURING_MAX_DAYS = ROTATION_LIFECYCLE.MATURING_MAX_DAYS;
 
 export function computeLifecycleStage(event: RotationEvent): LifecycleStage {
   const h = getHealth(event);
+  // Hard cutoff: beyond EXHAUSTING_DAYS or clear structural weakness
   if (
     event.daysActive > ROTATION_LIFECYCLE.EXHAUSTING_DAYS ||
     (h.acceleration < 0 && (h.quadrant === "WEAKENING" || h.quadrant === "LAGGING"))
+  ) {
+    return "EXHAUSTING";
+  }
+  // Soft zone: between EXHAUSTING_SOFT_DAYS and EXHAUSTING_DAYS, only EXHAUSTING if
+  // health confirms (both acceleration and CMF negative). Prevents binary cliff at day 30.
+  if (
+    event.daysActive > ROTATION_LIFECYCLE.EXHAUSTING_SOFT_DAYS &&
+    h.acceleration < 0 && h.cmf20 < 0
   ) {
     return "EXHAUSTING";
   }

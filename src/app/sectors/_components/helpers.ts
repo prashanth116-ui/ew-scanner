@@ -25,9 +25,11 @@ export function quadrantDotColor(q: RRGQuadrant): string {
 // ── Trading action helpers ──
 
 export function getTradingAction(s: Pick<SectorRotationScore, "quadrant" | "compositeScore" | "acceleration">): TradingAction {
-  if (s.quadrant === "LEADING" && s.compositeScore >= COMPOSITE_TRADE_THRESHOLD && s.acceleration > 0) return "TRADE";
   if (s.quadrant === "IMPROVING" && s.acceleration > 0) return "BUILD";
-  if (s.quadrant === "LEADING" && s.compositeScore >= COMPOSITE_TRADE_THRESHOLD) return "TRADE";
+  if (s.quadrant === "LEADING" && s.compositeScore >= COMPOSITE_TRADE_THRESHOLD) {
+    // Decelerating leaders: WATCH (monitor, don't add) vs accelerating: TRADE
+    return s.acceleration > 0 ? "TRADE" : "WATCH";
+  }
   if (s.quadrant === "LEADING") return "WATCH";
   if (s.quadrant === "WEAKENING") return "TRIM";
   if (s.quadrant === "IMPROVING") return "WATCH";

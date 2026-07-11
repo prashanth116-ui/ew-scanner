@@ -126,7 +126,7 @@ interface DailySignal {
 }
 
 function computeDailySignals(aligned: AlignedBar[]): DailySignal[] {
-  if (aligned.length < 50) return [];
+  if (aligned.length < ROTATION.MIN_ALIGNED_BARS) return [];
 
   // Compute RS ratio series (ETF close / SPY close)
   const rsRatios = aligned.map((b) => b.etfClose / b.spyClose);
@@ -134,8 +134,8 @@ function computeDailySignals(aligned: AlignedBar[]): DailySignal[] {
   const closes = aligned.map((b) => b.etfClose);
 
   // Compute SMAs
-  const rsSma10 = computeSMASeries(rsRatios, 10);
-  const rsSma30 = computeSMASeries(rsRatios, 30);
+  const rsSma10 = computeSMASeries(rsRatios, ROTATION.RS_SMA_SHORT);
+  const rsSma30 = computeSMASeries(rsRatios, ROTATION.RS_SMA_LONG);
   const volumeSma20 = computeSMASeries(volumes, 20);
   const closeSma50 = computeSMASeries(closes, 50);
 
@@ -391,10 +391,9 @@ async function fetchStockPerformance(
   });
 
   // Fetch 6mo daily bars for each stock to find price at rotation start
-  // Batch in groups of 15 with 200ms delays
   const batches: string[][] = [];
-  for (let i = 0; i < quotedSymbols.length; i += 15) {
-    batches.push(quotedSymbols.slice(i, i + 15));
+  for (let i = 0; i < quotedSymbols.length; i += ROTATION.TRACKER_BATCH_SIZE) {
+    batches.push(quotedSymbols.slice(i, i + ROTATION.TRACKER_BATCH_SIZE));
   }
 
   for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
@@ -484,7 +483,7 @@ async function fetchStockPerformance(
 
     // Delay between batches
     if (batchIdx < batches.length - 1) {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, ROTATION.TRACKER_BATCH_DELAY));
     }
   }
 
@@ -592,7 +591,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
       spyChart.timestamps
     );
 
-    if (aligned.length < 50) continue;
+    if (aligned.length < ROTATION.MIN_ALIGNED_BARS) continue;
 
     // Compute daily signals
     const dailySignals = computeDailySignals(aligned);

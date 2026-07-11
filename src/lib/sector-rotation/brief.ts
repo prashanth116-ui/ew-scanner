@@ -80,7 +80,8 @@ export interface WhatChangedResult {
 
 export function computeMarketPosture(
   data: SectorRotationResult,
-  rotationData: RotationTrackerResult | null
+  rotationData: RotationTrackerResult | null,
+  precomputedLeadershipHealth?: LeadershipHealth | null
 ): PostureResult {
   const regime = data.regime;
   const activeRotations = rotationData?.activeRotations ?? [];
@@ -139,14 +140,14 @@ export function computeMarketPosture(
   }
 
   // Compute leadership health for posture modulation
-  const leadershipHealth = data.leadershipBasketScores?.length
+  const leadershipHealth = precomputedLeadershipHealth ?? (data.leadershipBasketScores?.length
     ? computeLeadershipHealth(
         data.leadershipBasketScores,
         data.crossAssetScores ?? [],
         data.sectors,
         data.subSectorScores ?? [],
       )
-    : null;
+    : null);
   // Hysteresis buffer: leadership must drop clearly below threshold (50 - 3 = 47)
   // to trigger narrow flag. Prevents posture oscillation from 1-2 point noise.
   const narrowLeadership = leadershipHealth && (leadershipHealth.score < (RISK_FLAGS.NARROW_LEADERSHIP - RISK_FLAGS.NARROW_LEADERSHIP_BUFFER) || leadershipHealth.megaCapDominant);
@@ -258,7 +259,8 @@ export function computeSectorTiers(
 
 export function computeRiskFlags(
   data: SectorRotationResult,
-  rotationData: RotationTrackerResult | null
+  rotationData: RotationTrackerResult | null,
+  precomputedLeadershipHealth?: LeadershipHealth | null
 ): RiskFlag[] {
   const flags: RiskFlag[] = [];
 
@@ -352,7 +354,7 @@ export function computeRiskFlags(
 
   // 8. Narrow leadership — concentration risk
   if (data.leadershipBasketScores?.length) {
-    const lh = computeLeadershipHealth(
+    const lh = precomputedLeadershipHealth ?? computeLeadershipHealth(
       data.leadershipBasketScores,
       data.crossAssetScores ?? [],
       data.sectors,

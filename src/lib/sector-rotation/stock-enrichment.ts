@@ -249,15 +249,18 @@ function classifyPhase(
   if (above50ma && pct > CLASSIFICATION.P3_PCT_LOW && accel >= 0 && volRatio >= CLASSIFICATION.P3_MIN_VOL_RATIO) {
     return "P3_TRENDING";
   }
-  // P4: Above 50MA but deeply negative RS or sector acceleration — exhaustion
-  // Must be above 50MA: stocks below can't exhaust from a trend they're not in
-  if (above50ma && (accel < CLASSIFICATION.P4_RS_ACCEL || sectorAcceleration < CLASSIFICATION.P4_SECTOR_ACCEL)) {
+  // P4: Above 50MA but BOTH RS and sector acceleration deeply negative — exhaustion.
+  // Require both: a single negative metric (e.g. sector decelerating while stock is fine)
+  // shouldn't trigger exhaustion. Must be above 50MA: stocks below can't exhaust from a trend they're not in.
+  if (above50ma && accel < CLASSIFICATION.P4_RS_ACCEL && sectorAcceleration < CLASSIFICATION.P4_SECTOR_ACCEL) {
     return "P4_EXHAUSTING";
   }
   // Fallback: enforce the same volume gate as the explicit P3 check —
   // without it, low-volume stocks bypass the P3_MIN_VOL_RATIO requirement.
+  // Above-50MA stocks use P2_TURNAROUND (not P1_BASING) for low-volume fallback:
+  // P1_BASING means below-50MA early recovery, which is semantically wrong for above-50MA.
   return above50ma
-    ? (accel < 0 ? "P4_EXHAUSTING" : (volRatio >= CLASSIFICATION.P3_MIN_VOL_RATIO ? "P3_TRENDING" : "P1_BASING"))
+    ? (accel < 0 ? "P4_EXHAUSTING" : (volRatio >= CLASSIFICATION.P3_MIN_VOL_RATIO ? "P3_TRENDING" : "P2_TURNAROUND"))
     : "P1_BASING";
 }
 
@@ -346,6 +349,12 @@ export function enrichStocks(stocks: StockInput[]): {
       s.sectorStealth
     );
 
+    // Track which quality gates were bypassed due to null data
+    const dataWarnings: string[] = [];
+    if (s.marketCap == null) dataWarnings.push("marketCap_null");
+    if (s.institutionalPct == null) dataWarnings.push("institutional_null");
+    if (s.ret20d == null) dataWarnings.push("ret20d_null");
+
     return {
       symbol: s.symbol,
       shortName: s.shortName,
@@ -373,6 +382,7 @@ export function enrichStocks(stocks: StockInput[]): {
       sectorQuadrant: s.sectorQuadrant,
       sectorComposite: s.sectorComposite,
       sectorStealth: s.sectorStealth,
+      ...(dataWarnings.length > 0 ? { dataWarnings } : {}),
     };
   });
 

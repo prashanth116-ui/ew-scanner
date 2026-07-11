@@ -44,7 +44,7 @@ const REGIME_SECTOR_MAP: Record<MacroRegime, { favored: string[]; avoid: string[
     avoid: ["Technology", "Consumer Discretionary", "Utilities"],
   },
   MIXED: {
-    favored: [],
+    favored: ["Health Care", "Financials"],  // quality/diversification tilt — structurally defensive-growth
     avoid: [],
   },
 };
@@ -161,19 +161,6 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
   } catch {
     return null;
   }
-}
-
-/**
- * Get regime score adjustment for a sector.
- * Aligned with regime → +5. Misaligned → -3.
- */
-export function getRegimeAdjustment(
-  sector: string,
-  regime: MacroRegimeData
-): number {
-  if (regime.favoredSectors.includes(sector)) return REGIME_CFG.ALIGNED_BONUS;
-  if (regime.avoidSectors.includes(sector)) return REGIME_CFG.MISALIGNED_PENALTY;
-  return 0;
 }
 
 async function fetchSymbolData(

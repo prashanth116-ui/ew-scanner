@@ -38,7 +38,7 @@ export const REGIME = {
   YIELD_INFLATIONARY: 4.5,
   /** Yield above this = high confidence INFLATIONARY */
   YIELD_EXTREME: 5,
-  /** DXY change over 20d to classify as rising/falling */
+  /** DXY absolute point change over 20d to classify as rising/falling (not percentage — DXY trades ~90-110) */
   DXY_TREND_THRESHOLD: 1,
   /** Cross-asset acceleration threshold for regime enhancement */
   CROSS_ASSET_ACCEL: 2,
@@ -66,6 +66,10 @@ export const COMPOSITE = {
     breadth: 15,
     smartMoney: 10,
   },
+  /** Fixed floor for acceleration normalization (replaces min-max) */
+  ACCEL_NORM_FLOOR: -10,
+  /** Fixed ceiling for acceleration normalization (replaces min-max) */
+  ACCEL_NORM_CEILING: 10,
 } as const;
 
 // ── Rotation Detection ──
@@ -87,6 +91,16 @@ export const ROTATION = {
   VOLUME_SURGE: 1.5,
   /** Minimum rotation days before considered real (not false start) */
   MIN_ROTATION_DAYS: 5,
+  /** RS SMA short period for rotation tracker golden cross */
+  RS_SMA_SHORT: 10,
+  /** RS SMA long period for rotation tracker golden cross */
+  RS_SMA_LONG: 30,
+  /** Minimum aligned bars required for rotation signal computation */
+  MIN_ALIGNED_BARS: 50,
+  /** Batch size for stock chart fetches in rotation tracker */
+  TRACKER_BATCH_SIZE: 15,
+  /** Delay (ms) between stock chart fetch batches in rotation tracker */
+  TRACKER_BATCH_DELAY: 200,
 } as const;
 
 // ── Stock Quality Gates ──
@@ -304,8 +318,10 @@ export const SCORING_SIGNALS = {
   PAIR_RISK_ON: 1,
   /** Pair analysis: ratio change < this = Risk-Off */
   PAIR_RISK_OFF: -1,
-  /** Momentum composite weights */
-  MOMENTUM_WEIGHTS: { roc63: 0.4, roc126: 0.2, roc189: 0.2, roc252: 0.2 },
+  /** Momentum composite weights (graduated: less short-term whipsaw, more medium-term stability) */
+  MOMENTUM_WEIGHTS: { roc63: 0.35, roc126: 0.25, roc189: 0.25, roc252: 0.15 },
+  /** Sigmoid exponent for ETF breadth proxy */
+  SIGMOID_EXPONENT: 0.4,
   /** OBV normalized slope threshold for accumulation/distribution */
   OBV_SLOPE_THRESHOLD: 0.01,
   /** RRG quadrant dead zone: when both axes are within ±this of 100, use momentum as tiebreaker */
@@ -315,8 +331,10 @@ export const SCORING_SIGNALS = {
 // ── Rotation Lifecycle ──
 
 export const ROTATION_LIFECYCLE = {
-  /** Days active > this = EXHAUSTING */
+  /** Days active > this = EXHAUSTING (hard cutoff) */
   EXHAUSTING_DAYS: 30,
+  /** Days active > this = soft EXHAUSTING zone (only if health confirms) */
+  EXHAUSTING_SOFT_DAYS: 25,
   /** Days active <= this = EARLY */
   EARLY_MAX_DAYS: 5,
   /** Days active <= this = MATURING (above = LATE) */
