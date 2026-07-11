@@ -279,6 +279,68 @@ export const SCAN_EXCLUSIONS: Set<string> = new Set([
   "VICI",   // VICI Properties — casino REIT, triple-net, ATR% ~1.1%
   "VTR",    // Ventas — healthcare REIT, ATR% ~1.3%
   "WY",     // Weyerhaeuser — timber REIT, ATR% ~1.3%
+  // Consumer Staples — slow-growth dividend aristocrats, ATR% < 1.5%, bond proxies
+  "ADM",    // Archer-Daniels-Midland — commodity processor, accounting scandal, ATR% ~1.3%
+  "BF.B",   // Brown-Forman — spirits, declining volumes, ATR% ~1.3%
+  "CAG",    // Conagra Brands — frozen food, private-label pressure, ATR% ~1.2%
+  "CHD",    // Church & Dwight — baking soda/laundry, ultra-stable, ATR% ~1.2%
+  "CL",     // Colgate-Palmolive — toothpaste, ATR% ~1.0%, bond proxy
+  "CLX",    // Clorox — bleach, ATR% ~1.2%, no growth catalyst
+  "GIS",    // General Mills — cereal, ATR% ~1.1%, secular decline in branded food
+  "HRL",    // Hormel Foods — packaged meat, ATR% ~1.3%, multi-year decline
+  "KHC",    // Kraft Heinz — processed food, ATR% ~1.3%, value trap
+  "KMB",    // Kimberly-Clark — diapers/tissue, ATR% ~1.0%, bond proxy
+  "MKC",    // McCormick — spices, ATR% ~1.2%, stable but no breakout DNA
+  "MO",     // Altria — tobacco, ATR% ~1.1%, secular decline in smoking
+  "SJM",    // J.M. Smucker — jelly/pet food, ATR% ~1.3%, low growth
+  "TAP",    // Molson Coors — beer, ATR% ~1.3%, market share losses
+  // Industrials (second pass) — low ATR%, conglomerate, utility-adjacent
+  "EXPD",   // Expeditors International — freight forwarding, ATR% ~1.3%
+  "ITW",    // Illinois Tool Works — diversified conglomerate, ATR% ~1.2%
+  "OTIS",   // Otis Elevator — elevators/escalators, ATR% ~1.1%, utility-like
+  "ROK",    // Rockwell Automation — factory automation, ATR% ~1.4%, multi-year decline
+  "SNA",    // Snap-on — tools, ATR% ~1.2%, very low volatility profile
+  "UPS",    // United Parcel Service — parcel delivery, ATR% ~1.3%, structural decline
+  "WAB",    // Wabtec — rail equipment, ATR% ~1.3%, niche, low momentum
+  "XYL",    // Xylem — water tech, ATR% ~1.1%, utility-adjacent
+  // Financials (second pass) — generic insurance/banks, low ATR%
+  "AFL",    // Aflac — supplemental insurance, ATR% ~1.2%, Japan-dependent
+  "AIG",    // AIG — P&C insurance, ATR% ~1.3%, perpetual restructuring
+  "ALL",    // Allstate — P&C insurer, ATR% ~1.3%, rate-driven, no breakout DNA
+  "MET",    // MetLife — life insurance, ATR% ~1.3%, rate-sensitive, generic
+  "PRU",    // Prudential — life/annuity, ATR% ~1.3%, same profile as MET
+  "TFC",    // Truist Financial — regional bank, ATR% ~1.3%, merger integration
+  "USB",    // U.S. Bancorp — regional bank, ATR% ~1.2%, too-big-to-grow
+  // Health Care (second pass) — low ATR%, structural decline
+  "BDX",    // Becton Dickinson — med supplies, ATR% ~1.2%, grinds not breaks
+  "CAH",    // Cardinal Health — drug distribution, ATR% ~1.2%, low margin commodity
+  "DGX",    // Quest Diagnostics — lab testing, ATR% ~1.2%, utility-like
+  "HUM",    // Humana — managed care, structural decline from MA rate cuts
+  "MDT",    // Medtronic — med devices, ATR% ~1.2%, multi-year underperformance
+  // Materials — commodity/packaging, low ATR%, declining
+  "AMCR",   // Amcor — packaging, ATR% ~1.2%, low-growth, commodity
+  "AVY",    // Avery Dennison — labels, ATR% ~1.3%, niche, low momentum
+  "IFF",    // International Flavors — flavors/fragrances, ATR% ~1.3%, high debt
+  "IP",     // International Paper — paper/packaging, ATR% ~1.3%, commodity decline
+  "LYB",    // LyondellBasell — chemicals, ATR% ~1.3%, cyclical trough, no catalyst
+  // Energy — pipeline/oilfield services past peak
+  "APA",    // APA Corp — small E&P, structural decline, governance issues
+  "HAL",    // Halliburton — oilfield services, ATR% ~1.5%, cycle past peak
+  "KMI",    // Kinder Morgan — midstream pipeline, ATR% ~1.0%, utility-like yield play
+  // Communication Services — legacy media/telecom, bond proxies
+  "FOXA",   // Fox Corp Class A — legacy media, ATR% ~1.3%, dual-share redundant
+  "NWS",    // News Corp — publishing, ATR% ~1.3%, old media, low growth
+  "NWSA",   // News Corp Class A — same company as NWS, dual share
+  "T",      // AT&T — telecom, ATR% ~1.1%, debt-heavy, utility-like yield play
+  "VZ",     // Verizon — telecom, ATR% ~1.0%, bond proxy, no growth
+  // Technology — legacy hardware, low growth
+  "HPE",    // Hewlett Packard Enterprise — server/storage, ATR% ~1.4%, commodity hardware
+  "HPQ",    // HP Inc — PCs/printers, ATR% ~1.3%, secular decline
+  "NTAP",   // NetApp — storage, ATR% ~1.5%, legacy storage, declining relevance
+  // Consumer Discretionary (second pass) — structural decline
+  "APTV",   // Aptiv — auto parts/EV wiring, structural decline, EV slowdown
+  "NKE",    // Nike — athletic, ATR% ~1.4%, multi-year decline, DTC transition failing
+  "PHM",    // PulteGroup — homebuilder, redundant with DHI/LEN/NVR
 ]);
 
 /** Build the scan universe: SP500 + NDX100 + ADDITIONAL minus SCAN_EXCLUSIONS. */
