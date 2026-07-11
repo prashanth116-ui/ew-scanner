@@ -26,6 +26,7 @@ interface FunnelPick {
   transitionPts: number;
   instPts: number;
   prerunnerPts: number;
+  vcpPts: number;
   confluencePts: number;
   presets: string[];
   prerunScore: number;
@@ -115,12 +116,13 @@ const STAGE_SHORT: Record<string, string> = {
   EXPANSION: "EXP",
 };
 
-function scoreBarColor(pts: number, max: number): string {
+function scorePillClass(pts: number, max: number): string {
+  if (pts <= 0) return "bg-[#1a1a1a] text-[#444]";
   const pct = max > 0 ? pts / max : 0;
-  if (pct >= 0.6) return "bg-emerald-500";
-  if (pct >= 0.3) return "bg-amber-500";
-  if (pts > 0) return "bg-blue-500";
-  return "bg-[#333]";
+  // Use complete Tailwind class strings — no dynamic concatenation
+  if (pct >= 0.6) return "bg-emerald-500/20 text-emerald-300";
+  if (pct >= 0.3) return "bg-amber-500/20 text-amber-300";
+  return "bg-blue-500/20 text-blue-300";
 }
 
 // ── Component ──
@@ -374,6 +376,7 @@ export default function FunnelBacktestPage() {
                                               <ScorePill label="TR" pts={pick.transitionPts} max={20} />
                                               <ScorePill label="IN" pts={pick.instPts} max={15} />
                                               <ScorePill label="RO" pts={pick.prerunnerPts} max={10} />
+                                              <ScorePill label="VCP" pts={pick.vcpPts} max={8} />
                                               <ScorePill label="C" pts={pick.confluencePts} max={5} />
                                             </div>
                                           </td>
@@ -507,12 +510,9 @@ function ScoreDistributionBar({ results }: { results: FunnelDayResult[] }) {
 // ── Score Pill ──
 
 function ScorePill({ label, pts, max }: { label: string; pts: number; max: number }) {
-  const bg = scoreBarColor(pts, max);
   return (
     <span
-      className={`inline-block rounded px-1 py-0.5 text-[9px] font-medium ${
-        pts > 0 ? `${bg}/20 text-white` : "bg-[#1a1a1a] text-[#444]"
-      }`}
+      className={`inline-block rounded px-1 py-0.5 text-[9px] font-medium ${scorePillClass(pts, max)}`}
       title={`${label}: ${pts}/${max}`}
     >
       {label}{pts > 0 ? ` ${pts}` : ""}

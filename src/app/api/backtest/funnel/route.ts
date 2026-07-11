@@ -127,6 +127,7 @@ interface FunnelPick {
   transitionPts: number;
   instPts: number;
   prerunnerPts: number;
+  vcpPts: number;
   confluencePts: number;
   presets: string[];
   prerunScore: number;
@@ -243,12 +244,11 @@ function scoreInflectionComponent(r: InflectionDailyRecord | undefined): number 
 function scoreTransitionComponent(r: TransitionDailyRecord | undefined): number {
   if (!r) return 0;
 
-  // Base by alert_state
+  // Base by alert_state — WATCH excluded (low conviction), ARMED requires score >= 35
   let pts = 0;
   if (r.alert_state === "TRIGGERED") pts = 8;
   else if (r.alert_state === "READY") pts = 6;
-  else if (r.alert_state === "ARMED") pts = 3;
-  else if (r.alert_state === "WATCH") pts = 1;
+  else if (r.alert_state === "ARMED" && r.overall_score >= 35) pts = 2;
   else return 0;
 
   // Score bonus
@@ -267,11 +267,14 @@ function scoreTransitionComponent(r: TransitionDailyRecord | undefined): number 
 function scoreInstitutionalComponent(r: InstitutionalDailyRecord | undefined): number {
   if (!r) return 0;
 
-  // Base by tier
+  // AVOID penalty — institutional flagged this as distribution/choppy/low quality
+  const cls = r.classification ?? "";
+  if (cls.startsWith("AVOID_")) return -5;
+
+  // Base by tier — SPECULATIVE excluded (noise for liquid large-caps)
   let pts = 0;
   if (r.tier === "SHORTLIST") pts = 7;
   else if (r.tier === "WATCHLIST") pts = 4;
-  else if (r.tier === "SPECULATIVE") pts = 2;
   else return 0;
 
   // Score bonus
@@ -303,6 +306,24 @@ function scorePrerunnerComponent(r: PreRunnerDailyRecord | undefined): number {
   else if (r.conviction === "MEDIUM") pts += 1;
 
   return Math.min(pts, 10);
+}
+
+function scoreVcpComponent(r: VCPDailyRecord | undefined): number {
+  if (!r) return 0;
+
+  // Base by phase
+  let pts = 0;
+  if (r.phase === "FOCUS_LIST") pts = 5;
+  else if (r.phase === "WATCHLIST") pts = 3;
+  else if (r.phase === "EARLY") pts = 1;
+  else return 0;
+
+  // Score bonus
+  if (r.total_score >= 70) pts += 3;
+  else if (r.total_score >= 50) pts += 2;
+  else if (r.total_score >= 35) pts += 1;
+
+  return Math.min(pts, 8);
 }
 
 function scoreConfluenceBonus(weightedConfluence: number): number {
@@ -398,9 +419,10 @@ function runFunnel(
     const transitionPts = scoreTransitionComponent(tr);
     const instPts = scoreInstitutionalComponent(inst);
     const prerunnerPts = scorePrerunnerComponent(prr);
+    const vcpPts = scoreVcpComponent(vcpRec);
     const confluencePts = scoreConfluenceBonus(confluence);
 
-    const compositeScore = prerunPts + inflectionPts + transitionPts + instPts + prerunnerPts + confluencePts;
+    const compositeScore = prerunPts + inflectionPts + transitionPts + instPts + prerunnerPts + vcpPts + confluencePts;
 
     // Track coverage
     if (prerunPts > 0) coveragePrerun++;
@@ -410,7 +432,7 @@ function runFunnel(
     if (prerunnerPts > 0) coveragePrerunner++;
 
     // Minimum composite score gate
-    if (compositeScore < 25) continue;
+    if (compositeScore < 30) continue;
 
     // Build presets list
     const presets: string[] = [];
@@ -440,6 +462,7 @@ function runFunnel(
       transitionPts,
       instPts,
       prerunnerPts,
+      vcpPts,
       confluencePts,
       presets,
       prerunScore: pr?.final_score ?? 0,
@@ -466,12 +489,24 @@ function runFunnel(
     return b.rsAccel - a.rsAccel;
   });
 
-  // Cap at 15, strip rsAccel
-  const picks: Omit<FunnelPick, "forward">[] = scored.slice(0, 15).map(({ rsAccel: _, ...rest }) => rest);
+  // Cap at 15 with max 3 per sector, strip rsAccel
+  const MAX_PICKS = 15;
+  const MAX_PER_SECTOR = 3;
+  const sectorCounts = new Map<string, number>();
+  const picks: Omit<FunnelPick, "forward">[] = [];
+  for (const { rsAccel: _, ...rest } of scored) {
+    if (picks.length >= MAX_PICKS) break;
+    const sec = rest.sector || "Unknown";
+    const count = sectorCounts.get(sec) ?? 0;
+    if (count >= MAX_PER_SECTOR) continue;
+    sectorCounts.set(sec, count + 1);
+    picks.push(rest);
+  }
 
   const qualifiedCount = scored.length;
-  const avgScore = qualifiedCount > 0
-    ? scored.reduce((a, b) => a + b.compositeScore, 0) / qualifiedCount
+  // avgCompositeScore reflects the picked stocks, not all qualified
+  const avgScore = picks.length > 0
+    ? picks.reduce((a, b) => a + b.compositeScore, 0) / picks.length
     : 0;
 
   return {
