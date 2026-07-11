@@ -78,14 +78,18 @@ All cron scanners and the sector rotation stock enrichment share a universal qua
 **Scanner gate** (`passesUniverseQualityGates()` in `src/lib/prerun/scoring.ts`):
 | Check | Threshold | Field |
 |-------|-----------|-------|
-| Price | >= $15 | `currentPrice` |
+| Price | >= $10 | `currentPrice` |
 | Price | <= $1000 (except Semiconductors) | `currentPrice` |
 | Market cap | >= $8B | `marketCap` |
 | Dollar volume | >= $100M/day | `vcpAvgDollarVolume` (50d avg) |
 | Data quality | >= 40% | `dataQuality` (% of API calls that succeeded) |
+| Max ATR% 60d | >= 1.2% | `maxAtrPct60d` (max ATR(14)/close over ~60 trading days) |
+
+**Persistent non-scorer gate** (applied BEFORE `fetchPreRunData` in cron routes):
+Loads all distinct tickers from 7 scanner tables (`loadAllScoredTickers()` in `persistence.ts`). If a ticker has never appeared in any scanner result during the 14-day retention window, it is skipped entirely (no API call). Safety: only activates when `scoredTickers.size > 50` (prevents empty-DB edge case from filtering everything). Applied in 5 cron routes: PreRun preset, PreRun 4h, Inflection, Transition, VCP.
 
 **Sector rotation gate** (`applyQualityGates()` in `src/lib/sector-rotation/stock-enrichment.ts`):
-Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MAX_PRICE: 1000 (except Semiconductors)`, `MIN_MARKET_CAP: 8B`, `MIN_DOLLAR_VOLUME: 100M`. Plus existing gates (volume spike, extension, institutional %, trend, sector correlation).
+Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 10`, `MAX_PRICE: 1000 (except Semiconductors)`, `MIN_MARKET_CAP: 8B`, `MIN_DOLLAR_VOLUME: 100M`. Plus existing gates (volume spike, extension, institutional %, trend, sector correlation).
 
 **Applied in 6 cron routes:** PreRun preset, PreRun 4h, Inflection, Transition, VCP, Institutional. NOT applied to single-ticker API routes (explicit user lookups) or PreRunner (uses `computePreRunnerRadar()`).
 
@@ -93,7 +97,8 @@ Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MAX_PRICE:
 - **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS (~615 unique tickers)
 - **SP400 dropped:** Removed from all scan universes. Notable SP400 stocks rescued to ADDITIONAL_MEMBERS.
 - **NDX100 updated:** Reflects June 22, 2026 quarterly rebalance (added ALAB, ALNY, CRWV, NBIS, RKLB, TER; removed CHTR, CTSH, VRSK, ZS)
-- **Universal quality gate:** Filters ~100+ stocks before scoring (price < $15, mcap < $8B, dollarVol < $100M, dataQuality < 40%)
+- **Universal quality gate:** Filters ~100+ stocks before scoring (price < $10, mcap < $8B, dollarVol < $100M, dataQuality < 40%, maxAtrPct60d < 1.2%)
+- **Non-scorer gate:** Skips tickers never seen in any scanner table (saves API calls). Loaded once at cron start via `loadAllScoredTickers()`.
 - **Vercel limit:** 300s maxDuration, 240s time guard for Telegram
 - **Single-pass system:** ~615 tickers typically fits in one pass. Resume pass available if needed.
 - **4h scanner:** May still need 2 passes (larger Yahoo 2y:1h chart responses slow each ticker)
@@ -122,8 +127,8 @@ Non-index stocks added to the scan universe for momentum/breakout relevance. Def
 ### Preset Qualification Criteria
 | Preset | Key Criteria |
 |--------|-------------|
-| SNDK | pctFromAth >= 40, shortFloat >= 15, finalScore >= 18 |
-| Early Mover | pctFromAth >= 25, finalScore >= 14, M2+L+F all >= 1 |
+| SNDK | pctFromAth >= 40 *(stale 2-6d)*, shortFloat >= 15 *(stale 14-35d FINRA)*, finalScore >= 18, scoreF >= 1 *(fresh EOD)* |
+| Early Mover | pctFromAth >= 25 *(stale 2-6d)*, finalScore >= 14 (daily) / >= 16 (4h), M2+L+F all >= 1 *(fresh EOD)* |
 | Pullback | pctFromAth <= 40, finalScore >= 15, 2/3 of (M2, F, L) >= 1 |
 | Leading | finalScore >= 15 (daily) / >= 18 (4h), M >= 1, J >= 1, quadrant LEADING/IMPROVING |
 | Stealth | finalScore >= 11, M2 >= 1, OBV divergent or VP bullish |

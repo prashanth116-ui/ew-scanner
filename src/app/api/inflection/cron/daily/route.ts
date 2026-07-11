@@ -9,6 +9,7 @@ import { getSectorForTicker } from "@/data/prerun-universe";
 import {
   upsertInflectionDaily,
   purgeOldInflectionDaily,
+  loadAllScoredTickers,
 } from "@/lib/supabase/persistence";
 import type { InflectionDailyRecord } from "@/lib/supabase/persistence";
 import type { InflectionResult } from "@/lib/prerun/types";
@@ -62,8 +63,12 @@ export async function GET(request: NextRequest) {
     const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...ADDITIONAL_MEMBERS])];
     const today = new Date().toISOString().slice(0, 10);
 
-    // Pre-warm sector ETF cache
-    await prefetchSectorETFs();
+    // Pre-warm sector ETF cache + load historically-scored tickers
+    const [, scoredTickers] = await Promise.all([
+      prefetchSectorETFs(),
+      loadAllScoredTickers(),
+    ]);
+    const hasHistory = scoredTickers.size > 50;
 
     const qualifying: InflectionResult[] = [];
     let pendingRecords: InflectionDailyRecord[] = [];
@@ -75,6 +80,8 @@ export async function GET(request: NextRequest) {
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
+          // Persistent non-scorer gate: skip tickers never seen in any scanner
+          if (hasHistory && !scoredTickers.has(ticker)) return null;
           const data = await fetchPreRunData(ticker);
           if (!data) return null;
           if (!passesUniverseQualityGates(data, ticker)) return null;

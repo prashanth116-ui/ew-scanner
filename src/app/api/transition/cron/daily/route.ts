@@ -10,6 +10,7 @@ import {
   upsertTransitionDaily,
   purgeOldTransitionDaily,
   clearTransitionDaily,
+  loadAllScoredTickers,
 } from "@/lib/supabase/persistence";
 import type { TransitionDailyRecord } from "@/lib/supabase/persistence";
 import type { TransitionResult } from "@/lib/prerun/types";
@@ -72,8 +73,12 @@ export async function GET(request: NextRequest) {
       cleared = await clearTransitionDaily(today);
     }
 
-    // Pre-warm sector ETF cache
-    await prefetchSectorETFs();
+    // Pre-warm sector ETF cache + load historically-scored tickers
+    const [, scoredTickers] = await Promise.all([
+      prefetchSectorETFs(),
+      loadAllScoredTickers(),
+    ]);
+    const hasHistory = scoredTickers.size > 50;
 
     const qualifying: TransitionResult[] = [];
     let pendingRecords: TransitionDailyRecord[] = [];
@@ -88,6 +93,8 @@ export async function GET(request: NextRequest) {
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
+          // Persistent non-scorer gate: skip tickers never seen in any scanner
+          if (hasHistory && !scoredTickers.has(ticker)) return null;
           const data = await fetchPreRunData(ticker);
           if (!data) return null;
           if (!passesUniverseQualityGates(data, ticker)) return null;

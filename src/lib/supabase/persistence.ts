@@ -1992,3 +1992,34 @@ export async function loadTransitionDailyMulti(
     return [];
   }
 }
+
+// ── Cross-Scanner Helpers ──
+
+/** Load all distinct tickers that have appeared in ANY scanner table.
+ *  Used by cron routes to skip persistent non-scorers.
+ *  Returns empty set on error (fail-open: scan everything). */
+export async function loadAllScoredTickers(): Promise<Set<string>> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return new Set();
+
+    const [r1, r2, r3, r4, r5, r6, r7] = await Promise.all([
+      supabase.from("prerun_daily").select("ticker").limit(5000),
+      supabase.from("prerun_4h_daily").select("ticker").limit(5000),
+      supabase.from("inflection_daily").select("ticker").limit(5000),
+      supabase.from("vcp_daily").select("ticker").limit(5000),
+      supabase.from("institutional_daily").select("ticker").limit(5000),
+      supabase.from("transition_daily").select("ticker").limit(5000),
+      supabase.from("prerunner_daily").select("ticker").limit(5000),
+    ]);
+
+    const all = new Set<string>();
+    for (const r of [r1, r2, r3, r4, r5, r6, r7]) {
+      if (r.data) for (const row of r.data) all.add(row.ticker as string);
+    }
+    return all;
+  } catch (err) {
+    console.error("[persistence] loadAllScoredTickers exception:", err);
+    return new Set();
+  }
+}

@@ -76,6 +76,7 @@ function makeData(overrides: Partial<PreRunStockData> = {}): PreRunStockData {
     vcpDistFromSma50Pct: null,
     vcpDistFromSma200Pct: null,
     vcpAtrPct: null,
+    maxAtrPct60d: null,
     vcpRange5d: null,
     vcpRange10d: null,
     vcpRange20d: null,

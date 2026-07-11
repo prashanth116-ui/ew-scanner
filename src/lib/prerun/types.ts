@@ -105,6 +105,7 @@ export interface PreRunStockData {
   vcpDistFromSma50Pct: number | null;
   vcpDistFromSma200Pct: number | null;
   vcpAtrPct: number | null;
+  maxAtrPct60d: number | null;         // Max ATR(14)% over last ~60 trading days (quality gate)
   vcpRange5d: number | null;
   vcpRange10d: number | null;
   vcpRange20d: number | null;

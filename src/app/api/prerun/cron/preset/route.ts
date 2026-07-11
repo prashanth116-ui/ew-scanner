@@ -19,6 +19,7 @@ import {
   purgeOldQFEDaily,
   clearQFEDaily,
   loadQFEDaily,
+  loadAllScoredTickers,
 } from "@/lib/supabase/persistence";
 import type { PreRunDailyRecord, QFEDailyRecord } from "@/lib/supabase/persistence";
 import type { PreRunResult } from "@/lib/prerun/types";
@@ -42,11 +43,23 @@ function computePresetFlags(
   const shortFloat = d.shortFloat ?? 0;
 
   return {
-    sndk: pctFromAth >= 40 && shortFloat >= 15 && s.finalScore >= 18,
+    // SNDK: Squeeze recovery — deep discount + heavy shorts + technical readiness + volume confirmation
+    // pctFromAth (stale 2-6d, weekly chart) | shortFloat (stale 14-35d, FINRA bi-monthly) | finalScore (~50% fresh EOD technicals)
+    sndk: pctFromAth >= 40 && shortFloat >= 15 && s.finalScore >= 18 && s.scoreF >= 1,
+    // Early Mover: Beaten-down + EMA timing + structure + volume
+    // pctFromAth (stale 2-6d) | M2,L,F all fresh EOD
     early_mover: pctFromAth >= 25 && s.finalScore >= 14 && s.scoreM2 >= 1 && s.scoreL >= 1 && s.scoreF >= 1,
+    // Pullback: Near-ATH + strong score + 2/3 technical confirmation
+    // pctFromAth (stale 2-6d) | M2,F,L all fresh EOD
     pullback: pctFromAth <= 40 && s.finalScore >= 15 && [s.scoreM2 >= 1, s.scoreF >= 1, s.scoreL >= 1].filter(Boolean).length >= 2,
+    // Leading: High score + momentum + RS + favorable sector rotation
+    // quadrant from sector_snapshots (stale up to 24h) | M,J fresh EOD
     leading: s.finalScore >= 15 && s.scoreM >= 1 && s.scoreJ >= 1 && (quadrant === "LEADING" || quadrant === "IMPROVING"),
+    // Stealth: Moderate score + EMA timing + hidden accumulation divergence
+    // obvDivergent, vpDivergenceBullish fresh EOD | M2 fresh EOD
     stealth: s.finalScore >= 11 && s.scoreM2 >= 1 && (d.obvDivergent === true || d.vpDivergenceBullish === true),
+    // Early+: Low floor + EMA timing + range coil + divergence
+    // All fresh EOD signals
     early_plus: s.finalScore >= 10 && s.scoreM2 >= 1 && s.scoreN >= 1 && (d.obvDivergent === true || d.vpDivergenceBullish === true),
   };
 }
@@ -247,11 +260,13 @@ export async function GET(request: NextRequest) {
       console.log(`[prerun-daily] resume mode: skipping ${skippedCount} already-scanned tickers, ${scanUniverse.length} remaining`);
     }
 
-    // Pre-warm sector ETF cache + load sector quadrants
-    const [, sectorQuadrants] = await Promise.all([
+    // Pre-warm sector ETF cache + load sector quadrants + load historically-scored tickers
+    const [, sectorQuadrants, scoredTickers] = await Promise.all([
       prefetchSectorETFs(),
       loadSectorQuadrants(),
+      loadAllScoredTickers(),
     ]);
+    const hasHistory = scoredTickers.size > 50;
 
     // Compute market environment ONCE (1 extra API call for SPY 1y)
     let marketEnv: MarketEnvironment;
@@ -290,6 +305,8 @@ export async function GET(request: NextRequest) {
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
+          // Persistent non-scorer gate: skip tickers never seen in any scanner
+          if (hasHistory && !scoredTickers.has(ticker)) return null;
           const data = await fetchPreRunData(ticker);
           if (!data) return null;
           if (!passesUniverseQualityGates(data, ticker)) return null;

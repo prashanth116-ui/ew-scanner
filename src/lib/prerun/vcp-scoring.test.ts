@@ -84,6 +84,7 @@ function makeVCPData(overrides: Partial<PreRunStockData> = {}): PreRunStockData 
     vcpDistFromSma50Pct: 5.88,
     vcpDistFromSma200Pct: 20,
     vcpAtrPct: 1.8,
+    maxAtrPct60d: null,
     vcpRange5d: 2.5,
     vcpRange10d: 4.0,
     vcpRange20d: 6.0,

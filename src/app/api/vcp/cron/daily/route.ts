@@ -11,6 +11,7 @@ import {
   purgeOldVCPDaily,
   loadVCPDailyDates,
   loadVCPDaily,
+  loadAllScoredTickers,
 } from "@/lib/supabase/persistence";
 import type { VCPDailyRecord } from "@/lib/supabase/persistence";
 import type { VCPResult } from "@/lib/prerun/types";
@@ -65,7 +66,11 @@ export async function GET(request: NextRequest) {
     const universe = [...new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...ADDITIONAL_MEMBERS])];
     const today = new Date().toISOString().slice(0, 10);
 
-    await prefetchSectorETFs();
+    const [, scoredTickers] = await Promise.all([
+      prefetchSectorETFs(),
+      loadAllScoredTickers(),
+    ]);
+    const hasHistory = scoredTickers.size > 50;
 
     const qualifying: VCPDailyRecord[] = [];
     let pendingRecords: VCPDailyRecord[] = [];
@@ -77,6 +82,8 @@ export async function GET(request: NextRequest) {
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
+          // Persistent non-scorer gate: skip tickers never seen in any scanner
+          if (hasHistory && !scoredTickers.has(ticker)) return null;
           const data = await fetchPreRunData(ticker);
           if (!data) return null;
           if (!passesUniverseQualityGates(data, ticker)) return null;

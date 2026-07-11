@@ -1829,6 +1829,7 @@ export async function fetchPreRunData(
   let vcpDistFromSma50Pct: number | null = null;
   let vcpDistFromSma200Pct: number | null = null;
   let vcpAtrPct: number | null = null;
+  let maxAtrPct60d: number | null = null;
   let vcpRange5d: number | null = null;
   let vcpRange10d: number | null = null;
   let vcpRange20d: number | null = null;
@@ -1863,6 +1864,18 @@ export async function fetchPreRunData(
     const lastAtr = atrArr.length > 0 ? atrArr[atrArr.length - 1] : 0;
     if (currentPrice > 0 && lastAtr > 0) {
       vcpAtrPct = (lastAtr / currentPrice) * 100;
+    }
+
+    // Max ATR% over last ~60 trading days (for quality gate)
+    if (atrArr.length > 0) {
+      let maxPct = 0;
+      for (let i = 0; i < atrArr.length; i++) {
+        if (atrArr[i] > 0 && closes[i] > 0) {
+          const pct = (atrArr[i] / closes[i]) * 100;
+          if (pct > maxPct) maxPct = pct;
+        }
+      }
+      if (maxPct > 0) maxAtrPct60d = maxPct;
     }
 
     // ATR multiple above 50 SMA
@@ -2199,6 +2212,7 @@ export async function fetchPreRunData(
     vcpDistFromSma50Pct,
     vcpDistFromSma200Pct,
     vcpAtrPct,
+    maxAtrPct60d,
     vcpRange5d,
     vcpRange10d,
     vcpRange20d,
