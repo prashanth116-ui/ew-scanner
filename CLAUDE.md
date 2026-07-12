@@ -134,7 +134,7 @@ Non-index stocks added to the scan universe for momentum/breakout relevance. Def
 | SNDK | pctFromAth >= 40 *(stale 2-6d)*, shortFloat >= 15 *(stale 14-35d FINRA)*, finalScore >= 18, scoreF >= 1 *(fresh EOD)* |
 | Early Mover | pctFromAth >= 25 *(stale 2-6d)*, finalScore >= 14 (daily) / >= 16 (4h), M2+L+F all >= 1 *(fresh EOD)* |
 | Pullback | pctFromAth <= 40 *(stale 2-6d)*, finalScore >= 17 (daily) / >= 18 (4h), F >= 1 + L >= 1 *(both fresh EOD)* — M2 intentionally excluded (late signal) |
-| Leading | finalScore >= 18 (daily) / >= 20 (4h), M >= 1, J >= 1, F >= 1 *(fresh EOD)*, quadrant LEADING only *(stale up to 24h)* |
+| Leading | finalScore >= 18 (daily) / >= 20 (4h), M >= 1, J >= 1, F >= 1 *(fresh EOD)*, quadrant LEADING or IMPROVING *(stale up to 24h)* — UI toggle for score 20+ filter |
 | Stealth | finalScore >= 14 (daily) / >= 15 (4h), M2 >= 1, OBV divergent or VP bullish *(all fresh EOD)* |
 | Early+ | **Deprecated** — merged into Stealth (was 100% redundant). DB flag kept for schema compat. |
 

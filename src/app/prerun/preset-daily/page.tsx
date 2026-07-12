@@ -92,7 +92,7 @@ const PRESET_DESCRIPTIONS: Record<Preset, string> = {
   sndk: "40%+ from ATH, 15%+ SI, score 18+, volume confirmed",
   early_mover: "25%+ from ATH, EMA timing + higher lows + volume",
   pullback: "Up to 40% pullback, volume accumulation + higher lows",
-  leading: "LEADING sector quadrant, score 18+, EMA + RS + volume",
+  leading: "LEADING/IMPROVING quadrant, score 18+, EMA + RS + volume",
   stealth: "OBV/VP divergence + EMA timing (includes former Early+)",
   early_plus: "(Deprecated — merged into Stealth)",
 };
@@ -266,6 +266,7 @@ export default function PreRunPresetDailyPage() {
   const [showDropped, setShowDropped] = useState(false);
   const [copied, setCopied] = useState(false);
   const [allResults, setAllResults] = useState<PreRunDailyRow[]>([]);
+  const [leadingFloor, setLeadingFloor] = useState<18 | 20>(18);
 
   useEffect(() => {
     async function init() {
@@ -357,6 +358,7 @@ export default function PreRunPresetDailyPage() {
 
   const filtered = useMemo(() => {
     let rows = results;
+    if (preset === "leading" && leadingFloor > 18) rows = rows.filter((r) => r.final_score >= leadingFloor);
     if (minScore > 0) rows = rows.filter((r) => r.final_score >= minScore);
     if (tickerSearch.trim()) {
       const q = tickerSearch.trim().toUpperCase();
@@ -378,7 +380,7 @@ export default function PreRunPresetDailyPage() {
       else cmp = b.final_score - a.final_score;
       return sortAsc ? -cmp : cmp;
     });
-  }, [results, minScore, tickerSearch, sortField, sortAsc, streaks, deltas]);
+  }, [results, minScore, tickerSearch, sortField, sortAsc, streaks, deltas, preset, leadingFloor]);
 
   const newTodayCount = Object.values(streaks).filter((s) => s === 1).length;
 
@@ -487,6 +489,32 @@ export default function PreRunPresetDailyPage() {
       </div>
 
       <p className="text-[10px] text-[#555] mb-4">{PRESET_DESCRIPTIONS[preset]}</p>
+
+      {/* Leading floor toggle */}
+      {preset === "leading" && (
+        <div className="flex items-center gap-1 mb-4">
+          <button
+            onClick={() => setLeadingFloor(18)}
+            className={`px-2.5 py-1 rounded-l text-[10px] font-medium transition-colors border ${
+              leadingFloor === 18
+                ? "bg-white text-black border-white"
+                : "bg-[#1a1a1a] text-[#a0a0a0] border-[#2a2a2a] hover:text-white"
+            }`}
+          >
+            All ({results.length})
+          </button>
+          <button
+            onClick={() => setLeadingFloor(20)}
+            className={`px-2.5 py-1 rounded-r text-[10px] font-medium transition-colors border ${
+              leadingFloor === 20
+                ? "bg-white text-black border-white"
+                : "bg-[#1a1a1a] text-[#a0a0a0] border-[#2a2a2a] hover:text-white"
+            }`}
+          >
+            Score 20+ ({results.filter(r => r.final_score >= 20).length})
+          </button>
+        </div>
+      )}
 
       {/* Multi-Preset Overlap */}
       {overlapTickers.length > 0 && (
