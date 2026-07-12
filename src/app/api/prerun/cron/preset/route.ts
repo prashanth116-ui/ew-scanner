@@ -53,9 +53,9 @@ function computePresetFlags(
     // pctFromAth (stale 2-6d) | F (volume, fresh EOD) + L (higher lows, fresh EOD)
     // M2 intentionally NOT required — EMA timing is a late signal, wrong for early pullback recovery
     pullback: pctFromAth <= 40 && s.finalScore >= 17 && s.scoreF >= 1 && s.scoreL >= 1,
-    // Leading: High score + momentum + RS + volume + LEADING sector quadrant only
+    // Leading: High score + momentum + RS + volume + LEADING or IMPROVING quadrant
     // quadrant from sector_snapshots (stale up to 24h) | M,J,F fresh EOD
-    leading: s.finalScore >= 18 && s.scoreM >= 1 && s.scoreJ >= 1 && s.scoreF >= 1 && quadrant === "LEADING",
+    leading: s.finalScore >= 18 && s.scoreM >= 1 && s.scoreJ >= 1 && s.scoreF >= 1 && (quadrant === "LEADING" || quadrant === "IMPROVING"),
     // Stealth: Hidden accumulation — EMA timing + OBV/VP divergence (all fresh EOD)
     // Merged with former Early+ preset (Early+ was 100% redundant)
     stealth: s.finalScore >= 14 && s.scoreM2 >= 1 && (d.obvDivergent === true || d.vpDivergenceBullish === true),
