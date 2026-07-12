@@ -111,17 +111,17 @@ export const QUALITY_GATES = {
   /** Maximum stock price ($) — excludes ultra-high-price stocks (except Semiconductors) */
   MAX_PRICE: 1000,
   /** Minimum market cap ($) */
-  MIN_MARKET_CAP: 15_000_000_000,
+  MIN_MARKET_CAP: 8_000_000_000,
   /** Minimum average daily dollar volume ($) */
   MIN_DOLLAR_VOLUME: 150_000_000,
   /** Minimum average daily volume */
-  MIN_AVG_VOLUME: 1_500_000,
+  MIN_AVG_VOLUME: 1_000_000,
   /** Maximum volume spike ratio */
   MAX_VOLUME_SPIKE: 5,
   /** Maximum % extension above 200d SMA */
   MAX_EXTENSION_PCT: 80,
-  /** Minimum institutional ownership % */
-  MIN_INSTITUTIONAL_PCT: 30,
+  /** Minimum institutional ownership % (low threshold: ADRs report artificially low via Yahoo) */
+  MIN_INSTITUTIONAL_PCT: 5,
   /** RS accel threshold for turnaround signal */
   TURNAROUND_RS_ACCEL: 0.5,
   /** Volume ratio for turnaround confirmation */
