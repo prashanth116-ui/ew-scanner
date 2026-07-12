@@ -89,7 +89,10 @@ All cron scanners and the sector rotation stock enrichment share a universal qua
 Loads all distinct tickers from 7 scanner tables (`loadAllScoredTickers()` in `persistence.ts`). If a ticker has never appeared in any scanner result during the 14-day retention window, it is skipped entirely (no API call). Safety: only activates when `scoredTickers.size > 50` (prevents empty-DB edge case from filtering everything). Applied in 5 cron routes: PreRun preset, PreRun 4h, Inflection, Transition, VCP.
 
 **Sector rotation gate** (`applyQualityGates()` in `src/lib/sector-rotation/stock-enrichment.ts`):
-Same thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 10`, `MAX_PRICE: 1000 (except Semiconductors)`, `MIN_MARKET_CAP: 8B`, `MIN_DOLLAR_VOLUME: 100M`. Plus existing gates (volume spike, extension, institutional %, trend, sector correlation).
+Thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MAX_PRICE: 1000 (except Semiconductors)`, `MIN_MARKET_CAP: 15B`, `MIN_DOLLAR_VOLUME: 150M`, `MIN_AVG_VOLUME: 1.5M`. Plus existing gates (volume spike, extension, institutional %, trend, sector correlation). Additional gates: `APPLY_SCAN_EXCLUSIONS: true` rejects the 133 SCAN_EXCLUSIONS tickers before any other gate check; `REJECT_NULL_MARKET_CAP: true` fails stocks with null market cap (aligns with PreRun treating null as 0). SCAN_EXCLUSIONS also applied upstream in `sector-rotation.ts` (pre-filters batch quote list) and `rotation-tracker.ts` (filters stock symbols before chart fetches).
+
+**Rotation tracker gate** (`fetchStockPerformance()` in `src/lib/sector-rotation/rotation-tracker.ts`):
+Lightweight pre-filter before fetching 6mo charts: `price >= MIN_PRICE ($10)`, `dollarVol >= MIN_DOLLAR_VOLUME ($100M)`. Plus SCAN_EXCLUSIONS filtering when collecting stock symbols. Saves chart API calls for low-quality stocks.
 
 **Applied in 6 cron routes:** PreRun preset, PreRun 4h, Inflection, Transition, VCP, Institutional. NOT applied to single-ticker API routes (explicit user lookups) or PreRunner (uses `computePreRunnerRadar()`).
 
@@ -267,7 +270,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | Cross-Asset | 5 | GLD, TLT, HYG, EEM, UUP |
 | Leadership Baskets | 4 | MAGS, QQQ, IWM, ARKK |
 
-**Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment. Acceleration uses fixed-range normalization (clamped to `COMPOSITE.ACCEL_NORM_FLOOR` / `ACCEL_NORM_CEILING`, default [-10, 10]) instead of min-max, preventing inflation during broad deterioration. Momentum composite weights are graduated (`SCORING_SIGNALS.MOMENTUM_WEIGHTS`: 63d=0.35, 126d=0.25, 189d=0.25, 252d=0.15). Stock enrichment applies universal quality gates (price >= $15, mcap >= $8B, dollarVol >= $100M) plus sector-specific gates (volume spike, extension, institutional %, trend, correlation). Null gate bypasses (marketCap/institutional/ret20d) are tracked via `dataWarnings` on `EnrichedStock`.
+**Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment. Acceleration uses fixed-range normalization (clamped to `COMPOSITE.ACCEL_NORM_FLOOR` / `ACCEL_NORM_CEILING`, default [-10, 10]) instead of min-max, preventing inflation during broad deterioration. Momentum composite weights are graduated (`SCORING_SIGNALS.MOMENTUM_WEIGHTS`: 63d=0.35, 126d=0.25, 189d=0.25, 252d=0.15). Stock enrichment applies universal quality gates (price >= $15, mcap >= $15B, dollarVol >= $150M, avgVol >= 1.5M) plus sector-specific gates (volume spike, extension, institutional %, trend, correlation), SCAN_EXCLUSIONS filtering, and null market cap rejection. Remaining null gate bypasses (institutional/ret20d) are tracked via `dataWarnings` on `EnrichedStock`.
 
 **Centralized Config:** All thresholds live in `src/lib/sector-rotation/config.ts`. Sections: REGIME, COMPOSITE, ROTATION, QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, CLASSIFICATION, SCORING_SIGNALS, ROTATION_LIFECYCLE, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS, PRERUNNER, CRYPTO_WEIGHTS, PREMARKET_SCORING, POLICY_PULSE. **Never hardcode thresholds** — always add to config.ts and import.
 
@@ -277,7 +280,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | `src/lib/sector-rotation/config.ts` | All thresholds and scoring breakpoints |
 | `src/lib/sector-rotation/sector-rotation.ts` | Main scoring engine — `calculateSectorRotation()` |
 | `src/lib/sector-rotation/stock-enrichment.ts` | Stock quality gates, classification (LEADER/CATCH_UP/TURNAROUND/AVOID), phase (P1-P4), conviction scoring, null-data warnings |
-| `src/lib/sector-rotation/rotation-tracker.ts` | Active rotation detection — signal history, lifecycle stages (config-driven SMA periods, batch sizes) |
+| `src/lib/sector-rotation/rotation-tracker.ts` | Active rotation detection — signal history, lifecycle stages (config-driven SMA periods, batch sizes), stock quality gates (price, dollarVol, SCAN_EXCLUSIONS) |
 | `src/lib/sector-rotation/rotation-helpers.ts` | Lifecycle stage (with soft exhaustion zone at `EXHAUSTING_SOFT_DAYS`), conviction level, action signals |
 | `src/lib/sector-rotation/regime.ts` | Macro regime classification (RISK_ON/OFF/INFLATIONARY/MIXED) with adaptive VIX bounds. All regimes have favored/avoid sectors (MIXED favors Health Care, Financials). |
 | `src/lib/sector-rotation/brief.ts` | Market posture (AGGRESSIVE/SELECTIVE/DEFENSIVE/CASH), sector tiers, risk flags. `computeMarketPosture()` and `computeRiskFlags()` accept optional pre-computed `LeadershipHealth` to avoid duplicate computation. |
@@ -411,7 +414,9 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 | `REGIME` | `DXY_TREND_THRESHOLD: 1` (absolute point change, not percentage) |
 | `CLASSIFICATION` | `P4_RS_ACCEL`, `P4_SECTOR_ACCEL` (both must be negative — AND logic), `P3_MIN_VOL_RATIO` |
 
-Other sections: QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS.
+| `QUALITY_GATES` | `REJECT_NULL_MARKET_CAP: true` (null mcap = fail), `APPLY_SCAN_EXCLUSIONS: true` (133-ticker exclusion filter for enrichment + rotation tracker) |
+
+Other sections: CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS.
 
 ### Stock Enrichment Phase Classification
 Stocks passing quality gates are classified into phases in `stock-enrichment.ts`:
@@ -423,7 +428,7 @@ Stocks passing quality gates are classified into phases in `stock-enrichment.ts`
 | P2_TURNAROUND | Above 50MA, positive accel, low volume (fallback) OR below 50MA with positive RS accel + volume | Above-50MA low-volume stocks use P2 (not P1 — can't be "basing" above 50MA) |
 | P1_BASING | Below 50MA (fallback) | Early recovery, below key moving average |
 
-Null-data tracking: when `marketCap`, `institutionalPct`, or `ret20d` are null, the corresponding quality gates are bypassed (defensible — don't reject on missing data) but tracked via `dataWarnings: string[]` on `EnrichedStock`.
+Null-data tracking: `marketCap` null is now rejected (when `REJECT_NULL_MARKET_CAP` is true in config, aligns with PreRun treating null as 0). When `institutionalPct` or `ret20d` are null, the corresponding quality gates are bypassed (defensible — don't reject on missing data) but tracked via `dataWarnings: string[]` on `EnrichedStock`.
 
 ### Trading Action Logic
 `getTradingAction()` in `src/app/sectors/_components/helpers.ts` maps sector quadrant + composite + acceleration to actions:
