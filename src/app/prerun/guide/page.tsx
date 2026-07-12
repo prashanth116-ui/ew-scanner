@@ -719,39 +719,126 @@ export default function PreRunGuidePage() {
         {/* Universe & Sector Buckets */}
         <Section icon={Zap} title="Universe &amp; Sector Buckets">
           <p>
-            The scan universe covers <strong className="text-white">~1,390 stocks</strong> sourced
-            from the squeeze universe (S&amp;P 500 + S&amp;P 400 MidCap + S&amp;P 600 SmallCap highlights).
-            Each stock is mapped to one of 13 GICS sectors, with unmapped stocks in an &ldquo;Other&rdquo; bucket.
+            The nightly scan universe covers <strong className="text-white">~467 stocks</strong> built from:
           </p>
-          <div className="mt-3 overflow-x-auto">
+          <ul className="list-disc pl-4 space-y-1 text-xs text-[#c0c0c0] mt-2">
+            <li><strong className="text-white">S&amp;P 500</strong> (~500 tickers)</li>
+            <li><strong className="text-white">NDX 100</strong> (~100 tickers, updated quarterly)</li>
+            <li><strong className="text-white">ADDITIONAL_MEMBERS</strong> (86 curated non-index stocks with momentum/breakout relevance)</li>
+            <li className="text-red-400"><strong className="text-red-300">minus SCAN_EXCLUSIONS</strong> (133 structurally boring stocks removed)</li>
+          </ul>
+          <p className="mt-2 text-xs text-[#666]">
+            SP400 MidCap was dropped from the scan universe. Notable SP400 stocks with momentum characteristics
+            were rescued to ADDITIONAL_MEMBERS.
+          </p>
+
+          <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-[#5ba3e6]">
+            ADDITIONAL_MEMBERS (86 curated tickers)
+          </h3>
+          <p className="mt-1 text-xs text-[#a0a0a0]">
+            Non-index stocks added for momentum/breakout relevance. Reviewed quarterly.
+          </p>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2a2a2a] text-[#666]">
+                  <th className="py-1.5 pr-3 text-left font-medium">Category</th>
+                  <th className="py-1.5 text-left font-medium">Tickers</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#c0c0c0]">
+                {[
+                  { cat: "Tech / Software / Cloud", tickers: "TSM, SNOW, NET, MDB, HUBS, IOT, CYBR, MNDY, PSTG, TWLO, OKTA, NTNX, GTLB, S, ESTC, TOST, ZS, TTAN" },
+                  { cat: "Consumer / E-commerce", tickers: "SHOP, SPOT, RBLX, DKNG, ONON, CAVA, CPNG, SE, CHWY" },
+                  { cat: "Fintech / Payments / Crypto", tickers: "NU, XYZ, SOFI, AFRM, CRCL" },
+                  { cat: "Social / Media", tickers: "PINS, SNAP, RDDT, ZG, ROKU, ZM" },
+                  { cat: "Healthcare / Biotech", tickers: "NVO, NTRA, HALO, INSM, BMRN, VKTX, SRPT, TEM" },
+                  { cat: "Industrials / Defense", tickers: "HEI, BAH, ASTS" },
+                  { cat: "Energy / Materials", tickers: "CCJ, SCCO, ENPH, AA" },
+                  { cat: "Large ADRs", tickers: "SAP, GSK, BHP, RIO, BABA, JD, LI, BIDU" },
+                  { cat: "Recent IPOs / Momentum", tickers: "MDLN, VIK, QNT, IONQ" },
+                  { cat: "Notable ex-SP400", tickers: "MANH, DUOL, RBRK, MDGL, WING, CROX, DKS, ETSY, MOD, POWL, IESC, FND, NBIX, UTHR, CYTK, LNTH, ITCI, THC, SFM, GLOB, CART" },
+                ].map((r) => (
+                  <tr key={r.cat} className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{r.cat}</td>
+                    <td className="py-1.5 text-[10px]">{r.tickers}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-red-400">
+            SCAN_EXCLUSIONS (133 tickers removed)
+          </h3>
+          <p className="mt-1 text-xs text-[#a0a0a0]">
+            Structurally boring stocks excluded from scanning &mdash; ultra-low ATR%, secular decline, or utility-like behavior.
+          </p>
+          <div className="mt-2 overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-[#2a2a2a] text-[#666]">
                   <th className="py-1.5 pr-3 text-left font-medium">Sector</th>
-                  <th className="py-1.5 pr-3 text-right font-medium">Stocks</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Count</th>
+                  <th className="py-1.5 text-left font-medium">Examples</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#c0c0c0]">
+                {[
+                  { sector: "Utilities", count: 22, examples: "AEE, AEP, D, DUK, SO, WEC..." },
+                  { sector: "Real Estate", count: 20, examples: "ARE, AVB, O, PSA, VICI..." },
+                  { sector: "Industrials", count: 20, examples: "ROL, RSG, WM, UPS, ITW..." },
+                  { sector: "Financials", count: 18, examples: "BEN, AFL, AIG, MET, USB..." },
+                  { sector: "Consumer Staples", count: 14, examples: "ADM, CL, GIS, KHC, MO..." },
+                  { sector: "Health Care", count: 12, examples: "JNJ, PFE, CVS, BAX, MDT..." },
+                  { sector: "Consumer Disc", count: 11, examples: "F, GM, NKE, TGT, GPC..." },
+                  { sector: "Comms", count: 5, examples: "T, VZ, FOXA, NWS, NWSA" },
+                  { sector: "Materials", count: 5, examples: "AMCR, AVY, IFF, IP, LYB" },
+                  { sector: "Energy", count: 3, examples: "APA, HAL, KMI" },
+                  { sector: "Technology", count: 3, examples: "HPE, HPQ, NTAP" },
+                ].map((r) => (
+                  <tr key={r.sector} className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{r.sector}</td>
+                    <td className="py-1.5 pr-3 text-right text-red-400">{r.count}</td>
+                    <td className="py-1.5 text-[10px]">{r.examples}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-[#5ba3e6]">
+            Sector Mapping
+          </h3>
+          <p className="mt-1 text-xs text-[#a0a0a0]">
+            Each stock is mapped to one of 13 GICS sectors. Unmapped stocks use SPY as the benchmark.
+          </p>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2a2a2a] text-[#666]">
+                  <th className="py-1.5 pr-3 text-left font-medium">Sector</th>
                   <th className="py-1.5 text-left font-medium">Benchmark ETF</th>
                 </tr>
               </thead>
               <tbody className="text-[#c0c0c0]">
                 {[
-                  { name: "Semiconductors", count: "~76", etf: "SMH" },
-                  { name: "Software & Cloud", count: "~172", etf: "IGV" },
-                  { name: "Biotech", count: "~78", etf: "XBI" },
-                  { name: "Health Care", count: "~117", etf: "XLV" },
-                  { name: "Financials", count: "~174", etf: "XLF" },
-                  { name: "Consumer Discretionary", count: "~174", etf: "XLY" },
-                  { name: "Communication Services", count: "~62", etf: "XLC" },
-                  { name: "Industrials", count: "~206", etf: "XLI" },
-                  { name: "Consumer Staples", count: "~62", etf: "XLP" },
-                  { name: "Energy", count: "~68", etf: "XLE" },
-                  { name: "Utilities", count: "~45", etf: "XLU" },
-                  { name: "Real Estate", count: "~78", etf: "XLRE" },
-                  { name: "Materials", count: "~67", etf: "XLB" },
-                  { name: "Other", count: "~700", etf: "SPY" },
+                  { name: "Semiconductors", etf: "SMH" },
+                  { name: "Software & Cloud", etf: "IGV" },
+                  { name: "Biotech", etf: "XBI" },
+                  { name: "Health Care", etf: "XLV" },
+                  { name: "Financials", etf: "XLF" },
+                  { name: "Consumer Discretionary", etf: "XLY" },
+                  { name: "Communication Services", etf: "XLC" },
+                  { name: "Industrials", etf: "XLI" },
+                  { name: "Consumer Staples", etf: "XLP" },
+                  { name: "Energy", etf: "XLE" },
+                  { name: "Utilities", etf: "XLU" },
+                  { name: "Real Estate", etf: "XLRE" },
+                  { name: "Materials", etf: "XLB" },
                 ].map((b) => (
                   <tr key={b.name} className="border-b border-[#2a2a2a]/50">
                     <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{b.name}</td>
-                    <td className="py-1.5 pr-3 text-right text-[#5ba3e6]">{b.count}</td>
                     <td className="py-1.5">{b.etf}</td>
                   </tr>
                 ))}
@@ -762,6 +849,57 @@ export default function PreRunGuidePage() {
             Sector ETFs power criterion J (relative strength) and the sector
             momentum modifier (&plusmn;1). The scanner compares each stock&apos;s 20-day
             return against its sector ETF. Stocks in &ldquo;Other&rdquo; use SPY as the benchmark.
+          </p>
+        </Section>
+
+        {/* Universal Quality Gate */}
+        <Section icon={Shield} title="Universal Quality Gate">
+          <p>
+            Before any scoring logic runs, every stock must pass the universal quality gate.
+            This filters out low-quality, illiquid, or uninteresting stocks regardless of which preset is active.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2a2a2a] text-[#666]">
+                  <th className="py-1.5 pr-3 text-left font-medium">Check</th>
+                  <th className="py-1.5 pr-3 text-left font-medium">Threshold</th>
+                  <th className="py-1.5 text-left font-medium">Why</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#c0c0c0]">
+                {[
+                  { check: "Min Price", threshold: ">= $10", why: "Eliminates penny stocks with erratic price action" },
+                  { check: "Max Price", threshold: "<= $1,000", why: "Excludes BRK.A-style stocks (Semiconductors exempt)" },
+                  { check: "Market Cap", threshold: ">= $8B", why: "Ensures institutional relevance and liquidity" },
+                  { check: "Dollar Volume", threshold: ">= $100M/day", why: "50-day avg — ensures tradeable liquidity" },
+                  { check: "Data Quality", threshold: ">= 40%", why: "% of API calls that succeeded — rejects bad data" },
+                  { check: "Max ATR% 60d", threshold: ">= 1.2%", why: "Max ATR(14)/close over ~60 days — rejects dead-money stocks with no volatility" },
+                ].map((r) => (
+                  <tr key={r.check} className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white whitespace-nowrap">{r.check}</td>
+                    <td className="py-1.5 pr-3 text-[#5ba3e6] font-medium">{r.threshold}</td>
+                    <td className="py-1.5">{r.why}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-xs text-[#a0a0a0]">
+            This gate filters ~100+ stocks from the ~467 universe before scoring. Stocks failing the gate
+            are never scored or persisted &mdash; they appear in the &ldquo;dropped&rdquo; section of the daily page.
+          </p>
+
+          <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-[#5ba3e6]">
+            Non-Scorer Gate (API Saver)
+          </h3>
+          <p className="mt-1 text-xs text-[#a0a0a0]">
+            An additional upstream filter applied <em>before</em> any data is fetched. The system loads all distinct tickers
+            that have appeared in any scanner result during the 14-day retention window. If a ticker has <strong className="text-white">never</strong> appeared
+            in any scanner table, it is skipped entirely &mdash; no API call is made. This saves hundreds of unnecessary API calls nightly.
+          </p>
+          <p className="mt-1 text-xs text-[#666]">
+            Safety: only activates when the scored ticker set has &gt;50 entries (prevents an empty database from filtering everything).
           </p>
         </Section>
 

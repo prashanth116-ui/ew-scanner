@@ -246,7 +246,7 @@ export default function SectorGuidePage() {
               </table>
             </div>
             <p className="mt-2 text-[10px] text-[#555]">
-              ~1,400 stocks classified across 14 GICS sectors, plus 8 sub-sector ETFs (KRE, XHB, XRT, IYT, ITA, ARKX, UFO, AIQ) and 5 cross-asset ETFs (GLD, TLT, HYG, EEM, UUP) &mdash; 27 ETFs total.
+              ~1,400 stocks classified across 14 GICS sectors, plus 8 sub-sector ETFs (KRE, XHB, XRT, IYT, ITA, ARKX, UFO, AIQ), 5 cross-asset ETFs (GLD, TLT, HYG, EEM, UUP), and 4 leadership baskets (MAGS, QQQ, IWM, ARKK) &mdash; 31 ETFs total.
               Semiconductors and Biotech are split from Technology and Health Care respectively for finer granularity.
             </p>
           </SubSection>
@@ -365,14 +365,31 @@ export default function SectorGuidePage() {
             </p>
           </SubSection>
 
-          <SubSection title="Panel 7: Data Staleness Warning">
+          <SubSection title="Panel 7: Leadership Baskets">
+            <p>
+              Four market-cap-weighted baskets that gauge leadership breadth and style rotation:
+            </p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong className="text-white">MAGS (Magnificent 7)</strong> &mdash; Mega-cap tech leadership (AAPL, MSFT, NVDA, AMZN, GOOG, META, TSLA). When MAGS leads, the market is narrow and top-heavy.</li>
+              <li><strong className="text-white">QQQ (Nasdaq 100)</strong> &mdash; Growth/tech leadership. Improving QQQ with weakening IWM = large-cap growth regime.</li>
+              <li><strong className="text-white">IWM (Russell 2000)</strong> &mdash; Small-cap risk appetite. Improving IWM signals broadening participation and economic optimism.</li>
+              <li><strong className="text-white">ARKK (Innovation)</strong> &mdash; Speculative growth appetite. Leading ARKK signals peak risk-on / late-cycle speculation.</li>
+            </ul>
+            <p className="mt-2">
+              These four baskets feed the <strong className="text-white">Leadership Health Score</strong> (0&ndash;100), which measures how broad
+              and healthy market leadership is. A high score means multiple baskets are in LEADING/IMPROVING quadrants; a low score means
+              leadership is narrow or deteriorating. This metric informs the market posture (AGGRESSIVE / SELECTIVE / DEFENSIVE / CASH).
+            </p>
+          </SubSection>
+
+          <SubSection title="Panel 8: Data Staleness Warning">
             <p>
               An amber warning banner that appears when data is more than 20 minutes old. This panel is hidden when data is fresh.
               Stale data can lead to acting on outdated signals, especially during volatile sessions.
             </p>
           </SubSection>
 
-          <SubSection title="Panel 8: Correlation Matrix">
+          <SubSection title="Panel 9: Correlation Matrix">
             <p>
               A heatmap showing 20-day return correlations between all sector ETFs. High correlation clusters reveal
               sectors moving in lockstep (often macro-driven), while low or negative correlation pairs offer
@@ -380,11 +397,11 @@ export default function SectorGuidePage() {
             </p>
           </SubSection>
 
-          <SubSection title="Panel 9: Cross-Sector Pairs">
+          <SubSection title="Panel 10: Cross-Sector Pairs">
             <p>Two ratio pairs that reveal the market&apos;s risk appetite (see Cross-Sector Pairs section below).</p>
           </SubSection>
 
-          <SubSection title="Panel 10: Compare Sectors">
+          <SubSection title="Panel 11: Compare Sectors">
             <p>
               A side-by-side comparison tool that lets you select two sectors and compare their raw indicator values
               across all dimensions: momentum, acceleration, RS, CMF, breadth, smart money, and more.
