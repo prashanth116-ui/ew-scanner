@@ -39,7 +39,7 @@ npm run build             # Production build
 | `src/lib/supabase/` | Supabase client + persistence functions |
 | `src/data/` | Universe definitions (ticker lists, index tiers) |
 | `src/components/` | React components |
-| `supabase/migrations/` | SQL migration files (001-019) |
+| `supabase/migrations/` | SQL migration files (001-020) |
 
 ### Database Tables (Key)
 | Table | Cron | Purpose |
@@ -52,6 +52,7 @@ npm run build             # Production build
 | `transition_daily` | `/api/transition/cron/daily` | Market structure transition daily scan |
 | `scanner_signals` | various | Cross-scanner signal persistence |
 | `sector_snapshots` | `/api/sector-rotation/alert` | Sector rotation quadrants |
+| `trading_bias_daily` | `/api/daily-briefing/cron` | Daily trading bias predictions + next-day futures outcome backfill (90-day retention) |
 
 ### Cron Schedule (15 jobs)
 | UTC | ET | Days | Route | Notes |
@@ -69,7 +70,7 @@ npm run build             # Production build
 | 02:45 | 10:45 PM | Tue-Sat | `/api/qfe/cron/backfill` | QFE forward return backfill |
 | 02:50 | 10:50 PM | Tue-Sat | `/api/prerunner/cron/daily` | Rotation leaders/turnarounds radar |
 | 03:00 | 11:00 PM | Tue-Sat | `/api/nightly-summary/cron` | Consolidated nightly scan summary |
-| 13:00 | 9:00 AM | Mon-Fri | `/api/daily-briefing/cron` | Pre-trade 4-level briefing + direction |
+| 13:00 | 9:00 AM | Mon-Fri | `/api/daily-briefing/cron` | Pre-trade 4-level briefing + direction + bias logging + outcome backfill |
 | 06:00 Sun | 2:00 AM Sun | Sunday | `/api/sector-rotation/institutional-refresh` | Weekly institutional data refresh |
 
 ### Universal Quality Gate
@@ -321,6 +322,10 @@ Computes structured trading bias from equity futures, VIX, and market internals.
 
 **Outputs:** `TradingBias` object with bias, confidence (0-100), preferredDirection (Long/Short/Flat), leading/weakest asset, bestToTrade/assetToAvoid, dayType, VIX interpretation, playbook text, reasons array.
 
+**Backtesting persistence:** The daily briefing cron (`/api/daily-briefing/cron`) persists each day's prediction to `trading_bias_daily` and backfills the previous day's actual futures open-to-close returns. Flow:
+1. **Step A (backfill):** Find most recent row with null `outcome_updated_at`. Fetch 5d daily chart for ES=F/NQ=F/YM=F/RTY=F via `fetchYahooChart()`. Match candle by date, compute open-to-close return %. Evaluate `bias_correct` (Long → avg return > 0, Short → avg return < 0, Flat → null). Compute `best_trade_return_pct` (negated if direction was "short").
+2. **Step B (log):** After computing today's trading bias, upsert prediction row (bias, confidence, direction, posture, regime, futures snapshot, bestToTrade, assetToAvoid, etc.). Purge rows older than 90 days.
+
 **Key files:**
 | File | Purpose |
 |------|---------|
@@ -329,6 +334,7 @@ Computes structured trading bias from equity futures, VIX, and market internals.
 | `src/lib/premarket/scoring.ts` | Checklist-based bias score (-10 to +10) |
 | `src/lib/premarket/types.ts` | `TradingBias`, `FuturesSnapshot`, `PremarketData` types |
 | `src/app/api/premarket/route.ts` | API route — aggregates futures, sector data, regime, posture |
+| `supabase/migrations/020_trading_bias_daily.sql` | DB table for bias predictions + outcome backfill |
 
 ### Crypto Rotation
 Mirrors the equity sector rotation system for crypto assets. Uses adapted quality gates (lower market cap, dollar volume, wider extension thresholds) and reuses equity classification/conviction logic.
@@ -354,6 +360,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/app/api/institutional/cron/daily/route.ts` | Institutional daily cron |
 | `src/app/api/transition/cron/daily/route.ts` | Transition daily cron |
 | `src/app/api/nightly-summary/cron/route.ts` | Consolidated nightly scan summary (2 Telegram messages) |
+| `src/app/api/daily-briefing/cron/route.ts` | Daily briefing + trading bias logging + outcome backfill |
 
 ### Read API Routes
 | File | Purpose |
