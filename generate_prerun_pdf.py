@@ -150,11 +150,12 @@ pdf.cell(0, 8, "July 2026", align="C")
 pdf.add_page()
 pdf.section_title("Overview")
 pdf.body_text(
-    "The Pre-Run system is a screening funnel - it starts with ~869 tickers "
-    "(SP500 + NDX100 + SP400), eliminates noise through 3 hard gates, scores "
-    "survivors on 18 criteria, then filters by 6 preset strategies. Each preset "
-    "targets a different market setup. The nightly cron automates all of this and "
-    "delivers results to your inbox via Telegram."
+    "The Pre-Run system is a screening funnel - it starts with ~467 tickers "
+    "(SP500 + NDX100 + select SP400, excluding low-ATR utilities/staples), "
+    "eliminates noise through 3 hard gates, scores survivors on 18 criteria, "
+    "then filters by 5 preset strategies. Each preset targets a different market "
+    "setup. The nightly cron automates all of this and delivers results to your "
+    "inbox via Telegram."
 )
 pdf.bold_text("The Five Levels:")
 pdf.bullet("Level 1: Choose Your Preset (/prerun/preset-daily) - What type of setup?")
@@ -173,18 +174,17 @@ pdf.body_text(
 
 w = [25, 50, 50, 65]
 pdf.table_header(["Preset", "What It Finds", "When to Use", "Key Filters"], w)
-pdf.table_row(["SNDK", "Deeply beaten-down + short squeeze fuel", "Bear recoveries, high-SI plays", "40%+ from ATH, 15%+ SI, score >=18"], w)
-pdf.table_row(["Early Mover", "Stage 1-to-2 breakout candidates", "Market turning bullish", "25%+ from ATH, M2+L+F >=1, score >=14"], w)
-pdf.table_row(["Pullback", "Quality stocks in buy zones", "Healthy bull, buying dips", "<=40% from ATH, 2/3 signals, score >=15"], w)
-pdf.table_row(["Leading", "Hot sector stocks (skip ATH gate)", "Active sector rotation", "LEADING/IMPROVING quad, M>=1, score >=12"], w)
-pdf.table_row(["Stealth", "Institutional accumulation", "Quiet markets, hidden strength", "OBV/VP divergence, M2>=1, score >=11"], w)
-pdf.table_row(["Early+", "Pre-breakout 1-2 weeks early", "Max lead time, willing to wait", "Vol divergence + coil, M2+N>=1, score >=10"], w)
+pdf.table_row(["SNDK", "Deeply beaten-down + short squeeze fuel", "Bear recoveries, high-SI plays", "40%+ from ATH, 15%+ SI, F>=1, score >=18"], w)
+pdf.table_row(["Early Mover", "Stage 1-to-2 breakout candidates", "Market turning bullish", "25%+ from ATH, M2+L+F all >=1, score >=14"], w)
+pdf.table_row(["Pullback", "Recovery from pullback zones", "Healthy bull, buying dips", "<=40% from ATH, F+L both >=1, score >=17"], w)
+pdf.table_row(["Leading", "Strong sector momentum stocks", "Active sector rotation", "LEADING/IMPROVING quad, M+J+F >=1, score >=18"], w)
+pdf.table_row(["Stealth", "Hidden accumulation + divergence", "Quiet markets, hidden strength", "OBV/VP divergence, M2>=1, score >=14"], w)
 
 pdf.ln(4)
 pdf.tip_box(
     "In a strong bull market, start with Pullback and Leading. In a recovery or "
     "bottoming market, start with SNDK and Early Mover. In a flat/quiet market, "
-    "use Stealth and Early+ to find hidden setups."
+    "use Stealth to find hidden setups. Use the 4h tab for earlier detection."
 )
 
 # ── Level 2 ──
@@ -294,7 +294,7 @@ pdf.tip_box(
 
 # ── Companion Scanners ──
 pdf.section_title("Companion Scanners")
-pdf.body_text("Beyond the 6 presets, three specialized scanners run nightly on the same universe:")
+pdf.body_text("Beyond the 5 presets, three specialized scanners run nightly on the same universe:")
 
 w = [25, 45, 60, 60]
 pdf.table_header(["Scanner", "Page", "What It Finds", "Best For"], w)
@@ -309,7 +309,7 @@ pdf.body_text("Use this checklist each day to quickly identify the best setups:"
 pdf.ln(2)
 checks = [
     ("1.", "Check /prerun/preset-daily", "Any PRIORITY verdicts? (score >=19, earnings <=14 days)"),
-    ("2.", "Pick the right preset", "Bull = Pullback/Leading. Recovery = SNDK/Early Mover. Quiet = Stealth/Early+"),
+    ("2.", "Pick the right preset", "Bull = Pullback/Leading. Recovery = SNDK/Early Mover. Quiet = Stealth"),
     ("3.", "Expand top scorers", "Which criteria clusters? Fundamental+Technical = best"),
     ("4.", "Check /prerun/qfe-daily", "Rating A/A+? Action = Buy Now? Entry >=70? Market Env >=60?"),
     ("5.", "Cross-ref /sectors", "Sector LEADING/IMPROVING? Active rotation? Regime aligned?"),
