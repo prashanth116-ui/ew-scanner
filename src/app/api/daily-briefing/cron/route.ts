@@ -185,6 +185,8 @@ interface BriefingData {
   preferredDirection: "Long" | "Short" | "Flat" | null;
   leadingAsset: string | null;
   weakestAsset: string | null;
+  bestToTrade: { symbol: string; direction: "long" | "short" } | null;
+  assetToAvoid: string | null;
   leadershipHealth: LeadershipHealth | null;
   sectorTierCounts: { actionable: number; watch: number; avoid: number };
   sectorBreadth: { advancing: number; total: number } | null;
@@ -250,6 +252,12 @@ function formatDailyBriefing(data: BriefingData): string {
     if (data.leadingAsset) parts.push(`Lead: ${data.leadingAsset}`);
     if (data.weakestAsset) parts.push(`Weak: ${data.weakestAsset}`);
     if (parts.length > 0) lines.push(parts.join(" | "));
+    if (data.bestToTrade) {
+      lines.push(`Best: ${data.bestToTrade.symbol} (${data.bestToTrade.direction})`);
+    }
+    if (data.assetToAvoid) {
+      lines.push(`Avoid: ${data.assetToAvoid}`);
+    }
   }
 
   // SECTORS (day-trade: breadth + top actionable)
@@ -627,6 +635,8 @@ export async function GET(request: NextRequest) {
       preferredDirection: tradingBias?.preferredDirection ?? null,
       leadingAsset: tradingBias?.leadingAsset ?? null,
       weakestAsset: tradingBias?.weakestAsset ?? null,
+      bestToTrade: tradingBias?.bestToTrade ? { symbol: tradingBias.bestToTrade.symbol, direction: tradingBias.bestToTrade.direction } : null,
+      assetToAvoid: tradingBias?.assetToAvoid ?? null,
       leadershipHealth,
       sectorTierCounts,
       sectorBreadth: sectorBreadth ? { advancing: sectorBreadth.advancing, total: sectorBreadth.advancing + sectorBreadth.declining } : null,
