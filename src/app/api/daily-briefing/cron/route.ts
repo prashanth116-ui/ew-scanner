@@ -20,9 +20,15 @@ import { computeLeadershipHealth } from "@/lib/sector-rotation/leadership-health
 import type { LeadershipHealth } from "@/lib/sector-rotation/leadership-health";
 import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { COMPOSITE } from "@/lib/sector-rotation/config";
+import { fetchYahooChart } from "@/lib/prerun/data";
 import { createAdminClient } from "@/lib/supabase/server";
-import { recordSectorSnapshotBatch } from "@/lib/supabase/persistence";
-import type { SectorSnapshotRecord } from "@/lib/supabase/persistence";
+import {
+  recordSectorSnapshotBatch,
+  upsertTradingBiasDaily,
+  updateTradingBiasOutcomes,
+  purgeOldTradingBiasDaily,
+} from "@/lib/supabase/persistence";
+import type { SectorSnapshotRecord, TradingBiasOutcomes } from "@/lib/supabase/persistence";
 import type { SectorRotationResult, SectorRotationScore, RRGQuadrant } from "@/lib/sector-rotation/types";
 import type { RotationTrackerResult, LifecycleStage, ConvictionResult, RegimeData, PairSignalData } from "@/lib/sector-rotation/rotation-types";
 import type { SectorBreadth, MarketBias, DayType } from "@/lib/premarket/types";
@@ -358,6 +364,100 @@ function formatDailyBriefing(data: BriefingData): string {
   return lines.join("\n");
 }
 
+// ── Outcome Backfill ──
+
+const FUTURES_SYMBOLS = ["ES=F", "NQ=F", "YM=F", "RTY=F"] as const;
+type FuturesSymbol = typeof FUTURES_SYMBOLS[number];
+const FUTURES_RETURN_KEYS: Record<FuturesSymbol, keyof TradingBiasOutcomes> = {
+  "ES=F": "es_return_pct",
+  "NQ=F": "nq_return_pct",
+  "YM=F": "ym_return_pct",
+  "RTY=F": "rty_return_pct",
+};
+
+/** Backfill outcomes for the most recent prediction row that hasn't been updated yet. */
+async function backfillYesterdayOutcomes(): Promise<{ backfilled: boolean; date: string | null; error: string | null }> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return { backfilled: false, date: null, error: "no admin client" };
+
+    // Find most recent row where outcomes haven't been filled
+    const { data: pending, error: queryError } = await supabase
+      .from("trading_bias_daily")
+      .select("snapshot_date, preferred_direction, best_to_trade_symbol, best_to_trade_direction")
+      .is("outcome_updated_at", null)
+      .order("snapshot_date", { ascending: false })
+      .limit(1);
+
+    if (queryError) return { backfilled: false, date: null, error: queryError.message };
+    if (!pending?.length) return { backfilled: false, date: null, error: null };
+
+    const row = pending[0];
+    const snapshotDate = row.snapshot_date as string;
+
+    // Fetch 5d daily chart for each futures contract
+    const returns: Partial<Record<FuturesSymbol, number>> = {};
+    const chartPromises = FUTURES_SYMBOLS.map(async (symbol) => {
+      const chart = await fetchYahooChart(symbol, "5d", "1d");
+      if (!chart || chart.timestamps.length === 0) return;
+
+      // Find the candle matching the snapshot_date
+      for (let i = 0; i < chart.timestamps.length; i++) {
+        const candleDate = new Date(chart.timestamps[i] * 1000).toISOString().slice(0, 10);
+        if (candleDate === snapshotDate) {
+          const open = chart.opens[i];
+          const close = chart.closes[i];
+          if (open > 0) {
+            returns[symbol] = ((close - open) / open) * 100;
+          }
+          break;
+        }
+      }
+    });
+
+    await Promise.all(chartPromises);
+
+    // Compute bias_correct
+    const prefDir = row.preferred_direction as string | null;
+    const avgReturn = Object.values(returns).length > 0
+      ? Object.values(returns).reduce((a, b) => a + b, 0) / Object.values(returns).length
+      : null;
+
+    let biasCorrect: boolean | null = null;
+    if (prefDir && avgReturn != null) {
+      if (prefDir === "Long") biasCorrect = avgReturn > 0;
+      else if (prefDir === "Short") biasCorrect = avgReturn < 0;
+      // "Flat" → null (can't evaluate correctness)
+    }
+
+    // Compute best_trade_return_pct
+    let bestTradeReturn: number | null = null;
+    const bestSymbol = row.best_to_trade_symbol as string | null;
+    const bestDir = row.best_to_trade_direction as string | null;
+    if (bestSymbol && bestDir) {
+      // bestSymbol could be "ES", "NQ", etc. — need to map to "ES=F"
+      const fullSymbol = FUTURES_SYMBOLS.find((s) => s.startsWith(bestSymbol + "="));
+      if (fullSymbol && returns[fullSymbol] != null) {
+        bestTradeReturn = bestDir === "short" ? -(returns[fullSymbol]!) : returns[fullSymbol]!;
+      }
+    }
+
+    const outcomes: TradingBiasOutcomes = {
+      es_return_pct: returns["ES=F"] ?? null,
+      nq_return_pct: returns["NQ=F"] ?? null,
+      ym_return_pct: returns["YM=F"] ?? null,
+      rty_return_pct: returns["RTY=F"] ?? null,
+      bias_correct: biasCorrect,
+      best_trade_return_pct: bestTradeReturn != null ? Math.round(bestTradeReturn * 100) / 100 : null,
+    };
+
+    const updated = await updateTradingBiasOutcomes(snapshotDate, outcomes);
+    return { backfilled: updated, date: snapshotDate, error: updated ? null : "update failed" };
+  } catch (err) {
+    return { backfilled: false, date: null, error: err instanceof Error ? err.message : "unknown" };
+  }
+}
+
 // ── GET Handler ──
 
 export async function GET(request: NextRequest) {
@@ -372,6 +472,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const startTime = Date.now();
+
+    // Step A: Backfill yesterday's futures outcomes before today's prediction
+    const backfillResult = await backfillYesterdayOutcomes();
+    if (backfillResult.backfilled) {
+      console.log(`[daily-briefing] Backfilled outcomes for ${backfillResult.date}`);
+    } else if (backfillResult.error) {
+      console.warn(`[daily-briefing] Outcome backfill skipped: ${backfillResult.error}`);
+    }
 
     // 1. Parallel fetch all data sources + previous snapshot for "what changed"
     const [premarketResult, sectorResult, regime, rotationData, previousSnapshot] = await Promise.all([
@@ -665,6 +773,36 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Step B: Log today's trading bias prediction + purge old records
+    const today = new Date().toISOString().slice(0, 10);
+    if (tradingBias) {
+      const biasLogged = await upsertTradingBiasDaily({
+        snapshot_date: today,
+        bias: tradingBias.bias,
+        confidence: tradingBias.confidence,
+        preferred_direction: tradingBias.preferredDirection,
+        direction,
+        posture: posture.posture,
+        regime: enhancedRegime?.regime ?? null,
+        leading_asset: tradingBias.leadingAsset,
+        weakest_asset: tradingBias.weakestAsset,
+        best_to_trade_symbol: tradingBias.bestToTrade?.symbol ?? null,
+        best_to_trade_direction: tradingBias.bestToTrade?.direction ?? null,
+        asset_to_avoid: tradingBias.assetToAvoid,
+        day_type: tradingBias.dayType,
+        vix: enhancedRegime?.vix ?? null,
+        bias_conflict: biasConflict,
+        futures_snapshot: premarketResult.futures.map((f) => ({
+          symbol: f.symbol,
+          price: f.price,
+          changePct: f.changePct,
+        })),
+      });
+      if (biasLogged) {
+        await purgeOldTradingBiasDaily().catch(() => {});
+      }
+    }
+
     const enterSignals = rotationAnalyses.filter((r) => r.action.action === "ENTER").length;
 
     return NextResponse.json({
@@ -686,6 +824,8 @@ export async function GET(request: NextRequest) {
       topPicks: topPicks.map((p) => p.symbol),
       watchlist,
       telegramSent,
+      biasLogged: tradingBias != null,
+      outcomeBackfill: backfillResult.backfilled ? backfillResult.date : null,
       elapsedMs: Date.now() - startTime,
     });
   } catch (err) {

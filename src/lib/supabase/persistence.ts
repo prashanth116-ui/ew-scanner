@@ -2023,3 +2023,167 @@ export async function loadAllScoredTickers(): Promise<Set<string>> {
     return new Set();
   }
 }
+
+// ── Trading Bias Daily ──
+
+export interface TradingBiasDailyRecord {
+  snapshot_date: string;               // YYYY-MM-DD
+  bias: string;                        // "Strong Bull" | "Lean Bull" | "Neutral" | "Lean Bear" | "Strong Bear"
+  confidence: number | null;
+  preferred_direction: string | null;   // "Long" | "Short" | "Flat"
+  direction: string | null;             // "BULL" | "LEAN BULL" | "NEUTRAL" | "LEAN BEAR" | "BEAR"
+  posture: string | null;
+  regime: string | null;
+  leading_asset: string | null;
+  weakest_asset: string | null;
+  best_to_trade_symbol: string | null;
+  best_to_trade_direction: string | null;
+  asset_to_avoid: string | null;
+  day_type: string | null;
+  vix: number | null;
+  bias_conflict: boolean;
+  futures_snapshot: { symbol: string; price: number; changePct: number }[] | null;
+}
+
+export interface TradingBiasOutcomes {
+  es_return_pct: number | null;
+  nq_return_pct: number | null;
+  ym_return_pct: number | null;
+  rty_return_pct: number | null;
+  bias_correct: boolean | null;
+  best_trade_return_pct: number | null;
+}
+
+/** Upsert a single trading bias daily prediction. */
+export async function upsertTradingBiasDaily(record: TradingBiasDailyRecord): Promise<boolean> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertTradingBiasDaily: no admin client");
+      return false;
+    }
+
+    const { error } = await supabase
+      .from("trading_bias_daily")
+      .upsert(record, { onConflict: "snapshot_date" });
+
+    if (error) {
+      console.error("[persistence] upsertTradingBiasDaily error:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[persistence] upsertTradingBiasDaily exception:", err);
+    return false;
+  }
+}
+
+/** Load trading bias for a specific date, or the most recent row if no date given. */
+export async function loadTradingBiasDaily(date?: string): Promise<TradingBiasDailyRecord | null> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return null;
+
+    let query = supabase
+      .from("trading_bias_daily")
+      .select("*")
+      .order("snapshot_date", { ascending: false })
+      .limit(1);
+
+    if (date) {
+      query = query.eq("snapshot_date", date);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("[persistence] loadTradingBiasDaily error:", error.message);
+      return null;
+    }
+    return (data?.[0] as TradingBiasDailyRecord) ?? null;
+  } catch (err) {
+    console.error("[persistence] loadTradingBiasDaily exception:", err);
+    return null;
+  }
+}
+
+/** Load trading bias history for the last N days (for backtest analysis). */
+export async function loadTradingBiasDailyHistory(
+  days = 30
+): Promise<Array<TradingBiasDailyRecord & TradingBiasOutcomes & { outcome_updated_at: string | null }>> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("trading_bias_daily")
+      .select("*")
+      .gte("snapshot_date", cutoffStr)
+      .order("snapshot_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadTradingBiasDailyHistory error:", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<TradingBiasDailyRecord & TradingBiasOutcomes & { outcome_updated_at: string | null }>;
+  } catch (err) {
+    console.error("[persistence] loadTradingBiasDailyHistory exception:", err);
+    return [];
+  }
+}
+
+/** Delete trading_bias_daily rows older than retentionDays. */
+export async function purgeOldTradingBiasDaily(retentionDays = 90): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("trading_bias_daily")
+      .delete()
+      .lt("snapshot_date", cutoffStr)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] purgeOldTradingBiasDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] purgeOldTradingBiasDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Update outcome columns for a specific snapshot_date (backfill). */
+export async function updateTradingBiasOutcomes(
+  date: string,
+  outcomes: TradingBiasOutcomes,
+): Promise<boolean> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return false;
+
+    const { error } = await supabase
+      .from("trading_bias_daily")
+      .update({ ...outcomes, outcome_updated_at: new Date().toISOString() })
+      .eq("snapshot_date", date);
+
+    if (error) {
+      console.error("[persistence] updateTradingBiasOutcomes error:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[persistence] updateTradingBiasOutcomes exception:", err);
+    return false;
+  }
+}
