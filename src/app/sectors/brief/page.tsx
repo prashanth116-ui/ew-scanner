@@ -15,7 +15,7 @@ import {
 } from "../_components";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
-import type { FuturesSnapshot, ChecklistItem, TradingBias, SectorBreadth, VixData } from "@/lib/premarket/types";
+import type { FuturesSnapshot, ChecklistItem, TradingBias, SectorBreadth, VixData, TradingBiasSnapshot } from "@/lib/premarket/types";
 import { computeBiasScore } from "@/lib/premarket/scoring";
 import { PREMARKET_SCORING } from "@/lib/sector-rotation/config";
 import { loadHistory } from "@/lib/sector-rotation/history";
@@ -59,6 +59,8 @@ export default function DailyBriefPage() {
   const [vixData, setVixData] = useState<VixData | null>(null);
   const [pulseLoading, setPulseLoading] = useState(true);
   const [tradingBias, setTradingBias] = useState<TradingBias | null>(null);
+  const [biasSnapshot, setBiasSnapshot] = useState<TradingBiasSnapshot | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(true);
 
   // Fetch macro events + pre-market data in parallel
   useEffect(() => {
@@ -86,6 +88,22 @@ export default function DailyBriefPage() {
 
     // Auto-refresh pre-market data every 2 minutes
     const pulseInterval = setInterval(fetchPulse, 2 * 60 * 1000);
+
+    // One-time fetch of persisted 9 AM trading bias snapshot
+    fetch("/api/trading-bias/daily")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((result: { snapshot: TradingBiasSnapshot | null } | null) => {
+        if (result?.snapshot) {
+          // Only use snapshot if it matches today in ET timezone
+          const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+          if (result.snapshot.snapshot_date === todayET) {
+            setBiasSnapshot(result.snapshot);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setSnapshotLoading(false));
+
     return () => clearInterval(pulseInterval);
   }, []);
 
@@ -291,7 +309,7 @@ export default function DailyBriefPage() {
       </CollapsiblePanel>
 
       {/* 0.5 Pre-Market Trading Bias */}
-      <TradingBiasCard bias={tradingBias} loading={pulseLoading} />
+      <TradingBiasCard bias={tradingBias} loading={pulseLoading} snapshot={biasSnapshot} snapshotLoading={snapshotLoading} />
 
       {/* 0.6 Leadership Health */}
       {leadershipHealth && <LeadershipHealthCard health={leadershipHealth} />}
@@ -513,13 +531,47 @@ const BIAS_STYLES: Record<string, { bg: string; border: string; text: string }> 
   "Strong Bear": { bg: "bg-red-500/10", border: "border-red-500/30", text: "text-red-400" },
 };
 
-function TradingBiasCard({ bias, loading }: { bias: TradingBias | null; loading: boolean }) {
+// ── Bias divergence helpers ──
+
+const BIAS_LEVEL: Record<string, number> = {
+  "Strong Bear": -2, "Lean Bear": -1, Neutral: 0, "Lean Bull": 1, "Strong Bull": 2,
+};
+
+function computeDivergence(snapshotBias: string, liveBias: string): { label: string; color: string } | null {
+  const sLevel = BIAS_LEVEL[snapshotBias] ?? 0;
+  const lLevel = BIAS_LEVEL[liveBias] ?? 0;
+  const diff = Math.abs(sLevel - lLevel);
+  if (diff === 0) return null;
+  // Opposite sides of neutral
+  if ((sLevel > 0 && lLevel < 0) || (sLevel < 0 && lLevel > 0)) {
+    return { label: "Reversed", color: "text-amber-400 bg-amber-500/10 border-amber-500/30" };
+  }
+  // Same side shift of 2+ levels
+  if (diff >= 2) {
+    return { label: "Shifted", color: "text-[#888] bg-[#222] border-[#333]" };
+  }
+  // Minor 1-level shift
+  return { label: "Adjusted", color: "text-[#666] bg-[#181818] border-[#2a2a2a]" };
+}
+
+function TradingBiasCard({ bias, loading, snapshot, snapshotLoading }: {
+  bias: TradingBias | null;
+  loading: boolean;
+  snapshot: TradingBiasSnapshot | null;
+  snapshotLoading: boolean;
+}) {
   if (loading && !bias) return null;
+
+  const hasSnapshot = !!snapshot;
+  const cardTitle = hasSnapshot ? "Live Trading Bias" : "Pre-Market Trading Bias";
+
   if (!bias) {
     return (
-      <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-4">
+      <div className="rounded-xl border border-[#2a2a2a] bg-[#0a0a0a] p-4 space-y-3">
+        {/* 9 AM Snapshot header */}
+        <SnapshotHeader snapshot={snapshot} snapshotLoading={snapshotLoading} liveBias={null} />
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-[#888]">Pre-Market Trading Bias</h2>
+          <h2 className="text-sm font-semibold text-[#888]">{cardTitle}</h2>
         </div>
         <p className="text-xs text-[#555]">Insufficient data — waiting for futures</p>
       </div>
@@ -536,9 +588,12 @@ function TradingBiasCard({ bias, loading }: { bias: TradingBias | null; loading:
 
   return (
     <div className={`rounded-xl border ${style.border} ${style.bg} p-4 space-y-3`}>
+      {/* 9 AM Snapshot header */}
+      <SnapshotHeader snapshot={snapshot} snapshotLoading={snapshotLoading} liveBias={bias.bias} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-white">Pre-Market Trading Bias</h2>
+        <h2 className="text-sm font-semibold text-white">{cardTitle}</h2>
         <div className="flex items-center gap-2">
           <span className={`text-sm font-bold ${style.text}`}>{bias.bias}</span>
           <span className="text-xs text-[#888]">({bias.confidence}%)</span>
@@ -620,6 +675,83 @@ function TradingBiasCard({ bias, loading }: { bias: TradingBias | null; loading:
               </li>
             ))}
           </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SnapshotHeader({ snapshot, snapshotLoading, liveBias }: {
+  snapshot: TradingBiasSnapshot | null;
+  snapshotLoading: boolean;
+  liveBias: string | null;
+}) {
+  // Still loading
+  if (snapshotLoading) return null;
+
+  // No snapshot for today
+  if (!snapshot) {
+    return (
+      <div className="rounded-lg border border-[#222] bg-[#0d0d0d] px-3 py-2">
+        <p className="text-[10px] text-[#555]">9 AM prediction pending</p>
+      </div>
+    );
+  }
+
+  const snapStyle = BIAS_STYLES[snapshot.bias] ?? BIAS_STYLES.Neutral;
+  const snapDirColor = snapshot.preferred_direction === "Long" ? "text-green-400"
+    : snapshot.preferred_direction === "Short" ? "text-red-400"
+    : "text-[#888]";
+
+  // Divergence detection
+  const divergence = liveBias ? computeDivergence(snapshot.bias, liveBias) : null;
+
+  return (
+    <div className="rounded-lg border border-[#222] bg-[#0d0d0d] px-3 py-2.5 space-y-2">
+      {/* Top row: timestamp + bias + confidence + direction + divergence */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-md bg-[#1a1a1a] border border-[#2a2a2a] px-1.5 py-0.5 text-[9px] text-[#666] font-mono">
+          9:00 AM
+        </span>
+        <span className={`text-xs font-bold ${snapStyle.text}`}>{snapshot.bias}</span>
+        {snapshot.confidence != null && (
+          <span className="text-[10px] text-[#666]">({snapshot.confidence}%)</span>
+        )}
+        {snapshot.preferred_direction && (
+          <span className={`text-[10px] font-medium ${snapDirColor}`}>
+            {snapshot.preferred_direction}
+          </span>
+        )}
+        {snapshot.day_type && (
+          <span className="text-[10px] text-[#555]">{snapshot.day_type}</span>
+        )}
+        {divergence && (
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${divergence.color}`}>
+            {divergence.label}
+          </span>
+        )}
+      </div>
+
+      {/* Futures snapshot values */}
+      {snapshot.futures_snapshot && snapshot.futures_snapshot.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
+          {snapshot.futures_snapshot.map((f) => {
+            const isUp = f.changePct >= 0;
+            return (
+              <div key={f.symbol} className="flex items-center gap-1 text-[10px]">
+                <span className="text-[#666]">{f.symbol.replace("=F", "")}</span>
+                <span className={`font-mono font-medium ${isUp ? "text-green-400/70" : "text-red-400/70"}`}>
+                  {isUp ? "+" : ""}{f.changePct.toFixed(2)}%
+                </span>
+              </div>
+            );
+          })}
+          {snapshot.vix != null && (
+            <div className="flex items-center gap-1 text-[10px]">
+              <span className="text-[#666]">VIX</span>
+              <span className="text-[#888] font-mono">{snapshot.vix.toFixed(1)}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

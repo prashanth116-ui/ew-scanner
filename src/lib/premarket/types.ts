@@ -62,6 +62,23 @@ export interface TradingBias {
   biasConflictDetail?: string;  // explanation when biasConflict is true
 }
 
+/** Client-safe version of persisted trading bias prediction from trading_bias_daily. */
+export interface TradingBiasSnapshot {
+  snapshot_date: string;               // YYYY-MM-DD
+  bias: string;                        // "Strong Bull" | "Lean Bull" | "Neutral" | "Lean Bear" | "Strong Bear"
+  confidence: number | null;
+  preferred_direction: string | null;   // "Long" | "Short" | "Flat"
+  leading_asset: string | null;
+  weakest_asset: string | null;
+  best_to_trade_symbol: string | null;
+  best_to_trade_direction: string | null;
+  asset_to_avoid: string | null;
+  day_type: string | null;
+  vix: number | null;
+  bias_conflict: boolean;
+  futures_snapshot: { symbol: string; price: number; changePct: number }[] | null;
+}
+
 export interface PremarketData {
   futures: FuturesSnapshot[];
   internals: InternalsSnapshot;
