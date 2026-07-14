@@ -372,6 +372,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/app/api/transition/daily/route.ts` | Read transition daily data |
 | `src/app/api/sector-rotation/route.ts` | Sector rotation scores (31 ETFs, leadership baskets, regime) |
 | `src/app/api/premarket/route.ts` | Pre-market futures, internals, trading bias, sector checklist |
+| `src/app/api/trading-bias/daily/route.ts` | Read persisted 9 AM trading bias snapshot (?date=YYYY-MM-DD, defaults to most recent) |
 | `src/app/api/backtest/funnel/route.ts` | Funnel backtest — composite scoring across 5 scanners with forward returns |
 
 ### UI Pages
