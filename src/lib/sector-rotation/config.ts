@@ -489,6 +489,12 @@ export const CRYPTO_BRIEF = {
   BIAS_DISPERSION_HIGH: 6,
   /** Bias score: dispersion below this = bearish signal */
   BIAS_DISPERSION_LOW: 2,
+  /** Regime confidence below this numeric value = cap posture at SELECTIVE */
+  LOW_CONFIDENCE_THRESHOLD: 50,
+  /** BTC % from 50MA above/below this = bullish/bearish bias signal */
+  BTC_RETURN_THRESHOLD: 5,
+  /** Sector leading/lagging count difference above this = bias signal */
+  SECTOR_BALANCE_THRESHOLD: 2,
 } as const;
 
 // ── Sector Comparison ──

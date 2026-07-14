@@ -12,7 +12,7 @@ import type { CryptoRotationResult } from "./types";
 import type { RotationTrackerResult } from "../sector-rotation/rotation-types";
 import { computeConviction } from "../sector-rotation/rotation-helpers";
 import { getTradingAction } from "@/app/sectors/_components";
-import { CRYPTO_BRIEF as CB } from "../sector-rotation/config";
+import { CRYPTO_BRIEF as CB, RISK_FLAGS } from "../sector-rotation/config";
 
 // ── Shared types (reused from equity brief) ──
 
@@ -175,7 +175,7 @@ export function computeCryptoPosture(
 
   // Low-confidence guard: downgrade AGGRESSIVE to SELECTIVE when regime confidence is low
   // (this point is only reached if CASH/DEFENSIVE didn't trigger)
-  if (regimeConfidence < 50 && isRiskOn) {
+  if (regimeConfidence < CB.LOW_CONFIDENCE_THRESHOLD && isRiskOn) {
     return {
       posture: "SELECTIVE",
       reasoning: `Risk-on regime but low confidence (${regimeConfidence}%). Be selective until regime signals strengthen.`,
@@ -310,7 +310,7 @@ export function computeCryptoRiskFlags(
 
   // 4. Sector data quality < 50%
   for (const s of data.sectors) {
-    if (s.dataQuality < 50) {
+    if (s.dataQuality < RISK_FLAGS.LOW_DATA_QUALITY) {
       flags.push({
         severity: "medium",
         message: `${s.sector} low data quality`,
@@ -536,10 +536,10 @@ export function computeCryptoBiasScore(
   const btcQuote = data.stockQuotes?.["BTC-USD"];
   if (btcQuote) {
     const btcReturn = btcQuote.pctFromSma50 ?? 0;
-    if (btcReturn > 5) {
+    if (btcReturn > CB.BTC_RETURN_THRESHOLD) {
       signals.push({ label: "BTC above 50MA", value: 2, direction: "bullish" });
       score += 2;
-    } else if (btcReturn < -5) {
+    } else if (btcReturn < -CB.BTC_RETURN_THRESHOLD) {
       signals.push({ label: "BTC below 50MA", value: -2, direction: "bearish" });
       score -= 2;
     } else {
@@ -628,14 +628,14 @@ export function computeCryptoBiasScore(
   const lagging = data.sectors.filter(
     (s) => s.quadrant === "LAGGING" || s.quadrant === "WEAKENING"
   ).length;
-  if (leading > lagging + 2) {
+  if (leading > lagging + CB.SECTOR_BALANCE_THRESHOLD) {
     signals.push({
       label: `${leading} sectors improving/leading`,
       value: 1,
       direction: "bullish",
     });
     score += 1;
-  } else if (lagging > leading + 2) {
+  } else if (lagging > leading + CB.SECTOR_BALANCE_THRESHOLD) {
     signals.push({
       label: `${lagging} sectors weakening/lagging`,
       value: -1,
