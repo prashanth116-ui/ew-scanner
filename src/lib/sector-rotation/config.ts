@@ -449,6 +449,55 @@ export const CRYPTO_WEIGHTS = {
   CMF: 25,
 } as const;
 
+// ── Crypto Regime Classification ──
+
+export const CRYPTO_REGIME_THRESHOLDS = {
+  /** BTC realized vol below this = low volatility (favors RISK_ON) */
+  BTC_VOL_LOW: 60,
+  /** BTC realized vol above this = high volatility (favors RISK_OFF) */
+  BTC_VOL_HIGH: 80,
+  /** BTC dominance delta above this = "rising" */
+  DOMINANCE_DELTA_RISING: 2,
+  /** BTC dominance delta below this = "falling" */
+  DOMINANCE_DELTA_FALLING: -2,
+  /** Market trend median threshold (rising/falling) */
+  MARKET_TREND_THRESHOLD: 3,
+  /** RISK_ON confidence: BTC vol below this = strong signal */
+  CONFIDENCE_VOL_STRONG: 50,
+  /** RISK_ON confidence: total market momentum above this = signal */
+  CONFIDENCE_MOMENTUM_POSITIVE: 5,
+  /** RISK_OFF confidence: BTC vol above this = strong signal */
+  CONFIDENCE_VOL_EXTREME: 90,
+  /** RISK_OFF confidence: total market momentum below this = signal */
+  CONFIDENCE_MOMENTUM_NEGATIVE: -5,
+  /** Alt-season dispersion threshold */
+  ALT_SEASON_DISPERSION: 8,
+} as const;
+
+// ── Crypto Brief Thresholds ──
+
+export const CRYPTO_BRIEF = {
+  /** BTC vol above this triggers risk flags and posture downgrades */
+  BTC_VOL_SPIKE: 80,
+  /** Dispersion above this = eligible for AGGRESSIVE posture */
+  AGGRESSIVE_DISPERSION: 5,
+  /** Composite score >= this for actionable crypto sector classification */
+  ACTIONABLE_COMPOSITE: 55,
+  /** Dispersion above this = panic rotation flag when RISK_OFF */
+  PANIC_DISPERSION: 10,
+  /** Bias score: dispersion above this = bullish signal */
+  BIAS_DISPERSION_HIGH: 6,
+  /** Bias score: dispersion below this = bearish signal */
+  BIAS_DISPERSION_LOW: 2,
+} as const;
+
+// ── Sector Comparison ──
+
+export const COMPARISON = {
+  /** Score delta > this = sector improved/declined in comparison view */
+  CHANGE_THRESHOLD: 2,
+} as const;
+
 // ── Pre-Market Bias Scoring ──
 
 export const PREMARKET_SCORING = {

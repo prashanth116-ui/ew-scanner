@@ -419,7 +419,7 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
     enrichedStocks,
     regime: {
       regime: regime.regime,
-      regimeConfidence: 50,
+      regimeConfidence: regime.regimeConfidence === "high" ? 80 : regime.regimeConfidence === "medium" ? 50 : 20,
       vix: regime.btcVolatility, // Repurpose VIX field for BTC vol
       // Invert marketTrend→vixSlope: equity UI treats "falling vixSlope" as bullish.
       // By mapping rising market → falling vixSlope, the equity regime banner renders correctly.

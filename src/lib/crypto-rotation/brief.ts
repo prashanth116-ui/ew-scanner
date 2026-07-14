@@ -12,6 +12,7 @@ import type { CryptoRotationResult } from "./types";
 import type { RotationTrackerResult } from "../sector-rotation/rotation-types";
 import { computeConviction } from "../sector-rotation/rotation-helpers";
 import { getTradingAction } from "@/app/sectors/_components";
+import { CRYPTO_BRIEF as CB } from "../sector-rotation/config";
 
 // ── Shared types (reused from equity brief) ──
 
@@ -123,8 +124,11 @@ export function computeCryptoPosture(
   const isRiskOff = regime?.regime === "RISK_OFF";
   // For crypto, vix = BTC realized vol; vixSlope is inverted marketTrend
   const btcVol = regime?.vix ?? 0;
-  const btcVolHigh = btcVol > 80;
+  const btcVolHigh = btcVol > CB.BTC_VOL_SPIKE;
   const marketFalling = regime?.vixSlope === "rising"; // inverted: vixSlope="rising" means marketTrend="falling"
+
+  // Low-confidence regime: cap posture at SELECTIVE (don't act aggressively on uncertain signals)
+  const regimeConfidence = regime?.regimeConfidence ?? 20; // numeric: 80=high, 50=medium, 20=low
 
   // CASH: RISK_OFF + BTC vol > 80 + 0 active rotations with positive conviction
   if (isRiskOff && btcVolHigh && positiveConviction.length === 0) {
@@ -153,7 +157,7 @@ export function computeCryptoPosture(
     isRiskOn &&
     btcDom?.altSeasonSignal &&
     highModerate.length >= 2 &&
-    data.dispersionIndex > 5
+    data.dispersionIndex > CB.AGGRESSIVE_DISPERSION
   ) {
     return {
       posture: "AGGRESSIVE",
@@ -162,10 +166,19 @@ export function computeCryptoPosture(
   }
 
   // AGGRESSIVE (relaxed): RISK_ON + 2+ high/moderate rotations + dispersion > 5 (no alt-season required)
-  if (isRiskOn && highModerate.length >= 2 && data.dispersionIndex > 5) {
+  if (isRiskOn && highModerate.length >= 2 && data.dispersionIndex > CB.AGGRESSIVE_DISPERSION) {
     return {
       posture: "AGGRESSIVE",
       reasoning: `Risk-on regime with ${highModerate.length} high-conviction rotations and elevated sector dispersion (${data.dispersionIndex.toFixed(1)}). Lean into strongest sectors.`,
+    };
+  }
+
+  // Low-confidence guard: downgrade AGGRESSIVE to SELECTIVE when regime confidence is low
+  // (this point is only reached if CASH/DEFENSIVE didn't trigger)
+  if (regimeConfidence < 50 && isRiskOn) {
+    return {
+      posture: "SELECTIVE",
+      reasoning: `Risk-on regime but low confidence (${regimeConfidence}%). Be selective until regime signals strengthen.`,
     };
   }
 
@@ -223,7 +236,7 @@ export function computeCryptoTiers(
       // OR: active rotation with HIGH/MODERATE conviction + favorable quadrant
       if (
         inFavorableQuadrant &&
-        (s.compositeScore >= 55 || highConvictionETFs.has(s.etf))
+        (s.compositeScore >= CB.ACTIONABLE_COMPOSITE || highConvictionETFs.has(s.etf))
       ) {
         actionable.push(s);
       } else {
@@ -285,13 +298,13 @@ export function computeCryptoRiskFlags(
     }
   }
 
-  // 3. BTC realized volatility spike (> 80%)
+  // 3. BTC realized volatility spike
   const btcVol = data.regime?.vix ?? 0;
-  if (btcVol > 80) {
+  if (btcVol > CB.BTC_VOL_SPIKE) {
     flags.push({
       severity: "high",
       message: "BTC volatility spike",
-      detail: `BTC realized volatility at ${btcVol.toFixed(1)}% (> 80%). Extreme market uncertainty.`,
+      detail: `BTC realized volatility at ${btcVol.toFixed(1)}% (> ${CB.BTC_VOL_SPIKE}%). Extreme market uncertainty.`,
     });
   }
 
@@ -330,7 +343,7 @@ export function computeCryptoRiskFlags(
   }
 
   // 7. High dispersion + regime RISK_OFF (panic rotation)
-  if (data.dispersionIndex > 10 && data.regime?.regime === "RISK_OFF") {
+  if (data.dispersionIndex > CB.PANIC_DISPERSION && data.regime?.regime === "RISK_OFF") {
     flags.push({
       severity: "high",
       message: "Panic rotation detected",
@@ -377,7 +390,7 @@ function snapshotTier(
     (s.quadrant === "IMPROVING" && s.acceleration > 0);
 
   if (action === "TRADE" || action === "BUILD") {
-    return inFavorableQuadrant && s.composite >= 55 ? "actionable" : "watch";
+    return inFavorableQuadrant && s.composite >= CB.ACTIONABLE_COMPOSITE ? "actionable" : "watch";
   }
   if (action === "WATCH") return "watch";
   return "avoid";
@@ -582,14 +595,14 @@ export function computeCryptoBiasScore(
   }
 
   // 5. Sector dispersion
-  if (data.dispersionIndex > 6) {
+  if (data.dispersionIndex > CB.BIAS_DISPERSION_HIGH) {
     signals.push({
       label: `High dispersion (${data.dispersionIndex.toFixed(1)})`,
       value: 1,
       direction: "bullish",
     });
     score += 1;
-  } else if (data.dispersionIndex < 2) {
+  } else if (data.dispersionIndex < CB.BIAS_DISPERSION_LOW) {
     signals.push({
       label: `Low dispersion (${data.dispersionIndex.toFixed(1)})`,
       value: -1,

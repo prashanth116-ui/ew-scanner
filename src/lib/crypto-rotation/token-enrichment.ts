@@ -91,7 +91,10 @@ export function enrichCryptoTokens(
   // Crypto quality gates
   const { passed: gated, rejected } = applyCryptoQualityGates(stocks);
 
-  // Classify + score each passing token (reuse equity logic)
+  // Classify + score each passing token (reuse equity logic).
+  // NOTE: Crypto tokens cannot reach LEADER classification because classifyCategory()
+  // requires ret20d != null (crypto doesn't have 20d ETF-relative returns).
+  // Tokens land in CATCH_UP (above 50MA) or TURNAROUND (below 50MA) instead.
   const enriched: EnrichedStock[] = gated.map((s) => {
     const classified = classifyStock(s, s.sectorAcceleration);
     let scored = scoreConviction(

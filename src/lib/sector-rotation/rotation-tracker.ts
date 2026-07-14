@@ -634,7 +634,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     const sector = SECTOR_UNIVERSE.find((s) => s.id === event.sectorId);
     if (!sector || sector.stocks.length === 0) continue;
     for (const stock of sector.stocks) {
-      if (SCAN_EXCLUSIONS.has(stock.symbol)) continue;
+      if (QUALITY_GATES.APPLY_SCAN_EXCLUSIONS && SCAN_EXCLUSIONS.has(stock.symbol)) continue;
       if (!allStockSymbols.includes(stock.symbol)) {
         allStockSymbols.push(stock.symbol);
         allStockNames.set(stock.symbol, stock.name);
@@ -655,7 +655,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     if (!sector) continue;
 
     const sectorSymbols = sector.stocks
-      .filter((s) => !SCAN_EXCLUSIONS.has(s.symbol))
+      .filter((s) => !(QUALITY_GATES.APPLY_SCAN_EXCLUSIONS && SCAN_EXCLUSIONS.has(s.symbol)))
       .map((s) => s.symbol);
     const etfChartEntry = etfCharts.find((c) => c.sectorId === event.sectorId);
     const sectorEtfCloses = etfChartEntry?.chart?.closes ?? [];

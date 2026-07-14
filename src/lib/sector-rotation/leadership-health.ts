@@ -47,9 +47,9 @@ export function computeLeadershipHealth(
   const iwm = findByETF(leadershipBaskets, "IWM");
   const arkk = findByETF(leadershipBaskets, "ARKK");
   const hyg = findByETF(crossAsset, "HYG");
-  // SMH and IGV are sub_sector category, not gics_sector
-  const smh = findByETF(subSectors ?? [], "SMH") ?? findByETF(gicsSectors, "SMH");
-  const igv = findByETF(subSectors ?? [], "IGV") ?? findByETF(gicsSectors, "IGV");
+  // SMH and IGV are sub_sector category — only search subSectors
+  const smh = findByETF(subSectors ?? [], "SMH");
+  const igv = findByETF(subSectors ?? [], "IGV");
 
   let score = 0;
 
@@ -71,10 +71,8 @@ export function computeLeadershipHealth(
     if (spread < 10) score += 15;
     else if (spread < 20) score += 10;
     else if (spread < 30) score += 5;
-  } else {
-    // If one is missing, give partial credit
-    score += 5;
   }
+  // If one is missing, award 0 — don't inflate score for missing data
 
   // SMH confirming (0-10)
   if (smh && isStrong(smh.quadrant)) score += 10;

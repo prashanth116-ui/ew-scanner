@@ -6,6 +6,8 @@
 
 import "server-only";
 
+import { CRYPTO_REGIME_THRESHOLDS as CRT } from "../sector-rotation/config";
+
 export type CryptoRegime = "RISK_ON" | "RISK_OFF" | "MIXED";
 
 export interface CryptoRegimeData {
@@ -87,8 +89,8 @@ function estimateDominanceTrend(
 
   // If BTC is outperforming total market, dominance is rising
   const dominanceDelta = btcROC7 - tmcROC7;
-  if (dominanceDelta > 2) return "rising";
-  if (dominanceDelta < -2) return "falling";
+  if (dominanceDelta > CRT.DOMINANCE_DELTA_RISING) return "rising";
+  if (dominanceDelta < CRT.DOMINANCE_DELTA_FALLING) return "falling";
   return "flat";
 }
 
@@ -111,14 +113,14 @@ export function classifyCryptoRegime(
     ? sorted[Math.floor(sorted.length / 2)]
     : 0;
   const marketTrend: "rising" | "falling" | "flat" =
-    median > 3 ? "rising" : median < -3 ? "falling" : "flat";
+    median > CRT.MARKET_TREND_THRESHOLD ? "rising" : median < -CRT.MARKET_TREND_THRESHOLD ? "falling" : "flat";
 
   // BTC dominance trend (from optional data)
   let btcDominanceTrend: "rising" | "falling" | "flat" | undefined;
   if (btcDominanceCloses && btcDominanceCloses.length >= 8) {
     // Direct dominance data
     const domROC = computeROC(btcDominanceCloses, 7);
-    btcDominanceTrend = domROC > 2 ? "rising" : domROC < -2 ? "falling" : "flat";
+    btcDominanceTrend = domROC > CRT.DOMINANCE_DELTA_RISING ? "rising" : domROC < CRT.DOMINANCE_DELTA_FALLING ? "falling" : "flat";
   } else if (totalMarketCapCloses && totalMarketCapCloses.length >= 8) {
     // Estimate from BTC vs total market
     btcDominanceTrend = estimateDominanceTrend(btcCloses, totalMarketCapCloses);
@@ -132,15 +134,15 @@ export function classifyCryptoRegime(
 
   // Enhanced regime classification
   let regime: CryptoRegime;
-  if (btcVol < 60 && marketTrend === "rising" && btcDominanceTrend !== "rising") {
+  if (btcVol < CRT.BTC_VOL_LOW && marketTrend === "rising" && btcDominanceTrend !== "rising") {
     // RISK_ON: low vol + rising market + dominance not rising (or unknown)
     regime = "RISK_ON";
-  } else if (btcVol < 60 && marketTrend === "rising") {
+  } else if (btcVol < CRT.BTC_VOL_LOW && marketTrend === "rising") {
     // Low vol + rising but dominance rising — still RISK_ON but lower confidence
     regime = "RISK_ON";
-  } else if (btcVol > 80 && marketTrend === "falling") {
+  } else if (btcVol > CRT.BTC_VOL_HIGH && marketTrend === "falling") {
     regime = "RISK_OFF";
-  } else if (btcVol > 80 && btcDominanceTrend === "rising") {
+  } else if (btcVol > CRT.BTC_VOL_HIGH && btcDominanceTrend === "rising") {
     // High vol + dominance rising = flight to BTC safety
     regime = "RISK_OFF";
   } else {
@@ -151,18 +153,18 @@ export function classifyCryptoRegime(
   let regimeConfidence: "high" | "medium" | "low";
   if (regime === "RISK_ON") {
     const signals = [
-      btcVol < 50,
+      btcVol < CRT.CONFIDENCE_VOL_STRONG,
       marketTrend === "rising",
       btcDominanceTrend === "falling" || btcDominanceTrend === undefined,
-      (totalMarketMomentum ?? 0) > 5,
+      (totalMarketMomentum ?? 0) > CRT.CONFIDENCE_MOMENTUM_POSITIVE,
     ].filter(Boolean).length;
     regimeConfidence = signals >= 3 ? "high" : signals >= 2 ? "medium" : "low";
   } else if (regime === "RISK_OFF") {
     const signals = [
-      btcVol > 90,
+      btcVol > CRT.CONFIDENCE_VOL_EXTREME,
       marketTrend === "falling",
       btcDominanceTrend === "rising",
-      (totalMarketMomentum ?? 0) < -5,
+      (totalMarketMomentum ?? 0) < CRT.CONFIDENCE_MOMENTUM_NEGATIVE,
     ].filter(Boolean).length;
     regimeConfidence = signals >= 3 ? "high" : signals >= 2 ? "medium" : "low";
   } else {
@@ -174,7 +176,7 @@ export function classifyCryptoRegime(
     ? Math.sqrt(proxyReturns20d.reduce((s, v) => s + (v - median) ** 2, 0) / proxyReturns20d.length)
     : 0;
   // Enhanced: also check dominance falling for alt-season confirmation
-  const altSeasonSignal = dispersion > 8 && median > 0 && btcDominanceTrend !== "rising";
+  const altSeasonSignal = dispersion > CRT.ALT_SEASON_DISPERSION && median > 0 && btcDominanceTrend !== "rising";
 
   const sectorMap = REGIME_SECTOR_MAP[regime];
 
