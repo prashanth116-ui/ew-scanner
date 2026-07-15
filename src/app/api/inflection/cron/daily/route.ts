@@ -76,6 +76,8 @@ export async function GET(request: NextRequest) {
     let fetchedCount = 0;
 
     for (let i = 0; i < universe.length; i += BATCH_SIZE) {
+      if (Date.now() - startTime > 240_000) break; // time guard
+
       const batch = universe.slice(i, i + BATCH_SIZE);
 
       const settled = await Promise.allSettled(

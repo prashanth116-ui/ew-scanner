@@ -86,8 +86,8 @@ export async function GET(request: NextRequest) {
     let fetchedCount = 0;
 
     for (let i = 0; i < universe.length; i += BATCH_SIZE) {
-      // Time guard — leave 40s for final persist + response
-      if (Date.now() - startTime > 260_000) break;
+      // Time guard — leave 60s for final persist + response
+      if (Date.now() - startTime > 240_000) break;
 
       const batch = universe.slice(i, i + BATCH_SIZE);
 

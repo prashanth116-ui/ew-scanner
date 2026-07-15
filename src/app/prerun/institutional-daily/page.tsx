@@ -254,12 +254,6 @@ export default function InstitutionalDailyPage() {
     setSortField((prev) => { if (prev === field) { setSortAsc((a) => !a); return field; } setSortAsc(false); return field; });
   }, []);
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(results.map((r) => r.ticker).join(", "));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [results]);
-
   const filtered = useMemo(() => {
     let rows = results;
     if (tierFilter !== "ALL") rows = rows.filter((r) => r.tier === tierFilter);
@@ -287,6 +281,12 @@ export default function InstitutionalDailyPage() {
       return sortAsc ? -cmp : cmp;
     });
   }, [results, tierFilter, tickerSearch, sortField, sortAsc, streaks, deltas]);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [filtered]);
 
   const newTodayCount = Object.values(streaks).filter((s) => s === 1).length;
 
@@ -449,7 +449,7 @@ export default function InstitutionalDailyPage() {
       )}
 
       <div className="mt-6 text-center text-[10px] text-[#444]">
-        Scan runs at 10:30 PM ET Mon-Fri | Universe: S&P 500 + Nasdaq-100 (~509 tickers) | 14-day retention
+        Scan runs at 10:30 PM ET Tue-Sat | Universe: S&P 500 + Nasdaq-100 + Additional Members (~467 tickers) | 14-day retention
       </div>
     </div>
   );

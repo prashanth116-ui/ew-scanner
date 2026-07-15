@@ -454,12 +454,6 @@ export default function InflectionDailyPage() {
     });
   }, []);
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(results.map((r) => r.ticker).join(", "));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [results]);
-
   // High conviction tickers: on BOTH scanners with favorable conditions
   const highConvictionTickers = useMemo(() => {
     const set = new Set<string>();
@@ -555,6 +549,12 @@ export default function InflectionDailyPage() {
 
     return sorted;
   }, [results, highConvictionOnly, highConvictionTickers, tradeReadFilter, stageFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [filtered]);
 
   // Summary counts
   const starterCount = results.filter((r) => r.trade_read === "STARTER_POSITION_CANDIDATE").length;
@@ -1084,7 +1084,7 @@ export default function InflectionDailyPage() {
 
       {/* Footer */}
       <div className="mt-6 text-center text-[10px] text-[#444]">
-        Scan runs at 9:45 PM ET Mon-Fri | Universe: S&P 500 + Nasdaq-100 (~560 tickers) | 14-day retention
+        Scan runs at 9:45 PM ET Tue-Sat | Universe: S&P 500 + Nasdaq-100 + Additional Members (~467 tickers) | 14-day retention
       </div>
     </div>
   );

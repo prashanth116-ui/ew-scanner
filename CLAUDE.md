@@ -112,7 +112,7 @@ Lightweight pre-filter before fetching 6mo charts: `price >= MIN_PRICE ($10)`, `
 - **Telegram:** Always sends summary using full DB data (not in-memory partial)
 - **Noise guards:** `finalScore > 0` required for persistence, Leading preset uses `finalScore` not `totalScore`
 
-### ADDITIONAL_MEMBERS (86 curated tickers)
+### ADDITIONAL_MEMBERS (87 curated tickers)
 Non-index stocks added to the scan universe for momentum/breakout relevance. Defined in `src/data/index-tiers.ts`. Tier 2 for `getTickerTier()`. Last updated 2026-07-11.
 
 | Category | Tickers |
@@ -156,7 +156,7 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 
 ### Scanner Architecture & Value Map
 
-9 scanning engines, unified via nightly confluence. 5 count for confluence, 4 are badge-only. All scanners share a universal quality gate (`passesUniverseQualityGates()`) that filters stocks before scoring: price >= $15, price <= $1000 (except Semiconductors), mcap >= $8B, dollarVol >= $100M/day, dataQuality >= 40%.
+9 scanning engines, unified via nightly confluence. 5 count for confluence, 4 are badge-only. All scanners share a universal quality gate (`passesUniverseQualityGates()`) that filters stocks before scoring: price >= $10, price <= $1000 (except Semiconductors), mcap >= $8B, dollarVol >= $100M/day, dataQuality >= 40%.
 
 **Confluence scanners (5):**
 
@@ -164,7 +164,7 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 |---------|-------|---------|-------|--------|-----------|
 | PreRun Setup | `Setup` | Base breakouts from deep pullbacks (20%+ from ATH) | G1: pctFromAth >= 20% (10% for 4h), G2: no existential risk, G3: price > 92% SMA20 | 18 criteria A-Q+M2 (max 40), verdicts PRIORITY/KEEP/WATCH/DISCARD, 5 presets (Early+ deprecated) | `scoring.ts`, `data.ts` |
 | Inflection | `Inflect` | Accumulation cycle stage transitions (seller exhaustion → expansion) | Price >= $5, dollarVol >= $10M, mcap >= $500M | 6 components (SE/VC/BE/RS/LA/IP) weighted 0-100, stages + trade read (AVOID/WATCH/STARTER/ADD_ON) | `inflection-scoring.ts` |
-| VCP | `VCP` | Volatility contraction patterns before breakouts | Price >= $10, vol >= 500K, dollarVol >= $20M, mcap >= $1B, above SMA50+SMA200 | 5 components (trend/vol/compression/RS/risk) max 100, phases FOCUS/WATCHLIST/EARLY/IGNORE | `vcp-scoring.ts` |
+| Transition | `Trans` | Market structure transitions (accumulation → markup) | Price >= $5, dollarVol >= $10M, mcap >= $500M | 8 components weighted 0-100, 11-state model, alert states (TRIGGERED/READY/ARMED/WATCH) | `transition-scoring.ts`, `market-structure.ts` |
 | Institutional | `Inst` | Large-cap institutional runners with momentum | Price >= $20, mcap >= $20B, dollarVol >= $100M, vol >= 1.5M | 4 weighted components (inst 35%/exec 25%/risk 25%/disc 15%), 12 classifications | `institutional-scoring.ts` |
 | PreRunner | `Rot` | Sector rotation leaders + turnaround candidates | Min score threshold | LEADERs (from enrichment) + TURNAROUNDs (from rotation tracker), 0-100 score | `src/lib/prerunner/scoring.ts` |
 
@@ -175,7 +175,7 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 | QFE | `QFE` | Quality-Factor-Entry rating (A+ → D) + Buy/Wait/Avoid actions | 100% derived from PreRun data, no new information |
 | PreRun 4h | `Setup4h` | Same as Setup but on 4h candles (barMultiplier=6, Gate1=10%) | Same scoring methodology as Setup, different timeframe |
 | Inflection WATCH | `INF_WATCH` | Inflection WATCH trade reads | Low conviction signal |
-| Transition | `Trans` | Market structure transitions (accumulation → markup) | Trial scanner — comparing against Inflection for overlap/quality |
+| VCP | `VCP` | Volatility contraction patterns before breakouts | Significant overlap with Setup criteria N (range coil) + L (higher lows) |
 
 **Other scanners (not in nightly confluence):**
 
@@ -197,10 +197,10 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 | QFE | Rating wrapper — no new data | 100% derived from PreRun, candidate for removal |
 | Catalyst | Only scanner for short-term catalysts | Unique timeframe and inputs |
 | Squeeze | Pure squeeze mechanics (SI%, FTD, float, DTC) | No overlap, niche use case |
-| Transition | Market structure state machine (ChoCH, BOS, swing pivots) | Significant overlap with Inflection (both detect accumulation → markup), uses structural confirmation (pivots) vs statistical (component scores) |
+| Transition | Market structure state machine (ChoCH, BOS, swing pivots) | Complements Inflection — structural confirmation (pivots) vs statistical (component scores) |
 
 ### Transition Scanner
-Detects market structure transitions from accumulation into early markup using swing pivot analysis, Change of Character (ChoCH), and Break of Structure (BOS). Created as a trial scanner to compare against Inflection — badge-only in nightly summary, not counted for confluence.
+Detects market structure transitions from accumulation into early markup using swing pivot analysis, Change of Character (ChoCH), and Break of Structure (BOS). Counted for confluence (structural complement to Inflection's statistical approach).
 
 **11-state model** (ordered from bearish to bullish):
 
@@ -479,16 +479,17 @@ Sends 2 Telegram messages at 11 PM ET after all scanners finish:
 |---------------|---------|-------------|
 | `Setup` | PreRun | 5-preset pattern/setup scanner (LD, ST, SNDK, EM, PB). E+ deprecated, merged into ST. |
 | `Inflect` | Inflection | Inflection point detection (STARTER, ADD_ON, WATCH) |
-| `VCP` | VCP | Volatility contraction patterns (FOCUS, WATCH, EARLY) |
+| `Trans` | Transition | Market structure transitions (TRIGGERED + READY by score) |
 | `Inst` | Institutional | Institutional flow quality (SL, WL, SPEC) |
 | `Rot` | PreRunner | Rotation leaders/turnarounds radar |
 | `QFE` | QFE | Quality-Factor-Entry rating (A+ → C) — badge only, not counted for confluence |
+| `VCP` | VCP | Volatility contraction patterns (FOCUS, WATCH, EARLY) — badge only, not counted for confluence |
 | `Setup4h` | PreRun 4h | 4h-candle variant of PreRun (barMultiplier=6) — badge only, not counted for confluence |
-| `Trans` | Transition | Market structure transitions (TRIGGERED + READY by score) — badge only, not counted for confluence |
 
 **Confluence rules:**
-- 5 independent scanners counted: Setup, Inflect, VCP, Inst, Rot
+- 5 independent scanners counted: Setup, Inflect, Trans, Inst, Rot
 - QFE excluded (derived from PreRun data)
+- VCP excluded (significant overlap with Setup criteria N + L)
 - Setup4h excluded (same scoring methodology as Setup, different timeframe)
 - INF WATCH excluded from confluence count (badge only)
 - INF AVOID excluded entirely (negative signal)
@@ -534,7 +535,7 @@ Cross-scanner stock picker that replaces sequential AND gates with a composite s
 | `src/app/prerun/backtest/page.tsx` | UI — summary cards, score distribution bar, per-day table with expandable picks, score breakdown pills |
 
 ## Open Items / Known Gaps
-- **Transition scanner is a trial:** Created to compare against Inflection for detecting accumulation → markup transitions. Badge-only in nightly summary. After gating tuning, pass rate is ~45% (247/546). Produces 27 SE + 2 ACCUM stocks for early detection. After several days of parallel output, decide whether to promote to confluence, merge with Inflection, or remove.
+- **Transition scanner promoted to confluence:** Structural complement to Inflection (pivots/ChoCH/BOS vs statistical components). VCP demoted to badge-only (significant overlap with Setup criteria N + L). NON_CONFLUENCE set: QFE, VCP, Setup4h.
 - **VCP + Institutional crons untested:** Built but not manually triggered yet — universe is ~467, likely fits in one pass.
 - **Preset-resume may be redundant:** With SP400 dropped and universe at ~467, the preset cron likely completes in a single pass. The resume cron at 02:06 is still scheduled as a safety net but may not be needed. Monitor scan completion counts.
 - **NDX100 rebalance maintenance:** NDX100_MEMBERS updated for June 22, 2026 rebalance + July 7, 2026 SPCX addition. Next rebalance is September 2026 — update `src/data/index-tiers.ts` when announced. No automated rebalance cron (index changes are infrequent, ADDITIONAL_MEMBERS requires human judgment).

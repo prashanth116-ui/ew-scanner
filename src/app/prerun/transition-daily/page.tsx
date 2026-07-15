@@ -1215,7 +1215,7 @@ export default function TransitionDailyPage() {
 
       {/* Footer */}
       <div className="mt-6 text-center text-[10px] text-[#444]">
-        Scan runs at 9:55 PM ET Mon-Fri | Universe: S&P 500 + Nasdaq-100 (~605 tickers) | 14-day retention
+        Scan runs at 9:55 PM ET Tue-Sat | Universe: S&P 500 + Nasdaq-100 + Additional Members (~467 tickers) | 14-day retention
       </div>
     </div>
   );

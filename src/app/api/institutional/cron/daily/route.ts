@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { scoreInstitutionalAcceleration } from "@/lib/prerun/institutional-scoring";
+import { passesUniverseQualityGates } from "@/lib/prerun/scoring";
 import { buildScanUniverse } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
 
@@ -10,6 +11,7 @@ import {
   purgeOldInstitutionalDaily,
   loadInstitutionalDailyDates,
   loadInstitutionalDaily,
+  loadAllScoredTickers,
 } from "@/lib/supabase/persistence";
 import type { InstitutionalDailyRecord } from "@/lib/supabase/persistence";
 import type { InstitutionalResult } from "@/lib/prerun/types";
@@ -63,18 +65,27 @@ export async function GET(request: NextRequest) {
 
     await prefetchSectorETFs();
 
+    // Non-scorer gate: skip tickers never seen in any scanner table
+    const scoredTickers = await loadAllScoredTickers().catch(() => new Set<string>());
+    const hasHistory = scoredTickers.size > 50;
+
     const qualifying: InstitutionalDailyRecord[] = [];
     let pendingRecords: InstitutionalDailyRecord[] = [];
     let totalPersisted = 0;
     let fetchedCount = 0;
+    let skippedGate = 0;
 
     for (let i = 0; i < universe.length; i += BATCH_SIZE) {
+      if (Date.now() - startTime > 240_000) break; // time guard
+
       const batch = universe.slice(i, i + BATCH_SIZE);
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
+          if (hasHistory && !scoredTickers.has(ticker)) return null;
           const data = await fetchPreRunData(ticker);
           if (!data) return null;
+          if (!passesUniverseQualityGates(data, ticker)) { skippedGate++; return null; }
           return scoreInstitutionalAcceleration(data);
         })
       );
@@ -136,17 +147,16 @@ export async function GET(request: NextRequest) {
       // Non-critical
     }
 
-    let telegramSent = false;
     const timedOut = (Date.now() - startTime) > 240_000;
 
     return NextResponse.json({
       scannedCount: universe.length,
       fetchedCount,
+      skippedGate,
       qualifyingCount: qualifying.length,
       persistedCount: totalPersisted,
       purgedCount: purged,
       newTodayCount: newTickers.length,
-      telegramSent,
       timedOut,
       elapsedMs: Date.now() - startTime,
       tierCounts: {

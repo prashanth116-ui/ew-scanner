@@ -219,7 +219,7 @@ function scoreInflectionComponent(r: InflectionDailyRecord | undefined): number 
   // Base by trade_read
   let pts = 0;
   if (r.trade_read === "STARTER_POSITION_CANDIDATE") pts = 10;
-  else if (r.trade_read === "ADD_ON_CANDIDATE") pts = 8;
+  else if (r.trade_read === "ADD_ON_CONFIRMATION") pts = 8;
   else if (r.trade_read === "WATCH") pts = 3;
   else if (r.trade_read === "AVOID") pts = -5;
   else return 0; // unknown trade_read, no points
@@ -314,8 +314,8 @@ function scoreVcpComponent(r: VCPDailyRecord | undefined): number {
   // Base by phase
   let pts = 0;
   if (r.phase === "FOCUS_LIST") pts = 5;
-  else if (r.phase === "WATCHLIST") pts = 3;
-  else if (r.phase === "EARLY") pts = 1;
+  else if (r.phase === "WATCHLIST_CANDIDATE") pts = 3;
+  else if (r.phase === "EARLY_SETUP") pts = 1;
   else return 0;
 
   // Score bonus

@@ -172,14 +172,14 @@ export interface PreRunScores {
   scoreK: number; // Breakout proximity (0-2)
   scoreL: number; // Higher lows (0-2)
   scoreM: number; // EMA reclaim (0-2)
-  scoreM2: number; // 15m EMA timing signal (0-2)
+  scoreM2: number; // EMA 10/20 timing signal (0-2)
   scoreN: number; // Range coil / tight closes near top (0-2)
   scoreO: number; // Failed breakdown recovery (0-2)
   scoreP: number; // Earnings revision momentum (0-2)
   scoreQ: number; // Short squeeze probability (0-2)
   sectorModifier: number; // +1/0/-1 based on sector momentum
   sectorQuadrant: number; // +2/0/-1/-2 based on RRG quadrant
-  totalScore: number; // Sum of A-Q + M2 + modifiers (max 41 + modifiers)
+  totalScore: number; // Sum of A-Q + M2 + modifiers (max 40 + modifiers)
   finalScore: number; // 0 if any gate fails, else totalScore
 }
 

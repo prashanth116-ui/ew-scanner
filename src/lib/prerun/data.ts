@@ -29,7 +29,7 @@ function toNumOrNull(val: unknown): number | null {
   return typeof val === "number" && !Number.isNaN(val) ? val : null;
 }
 
-// ── Finnhub response cache (30-min TTL) ──
+// ── Finnhub response cache (24h TTL) ──
 // Earnings calendar, insider buys, and beat streaks are stable for hours.
 // Eliminates ~4,173 redundant HTTP calls on repeated confluence scans.
 const _finnhubCache = new Map<string, { data: unknown; ts: number }>();

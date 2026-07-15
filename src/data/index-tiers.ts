@@ -2,7 +2,7 @@
  * Index membership tiers for quality-based sorting in the pre-run scanner.
  *
  * Tier 1: S&P 500 — institutional-grade large-cap
- * Tier 2: Nasdaq-100 + S&P 400 MidCap (not already in tier 1) — quality mid/large-cap
+ * Tier 2: Nasdaq-100 or Additional Members (not already in tier 1) — quality mid/large-cap
  * Tier 3: Everything else — small-cap, speculative
  *
  * Last updated: 2026-07-11 (refresh quarterly after index rebalances)
@@ -74,7 +74,7 @@ export const SP500_MEMBERS: Set<string> = new Set([
 ]);
 
 // prettier-ignore
-// Updated for June 22, 2026 quarterly rebalance
+// Updated for June 22, 2026 quarterly rebalance + July 7, 2026 SPCX addition
 export const NDX100_MEMBERS: Set<string> = new Set([
   "AAPL", "ABNB", "ADBE", "ADI", "ADP", "ADSK", "AEP", "ALAB", "ALNY", "AMAT",
   "AMD", "AMGN", "AMZN", "ANSS", "APP", "ARM", "ASML", "AVGO", "AZN",
