@@ -147,6 +147,15 @@ function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
     return avgChange > 1.0 ? "Strong Bull" : "Lean Bull";
   }
 
+  // Count-based override: when 3+ of 4 futures agree on direction (using the
+  // sign() threshold), one outlier shouldn't drag the classification to Neutral.
+  // e.g., ES +0.06%, NQ -0.70%, RTY +0.40%, YM +0.17% → NQ is the outlier,
+  // 3 are positive above threshold → Lean Bull despite NQ pulling avg negative.
+  const upCount = dirs.filter((d) => d === "up").length;
+  const downCount = dirs.filter((d) => d === "down").length;
+  if (upCount >= 3 && equities.length >= 4) return "Lean Bull";
+  if (downCount >= 3 && equities.length >= 4) return "Lean Bear";
+
   // Close call — use average change as tiebreaker (lowered from ±0.3 to ±0.15
   // since pre-market averages are typically 0.1-0.4%, making 0.3 too aggressive)
   if (avgChange > 0.15) return "Lean Bull";
@@ -313,17 +322,23 @@ function pickBestWorst(
     bestToTrade = { symbol: best.symbol, direction, reason };
   }
 
-  // Avoid = the one diverging from the others
+  // Avoid = the futures contract whose changePct deviates most from the group median.
+  // Previous approach used sign() direction uniqueness, which caused artifacts like
+  // ES +0.06% ("flat") being flagged as avoid instead of NQ -0.70% (the real outlier).
   let assetToAvoid: string | null = null;
   if (equities.length >= 3) {
-    const dirs = equities.map((e) => ({ sym: e.symbol, dir: sign(e.changePct) }));
-    const counts: Record<string, string[]> = {};
-    for (const d of dirs) {
-      (counts[d.dir] ??= []).push(d.sym);
+    const sorted = [...equities].sort((a, b) => a.changePct - b.changePct);
+    const mid = Math.floor(sorted.length / 2);
+    const median = sorted.length % 2 === 0
+      ? (sorted[mid - 1].changePct + sorted[mid].changePct) / 2
+      : sorted[mid].changePct;
+    let maxDev = 0;
+    for (const e of equities) {
+      const dev = Math.abs(e.changePct - median);
+      if (dev > maxDev) { maxDev = dev; assetToAvoid = e.symbol; }
     }
-    for (const [, syms] of Object.entries(counts)) {
-      if (syms.length === 1) { assetToAvoid = syms[0]; break; }
-    }
+    // Only flag if the deviation is meaningful (> 0.15pp from median)
+    if (maxDev < 0.15) assetToAvoid = null;
   }
 
   return { bestToTrade, assetToAvoid };
@@ -491,14 +506,22 @@ function buildReasons(
     }
   }
 
-  // Alignment count
+  // Alignment count (with annotation for near-threshold futures)
   if (equities.length >= 3) {
     const dirs = equities.map((e) => sign(e.changePct));
     const upCount = dirs.filter((d) => d === "up").length;
     const downCount = dirs.filter((d) => d === "down").length;
+    const flatCount = dirs.filter((d) => d === "flat").length;
     const maxSame = Math.max(upCount, downCount);
     const dirLabel = upCount > downCount ? "bullish" : "bearish";
-    reasons.push(`${maxSame} of ${equities.length} equity futures aligned ${dirLabel}`);
+    // Annotate which futures are below the 0.1% threshold (classified as "flat")
+    const flatNames = equities
+      .filter((e) => sign(e.changePct) === "flat")
+      .map((e) => e.symbol);
+    const annotation = flatCount > 0
+      ? ` (${flatNames.join(", ")} below threshold)`
+      : "";
+    reasons.push(`${maxSame} of ${equities.length} equity futures aligned ${dirLabel}${annotation}`);
   }
 
   return reasons.slice(0, 6);

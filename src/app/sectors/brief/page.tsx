@@ -542,15 +542,23 @@ function computeDivergence(snapshotBias: string, liveBias: string): { label: str
   const lLevel = BIAS_LEVEL[liveBias] ?? 0;
   const diff = Math.abs(sLevel - lLevel);
   if (diff === 0) return null;
-  // Opposite sides of neutral
+  // Opposite sides of neutral (e.g., Lean Bull → Lean Bear)
   if ((sLevel > 0 && lLevel < 0) || (sLevel < 0 && lLevel > 0)) {
-    return { label: "Reversed", color: "text-amber-400 bg-amber-500/10 border-amber-500/30" };
+    return { label: "Reversed", color: "text-red-400 bg-red-500/10 border-red-500/30" };
   }
-  // Same side shift of 2+ levels
+  // Strong directional call faded to Neutral (e.g., Strong Bull → Neutral)
+  if (lLevel === 0 && Math.abs(sLevel) >= 2) {
+    return { label: "Faded", color: "text-amber-400 bg-amber-500/10 border-amber-500/30" };
+  }
+  // Directional call degraded to Neutral (e.g., Lean Bull → Neutral)
+  if (lLevel === 0 && Math.abs(sLevel) === 1) {
+    return { label: "Faded", color: "text-amber-400/70 bg-amber-500/5 border-amber-500/20" };
+  }
+  // Same side shift of 2+ levels (e.g., Strong Bull → Lean Bull skipping a level, rare)
   if (diff >= 2) {
-    return { label: "Shifted", color: "text-[#888] bg-[#222] border-[#333]" };
+    return { label: "Shifted", color: "text-amber-400 bg-amber-500/10 border-amber-500/30" };
   }
-  // Minor 1-level shift
+  // Minor 1-level same-direction shift (e.g., Strong Bull → Lean Bull)
   return { label: "Adjusted", color: "text-[#666] bg-[#181818] border-[#2a2a2a]" };
 }
 
@@ -732,10 +740,12 @@ function SnapshotHeader({ snapshot, snapshotLoading, liveBias }: {
         )}
       </div>
 
-      {/* Futures snapshot values */}
+      {/* Futures snapshot values — only equity futures (bias inputs), not commodities */}
       {snapshot.futures_snapshot && snapshot.futures_snapshot.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
-          {snapshot.futures_snapshot.map((f) => {
+          {snapshot.futures_snapshot
+            .filter((f) => ["ES=F", "NQ=F", "YM=F", "RTY=F"].includes(f.symbol))
+            .map((f) => {
             const isUp = f.changePct >= 0;
             return (
               <div key={f.symbol} className="flex items-center gap-1 text-[10px]">
