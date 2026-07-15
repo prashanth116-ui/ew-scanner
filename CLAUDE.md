@@ -311,16 +311,36 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 ### Pre-Market Trading Bias Engine
 Computes structured trading bias from equity futures, VIX, and market internals.
 
-**Inputs:** ES=F, NQ=F, YM=F, RTY=F (4 equity futures), VIX level, TICK/TRIN/ADD internals.
+**Inputs:** ES=F, NQ=F, YM=F, RTY=F (4 equity futures), VIX level, sector breadth, adaptive VIX bounds.
 
 **Classification logic (`classifyBias`):**
-1. **Magnitude gate:** If average absolute change < 0.15%, return Neutral (tiny moves are noise)
+1. **Magnitude gate:** If average absolute change < 0.08%, return Neutral (tiny moves are noise)
 2. **Unanimous:** All 4 up → Strong Bull, all 4 down → Strong Bear
-3. **Majority rules:** If more futures are down than up → Lean Bear (or Strong Bear if avg < -1.0%). Vice versa for bullish. Leadership shortcuts never override majority direction.
-4. **Even split:** Use average change as tiebreaker (±0.3% threshold)
-5. **Fallback:** biasScore from checklist scoring
+3. **Magnitude-weighted majority:** Sum positive and negative contributions; one side must outweigh the other by 1.5x to claim majority (prevents 3 barely-positive futures from overriding 1 strongly-negative)
+4. **Count-based override:** If 3+ of 4 futures agree on direction (using the `sign()` 0.1% threshold), classify as Lean Bull/Bear regardless of magnitude weighting. Prevents one large outlier from dragging classification to Neutral.
+5. **Even split:** Use average change as tiebreaker (±0.15% threshold)
+6. **Fallback:** biasScore from checklist scoring
+
+**Direction threshold (`sign()`):** Futures with absolute changePct < 0.1% are classified as "flat" (not "up" or "down"). This affects the unanimous check, count-based override, and alignment reasons.
+
+**Asset-to-avoid logic (`pickBestWorst`):** Uses median-deviation — the futures contract whose changePct deviates most from the group median is flagged as avoid (minimum 0.15pp deviation required). Previous approach used `sign()` direction uniqueness, which caused artifacts like ES +0.06% ("flat") being flagged instead of NQ -0.70% (the real outlier).
+
+**Best-to-trade logic:** When bias is Neutral/Flat, no trade is recommended (`bestToTrade: null`). When bullish, picks the futures with highest changePct for long. When bearish, picks the most negative for short.
+
+**Alignment reasons:** The `buildReasons()` function annotates which futures are below the 0.1% sign threshold, e.g., "2 of 4 equity futures aligned bullish (ES below threshold)".
 
 **Outputs:** `TradingBias` object with bias, confidence (0-100), preferredDirection (Long/Short/Flat), leading/weakest asset, bestToTrade/assetToAvoid, dayType, VIX interpretation, playbook text, reasons array.
+
+**9 AM Snapshot display (`/sectors/brief`):** The brief page shows both the persisted 9 AM prediction (frozen from `trading_bias_daily`) and the live bias (refreshed every 2 min from `/api/premarket`). The snapshot header shows the 9 AM bias, confidence, direction, and equity futures values. When the live bias diverges from the snapshot, a divergence badge appears:
+
+| Divergence | Condition | Styling |
+|------------|-----------|---------|
+| Reversed | Opposite sides of neutral (e.g., Lean Bull → Lean Bear) | Red |
+| Faded | Strong directional call → Neutral (e.g., Strong Bull → Neutral) | Amber |
+| Shifted | Same-side shift of 2+ levels | Amber |
+| Adjusted | Minor 1-level same-direction shift | Muted gray |
+
+Snapshot futures are filtered to equity only (ES/NQ/YM/RTY) — CL and GC are not bias inputs and are excluded from the display.
 
 **Backtesting persistence:** The daily briefing cron (`/api/daily-briefing/cron`) persists each day's prediction to `trading_bias_daily` and backfills the previous day's actual futures open-to-close returns. Flow:
 1. **Step A (backfill):** Find most recent row with null `outcome_updated_at`. Fetch 5d daily chart for ES=F/NQ=F/YM=F/RTY=F via `fetchYahooChart()`. Match candle by date, compute open-to-close return %. Evaluate `bias_correct` (Long → avg return > 0, Short → avg return < 0, Flat → null). Compute `best_trade_return_pct` (negated if direction was "short").
@@ -332,8 +352,9 @@ Computes structured trading bias from equity futures, VIX, and market internals.
 | `src/lib/premarket/trading-bias.ts` | Bias classification, confidence, playbook generation |
 | `src/lib/premarket/fetch.ts` | Yahoo Finance data fetching for futures + internals (2-min cache) |
 | `src/lib/premarket/scoring.ts` | Checklist-based bias score (-10 to +10) |
-| `src/lib/premarket/types.ts` | `TradingBias`, `FuturesSnapshot`, `PremarketData` types |
+| `src/lib/premarket/types.ts` | `TradingBias`, `TradingBiasSnapshot`, `FuturesSnapshot`, `PremarketData` types |
 | `src/app/api/premarket/route.ts` | API route — aggregates futures, sector data, regime, posture |
+| `src/app/api/trading-bias/daily/route.ts` | Read API for persisted 9 AM snapshot (?date=YYYY-MM-DD, defaults to most recent) |
 | `supabase/migrations/020_trading_bias_daily.sql` | DB table for bias predictions + outcome backfill |
 
 ### Crypto Rotation
