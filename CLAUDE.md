@@ -449,17 +449,43 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 | `COMPARISON` | `CHANGE_THRESHOLD: 2` (sector score delta for improved/declined classification) |
 | `PRERUNNER` | Leader weights: `RS: 30`, `SECTOR: 25`, `VOLUME: 15`, `CONVICTION: 15`, `MOMENTUM: 10`, `REGIME: 5` (sum=100). Turnaround weights: `RS: 35`, `LIFECYCLE: 20`, `VOLUME: 15`, `SECTOR: 15`, `MOMENTUM: 10`, `REGIME: 5` (sum=100). Normalization: `RS_ACCEL_MAX: 6`, `VOL_RATIO_MAX: 2.0`, `VOL_RATIO_FLOOR: 0.8`, `MOMENTUM_RANGE: [-10, +10]`. Bonuses: `RS_IMPROVING_BONUS: 5`, `OUTPERFORMANCE_BONUS_CAP: 5` (leaders only, scaled by `OUTPERFORMANCE_SCALE: 10`). Blending: `SECTOR_COMPOSITE_BLEND: 0.5` (50% quadrant + 50% continuous composite). Conviction: `TURNAROUND_CONVICTION_RS_BLEND: 0.4`, breakpoints at `0.7` (HIGH) / `0.4` (MEDIUM). |
 
-Other sections: CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS.
+| `CONVICTION` | Signal weights: `sectorQuadrant: 1.5`, `sectorComposite: 1.5`, `stockCategory: 1.0`, `rsAccel: 1.0`, `sectorStealth: 1.0`, `volumeRatio: 0.5`. Thresholds: `STRONG_RS_ACCEL: 3.0`, `HIGH_VOL_RATIO: 1.2`, `HIGH_COMPOSITE: 70`, `STEALTH_VOL_FLOOR: 0.8`. Phase: `PHASE_P4_PENALTY: 1.5`. Tiers: `WEIGHTED_HIGH: 4.0`, `WEIGHTED_MEDIUM: 2.5`. |
+
+Other sections: LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS.
 
 ### Stock Enrichment Phase Classification
 Stocks passing quality gates are classified into phases in `stock-enrichment.ts`:
 
 | Phase | Criteria | Notes |
 |-------|----------|-------|
-| P4_EXHAUSTING | Above 50MA AND both RS accel < `P4_RS_ACCEL` AND sector accel < `P4_SECTOR_ACCEL` | Requires BOTH negative — single negative metric doesn't trigger |
-| P3_TRENDING | Above 50MA, positive accel, volRatio >= `P3_MIN_VOL_RATIO` | Strong trend with volume confirmation |
-| P2_TURNAROUND | Above 50MA, positive accel, low volume (fallback) OR below 50MA with positive RS accel + volume | Above-50MA low-volume stocks use P2 (not P1 — can't be "basing" above 50MA) |
-| P1_BASING | Below 50MA (fallback) | Early recovery, below key moving average |
+| P2_TURNAROUND | pctFrom50ma in [-5%, 3%] AND rsAccel > 0.5 AND volRatio >= 1.2 | Checked first (most specific) — near 50MA crossover with acceleration + volume |
+| P1_BASING | Below 50MA AND rsAccel > 0 | Early recovery, positive acceleration below key MA |
+| P3_TRENDING | Above 50MA AND pctFrom50ma > 3% AND rsAccel >= 0 AND volRatio >= 0.7 | Strong trend with volume confirmation |
+| P4_EXHAUSTING | Above 50MA AND rsAccel < `P4_RS_ACCEL` (-2.0) AND sectorAccel < `P4_SECTOR_ACCEL` (-3) | Requires BOTH deeply negative — single negative metric doesn't trigger |
+
+**Fallback logic (above 50MA):** If no explicit phase matches: `rsAccel < P4_RS_ACCEL` → P4_EXHAUSTING, `rsAccel >= 0 + volRatio >= 0.7` → P3_TRENDING, else → P2_TURNAROUND (not P1 — can't be "basing" above 50MA). Fallback respects the same RS accel threshold as the explicit P4 check — mildly decelerating stocks (accel between -2.0 and 0) stay P3/P2, not P4.
+
+**Fallback logic (below 50MA):** Always P1_BASING.
+
+### Stock Enrichment Conviction Scoring
+`scoreConviction()` in `stock-enrichment.ts` computes conviction from 6 weighted signals plus a phase penalty.
+
+**Signals (structural > tactical):**
+
+| Signal | Weight | Condition | Type |
+|--------|--------|-----------|------|
+| sectorQuadrant | 1.5 | IMPROVING or LEADING | Structural |
+| sectorComposite | 1.5 | >= 70 | Structural |
+| stockCategory | 1.0 | TURNAROUND or LEADER | Structural |
+| rsAccel | 1.0 | >= 3.0 | Tactical |
+| sectorStealth | 1.0 | stealth + (volRatio >= `STEALTH_VOL_FLOOR` (0.8) or TURNAROUND/LEADER) | Structural |
+| volumeRatio | 0.5 | >= 1.2 | Tactical |
+
+**Phase penalty:** P4_EXHAUSTING stocks get `-PHASE_P4_PENALTY` (1.5) subtracted from weighted score. Prevents exhausting stocks from achieving HIGH conviction even with strong sector signals.
+
+**Conviction tiers:** HIGH >= 4.0, MEDIUM >= 2.5, WATCH < 2.5. All thresholds in `CONVICTION` config.
+
+**Category classification:** LEADER (above 50MA + outperforms sector + vol >= 1.0x), CATCH_UP (above 50MA fallback), TURNAROUND (below 50MA + rsAccel > 0.5 + vol >= 1.0x, or rsAccel > 1.0 alone), AVOID (below 50MA, no turnaround signal). AVOID never survives quality gates (Gate 5 uses identical conditions).
 
 Null-data tracking: `marketCap` null is now rejected (when `REJECT_NULL_MARKET_CAP` is true in config, aligns with PreRun treating null as 0). When `institutionalPct` or `ret20d` are null, the corresponding quality gates are bypassed (defensible — don't reject on missing data) but tracked via `dataWarnings: string[]` on `EnrichedStock`.
 
