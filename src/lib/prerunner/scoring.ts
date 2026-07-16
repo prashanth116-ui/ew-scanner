@@ -49,7 +49,8 @@ function scoreSectorBlended(quadrant: RRGQuadrant, composite: number): number {
 
 function scoreMomentum(ret: number | null): number {
   if (ret == null) return 0.5;
-  return clamp01((ret + 10) / 20);
+  const range = PRERUNNER.MOMENTUM_RANGE_MAX - PRERUNNER.MOMENTUM_RANGE_MIN;
+  return clamp01((ret - PRERUNNER.MOMENTUM_RANGE_MIN) / range);
 }
 
 function computeTurnaroundConviction(
@@ -61,8 +62,8 @@ function computeTurnaroundConviction(
   const combined =
     lcScore * (1 - PRERUNNER.TURNAROUND_CONVICTION_RS_BLEND) +
     rsScore * PRERUNNER.TURNAROUND_CONVICTION_RS_BLEND;
-  if (combined >= 0.7) return "HIGH";
-  if (combined >= 0.4) return "MEDIUM";
+  if (combined >= PRERUNNER.TURNAROUND_CONVICTION_HIGH) return "HIGH";
+  if (combined >= PRERUNNER.TURNAROUND_CONVICTION_MEDIUM) return "MEDIUM";
   return "LOW";
 }
 

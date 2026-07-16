@@ -446,6 +446,13 @@ export const PRERUNNER = {
 
   /** Turnaround conviction: RS accel blend factor (vs lifecycle score) */
   TURNAROUND_CONVICTION_RS_BLEND: 0.4,
+  /** Turnaround conviction breakpoints */
+  TURNAROUND_CONVICTION_HIGH: 0.7,
+  TURNAROUND_CONVICTION_MEDIUM: 0.4,
+
+  /** Momentum normalization range: ret% mapped to [0,1] */
+  MOMENTUM_RANGE_MIN: -10,
+  MOMENTUM_RANGE_MAX: 10,
 
   /** Quadrant score mapping (used for sector health component) */
   QUADRANT_SCORES: { LEADING: 25, IMPROVING: 20, WEAKENING: 8, LAGGING: 0 } as Record<string, number>,

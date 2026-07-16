@@ -41,6 +41,7 @@ export default function PicksPage() {
     rotationSectorRS,
     stocksBySector,
     sortedSectors,
+    subSectorScores,
     comparisonMap,
     setScanResults,
     setScanResultsDate,
@@ -136,7 +137,7 @@ export default function PicksPage() {
         <PreRunnerRadar
           rotationData={rotationData}
           enrichedStocks={data.enrichedStocks.passed}
-          sectors={data.sectors}
+          sectors={[...data.sectors, ...subSectorScores]}
           collapsed={collapsedPanels.has("prerunner-radar")}
           onToggle={togglePanel}
         />
