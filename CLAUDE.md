@@ -323,7 +323,7 @@ Computes structured trading bias from equity futures, VIX, and market internals.
 
 **Direction threshold (`sign()`):** Futures with absolute changePct < 0.1% are classified as "flat" (not "up" or "down"). This affects the unanimous check, count-based override, and alignment reasons.
 
-**Asset-to-avoid logic (`pickBestWorst`):** Uses median-deviation — the futures contract whose changePct deviates most from the group median is flagged as avoid (minimum 0.15pp deviation required). Previous approach used `sign()` direction uniqueness, which caused artifacts like ES +0.06% ("flat") being flagged instead of NQ -0.70% (the real outlier).
+**Asset-to-avoid logic (`pickBestWorst`):** Uses median-deviation — the futures contract whose changePct deviates most from the group median is flagged as avoid (minimum 0.15pp deviation required). Previous approach used `sign()` direction uniqueness, which caused artifacts like ES +0.06% ("flat") being flagged instead of NQ -0.70% (the real outlier). **Conflict guard:** If `assetToAvoid` matches `bestToTrade.symbol`, `assetToAvoid` is cleared — you can't recommend trading and avoiding the same contract (the outlier IS the directional trade in bearish scenarios).
 
 **Best-to-trade logic:** When bias is Neutral/Flat, no trade is recommended (`bestToTrade: null`). When bullish, picks the futures with highest changePct for long. When bearish, picks the most negative for short.
 
