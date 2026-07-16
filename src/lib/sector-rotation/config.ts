@@ -407,9 +407,11 @@ export const EXTENSION_TIERS = {
 
 export const PRERUNNER = {
   /** RS accel cap for normalization (above = full marks) */
-  RS_ACCEL_MAX: 15,
+  RS_ACCEL_MAX: 6,
   /** Volume ratio cap for normalization */
-  VOL_RATIO_MAX: 3.0,
+  VOL_RATIO_MAX: 2.0,
+  /** Volume ratio floor for normalization */
+  VOL_RATIO_FLOOR: 0.8,
   /** Bonus when RS direction is improving */
   RS_IMPROVING_BONUS: 5,
   /** Minimum composite score to qualify */
@@ -420,18 +422,30 @@ export const PRERUNNER = {
   MAX_TELEGRAM_CANDIDATES: 5,
 
   /** Leader scoring weights (sum = 100) */
-  LEADER_RS_WEIGHT: 35,
+  LEADER_RS_WEIGHT: 30,
   LEADER_SECTOR_WEIGHT: 25,
   LEADER_VOLUME_WEIGHT: 15,
   LEADER_CONVICTION_WEIGHT: 15,
-  LEADER_REGIME_WEIGHT: 10,
+  LEADER_REGIME_WEIGHT: 5,
+  LEADER_MOMENTUM_WEIGHT: 10,
 
   /** Turnaround scoring weights (sum = 100) */
-  TURNAROUND_RS_WEIGHT: 40,
+  TURNAROUND_RS_WEIGHT: 35,
   TURNAROUND_LIFECYCLE_WEIGHT: 20,
   TURNAROUND_VOLUME_WEIGHT: 15,
   TURNAROUND_SECTOR_WEIGHT: 15,
-  TURNAROUND_REGIME_WEIGHT: 10,
+  TURNAROUND_REGIME_WEIGHT: 5,
+  TURNAROUND_MOMENTUM_WEIGHT: 10,
+
+  /** Blend factor for sector composite vs quadrant (0 = pure quadrant, 1 = pure composite) */
+  SECTOR_COMPOSITE_BLEND: 0.5,
+
+  /** Outperformance bonus: cap and scale for ret20d > 0 */
+  OUTPERFORMANCE_BONUS_CAP: 5,
+  OUTPERFORMANCE_SCALE: 10,
+
+  /** Turnaround conviction: RS accel blend factor (vs lifecycle score) */
+  TURNAROUND_CONVICTION_RS_BLEND: 0.4,
 
   /** Quadrant score mapping (used for sector health component) */
   QUADRANT_SCORES: { LEADING: 25, IMPROVING: 20, WEAKENING: 8, LAGGING: 0 } as Record<string, number>,

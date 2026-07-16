@@ -34,11 +34,36 @@ function scoreRSAccel(rsAccel: number): number {
 }
 
 function scoreVolume(volRatio: number): number {
-  return clamp01((volRatio - 0.5) / (PRERUNNER.VOL_RATIO_MAX - 0.5));
+  return clamp01((volRatio - PRERUNNER.VOL_RATIO_FLOOR) / (PRERUNNER.VOL_RATIO_MAX - PRERUNNER.VOL_RATIO_FLOOR));
 }
 
 function scoreSectorQuadrant(quadrant: RRGQuadrant): number {
   return (PRERUNNER.QUADRANT_SCORES[quadrant] ?? 0) / 25;
+}
+
+function scoreSectorBlended(quadrant: RRGQuadrant, composite: number): number {
+  const qScore = scoreSectorQuadrant(quadrant);
+  const cScore = clamp01(composite / 100);
+  return qScore * (1 - PRERUNNER.SECTOR_COMPOSITE_BLEND) + cScore * PRERUNNER.SECTOR_COMPOSITE_BLEND;
+}
+
+function scoreMomentum(ret: number | null): number {
+  if (ret == null) return 0.5;
+  return clamp01((ret + 10) / 20);
+}
+
+function computeTurnaroundConviction(
+  lifecycle: LifecycleStage,
+  rsAccel: number,
+): "HIGH" | "MEDIUM" | "LOW" {
+  const lcScore = scoreLifecycle(lifecycle);
+  const rsScore = scoreRSAccel(rsAccel);
+  const combined =
+    lcScore * (1 - PRERUNNER.TURNAROUND_CONVICTION_RS_BLEND) +
+    rsScore * PRERUNNER.TURNAROUND_CONVICTION_RS_BLEND;
+  if (combined >= 0.7) return "HIGH";
+  if (combined >= 0.4) return "MEDIUM";
+  return "LOW";
 }
 
 function scoreLifecycle(lifecycle: LifecycleStage): number {
@@ -65,20 +90,26 @@ function scoreLeader(
   regime: RegimeData | null,
 ): number {
   const rsComponent = scoreRSAccel(stock.rsAccel ?? 0) * PRERUNNER.LEADER_RS_WEIGHT;
-  const sectorComponent = scoreSectorQuadrant(stock.sectorQuadrant) * PRERUNNER.LEADER_SECTOR_WEIGHT;
+  const sectorComponent = scoreSectorBlended(stock.sectorQuadrant, stock.sectorComposite) * PRERUNNER.LEADER_SECTOR_WEIGHT;
   const volumeComponent = scoreVolume(stock.volRatio) * PRERUNNER.LEADER_VOLUME_WEIGHT;
   const convictionComponent = scoreConviction(stock.conviction) * PRERUNNER.LEADER_CONVICTION_WEIGHT;
+  const momentumComponent = scoreMomentum(stock.ret20d) * PRERUNNER.LEADER_MOMENTUM_WEIGHT;
 
   const alignment = regime
     ? isRegimeAligned(stock.sector, regime)
     : "neutral";
   const regimeComponent = scoreRegime(alignment) * PRERUNNER.LEADER_REGIME_WEIGHT;
 
-  let score = rsComponent + sectorComponent + volumeComponent + convictionComponent + regimeComponent;
+  let score = rsComponent + sectorComponent + volumeComponent + convictionComponent + momentumComponent + regimeComponent;
 
   // RS improving bonus
   if (stock.rsAccel != null && stock.rsAccel > 0) {
     score += PRERUNNER.RS_IMPROVING_BONUS;
+  }
+
+  // Outperformance bonus for positive absolute momentum
+  if (stock.ret20d != null && stock.ret20d > 0) {
+    score += clamp01(stock.ret20d / PRERUNNER.OUTPERFORMANCE_SCALE) * PRERUNNER.OUTPERFORMANCE_BONUS_CAP;
   }
 
   return Math.round(Math.min(100, score));
@@ -98,14 +129,17 @@ function scoreTurnaround(
   const volumeComponent = scoreVolume(stock.volumeVsAvg) * PRERUNNER.TURNAROUND_VOLUME_WEIGHT;
 
   const quadrant = sectorScore?.quadrant ?? "LAGGING";
-  const sectorComponent = scoreSectorQuadrant(quadrant) * PRERUNNER.TURNAROUND_SECTOR_WEIGHT;
+  const composite = sectorScore?.compositeScore ?? 0;
+  const sectorComponent = scoreSectorBlended(quadrant, composite) * PRERUNNER.TURNAROUND_SECTOR_WEIGHT;
+
+  const momentumComponent = scoreMomentum(stock.performancePct) * PRERUNNER.TURNAROUND_MOMENTUM_WEIGHT;
 
   const alignment = regime
     ? isRegimeAligned(event.sectorName, regime)
     : "neutral";
   const regimeComponent = scoreRegime(alignment) * PRERUNNER.TURNAROUND_REGIME_WEIGHT;
 
-  let score = rsComponent + lifecycleComponent + volumeComponent + sectorComponent + regimeComponent;
+  let score = rsComponent + lifecycleComponent + volumeComponent + sectorComponent + momentumComponent + regimeComponent;
 
   // RS improving bonus
   if (stock.rsImproving) {
@@ -211,7 +245,7 @@ export async function computePreRunnerRadar(): Promise<PreRunnerResult> {
         rotationDaysActive: event.daysActive,
         volumeRatio: stock.volumeVsAvg,
         regimeAlignment: alignment,
-        conviction: lifecycle === "EARLY" ? "HIGH" : lifecycle === "MATURING" ? "MEDIUM" : "LOW",
+        conviction: computeTurnaroundConviction(lifecycle, stock.rsAcceleration),
         performancePct: stock.performancePct,
         aboveSma50: stock.aboveSma50,
         volumeConsistency: stock.volumeConsistency,

@@ -47,19 +47,41 @@ function scoreRS(rsAccel: number): number {
   return clamp01(Math.abs(rsAccel) / PRERUNNER.RS_ACCEL_MAX);
 }
 function scoreVol(volRatio: number): number {
-  return clamp01((volRatio - 0.5) / (PRERUNNER.VOL_RATIO_MAX - 0.5));
+  return clamp01((volRatio - PRERUNNER.VOL_RATIO_FLOOR) / (PRERUNNER.VOL_RATIO_MAX - PRERUNNER.VOL_RATIO_FLOOR));
 }
 function scoreQuad(q: RRGQuadrant): number {
   return (PRERUNNER.QUADRANT_SCORES[q] ?? 0) / 25;
 }
+function scoreSectorBlended(q: RRGQuadrant, composite: number): number {
+  const qScore = scoreQuad(q);
+  const cScore = clamp01(composite / 100);
+  return qScore * (1 - PRERUNNER.SECTOR_COMPOSITE_BLEND) + cScore * PRERUNNER.SECTOR_COMPOSITE_BLEND;
+}
 function scoreLc(lc: LifecycleStage): number {
   return (PRERUNNER.LIFECYCLE_SCORES[lc] ?? 0) / 20;
+}
+function scoreMomentum(ret: number | null): number {
+  if (ret == null) return 0.5;
+  return clamp01((ret + 10) / 20);
 }
 function scoreRegimeAlign(a: "aligned" | "headwind" | "neutral"): number {
   return a === "aligned" ? 1 : a === "neutral" ? 0.5 : 0;
 }
 function scoreConv(c: string): number {
   return c === "HIGH" ? 1 : c === "MEDIUM" ? 0.7 : 0.3;
+}
+function computeTurnaroundConviction(
+  lifecycle: LifecycleStage,
+  rsAccel: number,
+): "HIGH" | "MEDIUM" | "LOW" {
+  const lcScore = scoreLc(lifecycle);
+  const rsScore = scoreRS(rsAccel);
+  const combined =
+    lcScore * (1 - PRERUNNER.TURNAROUND_CONVICTION_RS_BLEND) +
+    rsScore * PRERUNNER.TURNAROUND_CONVICTION_RS_BLEND;
+  if (combined >= 0.7) return "HIGH";
+  if (combined >= 0.4) return "MEDIUM";
+  return "LOW";
 }
 
 function computeLeaderScore(
@@ -68,11 +90,15 @@ function computeLeaderScore(
 ): number {
   let s = 0;
   s += scoreRS(stock.rsAccel ?? 0) * PRERUNNER.LEADER_RS_WEIGHT;
-  s += scoreQuad(stock.sectorQuadrant) * PRERUNNER.LEADER_SECTOR_WEIGHT;
+  s += scoreSectorBlended(stock.sectorQuadrant, stock.sectorComposite) * PRERUNNER.LEADER_SECTOR_WEIGHT;
   s += scoreVol(stock.volRatio) * PRERUNNER.LEADER_VOLUME_WEIGHT;
   s += scoreConv(stock.conviction) * PRERUNNER.LEADER_CONVICTION_WEIGHT;
+  s += scoreMomentum(stock.ret20d) * PRERUNNER.LEADER_MOMENTUM_WEIGHT;
   s += scoreRegimeAlign(alignment) * PRERUNNER.LEADER_REGIME_WEIGHT;
   if ((stock.rsAccel ?? 0) > 0) s += PRERUNNER.RS_IMPROVING_BONUS;
+  if (stock.ret20d != null && stock.ret20d > 0) {
+    s += clamp01(stock.ret20d / PRERUNNER.OUTPERFORMANCE_SCALE) * PRERUNNER.OUTPERFORMANCE_BONUS_CAP;
+  }
   return Math.round(Math.min(100, s));
 }
 
@@ -81,14 +107,17 @@ function computeTurnaroundScore(
   rsImproving: boolean,
   volRatio: number,
   quadrant: RRGQuadrant,
+  sectorComposite: number,
   lifecycle: LifecycleStage,
+  performancePct: number | null,
   alignment: "aligned" | "headwind" | "neutral",
 ): number {
   let s = 0;
   s += scoreRS(rsAccel) * PRERUNNER.TURNAROUND_RS_WEIGHT;
   s += scoreLc(lifecycle) * PRERUNNER.TURNAROUND_LIFECYCLE_WEIGHT;
   s += scoreVol(volRatio) * PRERUNNER.TURNAROUND_VOLUME_WEIGHT;
-  s += scoreQuad(quadrant) * PRERUNNER.TURNAROUND_SECTOR_WEIGHT;
+  s += scoreSectorBlended(quadrant, sectorComposite) * PRERUNNER.TURNAROUND_SECTOR_WEIGHT;
+  s += scoreMomentum(performancePct) * PRERUNNER.TURNAROUND_MOMENTUM_WEIGHT;
   s += scoreRegimeAlign(alignment) * PRERUNNER.TURNAROUND_REGIME_WEIGHT;
   if (rsImproving) s += PRERUNNER.RS_IMPROVING_BONUS;
   return Math.round(Math.min(100, s));
@@ -157,13 +186,16 @@ export function PreRunnerRadar({
       for (const stock of rotation.stocks) {
         if (!stock.isTurnaroundCandidate) continue;
 
+        const sectorComposite = sectorScore?.compositeScore ?? 0;
         const alignment = regime ? isRegimeAligned(event.sectorName, regime) : "neutral";
         const score = computeTurnaroundScore(
           stock.rsAcceleration,
           stock.rsImproving,
           stock.volumeVsAvg,
           quadrant,
+          sectorComposite,
           lifecycle,
+          stock.performancePct,
           alignment,
         );
         if (score < PRERUNNER.MIN_SCORE) continue;
@@ -187,7 +219,7 @@ export function PreRunnerRadar({
           volumeRatio: stock.volumeVsAvg,
           performancePct: stock.performancePct,
           aboveSma50: stock.aboveSma50,
-          conviction: lifecycle === "EARLY" ? "HIGH" : lifecycle === "MATURING" ? "MEDIUM" : "LOW",
+          conviction: computeTurnaroundConviction(lifecycle, stock.rsAcceleration),
           regimeAlignment: alignment,
         });
       }
