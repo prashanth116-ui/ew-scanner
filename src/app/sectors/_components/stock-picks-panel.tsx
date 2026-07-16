@@ -18,7 +18,7 @@ import { CollapsiblePanel } from "./shared";
 
 // ── Top Picks by Sector ──
 
-export function TopPicksBySector({ stocks, sectors, scanResultsDate }: { stocks: EnrichedStock[]; sectors: SectorRotationScore[]; scanResultsDate: string | null }) {
+export function TopPicksBySector({ stocks, sectors }: { stocks: EnrichedStock[]; sectors: SectorRotationScore[] }) {
   const topPicks = useMemo(() => {
     const map: Record<string, EnrichedStock[]> = {};
     for (const s of stocks) {
@@ -29,6 +29,12 @@ export function TopPicksBySector({ stocks, sectors, scanResultsDate }: { stocks:
       map[etf].sort((a, b) => (CONV_ORDER[a.conviction] ?? 3) - (CONV_ORDER[b.conviction] ?? 3) || (b.rsAccel ?? -999) - (a.rsAccel ?? -999));
       map[etf] = map[etf].slice(0, 3);
     }
+    // Require at least 1 HIGH or MEDIUM stock — WATCH-only sectors are noise
+    for (const etf of Object.keys(map)) {
+      if (!map[etf].some((s) => s.conviction === "HIGH" || s.conviction === "MEDIUM")) {
+        delete map[etf];
+      }
+    }
     return map;
   }, [stocks]);
 
@@ -38,6 +44,13 @@ export function TopPicksBySector({ stocks, sectors, scanResultsDate }: { stocks:
       case "MEDIUM": return "bg-amber-500/20 text-amber-400 border-amber-500/30";
       default: return "bg-[#2a2a2a] text-[#a0a0a0] border-[#333]";
     }
+  };
+
+  const phaseColor = (p: string) => {
+    if (p.startsWith("P3")) return "text-green-400/70";
+    if (p.startsWith("P2")) return "text-cyan-400/70";
+    if (p.startsWith("P1")) return "text-amber-400/70";
+    return "text-red-400/70";
   };
 
   if (Object.keys(topPicks).length === 0) {
@@ -76,6 +89,7 @@ export function TopPicksBySector({ stocks, sectors, scanResultsDate }: { stocks:
                   >
                     {s.symbol}
                   </a>
+                  <span className={`text-[9px] ${phaseColor(s.phase)}`}>{s.phase.replace(/^P\d_/, "").slice(0, 3)}</span>
                   <span className="text-[10px] opacity-70">${s.price.toFixed(0)}</span>
                 </span>
               ))}
@@ -132,6 +146,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
         case "volRatio": cmp = a.volRatio - b.volRatio; break;
         case "price": cmp = a.price - b.price; break;
         case "pctFrom50ma": cmp = (a.pctFrom50ma ?? -999) - (b.pctFrom50ma ?? -999); break;
+        case "ret20d": cmp = (a.ret20d ?? -999) - (b.ret20d ?? -999); break;
       }
       return sortDir === "desc" ? -cmp : cmp;
     });
@@ -194,7 +209,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
     setRsAccelFilter("all"); setVolFilter("all"); setAboveSmaFilter("all");
   };
 
-  const COL_COUNT = 8;
+  const COL_COUNT = 9;
   const selectClass = "rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]";
 
   return (
@@ -214,7 +229,6 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
           <option value="LEADER">LEADER</option>
           <option value="CATCH_UP">CATCH_UP</option>
           <option value="TURNAROUND">TURNAROUND</option>
-          <option value="AVOID">AVOID</option>
         </select>
         <select value={phaseFilter} onChange={(e) => setPhaseFilter(e.target.value as RotationStockPhase | "ALL")} className={selectClass}>
           <option value="ALL">All Phase</option>
@@ -261,7 +275,8 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("rsAccel")} aria-sort={picksAriaSort("rsAccel")}>RS Accel <SortArrow col="rsAccel" /></th>
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")} aria-sort={picksAriaSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" /></th>
               <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")} aria-sort={picksAriaSort("price")}>Price <SortArrow col="price" /></th>
-              <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")} aria-sort={picksAriaSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")} aria-sort={picksAriaSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" /></th>
+              <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("ret20d")} aria-sort={picksAriaSort("ret20d")}>20d Ret <SortArrow col="ret20d" /></th>
             </tr>
           </thead>
           <tbody>
@@ -322,8 +337,11 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
                           {s.volRatio.toFixed(1)}x
                         </td>
                         <td className="py-1.5 pr-3 text-right text-white">${s.price.toFixed(2)}</td>
-                        <td className={`py-1.5 text-right ${s.pctFrom50ma != null && s.pctFrom50ma > 0 ? "text-green-400" : s.pctFrom50ma != null && s.pctFrom50ma < 0 ? "text-red-400" : "text-[#888]"}`}>
+                        <td className={`py-1.5 pr-3 text-right ${s.pctFrom50ma != null && s.pctFrom50ma > 0 ? "text-green-400" : s.pctFrom50ma != null && s.pctFrom50ma < 0 ? "text-red-400" : "text-[#888]"}`}>
                           {s.pctFrom50ma != null ? `${s.pctFrom50ma > 0 ? "+" : ""}${s.pctFrom50ma.toFixed(1)}%` : "\u2014"}
+                        </td>
+                        <td className={`py-1.5 text-right ${s.ret20d != null && s.ret20d > 0 ? "text-green-400" : s.ret20d != null && s.ret20d < 0 ? "text-red-400" : "text-[#888]"}`}>
+                          {s.ret20d != null ? `${s.ret20d > 0 ? "+" : ""}${s.ret20d.toFixed(1)}%` : "\u2014"}
                         </td>
                       </tr>
                     );

@@ -268,9 +268,12 @@ function classifyPhase(
   // without it, low-volume stocks bypass the P3_MIN_VOL_RATIO requirement.
   // Above-50MA stocks use P2_TURNAROUND (not P1_BASING) for low-volume fallback:
   // P1_BASING means below-50MA early recovery, which is semantically wrong for above-50MA.
-  return above50ma
-    ? (accel < 0 ? "P4_EXHAUSTING" : (volRatio >= CLASSIFICATION.P3_MIN_VOL_RATIO ? "P3_TRENDING" : "P2_TURNAROUND"))
-    : "P1_BASING";
+  // P4 fallback respects the same RS accel threshold as the explicit P4 check —
+  // mildly decelerating stocks (accel between P4_RS_ACCEL and 0) are trending, not exhausting.
+  if (!above50ma) return "P1_BASING";
+  if (accel < CLASSIFICATION.P4_RS_ACCEL) return "P4_EXHAUSTING";
+  if (accel >= 0 && volRatio >= CLASSIFICATION.P3_MIN_VOL_RATIO) return "P3_TRENDING";
+  return "P2_TURNAROUND";
 }
 
 function rsAccelDescription(rsAccel: number | null): string {
@@ -308,6 +311,7 @@ export function classifyStock(
 
 export function scoreConviction(
   category: StockCategory,
+  phase: StockPhase,
   rsAccel: number | null,
   volRatio: number,
   sectorQuadrant: RRGQuadrant,
@@ -325,8 +329,11 @@ export function scoreConviction(
   if (rsAccel != null && rsAccel >= CONVICTION.STRONG_RS_ACCEL) { weightedScore += W.rsAccel; signals++; }
   // Stealth credit only when the stock itself shows participation — a low-volume
   // stock in a stealth sector isn't accumulating, it's just along for the ride.
-  if (sectorStealth && (volRatio >= 0.8 || category === "TURNAROUND" || category === "LEADER")) { weightedScore += W.sectorStealth; signals++; }
+  if (sectorStealth && (volRatio >= CONVICTION.STEALTH_VOL_FLOOR || category === "TURNAROUND" || category === "LEADER")) { weightedScore += W.sectorStealth; signals++; }
   if (volRatio >= CONVICTION.HIGH_VOL_RATIO) { weightedScore += W.volumeRatio; signals++; }
+
+  // Phase penalty: exhausting stocks shouldn't achieve high conviction
+  if (phase === "P4_EXHAUSTING") { weightedScore -= CONVICTION.PHASE_P4_PENALTY; }
 
   let conviction: ConvictionLevel;
   if (weightedScore >= CONVICTION.WEIGHTED_HIGH) conviction = "HIGH";
@@ -351,6 +358,7 @@ export function enrichStocks(stocks: StockInput[]): {
     const classified = classifyStock(s, s.sectorAcceleration);
     const scored = scoreConviction(
       classified.category,
+      classified.phase,
       classified.rsAccel,
       classified.volRatio,
       s.sectorQuadrant,

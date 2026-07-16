@@ -99,6 +99,7 @@ export function enrichCryptoTokens(
     const classified = classifyStock(s, s.sectorAcceleration);
     let scored = scoreConviction(
       classified.category,
+      classified.phase,
       classified.rsAccel,
       classified.volRatio,
       s.sectorQuadrant,

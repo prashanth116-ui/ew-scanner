@@ -159,6 +159,10 @@ export const CONVICTION = {
     /** Volume ratio >= 1.2 (tactical) */
     volumeRatio: 0.5,
   },
+  /** Volume ratio floor for stealth conviction credit */
+  STEALTH_VOL_FLOOR: 0.8,
+  /** Phase penalty: subtracted from weighted score when P4_EXHAUSTING */
+  PHASE_P4_PENALTY: 1.5,
   /** Weighted score >= this = HIGH */
   WEIGHTED_HIGH: 4.0,
   /** Weighted score >= this = MEDIUM */

@@ -7,7 +7,7 @@ export type VolFilter = "all" | "above" | "below";
 export type VerdictFilter = "all" | "priority" | "keep" | "watch";
 export type RsAccelFilter = "all" | "positive" | "negative";
 export type PhaseFilter = "all" | "basing" | "turnaround" | "trending" | "exhausting";
-export type PicksSortKey = "conviction" | "symbol" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "pctFrom50ma";
+export type PicksSortKey = "conviction" | "symbol" | "category" | "phase" | "rsAccel" | "volRatio" | "price" | "pctFrom50ma" | "ret20d";
 export type PullbackSortKey = "tier" | "symbol" | "sector" | "price" | "pctFrom200ma" | "distanceTo80Pct" | "pctFrom50ma" | "volRatio";
 
 export interface StockInSector {

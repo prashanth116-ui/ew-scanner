@@ -190,7 +190,7 @@ export default function PicksPage() {
           </div>
         }
       >
-        <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={data.sectors} scanResultsDate={scanResultsDate} />
+        <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={[...data.sectors, ...subSectorScores]} />
       </CollapsiblePanel>
 
       {/* Stock Picks */}
