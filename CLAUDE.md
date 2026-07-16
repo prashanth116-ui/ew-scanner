@@ -146,7 +146,7 @@ Non-index stocks added to the scan universe for momentum/breakout relevance. Def
 | Inflection | `scoreInflection()` | 6 components, weighted 0-100 | Inflection daily |
 | VCP | `scoreVCP()` | 5 components, max 100 | VCP daily |
 | Institutional | `scoreInstitutionalAcceleration()` | 4 weighted components, max 100 | Institutional daily |
-| PreRunner | `scorePreRunnerCandidates()` | 0-100 per candidate | Rotation leaders/turnarounds |
+| PreRunner | `scoreLeader()` / `scoreTurnaround()` | 6 weighted components + bonuses, 0-100 | Rotation leaders/turnarounds |
 | QFE | `computeQFE()` | 4 components, weighted 0-100 | QFE rating (derived from PreRun) |
 | Catalyst | `scoreCatalyst()` | 17 factors, normalized 0-100 | Catalyst spikes |
 | Transition | `scoreTransitionWithOHLC()` | 8 components, weighted 0-100 | Transition daily |
@@ -166,7 +166,7 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 | Inflection | `Inflect` | Accumulation cycle stage transitions (seller exhaustion → expansion) | Price >= $5, dollarVol >= $10M, mcap >= $500M | 6 components (SE/VC/BE/RS/LA/IP) weighted 0-100, stages + trade read (AVOID/WATCH/STARTER/ADD_ON) | `inflection-scoring.ts` |
 | Transition | `Trans` | Market structure transitions (accumulation → markup) | Price >= $5, dollarVol >= $10M, mcap >= $500M | 8 components weighted 0-100, 11-state model, alert states (TRIGGERED/READY/ARMED/WATCH) | `transition-scoring.ts`, `market-structure.ts` |
 | Institutional | `Inst` | Large-cap institutional runners with momentum | Price >= $20, mcap >= $20B, dollarVol >= $100M, vol >= 1.5M | 4 weighted components (inst 35%/exec 25%/risk 25%/disc 15%), 12 classifications | `institutional-scoring.ts` |
-| PreRunner | `Rot` | Sector rotation leaders + turnaround candidates | Min score threshold | LEADERs (from enrichment) + TURNAROUNDs (from rotation tracker), 0-100 score | `src/lib/prerunner/scoring.ts` |
+| PreRunner | `Rot` | Sector rotation leaders + turnaround candidates | Min score >= 55 | LEADERs (6 components: RS/sector/volume/conviction/momentum/regime) + TURNAROUNDs (6 components: RS/lifecycle/volume/sector/momentum/regime), blended sector scoring, RS-aware conviction | `src/lib/prerunner/scoring.ts` |
 
 **Badge-only (not counted for confluence):**
 
@@ -447,6 +447,7 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 | `CRYPTO_REGIME_THRESHOLDS` | `BTC_VOL_LOW: 60`, `BTC_VOL_HIGH: 80`, `DOMINANCE_DELTA_RISING: 2`, `MARKET_TREND_THRESHOLD: 3`, `CONFIDENCE_VOL_STRONG: 50`, `CONFIDENCE_VOL_EXTREME: 90`, `ALT_SEASON_DISPERSION: 8` |
 | `CRYPTO_BRIEF` | `BTC_VOL_SPIKE: 80`, `AGGRESSIVE_DISPERSION: 5`, `ACTIONABLE_COMPOSITE: 55`, `PANIC_DISPERSION: 10`, `BIAS_DISPERSION_HIGH: 6`, `BIAS_DISPERSION_LOW: 2`, `LOW_CONFIDENCE_THRESHOLD: 50`, `BTC_RETURN_THRESHOLD: 5`, `SECTOR_BALANCE_THRESHOLD: 2` |
 | `COMPARISON` | `CHANGE_THRESHOLD: 2` (sector score delta for improved/declined classification) |
+| `PRERUNNER` | Leader weights: `RS: 30`, `SECTOR: 25`, `VOLUME: 15`, `CONVICTION: 15`, `MOMENTUM: 10`, `REGIME: 5` (sum=100). Turnaround weights: `RS: 35`, `LIFECYCLE: 20`, `VOLUME: 15`, `SECTOR: 15`, `MOMENTUM: 10`, `REGIME: 5` (sum=100). Normalization: `RS_ACCEL_MAX: 6`, `VOL_RATIO_MAX: 2.0`, `VOL_RATIO_FLOOR: 0.8`, `MOMENTUM_RANGE: [-10, +10]`. Bonuses: `RS_IMPROVING_BONUS: 5`, `OUTPERFORMANCE_BONUS_CAP: 5` (leaders only, scaled by `OUTPERFORMANCE_SCALE: 10`). Blending: `SECTOR_COMPOSITE_BLEND: 0.5` (50% quadrant + 50% continuous composite). Conviction: `TURNAROUND_CONVICTION_RS_BLEND: 0.4`, breakpoints at `0.7` (HIGH) / `0.4` (MEDIUM). |
 
 Other sections: CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS.
 
