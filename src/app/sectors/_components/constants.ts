@@ -28,7 +28,7 @@ export const CATEGORY_STYLE: Record<string, string> = {
 };
 export const CONV_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
 export const CAT_ORDER: Record<string, number> = { LEADER: 0, CATCH_UP: 1, TURNAROUND: 2, AVOID: 3 };
-export const PHASE_ORDER: Record<string, number> = { P1_BASING: 0, P2_TURNAROUND: 1, P3_TRENDING: 2, P4_EXHAUSTING: 3 };
+export const PHASE_ORDER: Record<string, number> = { P3_TRENDING: 0, P2_TURNAROUND: 1, P1_BASING: 2, P4_EXHAUSTING: 3 };
 export const TIER_ORDER: Record<ExtensionTier, number> = { MODERATE_EXTENSION: 0, HIGH_EXTENSION: 1, EXTREME_EXTENSION: 2 };
 export const TIER_STYLE: Record<ExtensionTier, { bg: string; border: string; text: string; label: string }> = {
   MODERATE_EXTENSION: { bg: "bg-green-500/10", border: "border-green-500/40", text: "text-green-400", label: "Moderate Extension" },

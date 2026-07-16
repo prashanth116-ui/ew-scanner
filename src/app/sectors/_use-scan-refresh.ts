@@ -21,12 +21,10 @@ export function useScanRefresh(
   const [progress, setProgress] = useState("");
   const [scannedCount, setScannedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const refreshScan = useCallback(async () => {
     if (scanning) return;
-    setError(null);
     setScanning(true);
     setProgress("Checking server...");
 
@@ -131,5 +129,5 @@ export function useScanRefresh(
     setTotalCount(0);
   }, []);
 
-  return { scanning, progress, scannedCount, totalCount, error, refreshScan, cancelScan };
+  return { scanning, progress, scannedCount, totalCount, refreshScan, cancelScan };
 }

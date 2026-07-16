@@ -463,6 +463,9 @@ export const PRERUNNER = {
 
   /** Lifecycle score mapping (used for turnaround lifecycle component) */
   LIFECYCLE_SCORES: { EARLY: 20, MATURING: 15, LATE: 5, EXHAUSTING: 0 } as Record<string, number>,
+
+  /** Conviction component normalization (maps stock conviction level to 0-1 score) */
+  CONVICTION_SCORES: { HIGH: 1, MEDIUM: 0.7, WATCH: 0.3 } as Record<string, number>,
 } as const;
 
 // ── Crypto Rotation Weights ──

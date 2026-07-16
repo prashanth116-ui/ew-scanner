@@ -43,7 +43,7 @@ export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: Pu
 
   const handleSort = (key: PullbackSortKey) => {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir(key === "symbol" || key === "sector" ? "asc" : "asc"); }
+    else { setSortKey(key); setSortDir(key === "symbol" || key === "sector" ? "asc" : "desc"); }
   };
 
   const SortArrow = ({ col }: { col: PullbackSortKey }) => {

@@ -69,7 +69,7 @@ function scoreRegimeAlign(a: "aligned" | "headwind" | "neutral"): number {
   return a === "aligned" ? 1 : a === "neutral" ? 0.5 : 0;
 }
 function scoreConv(c: string): number {
-  return c === "HIGH" ? 1 : c === "MEDIUM" ? 0.7 : 0.3;
+  return (PRERUNNER.CONVICTION_SCORES[c] ?? 0.3);
 }
 function computeTurnaroundConviction(
   lifecycle: LifecycleStage,

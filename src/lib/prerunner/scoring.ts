@@ -78,9 +78,7 @@ function scoreRegime(alignment: "aligned" | "headwind" | "neutral"): number {
 }
 
 function scoreConviction(conviction: string): number {
-  if (conviction === "HIGH") return 1;
-  if (conviction === "MEDIUM") return 0.7;
-  return 0.3;
+  return (PRERUNNER.CONVICTION_SCORES[conviction] ?? 0.3);
 }
 
 // ── Leader scoring (enrichment pipeline) ──

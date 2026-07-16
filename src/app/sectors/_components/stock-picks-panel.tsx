@@ -326,7 +326,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
                           <span className="ml-1.5 text-[10px] text-[#666]" title={s.shortName}>{s.shortName.length > 18 ? s.shortName.slice(0, 16) + "\u2026" : s.shortName}</span>
                         </td>
                         <td className={`py-1.5 pr-3 font-medium ${CATEGORY_STYLE[s.category] ?? "text-[#888]"}`}>{s.category}</td>
-                        <td className="py-1.5 pr-3 text-[#888]">{s.phase.replace("P1_", "").replace("P2_", "").replace("P3_", "").replace("P4_", "")}</td>
+                        <td className="py-1.5 pr-3 text-[#888]">{s.phase.replace(/^P\d_/, "")}</td>
                         <td className="py-1.5 pr-3 text-right">
                           <span className={s.rsAccel != null && s.rsAccel >= 3 ? "text-green-400 font-semibold" : s.rsAccel != null && s.rsAccel >= 0.5 ? "text-green-400/70" : s.rsAccel != null && s.rsAccel < -0.5 ? "text-red-400" : "text-[#888]"}>
                             {s.rsAccel != null ? s.rsAccel.toFixed(1) : "\u2014"}
