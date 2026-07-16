@@ -341,6 +341,14 @@ function pickBestWorst(
     if (maxDev < 0.15) assetToAvoid = null;
   }
 
+  // If bestToTrade and assetToAvoid point to the same contract, the trade
+  // recommendation takes priority — you can't tell the user to short NQ
+  // and also avoid NQ. The "avoid" was flagged because it's the outlier,
+  // but that's exactly WHY it's the best directional trade.
+  if (bestToTrade && assetToAvoid === bestToTrade.symbol) {
+    assetToAvoid = null;
+  }
+
   return { bestToTrade, assetToAvoid };
 }
 
