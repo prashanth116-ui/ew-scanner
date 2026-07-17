@@ -297,7 +297,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 |-------|------|---------|
 | `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart, sector cards, leadership baskets, sub-sectors, cross-asset |
 | `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias, leadership health, sector tiers, risk flags |
-| `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks from enriched rotation data |
+| `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks + Rotation Signals panel (early detection timing) |
 | `/sectors/crypto` | `src/app/sectors/crypto/page.tsx` | Crypto rotation dashboard |
 | `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables |
 
@@ -438,7 +438,7 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 |---------|-------------------|
 | `COMPOSITE` | `ACCEL_NORM_FLOOR: -10`, `ACCEL_NORM_CEILING: 10` (fixed-range acceleration normalization), `ACTIONABLE_THRESHOLD`, `ACTIONABLE_HYSTERESIS`, `WATCH_THRESHOLD` |
 | `SCORING_SIGNALS` | `MOMENTUM_WEIGHTS: { roc63: 0.35, roc126: 0.25, roc189: 0.25, roc252: 0.15 }`, `SIGMOID_EXPONENT: 0.4` |
-| `ROTATION` | `RS_SMA_SHORT: 10`, `RS_SMA_LONG: 30`, `MIN_ALIGNED_BARS: 50`, `TRACKER_BATCH_SIZE: 15`, `TRACKER_BATCH_DELAY: 200`, `VOLUME_SURGE`, `SIGNAL_START`, `SIGNAL_END_DAYS` |
+| `ROTATION` | `RS_SMA_SHORT: 10`, `RS_SMA_LONG: 30`, `MIN_ALIGNED_BARS: 50`, `TRACKER_BATCH_SIZE: 15`, `TRACKER_BATCH_DELAY: 200`, `VOLUME_SURGE`, `SIGNAL_START`, `SIGNAL_END_DAYS`, `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.5` |
 | `ROTATION_LIFECYCLE` | `EXHAUSTING_DAYS: 30` (hard cutoff), `EXHAUSTING_SOFT_DAYS: 25` (health-confirmed soft zone), `EARLY_MAX_DAYS`, `MATURING_MAX_DAYS` |
 | `REGIME` | `DXY_TREND_THRESHOLD: 1` (absolute point change, not percentage) |
 | `CLASSIFICATION` | `P4_RS_ACCEL`, `P4_SECTOR_ACCEL` (both must be negative — AND logic), `P3_MIN_VOL_RATIO` |
@@ -502,6 +502,40 @@ Null-data tracking: `marketCap` null is now rejected (when `REJECT_NULL_MARKET_C
 | 6 | IMPROVING (accel <= 0) | WATCH |
 | 7 | LAGGING + accel > 0 + composite >= watch threshold | WATCH |
 | 8 | Default | AVOID |
+
+### Rotation Signals Panel (`/sectors/picks`)
+The Rotation Signals panel on the picks page shows sector rotations at inflection points with timing labels. Replaces the previous "Entry Signals" panel which applied 4 confirmation gates (action=ENTER/ADD, CMF > 0, accel > 0, quality stocks) that delayed signals 10-15 days.
+
+**Component:** `RotationEntrySignals` in `src/app/sectors/_components/entry-signals.tsx`. Panel id remains `entry-signals` for localStorage compat.
+
+**Noise filters (replace old 4-gate system):**
+
+| Filter | Logic | Replaces |
+|--------|-------|----------|
+| EXIT filter | `action === "EXIT"` excluded | `action === ENTER or ADD` gate |
+| Blip filter | `daysActive < MIN_ROTATION_DAYS (5)` excluded | *(new)* |
+| Sustained filter | `isSignalSustained()`: requires 3+ history entries with avg signalCount >= `MIN_AVG_SIGNAL_COUNT` (1.5) | *(new)* |
+| *(removed)* | CMF shown as colored badge, not a gate | `cmf20 > 0` gate |
+| *(removed)* | Accel shown as colored badge, not a gate | `acceleration > 0` gate |
+| *(removed)* | "No quality stocks yet" shown if empty | `hasQualityStock` gate |
+
+**Timing classification (`classifyTiming`):**
+
+| Timing | Condition | Color |
+|--------|-----------|-------|
+| EARLY | Days 1-7, or days 8-10 without health confirmation (CMF > 0 AND accel > 0) | Green |
+| CONFIRMED | Days 8-15 with any health confirmation | Cyan |
+| DELAYED | Days 16+ | Amber |
+
+**Sort order:** EARLY first → CONFIRMED → DELAYED. Within tier: conviction score descending.
+
+**Card rendering:** Each card shows timing badge with day count, action badge (ENTER/ADD/HOLD), health indicator badges (CMF: green/amber/red, Accel: green/amber/red, signal count with color, conviction level), top picks or "No quality stocks yet" placeholder.
+
+**Grouped display:** Cards grouped by timing tier with section headers (`── Early Signals (N) ──`).
+
+**Empty state:** Shows counts for emerging (< 5 days), exiting (EXIT action), and unsustained rotations.
+
+**Config constants (ROTATION section):** `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.5`.
 
 ### Persistence Functions (per table)
 Each daily table has 5 standard functions in `persistence.ts`:
