@@ -150,7 +150,6 @@ export function PreRunnerRadar({
     // Leaders from enrichment
     for (const stock of enrichedStocks) {
       if (stock.category !== "LEADER") continue;
-      if (stock.conviction !== "HIGH" && stock.conviction !== "MEDIUM") continue;
 
       const alignment = regime ? isRegimeAligned(stock.sector, regime) : "neutral";
       const score = computeLeaderScore(stock, alignment);

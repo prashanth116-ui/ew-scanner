@@ -421,7 +421,7 @@ export const PRERUNNER = {
   /** Volume ratio cap for normalization */
   VOL_RATIO_MAX: 2.0,
   /** Volume ratio floor for normalization */
-  VOL_RATIO_FLOOR: 0.8,
+  VOL_RATIO_FLOOR: 0.5,
   /** Bonus when RS direction is improving */
   RS_IMPROVING_BONUS: 5,
   /** Minimum composite score to qualify */

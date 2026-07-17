@@ -176,7 +176,6 @@ export async function computePreRunnerRadar(): Promise<PreRunnerResult> {
   const enrichedStocks = sectorResult.enrichedStocks?.passed ?? [];
   for (const stock of enrichedStocks) {
     if (stock.category !== "LEADER") continue;
-    if (stock.conviction !== "HIGH" && stock.conviction !== "MEDIUM") continue;
 
     const sectorScore = sectorMap.get(stock.sectorEtf) ?? sectorMap.get(stock.sector);
     const score = scoreLeader(stock, sectorScore, regime);
