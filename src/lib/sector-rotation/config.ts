@@ -122,8 +122,8 @@ export const QUALITY_GATES = {
   MIN_DOLLAR_VOLUME: 150_000_000,
   /** Minimum average daily volume */
   MIN_AVG_VOLUME: 1_000_000,
-  /** Maximum volume spike ratio */
-  MAX_VOLUME_SPIKE: 5,
+  /** Maximum volume spike ratio (high to allow breakout days; crypto uses 10) */
+  MAX_VOLUME_SPIKE: 10,
   /** Maximum % extension above 200d SMA */
   MAX_EXTENSION_PCT: 80,
   /** Minimum institutional ownership % (low threshold: ADRs report artificially low via Yahoo) */
@@ -132,8 +132,8 @@ export const QUALITY_GATES = {
   TURNAROUND_RS_ACCEL: 0.5,
   /** Volume ratio for turnaround confirmation */
   TURNAROUND_VOL_RATIO: 1.0,
-  /** Max deviation from ETF return (±%) */
-  MAX_ETF_DEVIATION: 30,
+  /** Max deviation from ETF return (±%) — wide to allow sector leaders to diverge */
+  MAX_ETF_DEVIATION: 60,
   /** Reject stocks with null market cap (aligns with PreRun treating null as 0) */
   REJECT_NULL_MARKET_CAP: true,
   /** Apply SCAN_EXCLUSIONS to sector rotation stock enrichment + rotation tracker */
