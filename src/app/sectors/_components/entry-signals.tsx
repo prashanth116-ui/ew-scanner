@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ArrowUpCircle, Plus, CheckCircle2 } from "lucide-react";
+import { ArrowUpCircle, Plus, Shield, TrendingUp } from "lucide-react";
 import type {
   SectorRotationScore,
   RRGQuadrant,
@@ -16,8 +16,38 @@ import {
   isRegimeAligned,
   type ActionSignal,
 } from "@/lib/sector-rotation/rotation-helpers";
+import { ROTATION } from "@/lib/sector-rotation/config";
 import { quadrantColor } from "./helpers";
 import { CollapsiblePanel } from "./shared";
+
+// ── Timing Classification ──
+
+type SignalTiming = "EARLY" | "CONFIRMED" | "DELAYED";
+
+const TIMING_STYLE: Record<SignalTiming, { bg: string; border: string; text: string; label: string }> = {
+  EARLY: { bg: "bg-green-500/10", border: "border-green-500/30", text: "text-green-400", label: "Early" },
+  CONFIRMED: { bg: "bg-cyan-500/10", border: "border-cyan-500/30", text: "text-cyan-400", label: "Confirmed" },
+  DELAYED: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-400", label: "Delayed" },
+};
+
+const TIMING_RANK: Record<SignalTiming, number> = { EARLY: 0, CONFIRMED: 1, DELAYED: 2 };
+
+function classifyTiming(daysActive: number, health: { acceleration: number; cmf20: number }): SignalTiming {
+  const hasHealthConfirmation = health.cmf20 > 0 && health.acceleration > 0;
+
+  if (daysActive <= ROTATION.EARLY_TIMING_DAYS) return "EARLY";
+  if (daysActive <= 10 && !hasHealthConfirmation) return "EARLY";
+  if (daysActive <= ROTATION.DELAYED_TIMING_DAYS) return "CONFIRMED";
+  return "DELAYED";
+}
+
+function isSignalSustained(signalHistory: { date: string; signalCount: number; close: number }[]): boolean {
+  if (signalHistory.length < 3) return false;
+  const avgSignal = signalHistory.reduce((sum, h) => sum + h.signalCount, 0) / signalHistory.length;
+  return avgSignal >= ROTATION.MIN_AVG_SIGNAL_COUNT;
+}
+
+// ── Types ──
 
 interface EntrySignalSector {
   rotation: ActiveRotationDetail;
@@ -28,7 +58,10 @@ interface EntrySignalSector {
   health: { acceleration: number; cmf20: number; quadrant: RRGQuadrant };
   patternStats: RotationPatternStats | undefined;
   topStocks: EnrichedStock[];
+  timing: SignalTiming;
 }
+
+// ── Component ──
 
 export function RotationEntrySignals({
   rotationData,
@@ -43,9 +76,12 @@ export function RotationEntrySignals({
   collapsed: boolean;
   onToggle: (id: string) => void;
 }) {
-  const entries = useMemo(() => {
+  const { entries, emerging, exiting, unsustained } = useMemo(() => {
     const results: EntrySignalSector[] = [];
     const regime = rotationData.regime;
+    let emergingCount = 0;
+    let exitingCount = 0;
+    let unsustainedCount = 0;
 
     for (const rotation of rotationData.activeRotations) {
       const event = rotation.event;
@@ -55,19 +91,21 @@ export function RotationEntrySignals({
       const alignment = regime ? isRegimeAligned(event.sectorName, regime) : "neutral";
       const signal = computeActionSignal(lifecycle, conviction, alignment);
 
-      if (signal.action !== "ENTER" && signal.action !== "ADD ON PULLBACK") continue;
-      if (health.cmf20 <= 0) continue;
-      if (health.acceleration <= 0) continue;
+      // Filter EXIT rotations
+      if (signal.action === "EXIT") { exitingCount++; continue; }
+
+      // Filter blips (< MIN_ROTATION_DAYS)
+      if (event.daysActive < ROTATION.MIN_ROTATION_DAYS) { emergingCount++; continue; }
+
+      // Filter unsustained signals
+      if (!isSignalSustained(event.signalHistory ?? [])) { unsustainedCount++; continue; }
+
+      const timing = classifyTiming(event.daysActive, health);
 
       const sectorStocks = enrichedStocks.filter((s) => s.sectorEtf === event.etf);
       const qualityStocks = sectorStocks.filter(
         (s) => (s.conviction === "HIGH" || s.conviction === "MEDIUM") && (s.category === "LEADER" || s.category === "TURNAROUND")
       );
-
-      const hasQualityStock = sectorStocks.some(
-        (s) => (s.conviction === "HIGH" || s.conviction === "MEDIUM") && (s.category === "LEADER" || s.category === "TURNAROUND")
-      );
-      if (!hasQualityStock) continue;
 
       const CONVICTION_SORT: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
       const topStocks = [...qualityStocks]
@@ -85,152 +123,212 @@ export function RotationEntrySignals({
         health,
         patternStats: stats,
         topStocks,
+        timing,
       });
     }
 
-    results.sort((a, b) => (a.signal.action === "ENTER" ? 0 : 1) - (b.signal.action === "ENTER" ? 0 : 1));
-    return results;
+    // Sort: EARLY first → CONFIRMED → DELAYED; within tier: conviction score desc
+    results.sort((a, b) => TIMING_RANK[a.timing] - TIMING_RANK[b.timing] || b.conviction.score - a.conviction.score);
+
+    return { entries: results, emerging: emergingCount, exiting: exitingCount, unsustained: unsustainedCount };
   }, [rotationData, enrichedStocks]);
 
-  const hasEnter = entries.some((e) => e.signal.action === "ENTER");
-  const borderColor = entries.length > 0
-    ? hasEnter ? "border-green-500/30" : "border-cyan-500/30"
-    : "";
+  // Panel badge color based on best timing
+  const bestTiming: SignalTiming | null = entries.length > 0 ? entries[0].timing : null;
+  const badgeStyle = bestTiming ? TIMING_STYLE[bestTiming] : null;
+
+  // Group entries by timing tier
+  const groups = useMemo(() => {
+    const map = new Map<SignalTiming, EntrySignalSector[]>();
+    for (const e of entries) {
+      const arr = map.get(e.timing) ?? [];
+      arr.push(e);
+      map.set(e.timing, arr);
+    }
+    const ordered: { timing: SignalTiming; items: EntrySignalSector[] }[] = [];
+    for (const t of ["EARLY", "CONFIRMED", "DELAYED"] as SignalTiming[]) {
+      const items = map.get(t);
+      if (items && items.length > 0) ordered.push({ timing: t, items });
+    }
+    return ordered;
+  }, [entries]);
 
   return (
     <CollapsiblePanel
       id="entry-signals"
-      title="Entry Signals"
+      title="Rotation Signals"
       collapsed={collapsed}
       onToggle={onToggle}
       badge={
         entries.length === 0
           ? <span className="rounded-full border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-medium text-[#666]">No signals</span>
-          : <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${hasEnter ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"}`}>
-          {entries.length} {entries.length === 1 ? "signal" : "signals"}
-        </span>
+          : <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${badgeStyle!.border} ${badgeStyle!.bg} ${badgeStyle!.text}`}>
+            {entries.length} {entries.length === 1 ? "signal" : "signals"}
+          </span>
       }
-      className={borderColor}
+      className={entries.length > 0 && badgeStyle ? badgeStyle.border : ""}
     >
       <div className="space-y-3">
         {entries.length === 0 && (
-          <div className="space-y-1">
-            <p className="text-xs text-[#666]">No active rotations currently pass all entry gates (action signal + CMF + acceleration + stock quality). Check the <a href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</a> for current rotation status.</p>
-            {rotationData.activeRotations.length > 0 && (
-              <div className="text-[11px] text-[#555] space-y-0.5">
-                <p>{rotationData.activeRotations.length} active rotation{rotationData.activeRotations.length !== 1 ? "s" : ""} blocked:</p>
-                {rotationData.activeRotations.map((r) => {
-                  const ev = r.event;
-                  const h = getHealth(ev);
-                  const lc = computeLifecycleStage(ev);
-                  const conv = computeConviction(ev);
-                  const regime = rotationData.regime;
-                  const alignment = regime ? isRegimeAligned(ev.sectorName, regime) : "neutral";
-                  const sig = computeActionSignal(lc, conv, alignment);
-                  const blocks: string[] = [];
-                  if (sig.action !== "ENTER" && sig.action !== "ADD ON PULLBACK") blocks.push(`action=${sig.action ?? "none"}`);
-                  if (h.cmf20 <= 0) blocks.push(`CMF ${h.cmf20.toFixed(3)}`);
-                  if (h.acceleration <= 0) blocks.push(`accel ${h.acceleration.toFixed(2)}`);
-                  const sectorStocks = enrichedStocks.filter((s) => s.sectorEtf === ev.etf);
-                  const hasQuality = sectorStocks.some(
-                    (s) => (s.conviction === "HIGH" || s.conviction === "MEDIUM") && (s.category === "LEADER" || s.category === "TURNAROUND")
-                  );
-                  if (!hasQuality) blocks.push("no quality stocks");
-                  return (
-                    <p key={ev.etf}><span className="text-[#888]">{ev.sectorName}</span> — {blocks.join(", ")}</p>
-                  );
-                })}
-              </div>
-            )}
+          <div className="space-y-1.5">
+            <p className="text-xs text-[#666]">No active rotations pass noise filters. Check the <a href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</a> for current rotation status.</p>
+            <div className="text-[11px] text-[#555] space-y-0.5">
+              {emerging > 0 && <p>{emerging} emerging rotation{emerging !== 1 ? "s" : ""} — monitoring for sustained signals</p>}
+              {exiting > 0 && <p>{exiting} rotation{exiting !== 1 ? "s" : ""} ending</p>}
+              {unsustained > 0 && <p>{unsustained} rotation{unsustained !== 1 ? "s" : ""} with unsustained signals</p>}
+            </div>
           </div>
         )}
-        {entries.map((entry) => {
-          const { rotation, signal, lifecycle, conviction, regimeAlignment, health, patternStats, topStocks } = entry;
-          const event = rotation.event;
-          const sectorScore = sectors.find((s) => s.sector === event.sectorName);
 
+        {groups.map((group) => {
+          const style = TIMING_STYLE[group.timing];
           return (
-            <div
-              key={event.etf}
-              className={`rounded-lg border ${signal.borderColor} ${signal.bgColor} p-3`}
-            >
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-white">{event.sectorName}</span>
-                <span className="text-xs text-[#666]">{event.etf}</span>
-                {sectorScore && (
-                  <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${quadrantColor(sectorScore.quadrant)}`}>
-                    {sectorScore.quadrant}
-                  </span>
-                )}
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${signal.borderColor} ${signal.bgColor} ${signal.color}`}>
-                  {signal.action === "ENTER" ? <><ArrowUpCircle className="mr-1 inline h-3 w-3" />ENTER</> : <><Plus className="mr-1 inline h-3 w-3" />ADD ON PULLBACK</>}
+            <div key={group.timing}>
+              {/* Section header */}
+              <div className="mb-2 flex items-center gap-2">
+                <div className="h-px flex-1 bg-[#2a2a2a]" />
+                <span className={`text-[10px] font-semibold uppercase tracking-wider ${style.text}`}>
+                  {style.label} Signals ({group.items.length})
                 </span>
-                {regimeAlignment === "aligned" && (
-                  <span className="rounded-full border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-400">Regime Aligned</span>
-                )}
+                <div className="h-px flex-1 bg-[#2a2a2a]" />
               </div>
 
-              <p className="mb-2 text-xs text-[#a0a0a0]">{signal.description}</p>
-
-              <div className="mb-2 flex flex-wrap gap-3 text-xs">
-                <span className="text-[#666]">Stage: <span className="text-white">{lifecycle}</span></span>
-                <span className="text-[#666]">Day {event.daysActive}{patternStats ? ` / avg ${Math.round(patternStats.avgDurationDays)}d` : ""}</span>
-                <span className="text-[#666]">Accel: <span className={health.acceleration > 0 ? "text-green-400" : "text-red-400"}>{health.acceleration > 0 ? "+" : ""}{health.acceleration.toFixed(2)}</span></span>
-                <span className="text-[#666]">CMF: <span className={health.cmf20 > 0 ? "text-green-400" : "text-red-400"}>{health.cmf20 > 0 ? "+" : ""}{health.cmf20.toFixed(2)}</span></span>
-                <span className="text-[#666]">Conviction: <span className={conviction.level === "HIGH" ? "text-green-400" : conviction.level === "MODERATE" ? "text-cyan-400" : "text-amber-400"}>{conviction.level}</span> ({conviction.score})</span>
-              </div>
-
-              <div className="mb-2 flex flex-wrap gap-2 text-[10px]">
-                {[
-                  { label: `CMF ${health.cmf20 > 0 ? "+" : ""}${health.cmf20.toFixed(2)}`, strong: health.cmf20 > 0.1 },
-                  { label: `Accel ${health.acceleration > 0 ? "+" : ""}${health.acceleration.toFixed(2)}`, strong: health.acceleration > 1 },
-                  { label: `${conviction.level} Conviction`, strong: conviction.level === "HIGH" },
-                  { label: regimeAlignment === "aligned" ? "Regime Aligned" : "Regime Neutral", strong: regimeAlignment === "aligned" },
-                ].map((indicator) => (
-                  <span key={indicator.label} className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 ${indicator.strong ? "bg-green-500/10 text-green-400" : "bg-[#2a2a2a] text-[#888]"}`}>
-                    <CheckCircle2 className="h-2.5 w-2.5" />
-                    {indicator.label}
-                  </span>
+              <div className="space-y-3">
+                {group.items.map((entry) => (
+                  <SignalCard key={entry.rotation.event.etf} entry={entry} sectors={sectors} />
                 ))}
               </div>
-
-              {topStocks.length > 0 && (
-                <div className="rounded-md border border-[#2a2a2a] bg-[#0d0d0d] p-2">
-                  <div className="mb-1 text-[10px] font-medium text-[#666] uppercase tracking-wide">Top Picks</div>
-                  <div className="space-y-1">
-                    {topStocks.map((stock) => (
-                      <div key={stock.symbol} className="flex items-center gap-2 text-xs">
-                        <a
-                          href={`https://finance.yahoo.com/quote/${stock.symbol}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-[#5ba3e6] hover:underline"
-                        >
-                          {stock.symbol}
-                        </a>
-                        <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${stock.conviction === "HIGH" ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"}`}>
-                          {stock.conviction}
-                        </span>
-                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${stock.category === "LEADER" ? "bg-green-500/10 text-green-400" : "bg-purple-500/10 text-purple-400"}`}>
-                          {stock.category === "CATCH_UP" ? "Catch-up" : stock.category === "TURNAROUND" ? "Turnaround" : stock.category.charAt(0) + stock.category.slice(1).toLowerCase()}
-                        </span>
-                        {stock.rsAccel != null && (
-                          <span className={`text-[10px] ${stock.rsAccel > 0 ? "text-green-400" : "text-red-400"}`}>
-                            RS {stock.rsAccel > 0 ? "+" : ""}{stock.rsAccel.toFixed(1)}
-                          </span>
-                        )}
-                        {stock.institutionalPct != null && (
-                          <span className="text-[10px] text-[#666]">Inst {stock.institutionalPct.toFixed(0)}%</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
       </div>
     </CollapsiblePanel>
+  );
+}
+
+// ── Signal Card ──
+
+function SignalCard({ entry, sectors }: { entry: EntrySignalSector; sectors: SectorRotationScore[] }) {
+  const { rotation, signal, lifecycle, conviction, regimeAlignment, health, patternStats, topStocks, timing } = entry;
+  const event = rotation.event;
+  const sectorScore = sectors.find((s) => s.sector === event.sectorName);
+  const style = TIMING_STYLE[timing];
+
+  const signalHistory = event.signalHistory ?? [];
+  const avgSignalCount = signalHistory.length > 0
+    ? signalHistory.reduce((sum, h) => sum + h.signalCount, 0) / signalHistory.length
+    : 0;
+
+  // Health indicator colors
+  const cmfColor = health.cmf20 > 0 ? "bg-green-500/10 text-green-400 border-green-500/30"
+    : health.cmf20 > -0.05 ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+    : "bg-red-500/10 text-red-400 border-red-500/30";
+  const accelColor = health.acceleration > 0 ? "bg-green-500/10 text-green-400 border-green-500/30"
+    : health.acceleration > -0.3 ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+    : "bg-red-500/10 text-red-400 border-red-500/30";
+  const signalColor = avgSignalCount >= 2.5 ? "text-green-400" : avgSignalCount >= 1.5 ? "text-cyan-400" : "text-amber-400";
+  const convictionColor = conviction.level === "HIGH" ? "border-green-500/30 bg-green-500/10 text-green-400"
+    : conviction.level === "MODERATE" ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+    : "border-amber-500/30 bg-amber-500/10 text-amber-400";
+
+  // Action badge
+  const actionIcon = signal.action === "ENTER"
+    ? <ArrowUpCircle className="mr-1 inline h-3 w-3" />
+    : signal.action === "ADD ON PULLBACK"
+      ? <Plus className="mr-1 inline h-3 w-3" />
+      : <Shield className="mr-1 inline h-3 w-3" />;
+  const actionLabel = signal.action === "HOLD — TIGHTEN STOPS" ? "HOLD" : signal.action;
+
+  return (
+    <div className={`rounded-lg border ${style.border} ${style.bg} p-3`}>
+      {/* Header row */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-white">{event.sectorName}</span>
+        <span className="text-xs text-[#666]">{event.etf}</span>
+        {sectorScore && (
+          <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${quadrantColor(sectorScore.quadrant)}`}>
+            {sectorScore.quadrant}
+          </span>
+        )}
+        {/* Timing badge */}
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${style.border} ${style.bg} ${style.text}`}>
+          <TrendingUp className="h-3 w-3" />
+          {style.label} (Day {event.daysActive})
+        </span>
+        {/* Action badge */}
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${signal.borderColor} ${signal.bgColor} ${signal.color}`}>
+          {actionIcon}{actionLabel}
+        </span>
+        {regimeAlignment === "aligned" && (
+          <span className="rounded-full border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-400">Regime Aligned</span>
+        )}
+      </div>
+
+      <p className="mb-2 text-xs text-[#a0a0a0]">{signal.description}</p>
+
+      {/* Stage + Day info */}
+      <div className="mb-2 flex flex-wrap gap-3 text-xs">
+        <span className="text-[#666]">Stage: <span className="text-white">{lifecycle}</span></span>
+        <span className="text-[#666]">Day {event.daysActive}{patternStats ? ` / avg ${Math.round(patternStats.avgDurationDays)}d` : ""}</span>
+      </div>
+
+      {/* Health indicator badges */}
+      <div className="mb-2 flex flex-wrap gap-2 text-[10px]">
+        <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 ${cmfColor}`}>
+          CMF {health.cmf20 > 0 ? "+" : ""}{health.cmf20.toFixed(2)}
+        </span>
+        <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 ${accelColor}`}>
+          Accel {health.acceleration > 0 ? "+" : ""}{health.acceleration.toFixed(2)}
+        </span>
+        <span className={`inline-flex items-center rounded-full border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5`}>
+          <span className={signalColor}>{avgSignalCount.toFixed(1)}/3</span><span className="text-[#666] ml-0.5">signals</span>
+        </span>
+        <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 ${convictionColor}`}>
+          {conviction.level}
+        </span>
+        {regimeAlignment === "headwind" && (
+          <span className="inline-flex items-center rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-red-400">Headwind</span>
+        )}
+      </div>
+
+      {/* Top picks */}
+      {topStocks.length > 0 ? (
+        <div className="rounded-md border border-[#2a2a2a] bg-[#0d0d0d] p-2">
+          <div className="mb-1 text-[10px] font-medium text-[#666] uppercase tracking-wide">Top Picks</div>
+          <div className="space-y-1">
+            {topStocks.map((stock) => (
+              <div key={stock.symbol} className="flex items-center gap-2 text-xs">
+                <a
+                  href={`https://finance.yahoo.com/quote/${stock.symbol}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-[#5ba3e6] hover:underline"
+                >
+                  {stock.symbol}
+                </a>
+                <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${stock.conviction === "HIGH" ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"}`}>
+                  {stock.conviction}
+                </span>
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${stock.category === "LEADER" ? "bg-green-500/10 text-green-400" : "bg-purple-500/10 text-purple-400"}`}>
+                  {stock.category === "CATCH_UP" ? "Catch-up" : stock.category === "TURNAROUND" ? "Turnaround" : stock.category.charAt(0) + stock.category.slice(1).toLowerCase()}
+                </span>
+                {stock.rsAccel != null && (
+                  <span className={`text-[10px] ${stock.rsAccel > 0 ? "text-green-400" : "text-red-400"}`}>
+                    RS {stock.rsAccel > 0 ? "+" : ""}{stock.rsAccel.toFixed(1)}
+                  </span>
+                )}
+                {stock.institutionalPct != null && (
+                  <span className="text-[10px] text-[#666]">Inst {stock.institutionalPct.toFixed(0)}%</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-md border border-[#2a2a2a] bg-[#0d0d0d] p-2">
+          <p className="text-[10px] text-[#555] italic">No quality stocks yet — monitoring for leaders/turnarounds</p>
+        </div>
+      )}
+    </div>
   );
 }

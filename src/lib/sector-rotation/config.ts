@@ -101,6 +101,12 @@ export const ROTATION = {
   TRACKER_BATCH_SIZE: 15,
   /** Delay (ms) between stock chart fetch batches in rotation tracker */
   TRACKER_BATCH_DELAY: 200,
+  /** Days threshold for EARLY timing classification (inclusive) */
+  EARLY_TIMING_DAYS: 7,
+  /** Days above which timing is DELAYED */
+  DELAYED_TIMING_DAYS: 15,
+  /** Minimum avg signalCount across history for sustained rotation */
+  MIN_AVG_SIGNAL_COUNT: 1.5,
 } as const;
 
 // ── Stock Quality Gates ──
