@@ -90,7 +90,7 @@ All cron scanners and the sector rotation stock enrichment share a universal qua
 Loads all distinct tickers from 7 scanner tables (`loadAllScoredTickers()` in `persistence.ts`). If a ticker has never appeared in any scanner result during the 14-day retention window, it is skipped entirely (no API call). Safety: only activates when `scoredTickers.size > 50` (prevents empty-DB edge case from filtering everything). Applied in 5 cron routes: PreRun preset, PreRun 4h, Inflection, Transition, VCP.
 
 **Sector rotation gate** (`applyQualityGates()` in `src/lib/sector-rotation/stock-enrichment.ts`):
-Thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MAX_PRICE: 1000 (except Semiconductors)`, `MIN_MARKET_CAP: 8B`, `MIN_DOLLAR_VOLUME: 150M`, `MIN_AVG_VOLUME: 1M`, `MIN_INSTITUTIONAL_PCT: 5` (low: ADRs report artificially low institutional % via Yahoo). Plus existing gates (volume spike, extension, trend, sector correlation). Additional gates: `APPLY_SCAN_EXCLUSIONS: true` rejects the 133 SCAN_EXCLUSIONS tickers before any other gate check; `REJECT_NULL_MARKET_CAP: true` fails stocks with null market cap (aligns with PreRun treating null as 0). SCAN_EXCLUSIONS also applied upstream in `sector-rotation.ts` (pre-filters batch quote list) and `rotation-tracker.ts` (filters stock symbols before chart fetches).
+Thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MAX_PRICE: 1000 (except Semiconductors)`, `MIN_MARKET_CAP: 8B`, `MIN_DOLLAR_VOLUME: 150M`, `MIN_AVG_VOLUME: 1M`, `MIN_INSTITUTIONAL_PCT: 5` (low: ADRs report artificially low institutional % via Yahoo), `MAX_VOLUME_SPIKE: 10` (breakout-day volume allowed), `MAX_ETF_DEVIATION: 60` (sector leaders can diverge from ETF). Plus existing gates (extension, trend). Additional gates: `APPLY_SCAN_EXCLUSIONS: true` rejects the 133 SCAN_EXCLUSIONS tickers before any other gate check; `REJECT_NULL_MARKET_CAP: true` fails stocks with null market cap (aligns with PreRun treating null as 0). SCAN_EXCLUSIONS also applied upstream in `sector-rotation.ts` (pre-filters batch quote list) and `rotation-tracker.ts` (filters stock symbols before chart fetches).
 
 **Rotation tracker gate** (`fetchStockPerformance()` in `src/lib/sector-rotation/rotation-tracker.ts`):
 Lightweight pre-filter before fetching 6mo charts: `price >= MIN_PRICE ($10)`, `dollarVol >= MIN_DOLLAR_VOLUME ($100M)`. Plus SCAN_EXCLUSIONS filtering when collecting stock symbols. Saves chart API calls for low-quality stocks.
@@ -166,7 +166,7 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 | Inflection | `Inflect` | Accumulation cycle stage transitions (seller exhaustion → expansion) | Price >= $5, dollarVol >= $10M, mcap >= $500M | 6 components (SE/VC/BE/RS/LA/IP) weighted 0-100, stages + trade read (AVOID/WATCH/STARTER/ADD_ON) | `inflection-scoring.ts` |
 | Transition | `Trans` | Market structure transitions (accumulation → markup) | Price >= $5, dollarVol >= $10M, mcap >= $500M | 8 components weighted 0-100, 11-state model, alert states (TRIGGERED/READY/ARMED/WATCH) | `transition-scoring.ts`, `market-structure.ts` |
 | Institutional | `Inst` | Large-cap institutional runners with momentum | Price >= $20, mcap >= $20B, dollarVol >= $100M, vol >= 1.5M | 4 weighted components (inst 35%/exec 25%/risk 25%/disc 15%), 12 classifications | `institutional-scoring.ts` |
-| PreRunner | `Rot` | Sector rotation leaders + turnaround candidates | Min score >= 55 | LEADERs (6 components: RS/sector/volume/conviction/momentum/regime) + TURNAROUNDs (6 components: RS/lifecycle/volume/sector/momentum/regime), blended sector scoring, RS-aware conviction | `src/lib/prerunner/scoring.ts` |
+| PreRunner | `Rot` | Sector rotation leaders + turnaround candidates | Min score >= 55 | LEADERs (6 components: RS/sector/volume/conviction/momentum/regime) + TURNAROUNDs (6 components: RS/lifecycle/volume/sector/momentum/regime), blended sector scoring, RS-aware conviction. No hard conviction gate — composite score (MIN_SCORE 55) handles filtering instead of double-gating on conviction level. | `src/lib/prerunner/scoring.ts` |
 
 **Badge-only (not counted for confluence):**
 
@@ -282,9 +282,9 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | `src/lib/sector-rotation/sector-rotation.ts` | Main scoring engine — `calculateSectorRotation()` |
 | `src/lib/sector-rotation/stock-enrichment.ts` | Stock quality gates, classification (LEADER/CATCH_UP/TURNAROUND/AVOID), phase (P1-P4), conviction scoring, null-data warnings |
 | `src/lib/sector-rotation/rotation-tracker.ts` | Active rotation detection — signal history, lifecycle stages (config-driven SMA periods, batch sizes), stock quality gates (price, dollarVol, SCAN_EXCLUSIONS) |
-| `src/lib/sector-rotation/rotation-helpers.ts` | Lifecycle stage (with soft exhaustion zone at `EXHAUSTING_SOFT_DAYS`), conviction level, action signals |
+| `src/lib/sector-rotation/rotation-helpers.ts` | Lifecycle stage (with soft exhaustion zone at `EXHAUSTING_SOFT_DAYS`), conviction level, action signals. All lifecycle constants imported from config (no local duplicates). |
 | `src/lib/sector-rotation/regime.ts` | Macro regime classification (RISK_ON/OFF/INFLATIONARY/MIXED) with adaptive VIX bounds. All regimes have favored/avoid sectors (MIXED favors Health Care, Financials). |
-| `src/lib/sector-rotation/brief.ts` | Market posture (AGGRESSIVE/SELECTIVE/DEFENSIVE/CASH), sector tiers, risk flags. `computeMarketPosture()` and `computeRiskFlags()` accept optional pre-computed `LeadershipHealth` to avoid duplicate computation. |
+| `src/lib/sector-rotation/brief.ts` | Market posture (AGGRESSIVE/SELECTIVE/DEFENSIVE/CASH), sector tiers, risk flags. `computeMarketPosture()` and `computeRiskFlags()` accept optional pre-computed `LeadershipHealth` to avoid duplicate computation. SELECTIVE posture reasoning handles 3 cases: rotations-only, sectors-only, and both qualifying. |
 | `src/lib/sector-rotation/leadership-health.ts` | Leadership Health Score (0-100) from MAGS/QQQ/IWM/ARKK |
 | `src/lib/sector-rotation/math.ts` | Momentum scoring, RS ratios (Mansfield with `isFinite` guard), RRG trail (lookback margin 20), CMF, OBV slope |
 | `src/lib/sector-rotation/types.ts` | Core types: `SectorRotationScore`, `EnrichedStock`, `SectorRotationResult` |
@@ -295,11 +295,11 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 **UI Pages:**
 | Route | File | Purpose |
 |-------|------|---------|
-| `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart, sector cards, leadership baskets, sub-sectors, cross-asset |
-| `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias, leadership health, sector tiers, risk flags |
+| `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart, sector cards (stable sort by conviction → rsAccel → ticker), leadership baskets, sub-sectors, cross-asset. Summary strip counts declining sectors explicitly (not `total - improving`). |
+| `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias, leadership health, sector tiers, risk flags. Stale snapshot guard: ignores previous snapshots older than 3 days. |
 | `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks + Rotation Signals panel (early detection timing) |
 | `/sectors/crypto` | `src/app/sectors/crypto/page.tsx` | Crypto rotation dashboard |
-| `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables |
+| `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables. Phase classification uses `isTurnaroundCandidate` flag (aligned with `categorizeStock()`). |
 
 **API Routes:**
 | Route | Purpose |
@@ -349,7 +349,7 @@ Snapshot futures are filtered to equity only (ES/NQ/YM/RTY) — CL and GC are no
 **Key files:**
 | File | Purpose |
 |------|---------|
-| `src/lib/premarket/trading-bias.ts` | Bias classification, confidence, playbook generation |
+| `src/lib/premarket/trading-bias.ts` | Bias classification, confidence, playbook generation. All numeric thresholds externalized to `PREMARKET_SCORING` in config.ts (sign threshold, magnitude gate, majority ratio, tiebreaker, VIX direction, avoid deviation). |
 | `src/lib/premarket/fetch.ts` | Yahoo Finance data fetching for futures + internals (2-min cache) |
 | `src/lib/premarket/scoring.ts` | Checklist-based bias score (-10 to +10) |
 | `src/lib/premarket/types.ts` | `TradingBias`, `TradingBiasSnapshot`, `FuturesSnapshot`, `PremarketData` types |
@@ -358,7 +358,7 @@ Snapshot futures are filtered to equity only (ES/NQ/YM/RTY) — CL and GC are no
 | `supabase/migrations/020_trading_bias_daily.sql` | DB table for bias predictions + outcome backfill |
 
 ### Crypto Rotation
-Mirrors the equity sector rotation system for crypto assets. Uses adapted quality gates (lower market cap, dollar volume, wider extension thresholds) and reuses equity classification/conviction logic.
+Mirrors the equity sector rotation system for crypto assets. Uses adapted quality gates (lower market cap, dollar volume, wider extension thresholds) and reuses equity classification/conviction logic. Crypto quality gates reject null market cap tokens (aligned with equity `REJECT_NULL_MARKET_CAP: true`). `MAX_EXTENSION_PCT: 200` (wider than equity — crypto volatility warrants higher ceiling).
 
 **Key files:**
 | File | Purpose |
@@ -443,13 +443,15 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 | `REGIME` | `DXY_TREND_THRESHOLD: 1` (absolute point change, not percentage) |
 | `CLASSIFICATION` | `P4_RS_ACCEL`, `P4_SECTOR_ACCEL` (both must be negative — AND logic), `P3_MIN_VOL_RATIO` |
 
-| `QUALITY_GATES` | `REJECT_NULL_MARKET_CAP: true` (null mcap = fail), `APPLY_SCAN_EXCLUSIONS: true` (133-ticker exclusion filter for enrichment + rotation tracker) |
+| `QUALITY_GATES` | `REJECT_NULL_MARKET_CAP: true` (null mcap = fail), `APPLY_SCAN_EXCLUSIONS: true` (133-ticker exclusion filter for enrichment + rotation tracker), `MAX_VOLUME_SPIKE: 10` (was 5 — allows breakout-day volume), `MAX_ETF_DEVIATION: 60` (was 30 — lets sector leaders diverge from ETF) |
 | `CRYPTO_REGIME_THRESHOLDS` | `BTC_VOL_LOW: 60`, `BTC_VOL_HIGH: 80`, `DOMINANCE_DELTA_RISING: 2`, `MARKET_TREND_THRESHOLD: 3`, `CONFIDENCE_VOL_STRONG: 50`, `CONFIDENCE_VOL_EXTREME: 90`, `ALT_SEASON_DISPERSION: 8` |
 | `CRYPTO_BRIEF` | `BTC_VOL_SPIKE: 80`, `AGGRESSIVE_DISPERSION: 5`, `ACTIONABLE_COMPOSITE: 55`, `PANIC_DISPERSION: 10`, `BIAS_DISPERSION_HIGH: 6`, `BIAS_DISPERSION_LOW: 2`, `LOW_CONFIDENCE_THRESHOLD: 50`, `BTC_RETURN_THRESHOLD: 5`, `SECTOR_BALANCE_THRESHOLD: 2` |
 | `COMPARISON` | `CHANGE_THRESHOLD: 2` (sector score delta for improved/declined classification) |
 | `PRERUNNER` | Leader weights: `RS: 30`, `SECTOR: 25`, `VOLUME: 15`, `CONVICTION: 15`, `MOMENTUM: 10`, `REGIME: 5` (sum=100). Turnaround weights: `RS: 35`, `LIFECYCLE: 20`, `VOLUME: 15`, `SECTOR: 15`, `MOMENTUM: 10`, `REGIME: 5` (sum=100). Normalization: `RS_ACCEL_MAX: 6`, `VOL_RATIO_MAX: 2.0`, `VOL_RATIO_FLOOR: 0.5`, `MOMENTUM_RANGE: [-10, +10]`. Score mappings: `QUADRANT_SCORES` (LEADING=25, IMPROVING=20, WEAKENING=8, LAGGING=0), `LIFECYCLE_SCORES` (EARLY=20, MATURING=15, LATE=5, EXHAUSTING=0), `CONVICTION_SCORES` (HIGH=1.0, MEDIUM=0.7, WATCH=0.3). Bonuses: `RS_IMPROVING_BONUS: 5`, `OUTPERFORMANCE_BONUS_CAP: 5` (leaders only, scaled by `OUTPERFORMANCE_SCALE: 10`). Blending: `SECTOR_COMPOSITE_BLEND: 0.5` (50% quadrant + 50% continuous composite). Turnaround conviction: `TURNAROUND_CONVICTION_RS_BLEND: 0.4`, breakpoints at `0.7` (HIGH) / `0.4` (MEDIUM). |
 
 | `CONVICTION` | Signal weights: `sectorQuadrant: 1.5`, `sectorComposite: 1.5`, `stockCategory: 1.0`, `rsAccel: 1.0`, `sectorStealth: 1.0`, `volumeRatio: 0.5`. Thresholds: `STRONG_RS_ACCEL: 3.0`, `HIGH_VOL_RATIO: 1.2`, `HIGH_COMPOSITE: 70`, `STEALTH_VOL_FLOOR: 0.8`. Phase: `PHASE_P4_PENALTY: 1.5`. Tiers: `WEIGHTED_HIGH: 4.0`, `WEIGHTED_MEDIUM: 2.5`. |
+
+| `PREMARKET_SCORING` | `SIGN_THRESHOLD: 0.1` (flat futures cutoff), `VIX_DIRECTION_PCT: 3` (VIX move threshold), `EQUITY_DIRECTION_THRESHOLD: 0.1`, `SUSPICIOUS_RALLY_THRESHOLD: 0.3`, `MAGNITUDE_GATE: 0.08` (tiny-move neutral gate), `MAJORITY_RATIO: 1.5` (bull/bear weight majority), `TIEBREAKER_THRESHOLD: 0.15` (even-split tiebreaker), `AVOID_MIN_DEVIATION: 0.15` (median-deviation floor for asset-to-avoid) |
 
 Other sections: LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS.
 
@@ -514,7 +516,7 @@ The Rotation Signals panel on the picks page shows sector rotations at inflectio
 |--------|-------|----------|
 | EXIT filter | `action === "EXIT"` excluded | `action === ENTER or ADD` gate |
 | Blip filter | `daysActive < MIN_ROTATION_DAYS (5)` excluded | *(new)* |
-| Sustained filter | `isSignalSustained()`: requires 3+ history entries with avg signalCount >= `MIN_AVG_SIGNAL_COUNT` (1.5) | *(new)* |
+| Sustained filter | `isSignalSustained()`: requires 3+ history entries with avg signalCount >= `MIN_AVG_SIGNAL_COUNT` (1.0) | *(new)* |
 | *(removed)* | CMF shown as colored badge, not a gate | `cmf20 > 0` gate |
 | *(removed)* | Accel shown as colored badge, not a gate | `acceleration > 0` gate |
 | *(removed)* | "No quality stocks yet" shown if empty | `hasQualityStock` gate |
@@ -523,7 +525,7 @@ The Rotation Signals panel on the picks page shows sector rotations at inflectio
 
 | Timing | Condition | Color |
 |--------|-----------|-------|
-| EARLY | Days 1-7, or days 8-10 without health confirmation (CMF > 0 AND accel > 0) | Green |
+| EARLY | Days 1-`EARLY_TIMING_DAYS` (7), or days 8-`EARLY_TIMING_DAYS+3` (10) without health confirmation (CMF > 0 AND accel > 0) | Green |
 | CONFIRMED | Days 8-15 with any health confirmation | Cyan |
 | DELAYED | Days 16+ | Amber |
 
