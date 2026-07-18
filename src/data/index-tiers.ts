@@ -5,7 +5,7 @@
  * Tier 2: Nasdaq-100 or Additional Members (not already in tier 1) — quality mid/large-cap
  * Tier 3: Everything else — small-cap, speculative
  *
- * Last updated: 2026-07-11 (refresh quarterly after index rebalances)
+ * Last updated: 2026-07-17 (refresh quarterly after index rebalances)
  */
 
 // prettier-ignore
@@ -42,7 +42,7 @@ export const SP500_MEMBERS: Set<string> = new Set([
   "J", "JBHT", "JBL", "JCI", "JKHY", "JNJ", "JPM",
   "K", "KDP", "KEY", "KEYS", "KHC", "KIM", "KKR", "KLAC", "KMB", "KMI",
   "KO", "KR", "KVUE",
-  "L", "LDOS", "LEN", "LH", "LHX", "LII", "LIN", "LLY", "LMT", "LNT",
+  "L", "LDOS", "LEN", "LH", "LHX", "LII", "LIN", "LITE", "LLY", "LMT", "LNT",
   "LOW", "LRCX", "LULU", "LUV", "LVS", "LYB", "LYV",
   "MA", "MAA", "MAR", "MAS", "MCD", "MCHP", "MCK", "MCO", "MDLZ", "MDT",
   "MET", "META", "MGM", "MKC", "MLM", "MMM", "MNST", "MO", "MOS", "MPC",
@@ -57,7 +57,7 @@ export const SP500_MEMBERS: Set<string> = new Set([
   "QCOM", "QRVO",
   "RCL", "REG", "REGN", "RF", "RJF", "RL", "RMD", "ROK", "ROL", "ROP",
   "ROST", "RSG", "RTX", "RVTY",
-  "SBAC", "SBUX", "SCHW", "SHW", "SJM", "SLB", "SMCI", "SNA", "SNPS", "SO",
+  "SATS", "SBAC", "SBUX", "SCHW", "SHW", "SJM", "SLB", "SMCI", "SNA", "SNPS", "SO",
   "SOLV", "SPG", "SPGI", "SRE", "STE", "STLD", "STT", "STX", "STZ", "SW",
   "SWK", "SWKS", "SYF", "SYK", "SYY",
   "T", "TAP", "TDG", "TDY", "TECH", "TEL", "TER", "TFC", "TGT", "TJX",
@@ -74,13 +74,13 @@ export const SP500_MEMBERS: Set<string> = new Set([
 ]);
 
 // prettier-ignore
-// Updated for June 22, 2026 quarterly rebalance + July 7, 2026 SPCX addition
+// Updated for June 22, 2026 quarterly rebalance + July 7, 2026 SPCX addition + May 18, 2026 LITE/CSGP swap
 export const NDX100_MEMBERS: Set<string> = new Set([
   "AAPL", "ABNB", "ADBE", "ADI", "ADP", "ADSK", "AEP", "ALAB", "ALNY", "AMAT",
   "AMD", "AMGN", "AMZN", "ANSS", "APP", "ARM", "ASML", "AVGO", "AZN",
   "BIIB", "BKNG", "BKR",
   "CCEP", "CDNS", "CDW", "CEG", "CMCSA", "COIN", "COST", "CPRT", "CRWD", "CRWV",
-  "CSCO", "CSGP",
+  "CSCO",
   "DASH", "DDOG", "DLTR", "DXCM",
   "EA", "EXC",
   "FANG", "FAST", "FTNT",
@@ -88,7 +88,7 @@ export const NDX100_MEMBERS: Set<string> = new Set([
   "HON",
   "IDXX", "ILMN", "INTC", "INTU", "ISRG",
   "KDP", "KHC", "KLAC",
-  "LIN", "LRCX", "LULU",
+  "LIN", "LITE", "LRCX", "LULU",
   "MAR", "MCHP", "MDLZ", "MELI", "META", "MNST", "MRNA", "MRVL", "MSFT",
   "MSTR", "MU",
   "NBIS", "NFLX", "NVDA", "NXPI",
