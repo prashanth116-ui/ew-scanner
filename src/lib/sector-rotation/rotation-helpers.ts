@@ -27,10 +27,6 @@ export function getHealth(event: RotationEvent): RotationHealthSignals {
 
 // ── Lifecycle Stage ──
 
-export const LIFECYCLE_EXHAUSTING_DAYS = ROTATION_LIFECYCLE.EXHAUSTING_DAYS;
-export const LIFECYCLE_EARLY_MAX_DAYS = ROTATION_LIFECYCLE.EARLY_MAX_DAYS;
-export const LIFECYCLE_MATURING_MAX_DAYS = ROTATION_LIFECYCLE.MATURING_MAX_DAYS;
-
 export function computeLifecycleStage(event: RotationEvent): LifecycleStage {
   const h = getHealth(event);
   // Hard cutoff: beyond EXHAUSTING_DAYS or clear structural weakness

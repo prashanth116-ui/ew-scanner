@@ -179,9 +179,11 @@ export function computeMarketPosture(
     return {
       posture: "SELECTIVE",
       reasoning:
-        highModerate.length >= 1
-          ? `${highModerate.length} rotation(s) with moderate+ conviction. Be selective — focus on highest-conviction sectors.`
-          : `${leadingImproving.length} sectors in leading/improving quadrant. Opportunities exist but be disciplined.`,
+        highModerate.length >= 1 && leadingImproving.length >= POSTURE.SELECTIVE_MIN_SECTORS
+          ? `${highModerate.length} rotation(s) with moderate+ conviction and ${leadingImproving.length} sectors in leading/improving quadrant. Be selective — focus on highest-conviction sectors.`
+          : highModerate.length >= 1
+            ? `${highModerate.length} rotation(s) with moderate+ conviction. Be selective — focus on highest-conviction sectors.`
+            : `${leadingImproving.length} sectors in leading/improving quadrant. Opportunities exist but be disciplined.`,
     };
   }
 

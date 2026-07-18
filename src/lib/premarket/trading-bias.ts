@@ -39,7 +39,7 @@ function extractEquityFutures(futures: FuturesSnapshot[]): EquityFuture[] {
   return result;
 }
 
-function sign(n: number, threshold = 0.1): "up" | "down" | "flat" {
+function sign(n: number, threshold = PREMARKET_SCORING.SIGN_THRESHOLD): "up" | "down" | "flat" {
   if (n > threshold) return "up";
   if (n < -threshold) return "down";
   return "flat";
@@ -67,16 +67,16 @@ function interpretVix(
   if (vixData == null) return "VIX data unavailable — cannot cross-reference fear gauge";
 
   const vix = vixData.level;
-  const equityUp = avgEquityChange > 0.1;
-  const equityDown = avgEquityChange < -0.1;
+  const equityUp = avgEquityChange > PREMARKET_SCORING.EQUITY_DIRECTION_THRESHOLD;
+  const equityDown = avgEquityChange < -PREMARKET_SCORING.EQUITY_DIRECTION_THRESHOLD;
 
   // Use adaptive bounds instead of hardcoded 17/20
   const vixLow = vix < vixBounds.low;
   const vixHigh = vix > vixBounds.high;
 
   // VIX direction from daily change (percentage-based for consistent sensitivity across VIX levels)
-  const vixRising = vixData.changePct > 3;
-  const vixFalling = vixData.changePct < -3;
+  const vixRising = vixData.changePct > PREMARKET_SCORING.VIX_DIRECTION_PCT;
+  const vixFalling = vixData.changePct < -PREMARKET_SCORING.VIX_DIRECTION_PCT;
   const vixDirLabel = vixRising ? " (rising)" : vixFalling ? " (falling)" : "";
 
   if (equityUp && vixLow && !vixRising) {
@@ -85,7 +85,7 @@ function interpretVix(
   if (equityUp && vixHigh) {
     // Only flag as "suspicious" when futures have meaningful magnitude — a +0.09%
     // move with elevated VIX is noise, not a suspicious rally worth trading against.
-    return avgEquityChange > 0.3
+    return avgEquityChange > PREMARKET_SCORING.SUSPICIOUS_RALLY_THRESHOLD
       ? `Suspicious rally — elevated fear despite significant positive futures, potential reversal risk${vixDirLabel}`
       : `Weak rally with elevated fear — likely noise, wait for directional clarity${vixDirLabel}`;
   }
@@ -124,7 +124,7 @@ function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
   // legitimate directional signals in the 0.08-0.15% range that were
   // previously masked, causing false Neutral readings on calm mornings.
   const avgAbsChange = equities.reduce((s, e) => s + Math.abs(e.changePct), 0) / equities.length;
-  if (avgAbsChange < 0.08) return "Neutral";
+  if (avgAbsChange < PREMARKET_SCORING.MAGNITUDE_GATE) return "Neutral";
 
   const dirs = equities.map((e) => sign(e.changePct));
   const avgChange = equities.reduce((s, e) => s + e.changePct, 0) / equities.length;
@@ -140,10 +140,10 @@ function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
   const bullWeight = equities.reduce((s, e) => s + Math.max(0, e.changePct), 0);
   const bearWeight = equities.reduce((s, e) => s + Math.max(0, -e.changePct), 0);
 
-  if (bearWeight > bullWeight * 1.5) {
+  if (bearWeight > bullWeight * PREMARKET_SCORING.MAJORITY_RATIO) {
     return avgChange < -1.0 ? "Strong Bear" : "Lean Bear";
   }
-  if (bullWeight > bearWeight * 1.5) {
+  if (bullWeight > bearWeight * PREMARKET_SCORING.MAJORITY_RATIO) {
     return avgChange > 1.0 ? "Strong Bull" : "Lean Bull";
   }
 
@@ -158,8 +158,8 @@ function classifyBias(equities: EquityFuture[], biasScore: number): MarketBias {
 
   // Close call — use average change as tiebreaker (lowered from ±0.3 to ±0.15
   // since pre-market averages are typically 0.1-0.4%, making 0.3 too aggressive)
-  if (avgChange > 0.15) return "Lean Bull";
-  if (avgChange < -0.15) return "Lean Bear";
+  if (avgChange > PREMARKET_SCORING.TIEBREAKER_THRESHOLD) return "Lean Bull";
+  if (avgChange < -PREMARKET_SCORING.TIEBREAKER_THRESHOLD) return "Lean Bear";
 
   // Fallback to biasScore
   if (biasScore >= 3) return "Lean Bull";
@@ -337,8 +337,8 @@ function pickBestWorst(
       const dev = Math.abs(e.changePct - median);
       if (dev > maxDev) { maxDev = dev; assetToAvoid = e.symbol; }
     }
-    // Only flag if the deviation is meaningful (> 0.15pp from median)
-    if (maxDev < 0.15) assetToAvoid = null;
+    // Only flag if the deviation is meaningful
+    if (maxDev < PREMARKET_SCORING.AVOID_MIN_DEVIATION) assetToAvoid = null;
   }
 
   // If bestToTrade and assetToAvoid point to the same contract, the trade

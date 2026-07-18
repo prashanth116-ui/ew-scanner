@@ -24,7 +24,10 @@ function applyCryptoQualityGates(
     const volRatio = s.avgVolume10d > 0 ? s.volume / s.avgVolume10d : 0;
 
     // Gate 1: Market cap >= minimum (crypto: much lower than equity)
-    if (s.marketCap != null && s.marketCap < CRYPTO_QUALITY_GATES.MIN_MARKET_CAP) {
+    // Reject null market cap — unknown-cap tokens may be illiquid or non-standard
+    if (s.marketCap == null) {
+      reasons.push("market_cap=null");
+    } else if (s.marketCap < CRYPTO_QUALITY_GATES.MIN_MARKET_CAP) {
       reasons.push(`market_cap=$${(s.marketCap / 1e6).toFixed(0)}M (<$${CRYPTO_QUALITY_GATES.MIN_MARKET_CAP / 1e6}M)`);
     }
 
@@ -40,12 +43,12 @@ function applyCryptoQualityGates(
       reasons.push(`vol_spike=${volRatio.toFixed(1)}x (>${CRYPTO_QUALITY_GATES.MAX_VOLUME_SPIKE}x)`);
     }
 
-    // Gate 4: Price extension <= max above 200-SMA (crypto: wider than equity)
-    if (s.sma200 != null && s.sma200 > 0) {
-      const pctFrom200 = ((s.price - s.sma200) / s.sma200) * 100;
-      if (pctFrom200 > CRYPTO_QUALITY_GATES.MAX_EXTENSION_PCT) {
-        reasons.push(`extension=${pctFrom200.toFixed(0)}% (>${CRYPTO_QUALITY_GATES.MAX_EXTENSION_PCT}%)`);
-      }
+    // Gate 4 & 6: Extension + extreme decline (shared pctFrom200 calc)
+    const pctFrom200 = s.sma200 != null && s.sma200 > 0
+      ? ((s.price - s.sma200) / s.sma200) * 100
+      : null;
+    if (pctFrom200 != null && pctFrom200 > CRYPTO_QUALITY_GATES.MAX_EXTENSION_PCT) {
+      reasons.push(`extension=${pctFrom200.toFixed(0)}% (>${CRYPTO_QUALITY_GATES.MAX_EXTENSION_PCT}%)`);
     }
 
     // Gate 5: Liquidity depth proxy — volume-to-market-cap ratio
@@ -57,11 +60,8 @@ function applyCryptoQualityGates(
     }
 
     // Gate 6: Price stability (anti-rug check)
-    if (s.sma200 != null && s.sma200 > 0) {
-      const pctFrom200 = ((s.price - s.sma200) / s.sma200) * 100;
-      if (pctFrom200 < CRYPTO_QUALITY_GATES.EXTREME_DECLINE_PCT) {
-        reasons.push(`extreme_decline=${pctFrom200.toFixed(0)}% from 200MA`);
-      }
+    if (pctFrom200 != null && pctFrom200 < CRYPTO_QUALITY_GATES.EXTREME_DECLINE_PCT) {
+      reasons.push(`extreme_decline=${pctFrom200.toFixed(0)}% from 200MA`);
     }
 
     // Skip: institutional ownership gate (unavailable for crypto)

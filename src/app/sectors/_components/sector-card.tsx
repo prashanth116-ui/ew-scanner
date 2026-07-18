@@ -161,7 +161,7 @@ export function SectorCard({
   const topStocks = useMemo(() => {
     return [...stocks]
       .map((s) => ({ ...s, _conviction: getConvictionScore(s) }))
-      .sort((a, b) => b._conviction - a._conviction)
+      .sort((a, b) => b._conviction - a._conviction || (b.rsAccel ?? 0) - (a.rsAccel ?? 0) || a.ticker.localeCompare(b.ticker))
       .slice(0, 3);
   }, [stocks]);
 

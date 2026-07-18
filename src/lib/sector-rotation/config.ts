@@ -390,8 +390,8 @@ export const CRYPTO_QUALITY_GATES = {
   MIN_DOLLAR_VOLUME: 500_000,
   /** Maximum volume spike ratio */
   MAX_VOLUME_SPIKE: 10.0,
-  /** Maximum % extension above 200-SMA */
-  MAX_EXTENSION_PCT: 150,
+  /** Maximum % extension above 200-SMA (wider than equity — crypto routinely extends 200%+) */
+  MAX_EXTENSION_PCT: 200,
   /** Minimum volume-to-market-cap ratio (liquidity depth) */
   MIN_VOL_TO_MCAP: 0.001,
   /** Extreme decline threshold (% below 200-SMA) */
@@ -558,6 +558,22 @@ export const PREMARKET_SCORING = {
   LEAN_BULL: 2,
   NEUTRAL: -1,
   LEAN_BEAR: -5,
+  /** Futures direction threshold — abs(changePct) below this = "flat" */
+  SIGN_THRESHOLD: 0.1,
+  /** VIX daily change threshold for rising/falling classification (%) */
+  VIX_DIRECTION_PCT: 3,
+  /** Minimum magnitude for equity average to count as directional */
+  EQUITY_DIRECTION_THRESHOLD: 0.1,
+  /** Suspicious rally — futures avg above this during high VIX */
+  SUSPICIOUS_RALLY_THRESHOLD: 0.3,
+  /** Magnitude gate — avg absolute change below this = Neutral */
+  MAGNITUDE_GATE: 0.08,
+  /** Majority weight ratio — one side must outweigh by this factor */
+  MAJORITY_RATIO: 1.5,
+  /** Tiebreaker threshold for even-split bias */
+  TIEBREAKER_THRESHOLD: 0.15,
+  /** Minimum median deviation to flag asset-to-avoid (pp) */
+  AVOID_MIN_DEVIATION: 0.15,
 } as const;
 
 // ── Policy Pulse Classification ──

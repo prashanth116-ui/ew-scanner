@@ -126,7 +126,7 @@ function perfBg(pct: number): string {
 function getRotationStockPhase(s: RotationStockPerformance): StockPhase {
   const ta = s.trendAccel ?? 0; // stock's own momentum (pctFromSMA50 - pctFromSMA200)
   if (ta < -2) return "exhausting";
-  if (!s.aboveSma50 && ta > 0 && s.volumeVsAvg >= 1.2) return "turnaround";
+  if (s.isTurnaroundCandidate) return "turnaround";
   if (!s.aboveSma50 && ta > 0 && s.performancePct <= 0) return "basing";
   if (s.aboveSma50 && ta > 0) return "trending";
   return "neutral";
@@ -874,7 +874,7 @@ function StockPerformanceTable({
     else if (rs20dFilter === "negative") copy = copy.filter(item => item.stock.rs20d != null && item.stock.rs20d < 0);
     if (qualityFilter === "improving") copy = copy.filter(item => item.stock.rsImproving);
     else if (qualityFilter === "high") copy = copy.filter(item =>
-      item.stock.rsImproving && (item.stock.volumeConsistency ?? 0) >= 3 && (item.stock.dailyChangePct ?? 0) > -3
+      item.stock.rsImproving && (item.stock.volumeConsistency ?? 0) >= 3
     );
     else if (qualityFilter === "fading") copy = copy.filter(item =>
       !item.stock.rsImproving && (item.stock.rsAcceleration ?? 0) < 0

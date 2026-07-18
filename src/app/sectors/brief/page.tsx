@@ -127,8 +127,12 @@ export default function DailyBriefPage() {
   const previousSnapshot = useMemo(() => {
     const history = loadHistory();
     const today = new Date().toISOString().slice(0, 10);
-    // Find most recent snapshot that ISN'T today
-    return history.find((s) => s.date !== today) ?? null;
+    // Find most recent snapshot that ISN'T today and is within 3 days
+    const match = history.find((s) => s.date !== today) ?? null;
+    if (!match) return null;
+    const ageMs = Date.now() - new Date(match.date).getTime();
+    if (ageMs > 3 * 24 * 60 * 60 * 1000) return null; // stale — more than 3 days old
+    return match;
   }, []);
 
   // Load yesterday's posture from localStorage
