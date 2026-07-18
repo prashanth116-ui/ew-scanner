@@ -206,8 +206,8 @@ function computeConfidence(
   if (vixData != null) {
     const vixLow = vixData.level < vixBounds.low;
     const vixHigh = vixData.level > vixBounds.high;
-    const vixRising = vixData.changePct > 3;
-    const vixFalling = vixData.changePct < -3;
+    const vixRising = vixData.changePct > PREMARKET_SCORING.VIX_DIRECTION_PCT;
+    const vixFalling = vixData.changePct < -PREMARKET_SCORING.VIX_DIRECTION_PCT;
 
     // Level-based confirmation (0-15)
     if ((bullBias && vixLow) || (bearBias && vixHigh)) {
@@ -496,8 +496,8 @@ function buildReasons(
     const vixLevel = vixData.level < vixBounds.low ? "low fear" :
       vixData.level > vixBounds.high * 1.25 ? "elevated fear" :
         vixData.level > vixBounds.high ? "above-average fear" : "moderate fear";
-    const vixDir = vixData.changePct > 3 ? `, rising ${fmt(vixData.changePct)}` :
-      vixData.changePct < -3 ? `, falling ${fmt(vixData.changePct)}` : "";
+    const vixDir = vixData.changePct > PREMARKET_SCORING.VIX_DIRECTION_PCT ? `, rising ${fmt(vixData.changePct)}` :
+      vixData.changePct < -PREMARKET_SCORING.VIX_DIRECTION_PCT ? `, falling ${fmt(vixData.changePct)}` : "";
     reasons.push(`VIX at ${vixData.level.toFixed(1)} — ${vixLevel} environment${vixDir}`);
   }
 
