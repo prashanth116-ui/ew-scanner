@@ -12,7 +12,7 @@ export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: Pu
   const [sectorFilter, setSectorFilter] = usePersistedFilter<string>("ew-filter:pullback:sector", "ALL");
   const [tierFilter, setTierFilter] = usePersistedFilter<ExtensionTier | "ALL">("ew-filter:pullback:tier", "ALL");
   const [sortKey, setSortKey] = useState<PullbackSortKey>("tier");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const sectorNames = useMemo(() => {
     const s = new Set(stocks.map((st) => st.sector));

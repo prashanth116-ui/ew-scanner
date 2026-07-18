@@ -438,7 +438,7 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 |---------|-------------------|
 | `COMPOSITE` | `ACCEL_NORM_FLOOR: -10`, `ACCEL_NORM_CEILING: 10` (fixed-range acceleration normalization), `ACTIONABLE_THRESHOLD`, `ACTIONABLE_HYSTERESIS`, `WATCH_THRESHOLD` |
 | `SCORING_SIGNALS` | `MOMENTUM_WEIGHTS: { roc63: 0.35, roc126: 0.25, roc189: 0.25, roc252: 0.15 }`, `SIGMOID_EXPONENT: 0.4` |
-| `ROTATION` | `RS_SMA_SHORT: 10`, `RS_SMA_LONG: 30`, `MIN_ALIGNED_BARS: 50`, `TRACKER_BATCH_SIZE: 15`, `TRACKER_BATCH_DELAY: 200`, `VOLUME_SURGE`, `SIGNAL_START`, `SIGNAL_END_DAYS`, `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.5` |
+| `ROTATION` | `RS_SMA_SHORT: 10`, `RS_SMA_LONG: 30`, `MIN_ALIGNED_BARS: 50`, `TRACKER_BATCH_SIZE: 15`, `TRACKER_BATCH_DELAY: 200`, `VOLUME_SURGE`, `SIGNAL_START`, `SIGNAL_END_DAYS`, `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.0` |
 | `ROTATION_LIFECYCLE` | `EXHAUSTING_DAYS: 30` (hard cutoff), `EXHAUSTING_SOFT_DAYS: 25` (health-confirmed soft zone), `EARLY_MAX_DAYS`, `MATURING_MAX_DAYS` |
 | `REGIME` | `DXY_TREND_THRESHOLD: 1` (absolute point change, not percentage) |
 | `CLASSIFICATION` | `P4_RS_ACCEL`, `P4_SECTOR_ACCEL` (both must be negative — AND logic), `P3_MIN_VOL_RATIO` |
@@ -535,7 +535,7 @@ The Rotation Signals panel on the picks page shows sector rotations at inflectio
 
 **Empty state:** Shows counts for emerging (< 5 days), exiting (EXIT action), and unsustained rotations.
 
-**Config constants (ROTATION section):** `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.5`.
+**Config constants (ROTATION section):** `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.0`.
 
 ### Persistence Functions (per table)
 Each daily table has 5 standard functions in `persistence.ts`:

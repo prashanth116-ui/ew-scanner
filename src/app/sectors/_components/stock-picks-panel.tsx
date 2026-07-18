@@ -166,8 +166,8 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
     return Array.from(groups.values());
   }, [filtered]);
 
-  const highCount = stocks.filter((s) => s.conviction === "HIGH").length;
-  const medCount = stocks.filter((s) => s.conviction === "MEDIUM").length;
+  const highCount = filtered.filter((s) => s.conviction === "HIGH").length;
+  const medCount = filtered.filter((s) => s.conviction === "MEDIUM").length;
 
   const handleSort = (key: PicksSortKey) => {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");

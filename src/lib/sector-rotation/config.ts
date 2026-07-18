@@ -106,7 +106,7 @@ export const ROTATION = {
   /** Days above which timing is DELAYED */
   DELAYED_TIMING_DAYS: 15,
   /** Minimum avg signalCount across history for sustained rotation */
-  MIN_AVG_SIGNAL_COUNT: 1.5,
+  MIN_AVG_SIGNAL_COUNT: 1.0,
 } as const;
 
 // ── Stock Quality Gates ──

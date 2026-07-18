@@ -36,7 +36,7 @@ function classifyTiming(daysActive: number, health: { acceleration: number; cmf2
   const hasHealthConfirmation = health.cmf20 > 0 && health.acceleration > 0;
 
   if (daysActive <= ROTATION.EARLY_TIMING_DAYS) return "EARLY";
-  if (daysActive <= 10 && !hasHealthConfirmation) return "EARLY";
+  if (daysActive <= ROTATION.EARLY_TIMING_DAYS + 3 && !hasHealthConfirmation) return "EARLY";
   if (daysActive <= ROTATION.DELAYED_TIMING_DAYS) return "CONFIRMED";
   return "DELAYED";
 }
