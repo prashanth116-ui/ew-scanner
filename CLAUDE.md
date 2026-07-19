@@ -562,7 +562,8 @@ When asked for a "deep dive audit", "full audit", or similar, always check ALL o
 | 7 | **Navigation flow** | Are links/routes logical? Can users find what they need? Dead links, missing breadcrumbs? |
 | 8 | **State flow** | Is state managed correctly across components? Stale state, race conditions, hydration mismatches? |
 | 9 | **UX consistency** | Sort stability, default states, empty states, loading states, error states displayed to user |
-| 10 | **Edge cases** | Empty arrays, null/undefined handling, first-time user (no data), division by zero, timezone issues |
+| 10 | **Data accuracy** | Are displayed values correct against source data? Rounding errors, stale cache, timezone-shifted dates, wrong field mapped to UI label, units mismatch |
+| 11 | **Edge cases** | Empty arrays, null/undefined handling, first-time user (no data), division by zero, timezone issues |
 
 ### Daily Page Pattern
 All daily pages share: client component, date tabs, sortable table, filters, streak badges, score delta, dropped section, sector pills, CSV export, copy watchlist. Import `fmtNum` from `@/lib/daily-format` and wrap tables in `TableErrorBoundary`.
