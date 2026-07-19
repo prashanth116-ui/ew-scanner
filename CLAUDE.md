@@ -548,6 +548,22 @@ Each daily table has 5 standard functions in `persistence.ts`:
 4. `load*Dates()` — SELECT DISTINCT scan_date
 5. `load*Multi()` — lightweight multi-date query for streak/delta computation
 
+### Audit Standard
+When asked for a "deep dive audit", "full audit", or similar, always check ALL of the following dimensions:
+
+| # | Dimension | What to Check |
+|---|-----------|---------------|
+| 1 | **Functional correctness** | Logic bugs, wrong outputs, data flow errors, filter/gate misalignment, stale data, boundary conditions |
+| 2 | **Code quality/resilience** | Retry limits, background tab guards, test coverage gaps, error boundaries, architectural debt, localStorage hygiene, type safety |
+| 3 | **Content flow** | Is the right data reaching the right components? Values lost/misrepresented between API → state → render? Missing fields, null propagation |
+| 4 | **User flow** | Does the user journey make sense? Can they accomplish goals efficiently? Are actions discoverable? |
+| 5 | **Task flow** | Are multi-step tasks (scan → filter → pick → trade) connected properly end-to-end? |
+| 6 | **Screen flow** | Do transitions between pages/views maintain context and state? Is information carried forward correctly? |
+| 7 | **Navigation flow** | Are links/routes logical? Can users find what they need? Dead links, missing breadcrumbs? |
+| 8 | **State flow** | Is state managed correctly across components? Stale state, race conditions, hydration mismatches? |
+| 9 | **UX consistency** | Sort stability, default states, empty states, loading states, error states displayed to user |
+| 10 | **Edge cases** | Empty arrays, null/undefined handling, first-time user (no data), division by zero, timezone issues |
+
 ### Daily Page Pattern
 All daily pages share: client component, date tabs, sortable table, filters, streak badges, score delta, dropped section, sector pills, CSV export, copy watchlist. Import `fmtNum` from `@/lib/daily-format` and wrap tables in `TableErrorBoundary`.
 
