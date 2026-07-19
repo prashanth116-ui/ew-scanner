@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 import { compositeColor, compositeTextColor } from "@/lib/color-utils";
 import { subSectorCardContext } from "@/lib/sector-rotation/sub-sector-constants";
@@ -66,11 +66,29 @@ export function CorrelationMatrix({ correlationMatrix, sectors, collapsed, onTog
 
 // ── Sector Comparison ──
 
+const COMPARE_ALWAYS_INCLUDE = ["SMH", "XLK", "IGV"];
+const COMPARE_MAX = 8;
+
 export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }) {
+  const defaults = useMemo(() => {
+    const fromQuadrant = sectors
+      .filter((s) => s.quadrant === "LEADING" || s.quadrant === "IMPROVING")
+      .map((s) => s.etf);
+    const combined = new Set([...fromQuadrant, ...COMPARE_ALWAYS_INCLUDE.filter((etf) => sectors.some((s) => s.etf === etf))]);
+    return [...combined].slice(0, COMPARE_MAX);
+  }, [sectors]);
+
   const [selected, setSelected] = useState<string[]>([]);
+  const initialized = useRef(false);
+  useEffect(() => {
+    if (!initialized.current && defaults.length > 0) {
+      initialized.current = true;
+      setSelected(defaults);
+    }
+  }, [defaults]);
 
   const toggleSector = (etf: string) => {
-    setSelected((prev) => prev.includes(etf) ? prev.filter((s) => s !== etf) : prev.length < 3 ? [...prev, etf] : prev);
+    setSelected((prev) => prev.includes(etf) ? prev.filter((s) => s !== etf) : prev.length < COMPARE_MAX ? [...prev, etf] : prev);
   };
 
   const compared = sectors.filter((s) => selected.includes(s.etf));
@@ -90,12 +108,12 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
     <div>
       <div className="flex flex-wrap gap-1.5 mb-3">
         {sectors.map((s) => (
-          <button key={s.etf} onClick={() => toggleSector(s.etf)}
+          <button type="button" key={s.etf} onClick={() => toggleSector(s.etf)}
             className={`rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
               selected.includes(s.etf) ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border-transparent"
             }`}>{s.etf}</button>
         ))}
-        <span className="text-[10px] text-[#555] self-center ml-2">Select up to 3</span>
+        <span className="text-[10px] text-[#555] self-center ml-2">Select up to {COMPARE_MAX}</span>
       </div>
       {compared.length < 2 && (
         <p className="text-xs text-[#555] py-4 text-center">

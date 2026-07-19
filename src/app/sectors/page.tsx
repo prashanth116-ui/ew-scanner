@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useSyncExternalStore } from "react";
 import { Loader2, RefreshCw, FileDown, ChevronRight, MoreHorizontal } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { DataAgeBadge } from "@/components/data-age-badge";
@@ -36,7 +36,7 @@ import {
   computeRiskFlags,
 } from "@/lib/sector-rotation/brief";
 
-const DEFAULT_COLLAPSED = ["regime", "rotation-status", "sub-sectors", "cross-asset", "correlation", "cross-pairs", "sector-comparison"];
+const DEFAULT_COLLAPSED = ["sub-sectors", "cross-asset", "correlation", "cross-pairs"];
 
 const ETF_COUNT = getEquitySectors().length + getSubSectors().length + getCrossAssetETFs().length + getLeadershipBaskets().length;
 
@@ -83,6 +83,18 @@ export default function SectorRotationPage() {
   );
   const [expandedSector, setExpandedSector] = useState<string | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setOverflowOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [overflowOpen]);
 
   if (loading && !data) {
     return (
@@ -98,7 +110,7 @@ export default function SectorRotationPage() {
         {loadingTimeout && (
           <div className="mt-6">
             <p className="text-xs text-amber-400">This is taking longer than expected.</p>
-            <button onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
+            <button type="button" onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
           </div>
         )}
       </div>
@@ -109,7 +121,7 @@ export default function SectorRotationPage() {
     return (
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <p className="text-red-400">Error: {error}</p>
-        <button onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
+        <button type="button" onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
       </div>
     );
   }
@@ -142,24 +154,24 @@ export default function SectorRotationPage() {
             <StockSearch allStocks={allStocks} />
             <AlertPanel sectors={data.sectors} />
             {/* Desktop action buttons */}
-            <button onClick={handleExport} className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="Export to Excel">
+            <button type="button" onClick={handleExport} className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="Export to Excel">
               <FileDown className="h-4 w-4" /><span>Export</span>
             </button>
             <CopyButton tickers={watchlistTickers} className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" />
-            <button onClick={() => fetchData(true)} disabled={loading} className="hidden sm:flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50" aria-label="Refresh data">
+            <button type="button" onClick={() => fetchData(true)} disabled={loading} className="hidden sm:flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50" aria-label="Refresh data">
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
             </button>
             {/* Mobile overflow menu */}
-            <div className="relative sm:hidden">
-              <button onClick={() => setOverflowOpen(!overflowOpen)} className="flex items-center rounded-lg border border-[#333] px-2 py-1.5 text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="More actions">
+            <div ref={overflowRef} className="relative sm:hidden">
+              <button type="button" onClick={() => setOverflowOpen(!overflowOpen)} className="flex items-center rounded-lg border border-[#333] px-2 py-1.5 text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" aria-label="More actions">
                 <MoreHorizontal className="h-4 w-4" />
               </button>
               {overflowOpen && (
                 <div className="absolute right-0 top-full mt-1 z-50 rounded-lg border border-[#2a2a2a] bg-[#111] py-1 shadow-xl min-w-[140px]">
-                  <button onClick={() => { handleExport(); setOverflowOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white">
+                  <button type="button" onClick={() => { handleExport(); setOverflowOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white">
                     <FileDown className="h-3.5 w-3.5" /> Export
                   </button>
-                  <button onClick={() => { fetchData(true); setOverflowOpen(false); }} disabled={loading} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50">
+                  <button type="button" onClick={() => { fetchData(true); setOverflowOpen(false); }} disabled={loading} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50">
                     <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
                   </button>
                   <Link href="/sectors/crypto" className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white" onClick={() => setOverflowOpen(false)}>
@@ -243,7 +255,7 @@ export default function SectorRotationPage() {
           <div className="flex items-center gap-1 overflow-x-auto">
             <span className="text-xs text-[#555] shrink-0 mr-1">Sort:</span>
             {SORT_MODE_OPTIONS.map(([mode, label]) => (
-              <button key={mode} onClick={() => setSortMode(mode)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${sortMode === mode ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>{label}</button>
+              <button type="button" key={mode} onClick={() => setSortMode(mode)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${sortMode === mode ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>{label}</button>
             ))}
           </div>
         }
@@ -252,7 +264,7 @@ export default function SectorRotationPage() {
           {history.length > 0 && (
             <div className="flex items-center gap-1 overflow-x-auto">
               <span className="text-xs text-[#555] shrink-0 mr-1">Compare:</span>
-              <button onClick={() => setCompareDate(null)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${compareDate === null ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>None</button>
+              <button type="button" onClick={() => setCompareDate(null)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${compareDate === null ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`}>None</button>
               {(() => {
                 const labelCount = new Map<string, number>();
                 const items = history.map((snap) => {
@@ -273,7 +285,7 @@ export default function SectorRotationPage() {
                     ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
                     : label;
                   return (
-                    <button key={snap.date} onClick={() => setCompareDate(snap.date)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${compareDate === snap.date ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`} title={snap.date}>{displayLabel}</button>
+                    <button type="button" key={snap.date} onClick={() => setCompareDate(snap.date)} className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${compareDate === snap.date ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "text-[#666] hover:text-[#a0a0a0] border border-transparent"}`} title={snap.date}>{displayLabel}</button>
                   );
                 });
               })()}
@@ -412,9 +424,28 @@ export default function SectorRotationPage() {
   );
 }
 
+const onboardingStore = {
+  listeners: new Set<() => void>(),
+  getSnapshot() {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("ew-sectors-onboarded") === "1";
+  },
+  subscribe(listener: () => void) {
+    onboardingStore.listeners.add(listener);
+    return () => { onboardingStore.listeners.delete(listener); };
+  },
+  dismiss() {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("ew-sectors-onboarded", "1");
+    onboardingStore.listeners.forEach((l) => l());
+  },
+};
+
 function OnboardingBanner() {
-  const [dismissed, setDismissed] = useState(() =>
-    typeof window !== "undefined" && localStorage.getItem("ew-sectors-onboarded") === "1"
+  const dismissed = useSyncExternalStore(
+    onboardingStore.subscribe,
+    onboardingStore.getSnapshot,
+    () => false
   );
   if (dismissed) return null;
   return (
@@ -426,11 +457,8 @@ function OnboardingBanner() {
         </Link>{" "}
         to understand the dashboard.
       </p>
-      <button
-        onClick={() => {
-          setDismissed(true);
-          localStorage.setItem("ew-sectors-onboarded", "1");
-        }}
+      <button type="button"
+        onClick={() => onboardingStore.dismiss()}
         className="shrink-0 rounded-md border border-[#333] px-2.5 py-1 text-xs text-[#888] hover:text-white hover:border-[#444] transition-colors"
       >
         Dismiss
