@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Loader2,
   RefreshCw,
@@ -50,6 +50,7 @@ import { type StockPhase, phaseBadge, PHASE_RANK } from "@/lib/phase-utils";
 const CACHE_KEY = "ew-rotation-tracker-v7";
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 const AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 function loadCached(): RotationTrackerResult | null {
   if (typeof window === "undefined") return null;
@@ -1981,6 +1982,7 @@ export default function RotationTrackerPage() {
   const [showAllSectors, setShowAllSectors] = useState(false);
   const [heatmapSectors, setHeatmapSectors] = useState<SectorRotationScore[] | null>(null);
   const [prerunServerMap, setPrerunServerMap] = useState<Map<string, { verdict: string; score: number; daysToEarnings: number | null; nextEarningsDate: string | null; rs20d: number | null }>>(new Map());
+  const consecutiveFailures = useRef(0);
 
   // Fetch prerun data from server when localStorage is empty
   useEffect(() => {
@@ -2022,7 +2024,9 @@ export default function RotationTrackerPage() {
       const result = (await res.json()) as RotationTrackerResult;
       setData(result);
       saveCache(result);
+      consecutiveFailures.current = 0;
     } catch (err) {
+      consecutiveFailures.current++;
       setError(err instanceof Error ? err.message : "Failed to load rotation data");
     } finally {
       setLoading(false);
@@ -2047,9 +2051,13 @@ export default function RotationTrackerPage() {
     fetchHeatmap();
   }, [fetchData, fetchHeatmap]);
 
-  // Auto-refresh every 10 minutes
+  // Auto-refresh every 10 minutes (pauses in background tabs or after repeated failures)
   useEffect(() => {
-    const interval = setInterval(() => fetchData(true), AUTO_REFRESH_INTERVAL_MS);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      if (consecutiveFailures.current >= MAX_CONSECUTIVE_FAILURES) return;
+      fetchData(true);
+    }, AUTO_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchData]);
 

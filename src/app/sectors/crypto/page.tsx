@@ -50,6 +50,9 @@ function RRGChart({ sectors: rawSectors }: { sectors: SectorRotationScore[] }) {
   const H = 400;
   const PAD = 50;
 
+  // State must be declared before any early return.
+  const [hovered, setHovered] = useState<string | null>(null);
+
   // Filter out sectors with invalid RRG data (NaN from bad Yahoo responses)
   const sectors = rawSectors.filter(
     (s) => isFinite(s.rsRatio) && isFinite(s.rsMomentum)
@@ -79,8 +82,6 @@ function RRGChart({ sectors: rawSectors }: { sectors: SectorRotationScore[] }) {
 
   const cx = scaleX(100);
   const cy = scaleY(100);
-
-  const [hovered, setHovered] = useState<string | null>(null);
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Crypto Relative Rotation Graph">
@@ -146,7 +147,7 @@ function SectorCard({
   isExpanded: boolean;
 }) {
   return (
-    <button
+    <button type="button"
       onClick={onClick}
       aria-expanded={isExpanded}
       aria-label={`${sector.sector} — score ${sector.compositeScore}, ${sector.quadrant}`}
@@ -255,9 +256,9 @@ function SectorDetail({ sector, tokens }: { sector: SectorRotationScore; tokens:
 
 // ── Regime Mapping ──
 
-/** Map the equity-compat regime format back to crypto-native CryptoRegimeData.
- *  The API inverts marketTrend→vixSlope for the equity UI, so we invert it back. */
-function mapCryptoRegime(
+/** Fallback: map equity-compat regime format back to crypto-native CryptoRegimeData
+ *  when the API response lacks the native cryptoRegime field (e.g. cached old responses). */
+function mapCryptoRegimeFallback(
   regime: CryptoRotationResult["regime"],
   btcDominance?: CryptoRotationResult["btcDominance"],
 ): CryptoRegimeData {
@@ -276,16 +277,17 @@ function mapCryptoRegime(
 
 // ── Entry Signals Panel ──
 
-function EntrySignalsPanel({ trackerData, regime, btcDominance }: {
+function EntrySignalsPanel({ trackerData, regime, btcDominance, nativeRegime }: {
   trackerData: RotationTrackerResult | null;
   regime: CryptoRotationResult["regime"];
   btcDominance?: CryptoRotationResult["btcDominance"];
+  nativeRegime?: CryptoRegimeData;
 }) {
   if (!trackerData?.activeRotations || trackerData.activeRotations.length === 0) {
     return <p className="text-sm text-[#555]">No active rotation signals detected.</p>;
   }
 
-  const cryptoRegime = mapCryptoRegime(regime, btcDominance);
+  const cryptoRegime = nativeRegime ?? mapCryptoRegimeFallback(regime, btcDominance);
 
   return (
     <div className="space-y-3">
@@ -373,7 +375,7 @@ function TokenPicksTable({ tokens }: { tokens: EnrichedStock[] }) {
       <div className="flex items-center gap-2">
         <span className="text-xs text-[#666]">Sort:</span>
         {(["conviction", "rsAccel", "sector"] as const).map((mode) => (
-          <button
+          <button type="button"
             key={mode}
             onClick={() => setSortBy(mode)}
             className={`rounded px-2 py-0.5 text-xs ${sortBy === mode ? "bg-[#5ba3e6]/20 text-[#5ba3e6]" : "text-[#888] hover:text-white"}`}
@@ -445,7 +447,18 @@ export default function CryptoRotationPage() {
   }, []);
 
   useEffect(() => { fetchData(); return () => { abortRef.current?.abort(); }; }, [fetchData]);
-  useEffect(() => { const id = setInterval(() => { fetchData(true); fetchTracker(); }, 10 * 60 * 1000); return () => clearInterval(id); }, [fetchData, fetchTracker]);
+  useEffect(() => {
+    if (document.hidden) return;
+    const id = setInterval(() => { fetchData(true); fetchTracker(); }, 10 * 60 * 1000);
+    const handleVisibility = () => {
+      if (!document.hidden) { fetchData(true); fetchTracker(); }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [fetchData, fetchTracker]);
 
   // Loading timeout — show retry after 30s
   useEffect(() => {
@@ -482,7 +495,7 @@ export default function CryptoRotationPage() {
         {loadingTimeout && (
           <div className="mt-6">
             <p className="text-xs text-amber-400">This is taking longer than expected.</p>
-            <button onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
+            <button type="button" onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
           </div>
         )}
       </div>
@@ -493,7 +506,7 @@ export default function CryptoRotationPage() {
     return (
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <p className="text-red-400">Error: {error}</p>
-        <button onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">
+        <button type="button" onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">
           Retry
         </button>
       </div>
@@ -525,7 +538,7 @@ export default function CryptoRotationPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <button type="button"
             onClick={() => fetchData(true)}
             disabled={loading}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-1.5 text-xs font-medium text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50"
@@ -533,7 +546,7 @@ export default function CryptoRotationPage() {
             <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </button>
-          <button
+          <button type="button"
             onClick={handleExport}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-1.5 text-xs font-medium text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white"
           >
@@ -625,7 +638,7 @@ export default function CryptoRotationPage() {
             : undefined
         }
       >
-        <EntrySignalsPanel trackerData={trackerData} regime={regime} btcDominance={btcDom} />
+        <EntrySignalsPanel trackerData={trackerData} regime={regime} btcDominance={btcDom} nativeRegime={data.cryptoRegime} />
       </CollapsiblePanel>
 
       {/* Sector Heatmap */}
@@ -761,7 +774,7 @@ function SectorAccordion({ sector, tokens }: { sector: SectorRotationScore; toke
   const [open, setOpen] = useState(false);
   return (
     <div className="border rounded-lg border-[#2a2a2a]">
-      <button
+      <button type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg"

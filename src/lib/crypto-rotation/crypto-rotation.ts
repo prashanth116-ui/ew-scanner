@@ -436,6 +436,7 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
       trend: "flat",
       altSeasonSignal: regime.altSeasonSignal,
     },
+    cryptoRegime: regime,
     discoveredSymbols: [...discoveredCrypto],
   };
 

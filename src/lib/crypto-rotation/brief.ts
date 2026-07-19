@@ -103,6 +103,7 @@ export function computeCryptoPosture(
   rotationData: RotationTrackerResult | null
 ): PostureResult {
   const regime = data.regime;
+  const native = data.cryptoRegime;
   const btcDom = data.btcDominance;
   const activeRotations = rotationData?.activeRotations ?? [];
 
@@ -122,10 +123,10 @@ export function computeCryptoPosture(
 
   const isRiskOn = regime?.regime === "RISK_ON";
   const isRiskOff = regime?.regime === "RISK_OFF";
-  // For crypto, vix = BTC realized vol; vixSlope is inverted marketTrend
-  const btcVol = regime?.vix ?? 0;
+  // Use native crypto regime directly when available; fall back to inverted vixSlope
+  const btcVol = native?.btcVolatility ?? regime?.vix ?? 0;
   const btcVolHigh = btcVol > CB.BTC_VOL_SPIKE;
-  const marketFalling = regime?.vixSlope === "rising"; // inverted: vixSlope="rising" means marketTrend="falling"
+  const marketFalling = native ? native.marketTrend === "falling" : regime?.vixSlope === "rising";
 
   // Low-confidence regime: cap posture at SELECTIVE (don't act aggressively on uncertain signals)
   const regimeConfidence = regime?.regimeConfidence ?? 20; // numeric: 80=high, 50=medium, 20=low
@@ -299,7 +300,7 @@ export function computeCryptoRiskFlags(
   }
 
   // 3. BTC realized volatility spike
-  const btcVol = data.regime?.vix ?? 0;
+  const btcVol = data.cryptoRegime?.btcVolatility ?? data.regime?.vix ?? 0;
   if (btcVol > CB.BTC_VOL_SPIKE) {
     flags.push({
       severity: "high",
