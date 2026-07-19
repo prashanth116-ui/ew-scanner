@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import type { SectorRotationScore, RRGQuadrant } from "@/lib/sector-rotation/types";
-import { compositeColor, compositeTextColor } from "@/lib/color-utils";
+import { compositeTextColor } from "@/lib/color-utils";
 import { subSectorCardContext } from "@/lib/sector-rotation/sub-sector-constants";
 import { CollapsiblePanel } from "./shared";
 import { quadrantColor } from "./helpers";
@@ -87,13 +87,13 @@ const METRIC_GROUPS: MetricDef[] = [
   { label: "Flow-Price Div", key: "flowPriceDivergence", category: "leading", isBool: true, boolValue: (s) => s.flowPriceDivergence, format: (s) => s.flowPriceDivergence ? "Yes" : "No" },
   { label: "Breadth Div", key: "breadthDivergence", category: "leading", isBool: true, boolValue: (s) => s.breadthDivergence, format: (s) => s.breadthDivergence ? "Yes" : "No" },
   { label: "Accel Inflection", key: "accelerationInflection", category: "leading", isBool: true, boolValue: (s) => s.accelerationInflection, format: (s) => s.accelerationInflection ? "Yes" : "No" },
-  { label: "Acceleration", key: "acceleration", category: "leading", format: (s) => `${s.acceleration > 0 ? "+" : ""}${s.acceleration.toFixed(2)}`, color: (s) => s.acceleration > 0 ? "text-green-400" : "text-red-400" },
+  { label: "Acceleration", key: "acceleration", category: "leading", format: (s) => `${s.acceleration > 0 ? "+" : ""}${s.acceleration.toFixed(2)}`, color: (s) => s.acceleration > 0 ? "text-green-400" : s.acceleration < 0 ? "text-red-400" : "text-[#888]" },
   { label: "RS-Momentum", key: "rsMomentum", category: "leading", format: (s) => s.rsMomentum.toFixed(2) },
   // ── Current Indicators ──
   { label: "Composite", key: "compositeScore", category: "current", format: (s) => `${s.compositeScore}`, color: (s) => compositeTextColor(s.compositeScore) },
   { label: "Quadrant", key: "quadrant", category: "current", format: (s) => s.quadrant },
-  { label: "Mansfield RS", key: "mansfieldRS", category: "current", format: (s) => `${s.mansfieldRS > 0 ? "+" : ""}${s.mansfieldRS.toFixed(2)}`, color: (s) => s.mansfieldRS > 0 ? "text-green-400" : "text-red-400" },
-  { label: "CMF (20d)", key: "cmf20", category: "current", format: (s) => `${s.cmf20 > 0 ? "+" : ""}${s.cmf20.toFixed(3)}`, color: (s) => s.cmf20 > 0 ? "text-green-400" : "text-red-400" },
+  { label: "Mansfield RS", key: "mansfieldRS", category: "current", format: (s) => `${s.mansfieldRS > 0 ? "+" : ""}${s.mansfieldRS.toFixed(2)}`, color: (s) => s.mansfieldRS > 0 ? "text-green-400" : s.mansfieldRS < 0 ? "text-red-400" : "text-[#888]" },
+  { label: "CMF (20d)", key: "cmf20", category: "current", format: (s) => `${s.cmf20 > 0 ? "+" : ""}${s.cmf20.toFixed(3)}`, color: (s) => s.cmf20 > 0 ? "text-green-400" : s.cmf20 < 0 ? "text-red-400" : "text-[#888]" },
   { label: "Breadth %", key: "breadthPct", category: "current", format: (s) => s.breadthPct !== null ? `${s.breadthPct}%` : "N/A" },
   { label: "OBV Trend", key: "obvTrend", category: "current", format: (s) => s.obvTrend === 1 ? "Accum" : s.obvTrend === -1 ? "Distrib" : "Flat", color: (s) => s.obvTrend === 1 ? "text-green-400" : s.obvTrend === -1 ? "text-red-400" : "text-[#888]" },
   { label: "RS-Ratio", key: "rsRatio", category: "current", format: (s) => s.rsRatio.toFixed(2) },
@@ -109,11 +109,11 @@ const ALL_QUADRANTS: RRGQuadrant[] = ["LEADING", "IMPROVING", "WEAKENING", "LAGG
 const ALL_CATEGORIES: MetricCategory[] = ["leading", "current", "lagging"];
 const CATEGORY_LABELS: Record<MetricCategory, string> = { leading: "Leading", current: "Current", lagging: "Lagging" };
 
-const QUADRANT_PILL_COLORS: Record<RRGQuadrant, { active: string; text: string }> = {
-  LEADING: { active: "bg-green-500/20 text-green-400 border-green-500/30", text: "text-green-400" },
-  IMPROVING: { active: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30", text: "text-cyan-400" },
-  WEAKENING: { active: "bg-amber-500/20 text-amber-400 border-amber-500/30", text: "text-amber-400" },
-  LAGGING: { active: "bg-red-500/20 text-red-400 border-red-500/30", text: "text-red-400" },
+const QUADRANT_PILL_COLORS: Record<RRGQuadrant, string> = {
+  LEADING: "bg-green-500/20 text-green-400 border-green-500/30",
+  IMPROVING: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+  WEAKENING: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  LAGGING: "bg-red-500/20 text-red-400 border-red-500/30",
 };
 
 export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }) {
@@ -170,6 +170,8 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
   const compared = sectors
     .filter((s) => selected.includes(s.etf) && quadrantFilter.has(s.quadrant))
     .sort((a, b) => b.compositeScore - a.compositeScore);
+  const selectedCount = selected.length;
+  const filteredOut = selectedCount >= 2 && compared.length < 2;
 
   // Filter metrics by category or divergence-only mode
   const visibleMetrics = divergenceOnly
@@ -177,26 +179,32 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
     : METRIC_GROUPS.filter((m) => categoryFilter.has(m.category));
 
   // Group visible metrics by category for section headers
-  const metricRows: { type: "header"; label: string; category: MetricCategory }[] | { type: "metric"; metric: MetricDef }[] = [];
+  type MetricRow = { type: "header"; label: string; category: MetricCategory } | { type: "metric"; metric: MetricDef };
+  const metricRows: MetricRow[] = [];
   let lastCat: MetricCategory | null = null;
   for (const m of visibleMetrics) {
     if (m.category !== lastCat && !divergenceOnly) {
-      (metricRows as { type: string; label?: string; category?: MetricCategory; metric?: MetricDef }[]).push({ type: "header", label: CATEGORY_LABELS[m.category], category: m.category });
+      metricRows.push({ type: "header", label: CATEGORY_LABELS[m.category], category: m.category });
       lastCat = m.category;
     }
-    (metricRows as { type: string; metric?: MetricDef }[]).push({ type: "metric", metric: m });
+    metricRows.push({ type: "metric", metric: m });
   }
 
   return (
     <div>
       {/* Sector selection pills */}
       <div className="flex flex-wrap gap-1.5 mb-3">
-        {sectors.map((s) => (
-          <button type="button" key={s.etf} onClick={() => toggleSector(s.etf)}
-            className={`rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
-              selected.includes(s.etf) ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border-transparent"
-            }`}>{s.etf}</button>
-        ))}
+        {sectors.map((s) => {
+          const isSelected = selected.includes(s.etf);
+          const isHiddenByFilter = isSelected && !quadrantFilter.has(s.quadrant);
+          return (
+            <button type="button" key={s.etf} onClick={() => toggleSector(s.etf)}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
+                isHiddenByFilter ? "bg-[#5ba3e6]/10 text-[#5ba3e6]/40 border-[#5ba3e6]/15 line-through" :
+                isSelected ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border-[#5ba3e6]/30" : "text-[#666] hover:text-[#a0a0a0] border-transparent"
+              }`}>{s.etf}</button>
+          );
+        })}
         <span className="text-[10px] text-[#555] self-center ml-2">Select up to {COMPARE_MAX}</span>
       </div>
 
@@ -208,7 +216,7 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
           {ALL_QUADRANTS.map((q) => (
             <button type="button" key={q} onClick={() => toggleQuadrant(q)}
               className={`rounded-full px-2 py-0.5 font-medium border transition-colors ${
-                quadrantFilter.has(q) ? QUADRANT_PILL_COLORS[q].active : "text-[#666] hover:text-[#a0a0a0] border-transparent"
+                quadrantFilter.has(q) ? QUADRANT_PILL_COLORS[q] : "text-[#666] hover:text-[#a0a0a0] border-transparent"
               }`}>{q}</button>
           ))}
         </div>
@@ -232,7 +240,7 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
 
       {compared.length < 2 && (
         <p className="text-xs text-[#555] py-4 text-center">
-          Select 2 or more sectors above to compare scores side-by-side.
+          {filteredOut ? "Selected sectors hidden by quadrant filter. Adjust the filter above to see them." : "Select 2 or more sectors above to compare scores side-by-side."}
         </p>
       )}
       {compared.length >= 2 && (
@@ -246,15 +254,14 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
             </thead>
             <tbody>
               {metricRows.map((row) => {
-                const r = row as { type: string; label?: string; category?: MetricCategory; metric?: MetricDef };
-                if (r.type === "header") {
+                if (row.type === "header") {
                   return (
-                    <tr key={`hdr-${r.category}`} className="border-b border-[#1a1a1a]">
-                      <td colSpan={compared.length + 1} className="py-1.5 text-[10px] text-[#555] font-semibold tracking-wider uppercase">── {r.label} ──</td>
+                    <tr key={`hdr-${row.category}`} className="border-b border-[#1a1a1a]">
+                      <td colSpan={compared.length + 1} className="py-1.5 text-[10px] text-[#555] font-semibold tracking-wider uppercase">── {row.label} ──</td>
                     </tr>
                   );
                 }
-                const m = r.metric!;
+                const m = row.metric;
                 return (
                   <tr key={m.key} className="border-b border-[#1a1a1a]">
                     <td className="py-1.5 pr-4 text-[#888]">{m.label}</td>
