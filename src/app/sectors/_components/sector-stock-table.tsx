@@ -110,21 +110,21 @@ export function SectorStockTable({ stocks, sectorName, hasRotationData = false, 
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-        <button onClick={() => setPhaseFilter(phaseFilter === "basing" ? "all" : "basing")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "basing" ? "bg-purple-500/20 text-purple-400 border-purple-500/40" : "bg-purple-500/5 text-purple-400/70 border-purple-500/20 hover:bg-purple-500/10"}`} title="Phase 1: Below 50MA, momentum turning — watch for confirmation">
+        <button type="button" onClick={() => setPhaseFilter(phaseFilter === "basing" ? "all" : "basing")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "basing" ? "bg-purple-500/20 text-purple-400 border-purple-500/40" : "bg-purple-500/5 text-purple-400/70 border-purple-500/20 hover:bg-purple-500/10"}`} title="Phase 1: Below 50MA, momentum turning — watch for confirmation">
           P1: {phaseCounts.basing}
         </button>
-        <button onClick={() => setPhaseFilter(phaseFilter === "turnaround" ? "all" : "turnaround")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "turnaround" ? "bg-amber-500/20 text-amber-400 border-amber-500/40" : "bg-amber-500/5 text-amber-400/70 border-amber-500/20 hover:bg-amber-500/10"}`} title="Phase 2: Below 50MA, RS positive + volume — entry zone">
+        <button type="button" onClick={() => setPhaseFilter(phaseFilter === "turnaround" ? "all" : "turnaround")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "turnaround" ? "bg-amber-500/20 text-amber-400 border-amber-500/40" : "bg-amber-500/5 text-amber-400/70 border-amber-500/20 hover:bg-amber-500/10"}`} title="Phase 2: Below 50MA, RS positive + volume — entry zone">
           P2: {phaseCounts.turnaround}
         </button>
-        <button onClick={() => setPhaseFilter(phaseFilter === "trending" ? "all" : "trending")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "trending" ? "bg-green-500/20 text-green-400 border-green-500/40" : "bg-green-500/5 text-green-400/70 border-green-500/20 hover:bg-green-500/10"}`} title="Phase 3: Above 50MA, accelerating — hold or add on dips">
+        <button type="button" onClick={() => setPhaseFilter(phaseFilter === "trending" ? "all" : "trending")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "trending" ? "bg-green-500/20 text-green-400 border-green-500/40" : "bg-green-500/5 text-green-400/70 border-green-500/20 hover:bg-green-500/10"}`} title="Phase 3: Above 50MA, accelerating — hold or add on dips">
           P3: {phaseCounts.trending}
         </button>
-        <button onClick={() => setPhaseFilter(phaseFilter === "exhausting" ? "all" : "exhausting")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "exhausting" ? "bg-red-500/20 text-red-400 border-red-500/40" : "bg-red-500/5 text-red-400/70 border-red-500/20 hover:bg-red-500/10"}`} title="Phase 4: Momentum fading (Trend Accel < -2) — take profit">
+        <button type="button" onClick={() => setPhaseFilter(phaseFilter === "exhausting" ? "all" : "exhausting")} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${phaseFilter === "exhausting" ? "bg-red-500/20 text-red-400 border-red-500/40" : "bg-red-500/5 text-red-400/70 border-red-500/20 hover:bg-red-500/10"}`} title="Phase 4: Momentum fading (Trend Accel < -2) — take profit">
           P4: {phaseCounts.exhausting}
         </button>
         <span className="text-[10px] text-[#555]" title="Neutral: Mixed or insufficient signals">—: {phaseCounts.neutral}</span>
         <div className="h-3 w-px bg-[#333] mx-1" />
-        <button
+        <button type="button"
           onClick={toggleEarlyStrength}
           className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
             earlyStrengthActive
@@ -199,11 +199,11 @@ export function SectorStockTable({ stocks, sectorName, hasRotationData = false, 
           </select>
         </label>
         {hasFilters && (
-          <button onClick={resetFilters} className="text-[#5ba3e6] hover:text-white transition-colors">Reset</button>
+          <button type="button" onClick={resetFilters} className="text-[#5ba3e6] hover:text-white transition-colors">Reset</button>
         )}
         <div className="flex items-center gap-1 ml-auto">
           <CopyButton tickers={sorted.map((s) => s.ticker)} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" />
-          <button onClick={exportCsv} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" title="Export to CSV" aria-label="Export to CSV">
+          <button type="button" onClick={exportCsv} className="flex items-center gap-1 text-[#666] hover:text-white transition-colors" title="Export to CSV" aria-label="Export to CSV">
             <FileDown className="h-3 w-3" />
           </button>
           <span className="text-[#555] ml-1">
@@ -385,7 +385,7 @@ export function FilterRecipes() {
 
   return (
     <div>
-      <button
+      <button type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         className="mb-3 flex w-full items-center gap-2 text-lg font-semibold text-white text-left"

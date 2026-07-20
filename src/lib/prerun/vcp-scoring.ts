@@ -239,9 +239,9 @@ export function calcVCPRisk(
 // ── Phase Classification ──
 
 export function classifyVCPPhase(score: number): VCPPhase {
-  if (score >= 75) return "FOCUS_LIST";
-  if (score >= 65) return "WATCHLIST_CANDIDATE";
-  if (score >= 50) return "EARLY_SETUP";
+  if (score >= 85) return "FOCUS_LIST";
+  if (score >= 75) return "WATCHLIST_CANDIDATE";
+  if (score >= 65) return "EARLY_SETUP";
   return "IGNORE";
 }
 

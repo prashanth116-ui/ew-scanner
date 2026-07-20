@@ -34,41 +34,55 @@ export function useSectorData() {
   const [data, setData] = useState<SectorRotationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [scanResults, setScanResults] = useState<PreRunResult[]>([]);
-  const [scanResultsDate, setScanResultsDate] = useState<string | null>(null);
+  const [scanResults, setScanResults] = useState<PreRunResult[]>(() => loadScanResultsWithDate().results);
+  const [scanResultsDate, setScanResultsDate] = useState<string | null>(() => loadScanResultsWithDate().date);
   const [sortMode, setSortMode] = useState<SortMode>("score");
   const [compareDate, setCompareDate] = useState<string | null>(null);
-  const [history, setHistory] = useState<DailySnapshot[]>([]);
+  const [history, setHistory] = useState<DailySnapshot[]>(() => loadHistory());
   const [loadingPhase, setLoadingPhase] = useState(0);
   const [rotationSectorRS, setRotationSectorRS] = useState<Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number; perfPct: number }>>(new Map());
   const [rotationFetchFailed, setRotationFetchFailed] = useState(false);
   const [rotationData, setRotationData] = useState<RotationTrackerResult | null>(null);
+  const rotationRetryCount = useRef(0);
+  const MAX_ROTATION_RETRIES = 3;
 
   // Fetch rotation tracker data for Sector RS column + Entry Signals panel (non-blocking, with retry)
   const fetchRotation = useCallback(() => {
-    fetch("/api/rotation-tracker").then(res => res.ok ? res.json() : null).then((result: RotationTrackerResult | null) => {
-      if (!result?.activeRotations) return;
-      setRotationData(result);
-      setRotationFetchFailed(false);
-      const map = new Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number; perfPct: number }>();
-      for (const rotation of result.activeRotations) {
-        for (const s of rotation.stocks) {
-          map.set(s.symbol, { rsAccel: s.rsAcceleration, rsImproving: s.rsImproving, rsDelta: s.rsDelta, volConsistency: s.volumeConsistency, perfPct: s.performancePct });
+    fetch("/api/rotation-tracker")
+      .then(res => res.ok ? res.json() : null)
+      .then((result: RotationTrackerResult | null) => {
+        if (!result?.activeRotations) {
+          setRotationFetchFailed(true);
+          return;
         }
-      }
-      setRotationSectorRS(map);
-    }).catch(() => { setRotationFetchFailed(true); });
+        rotationRetryCount.current = 0;
+        setRotationData(result);
+        setRotationFetchFailed(false);
+        const map = new Map<string, { rsAccel: number; rsImproving: boolean; rsDelta: number; volConsistency: number; perfPct: number }>();
+        for (const rotation of result.activeRotations) {
+          for (const s of rotation.stocks) {
+            map.set(s.symbol, { rsAccel: s.rsAcceleration, rsImproving: s.rsImproving, rsDelta: s.rsDelta, volConsistency: s.volumeConsistency, perfPct: s.performancePct });
+          }
+        }
+        setRotationSectorRS(map);
+      })
+      .catch(() => { setRotationFetchFailed(true); });
   }, []);
 
   useEffect(() => { fetchRotation(); }, [fetchRotation]);
-  useEffect(() => { const id = setInterval(fetchRotation, 10 * 60 * 1000); return () => clearInterval(id); }, [fetchRotation]);
+  useEffect(() => {
+    if (!document.hidden) {
+      const id = setInterval(fetchRotation, 10 * 60 * 1000);
+      return () => clearInterval(id);
+    }
+  }, [fetchRotation]);
   useEffect(() => {
     if (!rotationFetchFailed || rotationData) return;
+    if (rotationRetryCount.current >= MAX_ROTATION_RETRIES) return;
+    rotationRetryCount.current += 1;
     const id = setTimeout(fetchRotation, 5_000);
     return () => clearTimeout(id);
   }, [rotationFetchFailed, rotationData, fetchRotation]);
-
-  useEffect(() => { if (data) setHistory(loadHistory()); }, [data]);
 
   const comparisonMap = useMemo(() => {
     if (!compareDate) return null;
@@ -93,21 +107,18 @@ export function useSectorData() {
     return { improved, declined, unchanged };
   }, [comparisonMap, data]);
 
+  // Fetch latest PreRun scan from server if it's newer than localStorage.
+  // setState only happens inside async Promise callbacks, not synchronously
+  // in the effect body.
   useEffect(() => {
-    const { results, date } = loadScanResultsWithDate();
-    setScanResults(results);
-    setScanResultsDate(date);
-
-    // If localStorage data is >24h old or missing, fetch latest from server
-    const ageMs = date ? Date.now() - new Date(date).getTime() : Infinity;
-    if (ageMs > 24 * 60 * 60 * 1000) {
-      fetch("/api/prerun/latest")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((result: { date: string | null; signals: { ticker: string; verdict: string; score: number; price: number }[] } | null) => {
-          if (!result?.date || !result.signals?.length) return;
-          // Only use server data if it's newer than localStorage
-          const serverDate = new Date(result.date + "T21:30:00Z").toISOString();
-          if (date && new Date(date) >= new Date(serverDate)) return;
+    const controller = new AbortController();
+    fetch("/api/prerun/latest", { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((result: { date: string | null; signals: { ticker: string; verdict: string; score: number; price: number }[] } | null) => {
+        if (!result?.date || !result.signals?.length) return;
+        const serverDate = new Date(result.date + "T21:30:00Z").toISOString();
+        setScanResultsDate((prevDate) => {
+          if (prevDate && new Date(prevDate) >= new Date(serverDate)) return prevDate;
           const shims: PreRunResult[] = result.signals.map((s) => ({
             data: {
               ticker: s.ticker, companyName: "", currentPrice: s.price,
@@ -120,10 +131,11 @@ export function useSectorData() {
             patternMatch: null,
           }));
           setScanResults(shims);
-          setScanResultsDate(serverDate);
-        })
-        .catch(() => {});
-    }
+          return serverDate;
+        });
+      })
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   // Build stock list per sector with RS Accel (only sectors with stocks)
@@ -222,6 +234,7 @@ export function useSectorData() {
       setData(result);
       saveSectorRotation(result);
       saveSnapshot(result);
+      setHistory(loadHistory());
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Failed to fetch");
@@ -230,14 +243,30 @@ export function useSectorData() {
     }
   }, []);
 
+  // Standard async data-fetch on mount. State updates happen after await.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { fetchData(); return () => { abortRef.current?.abort(); }; }, [fetchData]);
-  useEffect(() => { const interval = setInterval(() => fetchData(true), 10 * 60 * 1000); return () => clearInterval(interval); }, [fetchData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (document.hidden) return;
+    const interval = setInterval(() => fetchData(true), 10 * 60 * 1000);
+    const handleVisibility = () => {
+      if (!document.hidden) fetchData(true);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [fetchData]);
 
   const handleExport = useCallback(() => { if (data) exportSectorsToExcel(data); }, [data]);
 
   const watchlistTickers = useMemo(() => data?.topStocksToWatch.flatMap((g) => g.stocks.map((s) => s.ticker)) ?? [], [data]);
 
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  // Loading timeout UI state is driven by an async timer.
   useEffect(() => {
     if (!loading || data) { setLoadingTimeout(false); return; }
     const timer = setTimeout(() => setLoadingTimeout(true), LOADING_TIMEOUT_MS);
@@ -249,8 +278,8 @@ export function useSectorData() {
     if (!loading || data) { setLoadingPhase(0); return; }
     const timer = setInterval(() => setLoadingPhase((p) => (p + 1) % LOADING_PHASES.length), LOADING_PHASE_INTERVAL_MS);
     return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, data]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const subSectorScores = data?.subSectorScores ?? [];
   const crossAssetScores = data?.crossAssetScores ?? [];

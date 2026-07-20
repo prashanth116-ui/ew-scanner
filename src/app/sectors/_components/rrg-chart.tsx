@@ -25,24 +25,46 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [],
 
   const activeLabel = pinned ?? hovered;
 
-  // Compute data bounds
-  const allScores = useMemo(() => [...sectors, ...subSectorScores, ...crossAssetScores, ...leadershipBasketScores], [sectors, subSectorScores, crossAssetScores, leadershipBasketScores]);
-  const allRatios: number[] = [];
-  const allMoms: number[] = [];
-  for (const s of allScores) {
-    if (isFinite(s.rsRatio)) allRatios.push(s.rsRatio);
-    if (isFinite(s.rsMomentum)) allMoms.push(s.rsMomentum);
-    for (const pt of s.rrgTrail ?? []) {
-      if (isFinite(pt.rsRatio)) allRatios.push(pt.rsRatio);
-      if (isFinite(pt.rsMomentum)) allMoms.push(pt.rsMomentum);
+  // Compute data bounds (must be a hook so it lives before any early return)
+  const { allScores, allRatios, autoRMin, autoRMax, autoMMin, autoMMax } = useMemo(() => {
+    const scores = [...sectors, ...subSectorScores, ...crossAssetScores, ...leadershipBasketScores];
+    const ratios: number[] = [];
+    const moms: number[] = [];
+    for (const s of scores) {
+      if (isFinite(s.rsRatio)) ratios.push(s.rsRatio);
+      if (isFinite(s.rsMomentum)) moms.push(s.rsMomentum);
+      for (const pt of s.rrgTrail ?? []) {
+        if (isFinite(pt.rsRatio)) ratios.push(pt.rsRatio);
+        if (isFinite(pt.rsMomentum)) moms.push(pt.rsMomentum);
+      }
     }
-  }
-  if (allRatios.length === 0) return <div className="text-center py-8 text-sm text-[#555]">No RRG data available</div>;
+    return {
+      allScores: scores,
+      allRatios: ratios,
+      autoRMin: Math.min(99, ...ratios) - 0.5,
+      autoRMax: Math.max(101, ...ratios) + 0.5,
+      autoMMin: Math.min(99, ...moms) - 0.5,
+      autoMMax: Math.max(101, ...moms) + 0.5,
+    };
+  }, [sectors, subSectorScores, crossAssetScores, leadershipBasketScores]);
 
-  const autoRMin = Math.min(99, ...allRatios) - 0.5;
-  const autoRMax = Math.max(101, ...allRatios) + 0.5;
-  const autoMMin = Math.min(99, ...allMoms) - 0.5;
-  const autoMMax = Math.max(101, ...allMoms) + 0.5;
+  const handleClick = useCallback((sector: string) => {
+    setPinned((prev) => (prev === sector ? null : sector));
+  }, []);
+
+  const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if ((e.target as SVGElement).tagName === "svg" || (e.target as SVGElement).tagName === "rect" || (e.target as SVGElement).tagName === "line") {
+      setPinned(null);
+    }
+  }, []);
+
+  // Find the active score for tooltip
+  const activeScore = useMemo(() => {
+    if (!activeLabel) return null;
+    return allScores.find((s) => s.sector === activeLabel) ?? null;
+  }, [activeLabel, allScores]);
+
+  if (allRatios.length === 0) return <div className="text-center py-8 text-sm text-[#555]">No RRG data available</div>;
 
   // Apply zoom — narrow range by 25% per step toward center (100, 100)
   const zoomFactor = 1 - zoomLevel * 0.25;
@@ -70,22 +92,6 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [],
   for (let v = Math.ceil(mMin * 2) / 2; v <= mMax; v += 0.5) {
     if (Math.abs(v - 100) > 0.01) gridLinesY.push(v);
   }
-
-  const handleClick = useCallback((sector: string) => {
-    setPinned((prev) => (prev === sector ? null : sector));
-  }, []);
-
-  const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if ((e.target as SVGElement).tagName === "svg" || (e.target as SVGElement).tagName === "rect" || (e.target as SVGElement).tagName === "line") {
-      setPinned(null);
-    }
-  }, []);
-
-  // Find the active score for tooltip
-  const activeScore = useMemo(() => {
-    if (!activeLabel) return null;
-    return allScores.find((s) => s.sector === activeLabel) ?? null;
-  }, [activeLabel, allScores]);
 
   // Tooltip position
   const tooltipX = activeScore ? scaleX(activeScore.rsRatio) : 0;

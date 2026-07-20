@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import type { CryptoRotationResult } from "@/lib/crypto-rotation/types";
 import { Sparkline } from "../../_components";
 
@@ -15,8 +14,7 @@ interface CrossAssetRow {
 }
 
 export function CrossAssetPanel({ data }: { data: CryptoRotationResult }) {
-  const rows = useMemo(() => {
-    const result: CrossAssetRow[] = [];
+  const result: CrossAssetRow[] = [];
 
     // 1. BTC Dominance
     if (data.btcDominance) {
@@ -132,20 +130,15 @@ export function CrossAssetPanel({ data }: { data: CryptoRotationResult }) {
       interpretationColor: data.rotationActive ? "text-cyan-400" : "text-[#666]",
     });
 
-    return result;
-  }, [data]);
-
   // Collect sparklines from top 5 sectors by composite
-  const sectorSparklines = useMemo(() => {
-    const sorted = [...data.sectors].sort(
-      (a, b) => b.compositeScore - a.compositeScore
-    );
-    return sorted.slice(0, 5).map((s) => ({
-      sector: s.sector,
-      etf: s.etf,
-      returns: data.etfReturns20d?.[s.etf],
-    }));
-  }, [data]);
+  const sectorSparklinesSorted = [...data.sectors].sort(
+    (a, b) => b.compositeScore - a.compositeScore
+  );
+  const sectorSparklines = sectorSparklinesSorted.slice(0, 5).map((s) => ({
+    sector: s.sector,
+    etf: s.etf,
+    returns: data.etfReturns20d?.[s.etf],
+  }));
 
   return (
     <div className="space-y-4">
@@ -160,7 +153,7 @@ export function CrossAssetPanel({ data }: { data: CryptoRotationResult }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {result.map((row) => (
               <tr key={row.name} className="border-t border-[#1a1a1a]">
                 <td className="py-2 pr-3 text-white font-medium">
                   {row.name}

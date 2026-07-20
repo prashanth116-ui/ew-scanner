@@ -36,7 +36,7 @@ export function StockSearch({ allStocks }: { allStocks: StockInSector[] }) {
           className="bg-transparent text-sm text-white placeholder:text-[#555] outline-none w-32 sm:w-48"
         />
         {query && (
-          <button onClick={() => { setQuery(""); inputRef.current?.focus(); }} className="text-[#666] hover:text-white" aria-label="Clear search">
+          <button type="button" onClick={() => { setQuery(""); inputRef.current?.focus(); }} className="text-[#666] hover:text-white" aria-label="Clear search">
             <X className="h-3.5 w-3.5" />
           </button>
         )}

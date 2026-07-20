@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useSyncExternalStore, useEffect } from "react";
 import { ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { COLLAPSED_KEY } from "./constants";
@@ -55,24 +55,50 @@ export function Sparkline({ returns, width = 60, height = 20 }: { returns?: numb
 
 // ── Collapsible Panel ──
 
+const collapsedStores = new Map<string, ReturnType<typeof createCollapsedStore>>();
+
+function createCollapsedStore(storageKey: string, defaultCollapsed: string[] = []) {
+  const listeners = new Set<() => void>();
+  return {
+    getSnapshot() {
+      if (typeof window === "undefined") return new Set(defaultCollapsed);
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) return new Set(JSON.parse(raw) as string[]);
+      } catch { /* ignore */ }
+      return new Set(defaultCollapsed);
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    toggle(id: string) {
+      if (typeof window === "undefined") return;
+      const next = new Set(this.getSnapshot());
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try {
+        localStorage.setItem(storageKey, JSON.stringify([...next]));
+        listeners.forEach((l) => l());
+      } catch { /* ignore */ }
+    },
+  };
+}
+
 export function useCollapsedPanels(storageKey = COLLAPSED_KEY, defaultCollapsed?: string[]): [Set<string>, (id: string) => void] {
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set<string>(defaultCollapsed);
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) return new Set(JSON.parse(raw) as string[]);
-      // First visit — use defaults if provided
-      return new Set<string>(defaultCollapsed);
-    } catch { return new Set<string>(defaultCollapsed); }
-  });
+  let store = collapsedStores.get(storageKey);
+  if (!store) {
+    store = createCollapsedStore(storageKey, defaultCollapsed);
+    collapsedStores.set(storageKey, store);
+  }
+
+  const collapsed = useSyncExternalStore(
+    store.subscribe,
+    () => store!.getSnapshot(),
+    () => new Set(defaultCollapsed)
+  );
 
   const toggle = useCallback((id: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch { /* ignore */ }
-      return next;
-    });
+    collapsedStores.get(storageKey)?.toggle(id);
   }, [storageKey]);
 
   return [collapsed, toggle];
@@ -146,7 +172,18 @@ export function EtfSparkline({ returns }: { returns: number[] | undefined }) {
 // ── Data Staleness Warning ──
 
 export function DataStalenessWarning({ calculatedAt }: { calculatedAt: string }) {
-  const ageMinutes = Math.round((Date.now() - new Date(calculatedAt).getTime()) / 60000);
+  const [ageMinutes, setAgeMinutes] = useState(() =>
+    Math.round((Date.now() - new Date(calculatedAt).getTime()) / 60000)
+  );
+
+  useEffect(() => {
+    const update = () =>
+      setAgeMinutes(Math.round((Date.now() - new Date(calculatedAt).getTime()) / 60000));
+    update();
+    const interval = setInterval(update, 60_000);
+    return () => clearInterval(interval);
+  }, [calculatedAt]);
+
   if (ageMinutes <= 20) return null;
 
   return (

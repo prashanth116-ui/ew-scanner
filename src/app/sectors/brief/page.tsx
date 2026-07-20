@@ -4,6 +4,7 @@ import { Fragment, useState, useEffect, useMemo } from "react";
 import { Loader2, RefreshCw, AlertTriangle, TrendingUp, TrendingDown, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import Link from "next/link";
 import { DataAgeBadge } from "@/components/data-age-badge";
+import { useNow } from "@/lib/hooks/use-now";
 import { useSectorData } from "../_use-sector-data";
 import {
   CollapsiblePanel,
@@ -61,6 +62,7 @@ export default function DailyBriefPage() {
   const [tradingBias, setTradingBias] = useState<TradingBias | null>(null);
   const [biasSnapshot, setBiasSnapshot] = useState<TradingBiasSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(true);
+  const now = useNow(60_000);
 
   // Fetch macro events + pre-market data in parallel
   useEffect(() => {
@@ -86,8 +88,10 @@ export default function DailyBriefPage() {
     };
     fetchPulse();
 
-    // Auto-refresh pre-market data every 2 minutes
-    const pulseInterval = setInterval(fetchPulse, 2 * 60 * 1000);
+    // Auto-refresh pre-market data every 2 minutes while page is visible
+    const pulseInterval = setInterval(() => {
+      if (!document.hidden) fetchPulse();
+    }, 2 * 60 * 1000);
 
     // One-time fetch of persisted 9 AM trading bias snapshot
     fetch("/api/trading-bias/daily")
@@ -128,12 +132,14 @@ export default function DailyBriefPage() {
     const history = loadHistory();
     const today = new Date().toISOString().slice(0, 10);
     // Find most recent snapshot that ISN'T today and is within 3 days
-    const match = history.find((s) => s.date !== today) ?? null;
+    const match = [...history]
+      .filter((s) => s.date !== today)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] ?? null;
     if (!match) return null;
-    const ageMs = Date.now() - new Date(match.date).getTime();
+    const ageMs = now - new Date(match.date).getTime();
     if (ageMs > 3 * 24 * 60 * 60 * 1000) return null; // stale — more than 3 days old
     return match;
-  }, []);
+  }, [now]);
 
   // Load yesterday's posture from localStorage
   const previousPosture = useMemo(() => loadPreviousPosture(), []);
@@ -148,7 +154,7 @@ export default function DailyBriefPage() {
   );
 
   // Compute bias score from pre-market + existing regime/posture data
-  const biasResult = useMemo(() => {
+  const biasResult = (() => {
     if (!posture || futures.length === 0) return null;
     const regimeData = data?.regime ? {
       regime: data.regime.regime,
@@ -163,7 +169,7 @@ export default function DailyBriefPage() {
       vixBounds: data.regime.vixBounds ?? PREMARKET_SCORING.DEFAULT_VIX_BOUNDS,
     } : null;
     return computeBiasScore(futures, posture, regimeData, sectorBreadth);
-  }, [futures, posture, data?.regime, sectorBreadth]);
+  })();
 
   // Leadership health
   const leadershipHealth = useMemo(() => {
@@ -201,7 +207,7 @@ export default function DailyBriefPage() {
         {loadingTimeout && (
           <div className="mt-6">
             <p className="text-xs text-amber-400">This is taking longer than expected.</p>
-            <button onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
+            <button type="button" onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
           </div>
         )}
       </div>
@@ -214,7 +220,7 @@ export default function DailyBriefPage() {
         <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-6 text-center">
           <AlertTriangle className="mx-auto h-8 w-8 text-red-400" />
           <p className="mt-2 text-red-400">Error: {error}</p>
-          <button onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#222] px-4 py-2 text-sm text-white hover:bg-[#333]">
+          <button type="button" onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#222] px-4 py-2 text-sm text-white hover:bg-[#333]">
             Retry
           </button>
         </div>
@@ -247,7 +253,7 @@ export default function DailyBriefPage() {
         </div>
         <div className="flex items-center gap-3">
           <DataAgeBadge calculatedAt={data.calculatedAt} warnAfterMin={20} />
-          <button
+          <button type="button"
             onClick={() => fetchData(true)}
             className="rounded-lg border border-[#333] p-2 text-[#888] hover:bg-[#1a1a1a] hover:text-white"
           >
@@ -258,7 +264,7 @@ export default function DailyBriefPage() {
 
       {/* Tab Toggle */}
       <div className="flex gap-1 rounded-lg border border-[#333] bg-[#111] p-1 w-fit">
-        <button
+        <button type="button"
           onClick={() => setActiveTab("brief")}
           className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
             activeTab === "brief" ? "bg-[#222] text-white" : "text-[#888] hover:text-white"
@@ -266,7 +272,7 @@ export default function DailyBriefPage() {
         >
           Brief
         </button>
-        <button
+        <button type="button"
           onClick={() => setActiveTab("guide")}
           className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
             activeTab === "guide" ? "bg-[#222] text-white" : "text-[#888] hover:text-white"
@@ -1325,6 +1331,7 @@ interface PolicyPulseEvent {
 function PolicyPulseWidget() {
   const [events, setEvents] = useState<PolicyPulseEvent[]>([]);
   const [widgetLoading, setWidgetLoading] = useState(true);
+  const now = useNow(60_000);
 
   useEffect(() => {
     fetch("/api/policy-pulse?days=2&minImpact=30")
@@ -1355,7 +1362,7 @@ function PolicyPulseWidget() {
           const hoursAgo = Math.max(
             1,
             Math.floor(
-              (Date.now() - new Date(event.publishedAt).getTime()) / 3_600_000,
+              (now - new Date(event.publishedAt).getTime()) / 3_600_000,
             ),
           );
           const timeLabel = hoursAgo < 24 ? `${hoursAgo}h ago` : `${Math.floor(hoursAgo / 24)}d ago`;

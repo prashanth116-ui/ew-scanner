@@ -2,6 +2,7 @@
 
 import { useMemo, useCallback } from "react";
 import { Loader2, RefreshCw, AlertTriangle, X } from "lucide-react";
+import { useNow } from "@/lib/hooks/use-now";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { ScannerCTA } from "@/components/scanner-cta";
 import { getEquitySectors, getSubSectors, getCrossAssetETFs } from "@/data/sector-universe";
@@ -79,7 +80,7 @@ export default function PicksPage() {
         {loadingTimeout && (
           <div className="mt-6">
             <p className="text-xs text-amber-400">This is taking longer than expected.</p>
-            <button onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
+            <button type="button" onClick={() => { setLoadingTimeout(false); fetchData(true); }} className="mt-2 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
           </div>
         )}
       </div>
@@ -90,7 +91,7 @@ export default function PicksPage() {
     return (
       <div className="mx-auto max-w-7xl px-6 py-12 text-center">
         <p className="text-red-400">Error: {error}</p>
-        <button onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
+        <button type="button" onClick={() => fetchData(true)} className="mt-4 rounded-lg bg-[#5ba3e6] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a8fd4]">Retry</button>
       </div>
     );
   }
@@ -111,7 +112,7 @@ export default function PicksPage() {
             <span className="text-xs text-[#555]">{new Date(data.calculatedAt).toLocaleString()}</span>
           </div>
         </div>
-        <button onClick={() => fetchData(true)} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50" aria-label="Refresh data">
+        <button type="button" onClick={() => fetchData(true)} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#333] px-3 py-1.5 text-sm text-[#a0a0a0] hover:bg-[#1a1a1a] hover:text-white disabled:opacity-50" aria-label="Refresh data">
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>
@@ -149,16 +150,7 @@ export default function PicksPage() {
         title="Top Picks by Sector"
         collapsed={collapsedPanels.has("top-picks-sector")}
         onToggle={togglePanel}
-        badge={scanResultsDate ? (() => {
-          const ageHours = (Date.now() - new Date(scanResultsDate).getTime()) / (1000 * 60 * 60);
-          if (ageHours > 24) return (
-            <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-normal text-amber-400">
-              <AlertTriangle className="h-3 w-3" />
-              Scan data is {Math.floor(ageHours / 24)}d old
-            </span>
-          );
-          return <span className="text-[10px] font-normal text-[#555]">Scan: {Math.floor(ageHours)}h ago</span>;
-        })() : <span className="text-[10px] font-normal text-[#555]">No scan data</span>}
+        badge={<ScanAgeBadge date={scanResultsDate} variant="badge" />}
         actions={
           <div className="flex items-center gap-2">
             {scanRefreshing ? (
@@ -172,7 +164,7 @@ export default function PicksPage() {
                   </div>
                   <span className="text-[10px] text-[#888] tabular-nums">{scanProgress}</span>
                 </div>
-                <button
+                <button type="button"
                   onClick={cancelScan}
                   className="flex items-center gap-1 rounded-md border border-[#333] px-2 py-1 text-[10px] text-[#888] hover:bg-[#1a1a1a] hover:text-white"
                 >
@@ -180,7 +172,7 @@ export default function PicksPage() {
                 </button>
               </>
             ) : (
-              <button
+              <button type="button"
                 onClick={refreshScan}
                 className="flex items-center gap-1 rounded-md border border-[#333] px-2 py-1 text-[10px] text-[#888] hover:bg-[#1a1a1a] hover:text-white"
               >
@@ -219,17 +211,7 @@ export default function PicksPage() {
         badge={<span className="text-[10px] text-[#555]" title="6 factors: momentum, acceleration, Mansfield RS, CMF, breadth, smart money. Missing factors have weights redistributed.">% = missing data</span>}
         actions={
           <div className="flex items-center gap-2">
-            {scanResultsDate && (() => {
-              const ageMs = Date.now() - new Date(scanResultsDate).getTime();
-              const ageHours = ageMs / (1000 * 60 * 60);
-              if (ageHours > 24) return (
-                <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
-                  <AlertTriangle className="h-3 w-3" />
-                  PreRun scan data is {Math.floor(ageHours / 24)}d old
-                </span>
-              );
-              return <span className="text-[10px] text-[#555]">Scan: {Math.floor(ageHours)}h ago</span>;
-            })()}
+            <ScanAgeBadge date={scanResultsDate} variant="inline" />
           </div>
         }
       >
@@ -246,4 +228,21 @@ export default function PicksPage() {
       <ScannerCTA />
     </div>
   );
+}
+
+function ScanAgeBadge({ date, variant }: { date: string | null; variant: "badge" | "inline" }) {
+  const now = useNow(60_000);
+  if (!date) {
+    return <span className={`${variant === "badge" ? "text-[10px] font-normal" : "text-[10px]"} text-[#555]`}>No scan data</span>;
+  }
+  const ageHours = (now - new Date(date).getTime()) / (1000 * 60 * 60);
+  if (ageHours > 24) {
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 ${variant === "badge" ? "text-[10px] font-normal" : "text-xs"} text-amber-400`}>
+        <AlertTriangle className="h-3 w-3" />
+        {variant === "badge" ? "Scan data is" : "PreRun scan data is"} {Math.floor(ageHours / 24)}d old
+      </span>
+    );
+  }
+  return <span className={`${variant === "badge" ? "text-[10px] font-normal" : "text-[10px]"} text-[#555]`}>Scan: {Math.floor(ageHours)}h ago</span>;
 }

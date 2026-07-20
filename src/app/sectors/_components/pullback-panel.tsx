@@ -8,6 +8,11 @@ import type { PullbackSortKey } from "./types";
 import { TIER_ORDER, TIER_STYLE } from "./constants";
 import { CollapsiblePanel } from "./shared";
 
+function SortArrow<T extends string>({ col, sortKey, sortDir }: { col: T; sortKey: T; sortDir: "asc" | "desc" }) {
+  if (sortKey !== col) return null;
+  return sortDir === "desc" ? <ChevronDown className="inline h-3 w-3" /> : <ChevronUp className="inline h-3 w-3" />;
+}
+
 export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: PullbackWatchStock[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
   const [sectorFilter, setSectorFilter] = usePersistedFilter<string>("ew-filter:pullback:sector", "ALL");
   const [tierFilter, setTierFilter] = usePersistedFilter<ExtensionTier | "ALL">("ew-filter:pullback:tier", "ALL");
@@ -44,11 +49,6 @@ export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: Pu
   const handleSort = (key: PullbackSortKey) => {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir(key === "symbol" || key === "sector" ? "asc" : "desc"); }
-  };
-
-  const SortArrow = ({ col }: { col: PullbackSortKey }) => {
-    if (sortKey !== col) return null;
-    return sortDir === "desc" ? <ChevronDown className="inline h-3 w-3" /> : <ChevronUp className="inline h-3 w-3" />;
   };
 
   const ariaSort = (col: PullbackSortKey): "ascending" | "descending" | "none" =>
@@ -91,7 +91,7 @@ export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: Pu
           </select>
           <span className="text-[10px] text-[#666]">{filtered.length} / {stocks.length}</span>
           {hasFilters && (
-            <button onClick={resetFilters} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#888] hover:text-white">Reset</button>
+            <button type="button" onClick={resetFilters} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#888] hover:text-white">Reset</button>
           )}
         </div>
       </div>
@@ -99,14 +99,14 @@ export function PullbackWatchPanel({ stocks, collapsed, onToggle }: { stocks: Pu
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-[#2a2a2a] text-left text-[#666]">
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("tier")} aria-sort={ariaSort("tier")}>Tier <SortArrow col="tier" /></th>
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("symbol")} aria-sort={ariaSort("symbol")}>Ticker <SortArrow col="symbol" /></th>
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("sector")} aria-sort={ariaSort("sector")}>Sector <SortArrow col="sector" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")} aria-sort={ariaSort("price")}>Price <SortArrow col="price" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom200ma")} aria-sort={ariaSort("pctFrom200ma")}>Extension % <SortArrow col="pctFrom200ma" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("distanceTo80Pct")} aria-sort={ariaSort("distanceTo80Pct")}>Dist to 80% <SortArrow col="distanceTo80Pct" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")} aria-sort={ariaSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" /></th>
-              <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")} aria-sort={ariaSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("tier")} aria-sort={ariaSort("tier")}>Tier <SortArrow col="tier" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("symbol")} aria-sort={ariaSort("symbol")}>Ticker <SortArrow col="symbol" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("sector")} aria-sort={ariaSort("sector")}>Sector <SortArrow col="sector" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")} aria-sort={ariaSort("price")}>Price <SortArrow col="price" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom200ma")} aria-sort={ariaSort("pctFrom200ma")}>Extension % <SortArrow col="pctFrom200ma" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("distanceTo80Pct")} aria-sort={ariaSort("distanceTo80Pct")}>Dist to 80% <SortArrow col="distanceTo80Pct" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")} aria-sort={ariaSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")} aria-sort={ariaSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" sortKey={sortKey} sortDir={sortDir} /></th>
             </tr>
           </thead>
           <tbody>

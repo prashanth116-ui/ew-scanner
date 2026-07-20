@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { CRYPTO_EVENTS, getBtcHalvingCountdown, type CryptoEvent } from "@/data/crypto-events";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
+import { useNow } from "@/lib/hooks/use-now";
 
 import { baseSymbol } from "@/lib/crypto-rotation/format";
 
@@ -27,6 +28,7 @@ const IMPACT_STYLE: Record<string, string> = {
 export function CryptoEventsPanel() {
   const [macroEvents, setMacroEvents] = useState<CatalystCalendarEvent[]>([]);
   const [macroLoading, setMacroLoading] = useState(true);
+  const now = useNow(60_000);
 
   // Fetch macro events that impact crypto (FOMC, CPI, employment)
   useEffect(() => {
@@ -65,7 +67,7 @@ export function CryptoEventsPanel() {
       description: e.description,
       source: "crypto" as const,
       daysAway: Math.ceil(
-        (new Date(e.date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        (new Date(e.date).getTime() - now) / (1000 * 60 * 60 * 24)
       ),
     }));
 
@@ -86,11 +88,10 @@ export function CryptoEventsPanel() {
     const combined = [...cryptoUpcoming, ...macroRelevant];
     combined.sort((a, b) => a.date.localeCompare(b.date));
     return combined;
-  }, [macroEvents]);
+  }, [macroEvents, now]);
 
-  // BTC halving countdown — recompute daily via date key
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const halving = useMemo(() => getBtcHalvingCountdown(), [todayKey]);
+  // BTC halving countdown — recompute on render (cheap; changes only daily)
+  const halving = getBtcHalvingCountdown();
 
   return (
     <div className="space-y-4">

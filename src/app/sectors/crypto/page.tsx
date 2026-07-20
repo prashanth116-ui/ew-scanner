@@ -446,7 +446,10 @@ export default function CryptoRotationPage() {
     }
   }, []);
 
+  // Standard async data-fetch on mount. State updates happen after await.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { fetchData(); return () => { abortRef.current?.abort(); }; }, [fetchData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (document.hidden) return;
     const id = setInterval(() => { fetchData(true); fetchTracker(); }, 10 * 60 * 1000);
@@ -460,12 +463,14 @@ export default function CryptoRotationPage() {
     };
   }, [fetchData, fetchTracker]);
 
-  // Loading timeout — show retry after 30s
+  // Loading timeout — show retry after 30s (async timer-driven UI state).
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!loading || data) { setLoadingTimeout(false); return; }
     const timer = setTimeout(() => setLoadingTimeout(true), 30_000);
     return () => clearTimeout(timer);
   }, [loading, data]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleExport = useCallback(() => { if (data) exportCryptoRotationToExcel(data); }, [data]);
 

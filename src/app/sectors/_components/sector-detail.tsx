@@ -17,7 +17,7 @@ export function SectorDetail({ sector, stocks, prevSnapshot, etfReturns, hasRota
 
   return (
     <div className={`border rounded-lg ${sector.stealthAccumulation ? "border-cyan-500/40" : "border-[#2a2a2a]"}`}>
-      <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg" aria-label="Toggle sector details">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#1a1a1a] transition-colors rounded-lg" aria-label="Toggle sector details">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-lg">{sector.trendArrow}</span>
           <div className="min-w-0">
