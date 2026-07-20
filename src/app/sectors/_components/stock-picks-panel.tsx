@@ -23,7 +23,7 @@ function SortArrow<T extends string>({ col, sortKey, sortDir }: { col: T; sortKe
 
 // ── Top Picks by Sector ──
 
-export function TopPicksBySector({ stocks, sectors, inflectionMap }: { stocks: EnrichedStock[]; sectors: SectorRotationScore[]; inflectionMap?: Map<string, { trade_read: string; score: number }> }) {
+export function TopPicksBySector({ stocks, sectors, inflectionMap, transitionMap }: { stocks: EnrichedStock[]; sectors: SectorRotationScore[]; inflectionMap?: Map<string, { trade_read: string; score: number }>; transitionMap?: Map<string, { alert_state: string; state: string; score: number }> }) {
   const topPicks = useMemo(() => {
     const map: Record<string, EnrichedStock[]> = {};
     for (const s of stocks) {
@@ -101,6 +101,12 @@ export function TopPicksBySector({ stocks, sectors, inflectionMap }: { stocks: E
                       title={`Inflection: ${inflectionMap.get(s.symbol)!.trade_read} (${inflectionMap.get(s.symbol)!.score})`}
                     >INF</span>
                   )}
+                  {transitionMap?.has(s.symbol) && (
+                    <span
+                      className="rounded border border-violet-500/30 bg-violet-500/10 px-0.5 py-0 text-[7px] font-bold text-violet-400"
+                      title={`Transition: ${transitionMap.get(s.symbol)!.alert_state} / ${transitionMap.get(s.symbol)!.state} (${transitionMap.get(s.symbol)!.score})`}
+                    >TRANS</span>
+                  )}
                   <span className="text-[10px] opacity-70">${s.price.toFixed(0)}</span>
                 </span>
               ))}
@@ -114,7 +120,7 @@ export function TopPicksBySector({ stocks, sectors, inflectionMap }: { stocks: E
 
 // ── Stock Picks Panel ──
 
-export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, inflectionMap }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void; rotationPerfMap?: Map<string, number>; inflectionMap?: Map<string, { trade_read: string; score: number }> }) {
+export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, inflectionMap, transitionMap }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void; rotationPerfMap?: Map<string, number>; inflectionMap?: Map<string, { trade_read: string; score: number }>; transitionMap?: Map<string, { alert_state: string; state: string; score: number }> }) {
   const [filter, setFilter] = usePersistedFilter<ConvictionLevel | "ALL">("ew-filter:picks:conviction", "ALL");
   const [sectorFilter, setSectorFilter] = usePersistedFilter<string>("ew-filter:picks:sector", "ALL");
   const [categoryFilter, setCategoryFilter] = usePersistedFilter<StockCategory | "ALL">("ew-filter:picks:category", "ALL");
@@ -350,6 +356,12 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
                               className="ml-1 rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[8px] font-bold text-sky-400"
                               title={`Inflection: ${inflectionMap.get(s.symbol)!.trade_read} (${inflectionMap.get(s.symbol)!.score})`}
                             >INF</span>
+                          )}
+                          {transitionMap?.has(s.symbol) && (
+                            <span
+                              className="ml-1 rounded border border-violet-500/30 bg-violet-500/10 px-1 py-0.5 text-[8px] font-bold text-violet-400"
+                              title={`Transition: ${transitionMap.get(s.symbol)!.alert_state} / ${transitionMap.get(s.symbol)!.state} (${transitionMap.get(s.symbol)!.score})`}
+                            >TRANS</span>
                           )}
                           <span className="ml-1.5 text-[10px] text-[#666]" title={s.shortName}>{s.shortName.length > 18 ? s.shortName.slice(0, 16) + "\u2026" : s.shortName}</span>
                         </td>

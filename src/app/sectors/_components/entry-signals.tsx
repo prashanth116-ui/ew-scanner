@@ -70,6 +70,7 @@ export function RotationEntrySignals({
   collapsed,
   onToggle,
   inflectionMap,
+  transitionMap,
 }: {
   rotationData: RotationTrackerResult;
   enrichedStocks: EnrichedStock[];
@@ -77,6 +78,7 @@ export function RotationEntrySignals({
   collapsed: boolean;
   onToggle: (id: string) => void;
   inflectionMap?: Map<string, { trade_read: string; score: number }>;
+  transitionMap?: Map<string, { alert_state: string; state: string; score: number }>;
 }) {
   const { entries, emerging, exiting, unsustained } = useMemo(() => {
     const results: EntrySignalSector[] = [];
@@ -197,7 +199,7 @@ export function RotationEntrySignals({
 
               <div className="space-y-3">
                 {group.items.map((entry) => (
-                  <SignalCard key={entry.rotation.event.etf} entry={entry} sectors={sectors} inflectionMap={inflectionMap} />
+                  <SignalCard key={entry.rotation.event.etf} entry={entry} sectors={sectors} inflectionMap={inflectionMap} transitionMap={transitionMap} />
                 ))}
               </div>
             </div>
@@ -210,7 +212,7 @@ export function RotationEntrySignals({
 
 // ── Signal Card ──
 
-function SignalCard({ entry, sectors, inflectionMap }: { entry: EntrySignalSector; sectors: SectorRotationScore[]; inflectionMap?: Map<string, { trade_read: string; score: number }> }) {
+function SignalCard({ entry, sectors, inflectionMap, transitionMap }: { entry: EntrySignalSector; sectors: SectorRotationScore[]; inflectionMap?: Map<string, { trade_read: string; score: number }>; transitionMap?: Map<string, { alert_state: string; state: string; score: number }> }) {
   const { rotation, signal, lifecycle, conviction, regimeAlignment, health, patternStats, topStocks, timing } = entry;
   const event = rotation.event;
   const sectorScore = sectors.find((s) => s.sector === event.sectorName);
@@ -313,6 +315,12 @@ function SignalCard({ entry, sectors, inflectionMap }: { entry: EntrySignalSecto
                     className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[8px] font-bold text-sky-400"
                     title={`Inflection: ${inflectionMap.get(stock.symbol)!.trade_read} (${inflectionMap.get(stock.symbol)!.score})`}
                   >INF</span>
+                )}
+                {transitionMap?.has(stock.symbol) && (
+                  <span
+                    className="rounded border border-violet-500/30 bg-violet-500/10 px-1 py-0.5 text-[8px] font-bold text-violet-400"
+                    title={`Transition: ${transitionMap.get(stock.symbol)!.alert_state} / ${transitionMap.get(stock.symbol)!.state} (${transitionMap.get(stock.symbol)!.score})`}
+                  >TRANS</span>
                 )}
                 <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${stock.conviction === "HIGH" ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"}`}>
                   {stock.conviction}

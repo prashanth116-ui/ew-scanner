@@ -57,29 +57,43 @@ export default function PicksPage() {
 
   const [collapsedPanels, togglePanel] = useCollapsedPanels(PICKS_COLLAPSED_KEY);
 
-  // Inflection cross-reference map (fetch once on mount)
+  // Cross-scanner reference maps (fetch once on mount)
   const [inflectionMap, setInflectionMap] = useState<Map<string, { trade_read: string; score: number }>>(new Map());
-  const inflectionFetched = useRef(false);
+  const [transitionMap, setTransitionMap] = useState<Map<string, { alert_state: string; state: string; score: number }>>(new Map());
+  const scannersFetched = useRef(false);
   useEffect(() => {
-    if (inflectionFetched.current) return;
-    inflectionFetched.current = true;
-    // API requires ?date= param, so fetch latest available date first
-    fetch("/api/inflection/daily?dates=true")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        const date = json?.dates?.[0];
-        if (!date) return null;
-        return fetch(`/api/inflection/daily?date=${date}`).then((r) => (r.ok ? r.json() : null));
-      })
-      .then((json) => {
-        if (!json) return;
-        const map = new Map<string, { trade_read: string; score: number }>();
-        for (const r of json.results ?? []) {
-          map.set(r.ticker, { trade_read: r.trade_read, score: r.overall_score });
-        }
-        setInflectionMap(map);
-      })
-      .catch(() => {});
+    if (scannersFetched.current) return;
+    scannersFetched.current = true;
+    // Both APIs require ?date= param, so fetch latest dates first in parallel
+    Promise.all([
+      fetch("/api/inflection/daily?dates=true").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch("/api/transition/daily?dates=true").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([infDates, transDates]) => {
+      const fetches: Promise<void>[] = [];
+      const infDate = infDates?.dates?.[0];
+      if (infDate) {
+        fetches.push(
+          fetch(`/api/inflection/daily?date=${infDate}`).then((r) => (r.ok ? r.json() : null)).then((json) => {
+            if (!json) return;
+            const map = new Map<string, { trade_read: string; score: number }>();
+            for (const r of json.results ?? []) map.set(r.ticker, { trade_read: r.trade_read, score: r.overall_score });
+            setInflectionMap(map);
+          })
+        );
+      }
+      const transDate = transDates?.dates?.[0];
+      if (transDate) {
+        fetches.push(
+          fetch(`/api/transition/daily?date=${transDate}`).then((r) => (r.ok ? r.json() : null)).then((json) => {
+            if (!json) return;
+            const map = new Map<string, { alert_state: string; state: string; score: number }>();
+            for (const r of json.results ?? []) map.set(r.ticker, { alert_state: r.alert_state, state: r.state, score: r.overall_score });
+            setTransitionMap(map);
+          })
+        );
+      }
+      return Promise.all(fetches);
+    }).catch(() => {});
   }, []);
 
   const rotationPerfMap = useMemo(() => {
@@ -151,6 +165,7 @@ export default function PicksPage() {
           collapsed={collapsedPanels.has("entry-signals")}
           onToggle={togglePanel}
           inflectionMap={inflectionMap}
+          transitionMap={transitionMap}
         />
       )}
       {!rotationData && rotationFetchFailed && (
@@ -208,12 +223,12 @@ export default function PicksPage() {
           </div>
         }
       >
-        <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={[...data.sectors, ...subSectorScores]} inflectionMap={inflectionMap} />
+        <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={[...data.sectors, ...subSectorScores]} inflectionMap={inflectionMap} transitionMap={transitionMap} />
       </CollapsiblePanel>
 
       {/* Stock Picks */}
       {data.enrichedStocks && data.enrichedStocks.passed.length > 0 && (
-        <StockPicksPanel stocks={data.enrichedStocks.passed} collapsed={collapsedPanels.has("stock-picks")} onToggle={togglePanel} rotationPerfMap={rotationPerfMap} inflectionMap={inflectionMap} />
+        <StockPicksPanel stocks={data.enrichedStocks.passed} collapsed={collapsedPanels.has("stock-picks")} onToggle={togglePanel} rotationPerfMap={rotationPerfMap} inflectionMap={inflectionMap} transitionMap={transitionMap} />
       )}
 
       {/* Pullback Watch */}
