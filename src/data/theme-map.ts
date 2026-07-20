@@ -70,7 +70,7 @@ export const THEME_MAP: ThemeDefinition[] = [
     label: "Crypto Regulation",
     keywords: ["cryptocurrency", "blockchain", "digital currency", "defi", "crypto exchange", "mining regulation"],
     strongKeywords: ["bitcoin etf", "crypto ban", "stablecoin", "crypto regulation", "sec crypto"],
-    tickers: ["COIN", "MSTR", "MARA", "RIOT", "SQ", "PYPL"],
+    tickers: ["COIN", "MSTR", "MARA", "RIOT", "XYZ", "PYPL"],
     etfs: ["BITO"],
   },
   {

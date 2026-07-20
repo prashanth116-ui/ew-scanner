@@ -177,7 +177,7 @@ const UNIVERSES_DEF = {
     { symbol: "USB", name: "U.S. Bancorp", sector: "Financials" },
     { symbol: "FI", name: "Fiserv", sector: "Financials" },
     { symbol: "PYPL", name: "PayPal", sector: "Financials" },
-    { symbol: "SQ", name: "Block", sector: "Financials" },
+    { symbol: "XYZ", name: "Block", sector: "Financials" },
     { symbol: "COIN", name: "Coinbase", sector: "Financials" },
     { symbol: "AIG", name: "AIG", sector: "Financials" },
     { symbol: "MET", name: "MetLife", sector: "Financials" },

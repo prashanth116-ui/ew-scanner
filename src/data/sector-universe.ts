@@ -591,7 +591,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "SNV", name: "Synovus Financial" },
       { symbol: "SOFI", name: "SoFi Technologies" },
       { symbol: "SPGI", name: "S&P Global" },
-      { symbol: "SQ", name: "Block" },
+      { symbol: "XYZ", name: "Block" },
       { symbol: "SRCE", name: "1st Source" },
       { symbol: "STEP", name: "StepStone Group" },
       { symbol: "STNE", name: "StoneCo" },

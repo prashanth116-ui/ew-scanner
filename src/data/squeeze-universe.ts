@@ -1167,7 +1167,7 @@ export const SQUEEZE_UNIVERSE: SqueezeTickerInfo[] = [
   { symbol: "SPT", name: "Sprout Social" },
   { symbol: "SPWR", name: "SunPower" },
   { symbol: "SPXC", name: "SPX Technologies" },
-  { symbol: "SQ", name: "Block" },
+  { symbol: "XYZ", name: "Block" },
   { symbol: "SQSP", name: "Squarespace" },
   { symbol: "SRC", name: "Spirit Realty Capital" },
   { symbol: "SRCE", name: "1st Source" },
