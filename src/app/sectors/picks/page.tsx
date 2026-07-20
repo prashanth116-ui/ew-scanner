@@ -74,7 +74,8 @@ export default function PicksPage() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [data]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fire only when data loads/refreshes, not on every reference change
+  }, [data?.calculatedAt]);
 
   const rotationPerfMap = useMemo(() => {
     if (!rotationData?.activeRotations) return new Map<string, number>();
