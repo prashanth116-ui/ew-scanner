@@ -16,6 +16,11 @@ import { CONVICTION_STYLE, CATEGORY_STYLE, CONV_ORDER, CAT_ORDER, PHASE_ORDER } 
 import { quadrantColor } from "./helpers";
 import { CollapsiblePanel } from "./shared";
 
+function SortArrow<T extends string>({ col, sortKey, sortDir }: { col: T; sortKey: T; sortDir: "asc" | "desc" }) {
+  if (sortKey !== col) return null;
+  return sortDir === "desc" ? <ChevronDown className="inline h-3 w-3" /> : <ChevronUp className="inline h-3 w-3" />;
+}
+
 // ── Top Picks by Sector ──
 
 export function TopPicksBySector({ stocks, sectors }: { stocks: EnrichedStock[]; sectors: SectorRotationScore[] }) {
@@ -108,7 +113,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
   const [sectorFilter, setSectorFilter] = usePersistedFilter<string>("ew-filter:picks:sector", "ALL");
   const [categoryFilter, setCategoryFilter] = usePersistedFilter<StockCategory | "ALL">("ew-filter:picks:category", "ALL");
   const [phaseFilter, setPhaseFilter] = usePersistedFilter<RotationStockPhase | "ALL">("ew-filter:picks:phase", "ALL");
-  const [quadrantFilter, setQuadrantFilter] = usePersistedFilter<RRGQuadrant | "ALL">("ew-filter:picks:quadrant", "ALL");
+  const [quadrantFilter, setQuadrantFilter] = usePersistedFilter<RRGQuadrant | "ALL" | "LEADING_IMPROVING">("ew-filter:picks:quadrant", "ALL");
   const [rsAccelFilter, setRsAccelFilter] = usePersistedFilter<"all" | "positive" | "strong">("ew-filter:picks:rsAccel", "all");
   const [volFilter, setVolFilter] = usePersistedFilter<"all" | "above" | "high">("ew-filter:picks:vol", "all");
   const [aboveSmaFilter, setAboveSmaFilter] = usePersistedFilter<"all" | "above" | "below">("ew-filter:picks:aboveSma", "all");
@@ -127,7 +132,8 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
     if (sectorFilter !== "ALL") list = list.filter((s) => s.sector === sectorFilter);
     if (categoryFilter !== "ALL") list = list.filter((s) => s.category === categoryFilter);
     if (phaseFilter !== "ALL") list = list.filter((s) => s.phase === phaseFilter);
-    if (quadrantFilter !== "ALL") list = list.filter((s) => s.sectorQuadrant === quadrantFilter);
+    if (quadrantFilter === "LEADING_IMPROVING") list = list.filter((s) => s.sectorQuadrant === "LEADING" || s.sectorQuadrant === "IMPROVING");
+    else if (quadrantFilter !== "ALL") list = list.filter((s) => s.sectorQuadrant === quadrantFilter);
     if (rsAccelFilter === "positive") list = list.filter((s) => s.rsAccel != null && s.rsAccel > 0);
     if (rsAccelFilter === "strong") list = list.filter((s) => s.rsAccel != null && s.rsAccel >= 3);
     if (volFilter === "above") list = list.filter((s) => s.volRatio >= 1.0);
@@ -182,11 +188,6 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
     });
   };
 
-  const SortArrow = ({ col }: { col: PicksSortKey }) => {
-    if (sortKey !== col) return null;
-    return sortDir === "desc" ? <ChevronDown className="inline h-3 w-3" /> : <ChevronUp className="inline h-3 w-3" />;
-  };
-
   const picksAriaSort = (col: PicksSortKey): "ascending" | "descending" | "none" =>
     sortKey === col ? (sortDir === "asc" ? "ascending" : "descending") : "none";
 
@@ -208,6 +209,16 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
     setPhaseFilter("ALL"); setQuadrantFilter("ALL");
     setRsAccelFilter("all"); setVolFilter("all"); setAboveSmaFilter("all");
   };
+
+  const applyTopPicks = () => {
+    setFilter("HIGH"); setCategoryFilter("LEADER");
+    setQuadrantFilter("LEADING_IMPROVING"); setRsAccelFilter("strong");
+    setPhaseFilter("P3_TRENDING");
+    setSectorFilter("ALL"); setVolFilter("all"); setAboveSmaFilter("all");
+  };
+
+  const isTopPicks = filter === "HIGH" && categoryFilter === "LEADER" &&
+    quadrantFilter === "LEADING_IMPROVING" && rsAccelFilter === "strong" && phaseFilter === "P3_TRENDING";
 
   const COL_COUNT = 9;
   const selectClass = "rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]";
@@ -237,8 +248,9 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
           <option value="P3_TRENDING">P3 Trending</option>
           <option value="P4_EXHAUSTING">P4 Exhausting</option>
         </select>
-        <select value={quadrantFilter} onChange={(e) => setQuadrantFilter(e.target.value as RRGQuadrant | "ALL")} className={selectClass}>
+        <select value={quadrantFilter} onChange={(e) => setQuadrantFilter(e.target.value as RRGQuadrant | "ALL" | "LEADING_IMPROVING")} className={selectClass}>
           <option value="ALL">All Quadrant</option>
+          <option value="LEADING_IMPROVING">Leading + Improving</option>
           <option value="LEADING">LEADING</option>
           <option value="IMPROVING">IMPROVING</option>
           <option value="WEAKENING">WEAKENING</option>
@@ -260,23 +272,27 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }
           <option value="below">Below 50MA</option>
         </select>
         <span className="text-[10px] text-[#666]">{filtered.length} / {stocks.length}</span>
+        <button type="button" onClick={applyTopPicks}
+          className={`rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+            isTopPicks ? "bg-green-500/20 text-green-400 border-green-500/30" : "border-[#333] bg-[#1a1a1a] text-[#888] hover:text-green-400 hover:border-green-500/30"
+          }`}>Top Picks</button>
         {hasFilters && (
-          <button onClick={resetFilters} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#888] hover:text-white">Reset</button>
+          <button type="button" onClick={resetFilters} className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#888] hover:text-white">Reset</button>
         )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-[#2a2a2a] text-left text-[#666]">
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("conviction")} aria-sort={picksAriaSort("conviction")}>Conv. <SortArrow col="conviction" /></th>
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("symbol")} aria-sort={picksAriaSort("symbol")}>Symbol <SortArrow col="symbol" /></th>
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("category")} aria-sort={picksAriaSort("category")}>Category <SortArrow col="category" /></th>
-              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("phase")} aria-sort={picksAriaSort("phase")}>Phase <SortArrow col="phase" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("rsAccel")} aria-sort={picksAriaSort("rsAccel")}>RS Accel <SortArrow col="rsAccel" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")} aria-sort={picksAriaSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")} aria-sort={picksAriaSort("price")}>Price <SortArrow col="price" /></th>
-              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")} aria-sort={picksAriaSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" /></th>
-              <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("ret20d")} aria-sort={picksAriaSort("ret20d")}>20d Ret <SortArrow col="ret20d" /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("conviction")} aria-sort={picksAriaSort("conviction")}>Conv. <SortArrow col="conviction" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("symbol")} aria-sort={picksAriaSort("symbol")}>Symbol <SortArrow col="symbol" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("category")} aria-sort={picksAriaSort("category")}>Category <SortArrow col="category" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("phase")} aria-sort={picksAriaSort("phase")}>Phase <SortArrow col="phase" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("rsAccel")} aria-sort={picksAriaSort("rsAccel")}>RS Accel <SortArrow col="rsAccel" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("volRatio")} aria-sort={picksAriaSort("volRatio")}>Vol Ratio <SortArrow col="volRatio" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("price")} aria-sort={picksAriaSort("price")}>Price <SortArrow col="price" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 pr-3 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("pctFrom50ma")} aria-sort={picksAriaSort("pctFrom50ma")}>% from 50MA <SortArrow col="pctFrom50ma" sortKey={sortKey} sortDir={sortDir} /></th>
+              <th className="pb-2 font-medium text-right cursor-pointer hover:text-white" onClick={() => handleSort("ret20d")} aria-sort={picksAriaSort("ret20d")}>20d Ret <SortArrow col="ret20d" sortKey={sortKey} sortDir={sortDir} /></th>
             </tr>
           </thead>
           <tbody>
