@@ -298,7 +298,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 |-------|------|---------|
 | `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart, sector cards (stable sort by conviction → rsAccel → ticker), leadership baskets, sub-sectors, cross-asset. Summary strip counts declining sectors explicitly (not `total - improving`). |
 | `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias, leadership health, sector tiers, risk flags. Stale snapshot guard: ignores previous snapshots older than 3 days. |
-| `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks + Rotation Signals panel (early detection timing) |
+| `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks + Rotation Signals panel (early detection timing) + INF cross-reference badges |
 | `/sectors/crypto` | `src/app/sectors/crypto/page.tsx` | Crypto rotation dashboard |
 | `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables. Phase classification uses `isTurnaroundCandidate` flag (aligned with `categorizeStock()`). |
 
@@ -407,7 +407,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/app/prerun/transition-daily/page.tsx` | `/prerun/transition-daily` — Transition scanner (market structure) |
 | `src/app/sectors/page.tsx` | `/sectors` — Sector rotation dashboard (RRG chart, cards, baskets) |
 | `src/app/sectors/brief/page.tsx` | `/sectors/brief` — Daily brief (posture, bias, health, tiers) |
-| `src/app/sectors/picks/page.tsx` | `/sectors/picks` — Enriched stock picks |
+| `src/app/sectors/picks/page.tsx` | `/sectors/picks` — Enriched stock picks + INF cross-reference |
 | `src/app/sectors/crypto/page.tsx` | `/sectors/crypto` — Crypto rotation dashboard |
 | `src/app/rotation/page.tsx` | `/rotation` — Active rotation tracker |
 | `src/app/prerun/backtest/page.tsx` | `/prerun/backtest` — Funnel backtest with composite scores and forward returns |
@@ -539,6 +539,23 @@ The Rotation Signals panel on the picks page shows sector rotations at inflectio
 **Empty state:** Shows counts for emerging (< 5 days), exiting (EXIT action), and unsustained rotations.
 
 **Config constants (ROTATION section):** `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.0`.
+
+### INF Cross-Reference Badge (`/sectors/picks`)
+The picks page fetches inflection scanner data (`/api/inflection/daily`) in parallel and displays sky-blue `INF` badges on stocks that also appear in today's inflection results. Same pattern as the transition-daily page.
+
+**Data flow:** `picks/page.tsx` fetches inflection data once when `data` loads → builds `Map<string, { trade_read, score }>` keyed by ticker → passes `inflectionMap` prop to 3 components.
+
+**Badge locations:**
+
+| Component | File | Placement |
+|-----------|------|-----------|
+| `RotationEntrySignals` → `SignalCard` | `entry-signals.tsx` | After stock symbol link, before conviction badge |
+| `TopPicksBySector` | `stock-picks-panel.tsx` | After phase span, before price (smaller `text-[7px]` to fit pill) |
+| `StockPicksPanel` | `stock-picks-panel.tsx` | After ROT badge, before company name |
+
+**Badge styling:** `border-sky-500/30 bg-sky-500/10 text-sky-400 text-[8px] font-bold` (consistent with transition-daily). Tooltip: `Inflection: {trade_read} ({score})`.
+
+**Resilience:** Fetch uses `.catch(() => {})` — if inflection API fails, no badges shown, no errors.
 
 ### Persistence Functions (per table)
 Each daily table has 5 standard functions in `persistence.ts`:
