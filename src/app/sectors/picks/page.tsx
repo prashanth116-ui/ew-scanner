@@ -63,8 +63,14 @@ export default function PicksPage() {
   useEffect(() => {
     if (inflectionFetched.current) return;
     inflectionFetched.current = true;
-    fetch("/api/inflection/daily")
+    // API requires ?date= param, so fetch latest available date first
+    fetch("/api/inflection/daily?dates=true")
       .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        const date = json?.dates?.[0];
+        if (!date) return null;
+        return fetch(`/api/inflection/daily?date=${date}`).then((r) => (r.ok ? r.json() : null));
+      })
       .then((json) => {
         if (!json) return;
         const map = new Map<string, { trade_read: string; score: number }>();
