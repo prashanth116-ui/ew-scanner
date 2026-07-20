@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Loader2, RefreshCw, AlertTriangle, X } from "lucide-react";
 import { useNow } from "@/lib/hooks/use-now";
 import { DataAgeBadge } from "@/components/data-age-badge";
@@ -57,15 +57,16 @@ export default function PicksPage() {
 
   const [collapsedPanels, togglePanel] = useCollapsedPanels(PICKS_COLLAPSED_KEY);
 
-  // Inflection cross-reference map
+  // Inflection cross-reference map (fetch once on mount — independent of sector data)
   const [inflectionMap, setInflectionMap] = useState<Map<string, { trade_read: string; score: number }>>(new Map());
+  const inflectionFetched = useRef(false);
   useEffect(() => {
-    if (!data) return;
-    let cancelled = false;
+    if (inflectionFetched.current) return;
+    inflectionFetched.current = true;
     fetch("/api/inflection/daily")
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => {
-        if (cancelled || !json) return;
+        if (!json) return;
         const map = new Map<string, { trade_read: string; score: number }>();
         for (const r of json.results ?? []) {
           map.set(r.ticker, { trade_read: r.trade_read, score: r.overall_score });
@@ -73,9 +74,7 @@ export default function PicksPage() {
         setInflectionMap(map);
       })
       .catch(() => {});
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- fire only when data loads/refreshes, not on every reference change
-  }, [data?.calculatedAt]);
+  }, []);
 
   const rotationPerfMap = useMemo(() => {
     if (!rotationData?.activeRotations) return new Map<string, number>();
