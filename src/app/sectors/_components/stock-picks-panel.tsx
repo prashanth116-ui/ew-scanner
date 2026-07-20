@@ -23,7 +23,7 @@ function SortArrow<T extends string>({ col, sortKey, sortDir }: { col: T; sortKe
 
 // ── Top Picks by Sector ──
 
-export function TopPicksBySector({ stocks, sectors, inflectionMap }: { stocks: EnrichedStock[]; sectors: SectorRotationScore[]; inflectionMap?: Map<string, { trade_read: string; score: number }> }) {
+export function TopPicksBySector({ stocks, sectors }: { stocks: EnrichedStock[]; sectors: SectorRotationScore[] }) {
   const topPicks = useMemo(() => {
     const map: Record<string, EnrichedStock[]> = {};
     for (const s of stocks) {
@@ -95,12 +95,6 @@ export function TopPicksBySector({ stocks, sectors, inflectionMap }: { stocks: E
                     {s.symbol}
                   </a>
                   <span className={`text-[9px] ${phaseColor(s.phase)}`}>{s.phase.replace(/^P\d_/, "").slice(0, 3)}</span>
-                  {inflectionMap?.has(s.symbol) && (
-                    <span
-                      className="rounded border border-sky-500/30 bg-sky-500/10 px-0.5 py-0 text-[7px] font-bold text-sky-400"
-                      title={`Inflection: ${inflectionMap.get(s.symbol)!.trade_read} (${inflectionMap.get(s.symbol)!.score})`}
-                    >INF</span>
-                  )}
                   <span className="text-[10px] opacity-70">${s.price.toFixed(0)}</span>
                 </span>
               ))}
@@ -114,7 +108,7 @@ export function TopPicksBySector({ stocks, sectors, inflectionMap }: { stocks: E
 
 // ── Stock Picks Panel ──
 
-export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, inflectionMap }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void; rotationPerfMap?: Map<string, number>; inflectionMap?: Map<string, { trade_read: string; score: number }> }) {
+export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void; rotationPerfMap?: Map<string, number> }) {
   const [filter, setFilter] = usePersistedFilter<ConvictionLevel | "ALL">("ew-filter:picks:conviction", "ALL");
   const [sectorFilter, setSectorFilter] = usePersistedFilter<string>("ew-filter:picks:sector", "ALL");
   const [categoryFilter, setCategoryFilter] = usePersistedFilter<StockCategory | "ALL">("ew-filter:picks:category", "ALL");
@@ -345,12 +339,6 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
                               </span>
                             ) : null;
                           })()}
-                          {inflectionMap?.has(s.symbol) && (
-                            <span
-                              className="ml-1 rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[8px] font-bold text-sky-400"
-                              title={`Inflection: ${inflectionMap.get(s.symbol)!.trade_read} (${inflectionMap.get(s.symbol)!.score})`}
-                            >INF</span>
-                          )}
                           <span className="ml-1.5 text-[10px] text-[#666]" title={s.shortName}>{s.shortName.length > 18 ? s.shortName.slice(0, 16) + "\u2026" : s.shortName}</span>
                         </td>
                         <td className={`py-1.5 pr-3 font-medium ${CATEGORY_STYLE[s.category] ?? "text-[#888]"}`}>{s.category}</td>

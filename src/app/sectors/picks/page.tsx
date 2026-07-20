@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useMemo, useCallback } from "react";
 import { Loader2, RefreshCw, AlertTriangle, X } from "lucide-react";
 import { useNow } from "@/lib/hooks/use-now";
 import { DataAgeBadge } from "@/components/data-age-badge";
@@ -56,25 +56,6 @@ export default function PicksPage() {
   const { scanning: scanRefreshing, progress: scanProgress, scannedCount, totalCount, refreshScan, cancelScan } = useScanRefresh(scanResultsDate, handleScanComplete);
 
   const [collapsedPanels, togglePanel] = useCollapsedPanels(PICKS_COLLAPSED_KEY);
-
-  // Inflection cross-reference map (fetch once on mount — independent of sector data)
-  const [inflectionMap, setInflectionMap] = useState<Map<string, { trade_read: string; score: number }>>(new Map());
-  const inflectionFetched = useRef(false);
-  useEffect(() => {
-    if (inflectionFetched.current) return;
-    inflectionFetched.current = true;
-    fetch("/api/inflection/daily")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (!json) return;
-        const map = new Map<string, { trade_read: string; score: number }>();
-        for (const r of json.results ?? []) {
-          map.set(r.ticker, { trade_read: r.trade_read, score: r.overall_score });
-        }
-        setInflectionMap(map);
-      })
-      .catch(() => {});
-  }, []);
 
   const rotationPerfMap = useMemo(() => {
     if (!rotationData?.activeRotations) return new Map<string, number>();
@@ -144,7 +125,6 @@ export default function PicksPage() {
           sectors={data.sectors}
           collapsed={collapsedPanels.has("entry-signals")}
           onToggle={togglePanel}
-          inflectionMap={inflectionMap}
         />
       )}
       {!rotationData && rotationFetchFailed && (
@@ -202,12 +182,12 @@ export default function PicksPage() {
           </div>
         }
       >
-        <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={[...data.sectors, ...subSectorScores]} inflectionMap={inflectionMap} />
+        <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={[...data.sectors, ...subSectorScores]} />
       </CollapsiblePanel>
 
       {/* Stock Picks */}
       {data.enrichedStocks && data.enrichedStocks.passed.length > 0 && (
-        <StockPicksPanel stocks={data.enrichedStocks.passed} collapsed={collapsedPanels.has("stock-picks")} onToggle={togglePanel} rotationPerfMap={rotationPerfMap} inflectionMap={inflectionMap} />
+        <StockPicksPanel stocks={data.enrichedStocks.passed} collapsed={collapsedPanels.has("stock-picks")} onToggle={togglePanel} rotationPerfMap={rotationPerfMap} />
       )}
 
       {/* Pullback Watch */}

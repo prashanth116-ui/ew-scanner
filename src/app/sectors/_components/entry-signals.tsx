@@ -69,14 +69,12 @@ export function RotationEntrySignals({
   sectors,
   collapsed,
   onToggle,
-  inflectionMap,
 }: {
   rotationData: RotationTrackerResult;
   enrichedStocks: EnrichedStock[];
   sectors: SectorRotationScore[];
   collapsed: boolean;
   onToggle: (id: string) => void;
-  inflectionMap?: Map<string, { trade_read: string; score: number }>;
 }) {
   const { entries, emerging, exiting, unsustained } = useMemo(() => {
     const results: EntrySignalSector[] = [];
@@ -197,7 +195,7 @@ export function RotationEntrySignals({
 
               <div className="space-y-3">
                 {group.items.map((entry) => (
-                  <SignalCard key={entry.rotation.event.etf} entry={entry} sectors={sectors} inflectionMap={inflectionMap} />
+                  <SignalCard key={entry.rotation.event.etf} entry={entry} sectors={sectors} />
                 ))}
               </div>
             </div>
@@ -210,7 +208,7 @@ export function RotationEntrySignals({
 
 // ── Signal Card ──
 
-function SignalCard({ entry, sectors, inflectionMap }: { entry: EntrySignalSector; sectors: SectorRotationScore[]; inflectionMap?: Map<string, { trade_read: string; score: number }> }) {
+function SignalCard({ entry, sectors }: { entry: EntrySignalSector; sectors: SectorRotationScore[] }) {
   const { rotation, signal, lifecycle, conviction, regimeAlignment, health, patternStats, topStocks, timing } = entry;
   const event = rotation.event;
   const sectorScore = sectors.find((s) => s.sector === event.sectorName);
@@ -308,12 +306,6 @@ function SignalCard({ entry, sectors, inflectionMap }: { entry: EntrySignalSecto
                 >
                   {stock.symbol}
                 </a>
-                {inflectionMap?.has(stock.symbol) && (
-                  <span
-                    className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[8px] font-bold text-sky-400"
-                    title={`Inflection: ${inflectionMap.get(stock.symbol)!.trade_read} (${inflectionMap.get(stock.symbol)!.score})`}
-                  >INF</span>
-                )}
                 <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${stock.conviction === "HIGH" ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"}`}>
                   {stock.conviction}
                 </span>
