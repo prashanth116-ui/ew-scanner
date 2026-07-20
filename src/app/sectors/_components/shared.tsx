@@ -59,14 +59,21 @@ const collapsedStores = new Map<string, ReturnType<typeof createCollapsedStore>>
 
 function createCollapsedStore(storageKey: string, defaultCollapsed: string[] = []) {
   const listeners = new Set<() => void>();
+  // Cache snapshot to return stable reference — useSyncExternalStore
+  // compares via Object.is, so new Set() on every call causes infinite re-renders.
+  let cachedRaw: string | null = null;
+  let cachedSet: Set<string> = new Set(defaultCollapsed);
   return {
     getSnapshot() {
-      if (typeof window === "undefined") return new Set(defaultCollapsed);
+      if (typeof window === "undefined") return cachedSet;
       try {
         const raw = localStorage.getItem(storageKey);
-        if (raw) return new Set(JSON.parse(raw) as string[]);
+        if (raw !== cachedRaw) {
+          cachedRaw = raw;
+          cachedSet = raw ? new Set(JSON.parse(raw) as string[]) : new Set(defaultCollapsed);
+        }
       } catch { /* ignore */ }
-      return new Set(defaultCollapsed);
+      return cachedSet;
     },
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -77,7 +84,10 @@ function createCollapsedStore(storageKey: string, defaultCollapsed: string[] = [
       const next = new Set(this.getSnapshot());
       if (next.has(id)) next.delete(id); else next.add(id);
       try {
-        localStorage.setItem(storageKey, JSON.stringify([...next]));
+        const serialized = JSON.stringify([...next]);
+        localStorage.setItem(storageKey, serialized);
+        cachedRaw = serialized;
+        cachedSet = next;
         listeners.forEach((l) => l());
       } catch { /* ignore */ }
     },
@@ -94,7 +104,7 @@ export function useCollapsedPanels(storageKey = COLLAPSED_KEY, defaultCollapsed?
   const collapsed = useSyncExternalStore(
     store.subscribe,
     () => store!.getSnapshot(),
-    () => new Set(defaultCollapsed)
+    () => store!.getSnapshot()
   );
 
   const toggle = useCallback((id: string) => {
