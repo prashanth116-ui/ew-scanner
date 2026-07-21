@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   Users,
   Target,
+  Crosshair,
+  Zap,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -38,6 +40,8 @@ const SECTIONS = [
   { id: "quick-checklist", label: "Trade Checklist" },
   { id: "filter-recipes", label: "Filter Recipes" },
   { id: "prerunner-radar", label: "Pre-Runner Radar" },
+  { id: "cross-scanner-badges", label: "Cross-Scanner Badges" },
+  { id: "runner-playbook", label: "Runner Playbook" },
   { id: "limitations", label: "Limitations" },
 ];
 
@@ -2442,7 +2446,579 @@ export default function SectorGuidePage() {
         </Section>
 
         {/* ═══════════════════════════════════════════════════════════════
-            PART 4: LIMITATIONS
+            PART 4: CROSS-SCANNER BADGES & RUNNER PLAYBOOK
+           ═══════════════════════════════════════════════════════════════ */}
+
+        {/* Section: Cross-Scanner Badges */}
+        <Section
+          id="cross-scanner-badges"
+          title="Cross-Scanner Badges (INF & TRANS)"
+          icon={<Crosshair className="h-5 w-5 text-sky-400" />}
+        >
+          <p>
+            The <Link href="/sectors/picks" className="text-[#5ba3e6] hover:underline">Stock Picks</Link> page
+            cross-references every stock against two independent scanners and shows colored badges when a stock
+            appears in both the rotation system and a scanner. These badges appear in three places: Rotation Signals
+            cards, Top Picks by Sector pills, and the Stock Picks table.
+          </p>
+
+          <SubSection title="INF Badge (Inflection Scanner)">
+            <p className="mb-2">
+              The <span className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[9px] font-bold text-sky-400">INF</span> badge
+              (sky blue) appears when a stock also appears on the latest{" "}
+              <Link href="/prerun/inflection-daily" className="text-[#5ba3e6] hover:underline">Inflection Daily</Link> scan.
+              The inflection scanner detects accumulation cycle transitions &mdash; where in the seller exhaustion &rarr; accumulation
+              &rarr; expansion cycle a stock sits. Hover the badge for details.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Trade Read</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Meaning</th>
+                    <th className="py-1.5 text-left font-medium">Actionability</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-green-400">STARTER</td>
+                    <td className="py-1.5 pr-3">Seller exhaustion complete, accumulation confirmed</td>
+                    <td className="py-1.5">Strongest signal &mdash; initiate position</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-cyan-400">ADD_ON</td>
+                    <td className="py-1.5 pr-3">Already in early markup, trend confirmed</td>
+                    <td className="py-1.5">Add to existing position or enter with trend</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-amber-400">WATCH</td>
+                    <td className="py-1.5 pr-3">Early signs only, not yet confirmed</td>
+                    <td className="py-1.5">Monitor &mdash; do not act on this alone</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2">
+              The tooltip also shows the inflection <strong className="text-white">score (0&ndash;100)</strong> computed
+              from 6 components: seller exhaustion, volume characteristics, buyer emergence, relative strength, look-ahead,
+              and inflection point quality.
+            </p>
+          </SubSection>
+
+          <SubSection title="TRANS Badge (Transition Scanner)">
+            <p className="mb-2">
+              The <span className="rounded border border-violet-500/30 bg-violet-500/10 px-1 py-0.5 text-[9px] font-bold text-violet-400">TRANS</span> badge
+              (violet) appears when a stock also appears on the latest{" "}
+              <Link href="/prerun/transition-daily" className="text-[#5ba3e6] hover:underline">Transition Daily</Link> scan.
+              The transition scanner detects market structure shifts using swing pivots, Change of Character (ChoCH), and
+              Break of Structure (BOS). This is structural confirmation of a trend change. Hover the badge for details.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Alert State</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Meaning</th>
+                    <th className="py-1.5 text-left font-medium">Actionability</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-green-400">TRIGGERED</td>
+                    <td className="py-1.5 pr-3">Price broke above trigger level with volume confirmation</td>
+                    <td className="py-1.5">Strongest &mdash; structure has shifted, enter now</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-cyan-400">READY</td>
+                    <td className="py-1.5 pr-3">Price within 2 ATR of trigger level</td>
+                    <td className="py-1.5">Set alerts at trigger, prepare order</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-purple-400">ARMED</td>
+                    <td className="py-1.5 pr-3">Change of Character confirmed, trigger level set</td>
+                    <td className="py-1.5">On watchlist &mdash; wait for READY or TRIGGERED</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-amber-400">WATCH</td>
+                    <td className="py-1.5 pr-3">Early accumulation signs detected</td>
+                    <td className="py-1.5">Too early to act &mdash; monitor only</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2">
+              The tooltip shows the <strong className="text-white">market structure state</strong> (e.g., BULLISH_BOS,
+              HIGHER_LOW_FORMATION, EARLY_EXPANSION) and the <strong className="text-white">score (0&ndash;100)</strong> from
+              8 components: seller exhaustion, accumulation quality, ChoCH, BOS, compression, higher lows, RS trajectory,
+              and volume profile.
+            </p>
+          </SubSection>
+
+          <SubSection title="Using Both Badges Together">
+            <p className="mb-2">
+              INF and TRANS are <strong className="text-white">independent scanners</strong> that answer different questions
+              about the same stock:
+            </p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong className="text-sky-400">INF</strong> = &ldquo;Where in the accumulation cycle is this stock?&rdquo; (statistical approach &mdash; component scores)</li>
+              <li><strong className="text-violet-400">TRANS</strong> = &ldquo;Has the market structure actually shifted?&rdquo; (structural approach &mdash; swing pivots, breakouts)</li>
+            </ul>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Badge Combination</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Confluence</th>
+                    <th className="py-1.5 text-left font-medium">Conviction</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3">
+                      <span className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[9px] font-bold text-sky-400">INF</span>
+                      {" STARTER + "}
+                      <span className="rounded border border-violet-500/30 bg-violet-500/10 px-1 py-0.5 text-[9px] font-bold text-violet-400">TRANS</span>
+                      {" TRIGGERED"}
+                    </td>
+                    <td className="py-1.5 pr-3 text-green-400">Maximum</td>
+                    <td className="py-1.5">Two independent systems confirm structural shift. Highest probability setup.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3">
+                      <span className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[9px] font-bold text-sky-400">INF</span>
+                      {" STARTER + "}
+                      <span className="rounded border border-violet-500/30 bg-violet-500/10 px-1 py-0.5 text-[9px] font-bold text-violet-400">TRANS</span>
+                      {" READY"}
+                    </td>
+                    <td className="py-1.5 pr-3 text-cyan-400">High</td>
+                    <td className="py-1.5">Accumulation confirmed, structure about to break. Set alert at trigger level.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3">
+                      One badge only (either <span className="text-sky-400">INF</span> or <span className="text-violet-400">TRANS</span>)
+                    </td>
+                    <td className="py-1.5 pr-3 text-amber-400">Moderate</td>
+                    <td className="py-1.5">Single scanner confirmation. Valid but requires stronger sector-level support.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3">No badges</td>
+                    <td className="py-1.5 pr-3 text-[#666]">None</td>
+                    <td className="py-1.5">Not disqualifying &mdash; the stock may still be a valid pick based on rotation signals alone.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <Tip>
+            The badges refresh on page load by fetching the latest scan dates from{" "}
+            <code className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[10px]">/api/inflection/daily</code> and{" "}
+            <code className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[10px]">/api/transition/daily</code>.
+            If no badges appear, the nightly scans may not have run yet (they run at ~10 PM ET). Check the individual
+            scanner pages for the latest scan date.
+          </Tip>
+        </Section>
+
+        {/* Section: Runner Identification Playbook */}
+        <Section
+          id="runner-playbook"
+          title="Runner Identification Playbook"
+          icon={<Zap className="h-5 w-5 text-green-400" />}
+        >
+          <p>
+            This playbook integrates every page in the system &mdash; sectors dashboard, brief, picks, rotation tracker,
+            and all PreRun scanners &mdash; into a single repeatable process for finding stocks before they make their
+            primary move. The goal is early entry with high conviction, not chasing after the move is over.
+          </p>
+
+          <SubSection title="Step 1: Go/No-Go Decision (/sectors/brief)">
+            <p className="mb-2 font-medium text-white">Check every morning before market open. Takes 30 seconds.</p>
+            <ol className="list-decimal pl-4 space-y-1.5">
+              <li>
+                <strong className="text-white">Market Posture</strong> &mdash;
+                <span className="text-green-400"> AGGRESSIVE</span> (full size),
+                <span className="text-cyan-400"> SELECTIVE</span> (reduced size, best setups only),
+                <span className="text-amber-400"> DEFENSIVE</span> (no new positions),
+                <span className="text-red-400"> CASH</span> (stay out entirely).
+              </li>
+              <li>
+                <strong className="text-white">Regime</strong> &mdash;
+                <span className="text-green-400"> RISK_ON</span> favors cyclicals/growth.
+                <span className="text-red-400"> RISK_OFF</span> favors defensives.
+                <span className="text-[#888]"> MIXED</span> favors Health Care, Financials.
+                This tells you which sectors have tailwinds vs headwinds.
+              </li>
+              <li>
+                <strong className="text-white">Risk Flags</strong> &mdash; &ldquo;Narrow Leadership&rdquo;, &ldquo;Momentum Rollover&rdquo;,
+                or &ldquo;Correlation Breakdown&rdquo; reduce conviction on all new entries regardless of stock-level signals.
+              </li>
+              <li>
+                <strong className="text-white">Trading Bias</strong> &mdash; Strong Bull/Lean Bull = look for longs.
+                Lean Bear/Strong Bear = sit on hands or short. Neutral = tighter targets, quicker exits.
+              </li>
+              <li>
+                <strong className="text-white">What Changed Today</strong> &mdash; Quadrant transitions are the most important.
+                LAGGING &rarr; IMPROVING = rotation starting. LEADING &rarr; WEAKENING = rotation ending.
+              </li>
+            </ol>
+            <Warning>
+              If posture is <strong>DEFENSIVE</strong> or <strong>CASH</strong>, stop here. No new positions.
+              If <strong>SELECTIVE</strong>, only proceed with HIGH conviction setups in EARLY rotations.
+            </Warning>
+          </SubSection>
+
+          <SubSection title="Step 2: Identify Sector Tailwinds (/sectors dashboard)">
+            <p className="mb-2 font-medium text-white">Sort by RS Acceleration, not composite score.</p>
+            <p className="mb-2">
+              Composite score is backward-looking (where the sector has been). RS acceleration is forward-looking
+              (where it&apos;s going). Acceleration tells you the <em>rate of change</em> of momentum.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Signal</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">What It Means</th>
+                    <th className="py-1.5 text-left font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3"><span className="text-cyan-400">IMPROVING</span> + accel &gt; 0</td>
+                    <td className="py-1.5 pr-3">Rotation starting</td>
+                    <td className="py-1.5 text-green-400">Primary hunting ground</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3"><span className="text-green-400">LEADING</span> + accel &gt; 0</td>
+                    <td className="py-1.5 pr-3">Strong trend continuing</td>
+                    <td className="py-1.5 text-cyan-400">Add on pullbacks</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3"><span className="text-green-400">LEADING</span> + accel &lt; 0</td>
+                    <td className="py-1.5 pr-3">Momentum fading</td>
+                    <td className="py-1.5 text-amber-400">Do not enter new, protect existing</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3">Stealth Accumulation <span className="text-cyan-400">(cyan badge)</span></td>
+                    <td className="py-1.5 pr-3">OBV divergent + volume drying up</td>
+                    <td className="py-1.5 text-cyan-400">Early warning &mdash; institutions building before move</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3"><span className="text-amber-400">WEAKENING</span> or <span className="text-red-400">LAGGING</span></td>
+                    <td className="py-1.5 pr-3">Rotation out</td>
+                    <td className="py-1.5 text-red-400">Avoid entirely</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <Tip>
+              Narrow to <strong>2&ndash;3 sectors maximum</strong>. Spreading across more dilutes conviction and makes
+              position management harder. The best runners come from sectors with the strongest tailwinds.
+            </Tip>
+          </SubSection>
+
+          <SubSection title="Step 3: Confirm Rotation Timing (/sectors/picks &rarr; Rotation Signals)">
+            <p className="mb-2 font-medium text-white">This separates early entries from late entries.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Timing</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">Day Range</th>
+                    <th className="py-1.5 text-left font-medium">Your Action</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3"><span className="text-green-400 font-semibold">EARLY</span></td>
+                    <td className="py-1.5 pr-3">Day 1&ndash;7</td>
+                    <td className="py-1.5">Best entry window &mdash; highest reward/risk. Most traders have not noticed.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3"><span className="text-cyan-400 font-semibold">CONFIRMED</span></td>
+                    <td className="py-1.5 pr-3">Day 8&ndash;15</td>
+                    <td className="py-1.5">Good entry, CMF and acceleration confirmed. Slightly less upside.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3"><span className="text-amber-400 font-semibold">DELAYED</span></td>
+                    <td className="py-1.5 pr-3">Day 16+</td>
+                    <td className="py-1.5">Late &mdash; only enter on deep pullback to 50MA or skip.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 mb-1 font-medium text-white">Health badges on each rotation card:</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><span className="text-green-400">CMF green</span> + <span className="text-green-400">Accel green</span> = healthy rotation, full conviction</li>
+              <li>One red = one leg of confirmation missing. Smaller size, wider stop.</li>
+              <li>Both red = rotation may be failing. Do not enter.</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Step 4: Filter to the Best Stocks (/sectors/picks &rarr; Stock Picks)">
+            <p className="mb-2 font-medium text-white">Apply these filters in sequence:</p>
+            <ol className="list-decimal pl-4 space-y-1.5">
+              <li><strong className="text-white">Quadrant:</strong> Leading + Improving (only stocks in sectors with tailwinds)</li>
+              <li><strong className="text-white">Category:</strong> LEADER or TURNAROUND (avoid CATCH_UP &mdash; they follow, they don&apos;t lead)</li>
+              <li>
+                <strong className="text-white">Phase:</strong> P3_TRENDING (safest, momentum confirmed) or P2_TURNAROUND
+                (highest upside, more risk, near 50MA crossover)
+              </li>
+              <li><strong className="text-white">Conviction:</strong> HIGH first; expand to MEDIUM only if posture is AGGRESSIVE</li>
+              <li><strong className="text-white">RS Accel:</strong> Strong (&ge;3) &mdash; the single most predictive filter for runners</li>
+              <li><strong className="text-white">Volume:</strong> Above avg (&ge;1.0x) &mdash; confirms institutional participation</li>
+            </ol>
+            <p className="mt-2">
+              Or click the <strong className="text-white">Top Picks</strong> quick-filter button which applies: HIGH conviction +
+              LEADER category + Leading/Improving quadrant + Strong RS Accel + P3 Trending.
+            </p>
+          </SubSection>
+
+          <SubSection title="Step 5: Cross-Scanner Confirmation (Badges)">
+            <p className="mb-2">
+              Check the <span className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[9px] font-bold text-sky-400">INF</span> and{" "}
+              <span className="rounded border border-violet-500/30 bg-violet-500/10 px-1 py-0.5 text-[9px] font-bold text-violet-400">TRANS</span> badges
+              on your shortlisted stocks. Stocks with both badges have two independent scanners confirming a structural
+              transition &mdash; this is the strongest confluence signal in the system.
+            </p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><span className="text-sky-400 font-medium">INF STARTER</span> + <span className="text-violet-400 font-medium">TRANS TRIGGERED</span> = maximum conviction. Enter.</li>
+              <li><span className="text-sky-400 font-medium">INF STARTER</span> + <span className="text-violet-400 font-medium">TRANS READY</span> = high conviction. Set alert at trigger level.</li>
+              <li>Single badge = moderate conviction. Requires stronger sector-level support.</li>
+              <li>No badges = not disqualifying, but rely more heavily on rotation timing and sector strength.</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Step 6: Validate on PreRun Scanners (Optional Depth)">
+            <p className="mb-2">
+              For additional granularity before committing capital, check the individual scanner pages:
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Scanner Page</th>
+                    <th className="py-1.5 pr-3 text-left font-medium">What to Check</th>
+                    <th className="py-1.5 text-left font-medium">What You Want</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">
+                      <Link href="/prerun/transition-daily" className="text-[#5ba3e6] hover:underline">Transition Daily</Link>
+                    </td>
+                    <td className="py-1.5 pr-3">Filter: TRIGGERED + READY</td>
+                    <td className="py-1.5">Confirmed structure shift. Trigger and invalidation levels give exact entry and stop prices.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">
+                      <Link href="/prerun/inflection-daily" className="text-[#5ba3e6] hover:underline">Inflection Daily</Link>
+                    </td>
+                    <td className="py-1.5 pr-3">Filter: STARTER. Sort by score DESC.</td>
+                    <td className="py-1.5">High SE (seller exhaustion) + high BE (buyer emergence) = supply dried up, demand started.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">
+                      <Link href="/prerun/preset-daily" className="text-[#5ba3e6] hover:underline">Preset Daily</Link>
+                    </td>
+                    <td className="py-1.5 pr-3">Check Leading or Early Mover preset</td>
+                    <td className="py-1.5">Leading = momentum continuation. Early Mover = recovery with EMA confirmation. Stealth = smart money positioning.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">
+                      <Link href="/prerun/institutional-daily" className="text-[#5ba3e6] hover:underline">Institutional Daily</Link>
+                    </td>
+                    <td className="py-1.5 pr-3">Filter: SHORTLIST tier</td>
+                    <td className="py-1.5">Large-cap institutional quality. Entry Quality = HIGH and Best Trigger tells you when to enter.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <Tip>
+              <strong>Streak column matters:</strong> A stock appearing on the same scanner for 5+ consecutive days has
+              persistent signal strength. Fakeouts typically drop off within 1&ndash;3 days.
+            </Tip>
+          </SubSection>
+
+          <SubSection title="Runner vs Fakeout: How to Tell the Difference">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Characteristic</th>
+                    <th className="py-1.5 pr-3 text-left font-medium text-green-400">Runner</th>
+                    <th className="py-1.5 text-left font-medium text-red-400">Fakeout</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">RS Acceleration</td>
+                    <td className="py-1.5 pr-3 text-green-400">&ge; 3.0 (accelerating away from market)</td>
+                    <td className="py-1.5 text-red-400">&lt; 1.0 (drifting, no conviction)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Category</td>
+                    <td className="py-1.5 pr-3 text-green-400">LEADER (outperforming sector)</td>
+                    <td className="py-1.5 text-red-400">CATCH_UP (just following sector ETF)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Volume</td>
+                    <td className="py-1.5 pr-3 text-green-400">&ge; 1.2x (institutional buying)</td>
+                    <td className="py-1.5 text-red-400">&lt; 0.8x (no participation)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Phase</td>
+                    <td className="py-1.5 pr-3 text-green-400">P3 Trending (above 50MA, momentum confirmed)</td>
+                    <td className="py-1.5 text-red-400">P4 Exhausting (momentum rolling over)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Conviction</td>
+                    <td className="py-1.5 pr-3 text-green-400">HIGH (multiple structural signals aligned)</td>
+                    <td className="py-1.5 text-red-400">WATCH (1&ndash;2 weak signals only)</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Cross-Scanner</td>
+                    <td className="py-1.5 pr-3 text-green-400">INF STARTER or ADD_ON + TRANS TRIGGERED</td>
+                    <td className="py-1.5 text-red-400">No cross-scanner confirmation</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-white">Scanner Streak</td>
+                    <td className="py-1.5 pr-3 text-green-400">5+ consecutive days on scanner</td>
+                    <td className="py-1.5 text-red-400">1&ndash;2 days then drops off</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-white">Rotation Health</td>
+                    <td className="py-1.5 pr-3 text-green-400">CMF &gt; 0 and Accel &gt; 0</td>
+                    <td className="py-1.5 text-red-400">Both CMF and Accel negative</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Entry Timing Rules">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Condition</th>
+                    <th className="py-1.5 text-left font-medium">Entry Approach</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3">EARLY rotation + TRIGGERED transition + HIGH conviction</td>
+                    <td className="py-1.5">Market order or limit at current level. Do not wait.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3">EARLY rotation + READY transition</td>
+                    <td className="py-1.5">Set alert at transition trigger level. Enter on break.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3">CONFIRMED rotation + strong RS accel</td>
+                    <td className="py-1.5">Enter on first pullback to 10EMA or 20EMA.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3">DELAYED rotation</td>
+                    <td className="py-1.5">Only enter on pullback to 50MA. Otherwise skip this rotation.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Do Not Enter If (Kill Signals)">
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Posture is <span className="text-amber-400">DEFENSIVE</span> or <span className="text-red-400">CASH</span></li>
+              <li>Sector has <span className="text-red-400">&ldquo;Headwind&rdquo;</span> regime alignment</li>
+              <li>RS Accel is <strong className="text-white">decelerating</strong> (was 5, now 2 &mdash; direction matters more than level)</li>
+              <li>Volume ratio declining day over day</li>
+              <li>Phase = <span className="text-red-400">P4_EXHAUSTING</span></li>
+              <li>Brief shows &ldquo;Momentum Rollover&rdquo; or &ldquo;Narrow Leadership&rdquo; risk flags</li>
+              <li>Rotation has &lt; 1.0 avg signal count (unsustained)</li>
+              <li>Stock appeared on scanner for only 1 day (no streak persistence)</li>
+            </ul>
+          </SubSection>
+
+          <SubSection title="Position Management (/rotation)">
+            <p className="mb-2">
+              Use the <Link href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</Link> for
+              ongoing management after entry:
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a] text-[#666]">
+                    <th className="py-1.5 pr-3 text-left font-medium">Lifecycle Stage</th>
+                    <th className="py-1.5 text-left font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[#c0c0c0]">
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-green-400">EARLY</td>
+                    <td className="py-1.5">Hold. Add on pullbacks to support.</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-cyan-400">MATURING</td>
+                    <td className="py-1.5">Hold current size. Only add on deep pullback (ADD ON PULLBACK signal).</td>
+                  </tr>
+                  <tr className="border-b border-[#2a2a2a]/50">
+                    <td className="py-1.5 pr-3 font-medium text-amber-400">LATE</td>
+                    <td className="py-1.5">Tighten stops. No new additions. Protect gains.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium text-red-400">EXHAUSTING</td>
+                    <td className="py-1.5">Exit. The rotation is over. Do not wait for a bounce.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2">
+              Check the brief page daily: has posture shifted? Has your sector&apos;s quadrant changed? Any new risk flags?
+              A posture shift from AGGRESSIVE to SELECTIVE means reduce all positions. A sector quadrant change from
+              LEADING to WEAKENING means exit.
+            </p>
+          </SubSection>
+
+          <SubSection title="60-Second Morning Checklist">
+            <ol className="list-decimal pl-4 space-y-1.5">
+              <li>
+                <Link href="/sectors/brief" className="text-[#5ba3e6] hover:underline">/sectors/brief</Link> &rarr;
+                Posture + Regime + Risk Flags. <strong className="text-white">Go/No-Go decision.</strong>
+              </li>
+              <li>
+                <Link href="/sectors" className="text-[#5ba3e6] hover:underline">/sectors</Link> dashboard &rarr;
+                Sort by RS Accel. Which 2&ndash;3 sectors are accelerating?
+              </li>
+              <li>
+                <Link href="/sectors/picks" className="text-[#5ba3e6] hover:underline">/sectors/picks</Link> &rarr;
+                Rotation Signals panel. Any EARLY signals? Note the sectors.
+              </li>
+              <li>
+                <Link href="/sectors/picks" className="text-[#5ba3e6] hover:underline">/sectors/picks</Link> &rarr;
+                Stock Picks panel. Filter: HIGH conviction + LEADER + P3 + RS Accel strong. These are your candidates.
+              </li>
+              <li>
+                Check <span className="text-sky-400">INF</span> + <span className="text-violet-400">TRANS</span> badges
+                on candidates. Both present = highest conviction.
+              </li>
+              <li>
+                Size based on posture: <span className="text-green-400">AGGRESSIVE</span> = full,
+                <span className="text-cyan-400"> SELECTIVE</span> = half,
+                <span className="text-amber-400"> DEFENSIVE</span> = none.
+              </li>
+            </ol>
+          </SubSection>
+
+          <Tip>
+            The <strong className="text-white">Top Picks</strong> button on the Stock Picks panel applies the optimal filter
+            combination automatically: HIGH conviction, LEADER category, Leading + Improving quadrant, Strong RS Accel,
+            P3 Trending. Start there and loosen filters only if the candidate list is too small.
+          </Tip>
+        </Section>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            PART 5: LIMITATIONS
            ═══════════════════════════════════════════════════════════════ */}
 
         {/* Section 21: Combined Limitations */}
