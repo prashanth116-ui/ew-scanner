@@ -185,13 +185,27 @@ export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   "ITCI", "THC", "SFM", "GLOB", "CART",
   // Other
   "MTCH",
+  // 2026-08 high-momentum / speculative additions
+  "SHAK",   // Shake Shack — consumer momentum
+  "UPST",   // Upstart — AI lending
+  "MARA",   // Marathon Digital — crypto mining
+  "CLSK",   // CleanSpark — crypto mining
+  "PLNT",   // Planet Fitness — consumer growth
+  "QS",     // QuantumScape — solid-state battery
+  "RH",     // RH — luxury home
+  "LCID",   // Lucid Motors — EV
+  "LMND",   // Lemonade — insurtech
+  "WOLF",   // Wolfspeed — SiC semiconductor
+  "LUNR",   // Intuitive Machines — space
+  "SEDG",   // SolarEdge — solar/inverters
+  "PLUG",   // Plug Power — hydrogen/fuel cells
 ]);
 
 // prettier-ignore
 /** Tickers excluded from scan universe. These are SP500/NDX members that are
  *  structurally unlikely to produce swing-tradeable breakouts due to ultra-low
  *  volatility, secular decline, or utility-like price behavior.
- *  Last updated: 2026-07-11. Review quarterly. */
+ *  Last updated: 2026-08-08. Review quarterly. */
 export const SCAN_EXCLUSIONS: Set<string> = new Set([
   // Industrials — low ATR%, utility-like, conglomerate discount, or secular decline
   "ROL",    // Rollins — pest control, ATR% ~1.0-1.5%, never pulls back enough
@@ -341,6 +355,19 @@ export const SCAN_EXCLUSIONS: Set<string> = new Set([
   "APTV",   // Aptiv — auto parts/EV wiring, structural decline, EV slowdown
   "NKE",    // Nike — athletic, ATR% ~1.4%, multi-year decline, DTC transition failing
   "PHM",    // PulteGroup — homebuilder, redundant with DHI/LEN/NVR
+  // 2026-08 quality trim — additional low-ATR%, utility-like, or secular decline
+  "AKAM",   // Akamai — CDN, low growth, ATR% ~1.3%, no breakout DNA
+  "GEN",    // Gen Digital — NortonLifeLock portfolio, ATR% ~1.3%, boring
+  "JKHY",   // Jack Henry — bank software, utility-like, ATR% ~1.2%
+  "QRVO",   // Qorvo — RF semis, secular decline, losing mobile share
+  "CBOE",   // Cboe Global Markets — exchange operator, ultra-stable, ATR% ~1.2%
+  "JBHT",   // J.B. Hunt — intermodal trucking, ATR% ~1.3%, low momentum
+  "TSN",    // Tyson Foods — commodity meat processor, ATR% ~1.3%
+  "KVUE",   // Kenvue — J&J consumer spinoff, utility-like, ATR% ~1.1%
+  "SYY",    // Sysco — food distribution, ATR% ~1.2%, utility-like
+  "BG",     // Bunge — commodity agribusiness, ATR% ~1.3%
+  "BALL",   // Ball Corp — aluminum cans, low growth, ATR% ~1.3%
+  "SOLV",   // Solventum — 3M medical spinoff, ATR% ~1.3%, no growth catalyst
 ]);
 
 /** Build the scan universe: SP500 + NDX100 + ADDITIONAL minus SCAN_EXCLUSIONS. */

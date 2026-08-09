@@ -117,9 +117,9 @@ export const QUALITY_GATES = {
   /** Maximum stock price ($) — excludes ultra-high-price stocks (except Semiconductors) */
   MAX_PRICE: 1000,
   /** Minimum market cap ($) */
-  MIN_MARKET_CAP: 8_000_000_000,
+  MIN_MARKET_CAP: 10_000_000_000,
   /** Minimum average daily dollar volume ($) */
-  MIN_DOLLAR_VOLUME: 150_000_000,
+  MIN_DOLLAR_VOLUME: 200_000_000,
   /** Minimum average daily volume */
   MIN_AVG_VOLUME: 1_000_000,
   /** Maximum volume spike ratio (high to allow breakout days; crypto uses 10) */

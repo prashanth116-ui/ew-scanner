@@ -81,40 +81,40 @@ All cron scanners and the sector rotation stock enrichment share a universal qua
 |-------|-----------|-------|
 | Price | >= $10 | `currentPrice` |
 | Price | <= $1000 (except Semiconductors) | `currentPrice` |
-| Market cap | >= $8B | `marketCap` |
-| Dollar volume | >= $100M/day | `vcpAvgDollarVolume` (50d avg) |
+| Market cap | >= $10B (exempt: ADDITIONAL_MEMBERS) | `marketCap` |
+| Dollar volume | >= $150M/day | `vcpAvgDollarVolume` (50d avg) |
 | Data quality | >= 40% | `dataQuality` (% of API calls that succeeded) |
-| Max ATR% 60d | >= 1.2% | `maxAtrPct60d` (max ATR(14)/close over ~60 trading days) |
+| Max ATR% 60d | >= 1.5% | `maxAtrPct60d` (max ATR(14)/close over ~60 trading days) |
 
 **Persistent non-scorer gate** (applied BEFORE `fetchPreRunData` in cron routes):
 Loads all distinct tickers from 7 scanner tables (`loadAllScoredTickers()` in `persistence.ts`). If a ticker has never appeared in any scanner result during the 14-day retention window, it is skipped entirely (no API call). Safety: only activates when `scoredTickers.size > 50` (prevents empty-DB edge case from filtering everything). Applied in 5 cron routes: PreRun preset, PreRun 4h, Inflection, Transition, VCP.
 
 **Sector rotation gate** (`applyQualityGates()` in `src/lib/sector-rotation/stock-enrichment.ts`):
-Thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MAX_PRICE: 1000 (except Semiconductors)`, `MIN_MARKET_CAP: 8B`, `MIN_DOLLAR_VOLUME: 150M`, `MIN_AVG_VOLUME: 1M`, `MIN_INSTITUTIONAL_PCT: 5` (low: ADRs report artificially low institutional % via Yahoo), `MAX_VOLUME_SPIKE: 10` (breakout-day volume allowed), `MAX_ETF_DEVIATION: 60` (sector leaders can diverge from ETF). Plus existing gates (extension, trend). Additional gates: `APPLY_SCAN_EXCLUSIONS: true` rejects the 133 SCAN_EXCLUSIONS tickers before any other gate check; `REJECT_NULL_MARKET_CAP: true` fails stocks with null market cap (aligns with PreRun treating null as 0). SCAN_EXCLUSIONS also applied upstream in `sector-rotation.ts` (pre-filters batch quote list) and `rotation-tracker.ts` (filters stock symbols before chart fetches).
+Thresholds via `QUALITY_GATES` in `config.ts`: `MIN_PRICE: 15`, `MAX_PRICE: 1000 (except Semiconductors)`, `MIN_MARKET_CAP: 10B`, `MIN_DOLLAR_VOLUME: 200M`, `MIN_AVG_VOLUME: 1.0M`, `MIN_INSTITUTIONAL_PCT: 5` (low: ADRs report artificially low institutional % via Yahoo), `MAX_VOLUME_SPIKE: 10` (breakout-day volume allowed), `MAX_ETF_DEVIATION: 60` (sector leaders can diverge from ETF). Plus existing gates (extension, trend). Additional gates: `APPLY_SCAN_EXCLUSIONS: true` rejects the 145 SCAN_EXCLUSIONS tickers before any other gate check; `REJECT_NULL_MARKET_CAP: true` fails stocks with null market cap (aligns with PreRun treating null as 0). SCAN_EXCLUSIONS also applied upstream in `sector-rotation.ts` (pre-filters batch quote list) and `rotation-tracker.ts` (filters stock symbols before chart fetches).
 
 **Rotation tracker gate** (`fetchStockPerformance()` in `src/lib/sector-rotation/rotation-tracker.ts`):
-Lightweight pre-filter before fetching 6mo charts: `price >= MIN_PRICE ($10)`, `dollarVol >= MIN_DOLLAR_VOLUME ($100M)`. Plus SCAN_EXCLUSIONS filtering when collecting stock symbols. Saves chart API calls for low-quality stocks.
+Lightweight pre-filter before fetching 6mo charts: `price >= MIN_PRICE ($10)`, `dollarVol >= MIN_DOLLAR_VOLUME ($200M)`. Plus SCAN_EXCLUSIONS filtering when collecting stock symbols. Saves chart API calls for low-quality stocks.
 
 **Applied in 6 cron routes:** PreRun preset, PreRun 4h, Inflection, Transition, VCP, Institutional. NOT applied to single-ticker API routes (explicit user lookups) or PreRunner (uses `computePreRunnerRadar()`).
 
 ### Preset Cron Details
-- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS minus SCAN_EXCLUSIONS (~467 unique tickers). Built via `buildScanUniverse()` in `index-tiers.ts`.
-- **SCAN_EXCLUSIONS (133 tickers):** Structurally boring stocks excluded from scanning — ultra-low ATR%, secular decline, or utility-like behavior. Defined in `src/data/index-tiers.ts`. Sectors: Industrials (20: ROL, RSG, WM, CHRW, SWK, MMM, TXT, AOS, ALLE, PNR, NDSN, DOV, EXPD, ITW, OTIS, ROK, SNA, UPS, WAB, XYL); Financials (18: BEN, IVZ, GL, CINF, AIZ, L, NTRS, PFG, STT, KEY, RF, AFL, AIG, ALL, MET, PRU, TFC, USB); Consumer Disc (11: F, GM, GPC, HAS, RL, MAS, TGT, LVS, APTV, NKE, PHM); Health Care (12: JNJ, PFE, BAX, VTRS, HSIC, CVS, DVA, BDX, CAH, DGX, HUM, MDT); Consumer Staples (14: ADM, BF.B, CAG, CHD, CL, CLX, GIS, HRL, KHC, KMB, MKC, MO, SJM, TAP); Utilities (22: AEE, AEP, ATO, AWK, CMS, CNP, D, DTE, DUK, ED, EIX, ES, ETR, EVRG, FE, LNT, NI, PEG, PNW, PPL, SO, WEC); Real Estate (20: ARE, AVB, BXP, CPT, DOC, EQR, ESS, EXR, FRT, HST, INVH, KIM, MAA, O, PSA, REG, UDR, VICI, VTR, WY); Materials (5: AMCR, AVY, IFF, IP, LYB); Energy (3: APA, HAL, KMI); Comms (5: FOXA, NWS, NWSA, T, VZ); Technology (3: HPE, HPQ, NTAP). Review quarterly.
+- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS minus SCAN_EXCLUSIONS (~470 unique tickers). Built via `buildScanUniverse()` in `index-tiers.ts`.
+- **SCAN_EXCLUSIONS (145 tickers):** Structurally boring stocks excluded from scanning — ultra-low ATR%, secular decline, or utility-like behavior. Defined in `src/data/index-tiers.ts`. Sectors: Industrials (21: ROL, RSG, WM, CHRW, SWK, MMM, TXT, AOS, ALLE, PNR, NDSN, DOV, EXPD, ITW, OTIS, ROK, SNA, UPS, WAB, XYL, JBHT); Financials (19: BEN, IVZ, GL, CINF, AIZ, L, NTRS, PFG, STT, KEY, RF, AFL, AIG, ALL, MET, PRU, TFC, USB, CBOE); Consumer Disc (11: F, GM, GPC, HAS, RL, MAS, TGT, LVS, APTV, NKE, PHM); Health Care (13: JNJ, PFE, BAX, VTRS, HSIC, CVS, DVA, BDX, CAH, DGX, HUM, MDT, SOLV); Consumer Staples (18: ADM, BF.B, CAG, CHD, CL, CLX, GIS, HRL, KHC, KMB, MKC, MO, SJM, TAP, TSN, KVUE, SYY, BG); Utilities (22: AEE, AEP, ATO, AWK, CMS, CNP, D, DTE, DUK, ED, EIX, ES, ETR, EVRG, FE, LNT, NI, PEG, PNW, PPL, SO, WEC); Real Estate (20: ARE, AVB, BXP, CPT, DOC, EQR, ESS, EXR, FRT, HST, INVH, KIM, MAA, O, PSA, REG, UDR, VICI, VTR, WY); Materials (6: AMCR, AVY, IFF, IP, LYB, BALL); Energy (3: APA, HAL, KMI); Comms (5: FOXA, NWS, NWSA, T, VZ); Technology (7: HPE, HPQ, NTAP, AKAM, GEN, JKHY, QRVO). Review quarterly.
 - **SP400 dropped:** Removed from all scan universes. Notable SP400 stocks rescued to ADDITIONAL_MEMBERS.
 - **NDX100 updated:** Reflects May 18, 2026 LITE/CSGP swap + June 22, 2026 quarterly rebalance (added ALAB, ALNY, CRWV, NBIS, RKLB, TER; removed CHTR, CTSH, VRSK, ZS) + July 7, 2026 SPCX addition
 - **SP500 updated:** Reflects March 23, 2026 additions (LITE, SATS) and June 2026 additions (MRVL, FLEX)
-- **Universal quality gate:** Filters ~100+ stocks before scoring (price < $10, mcap < $8B, dollarVol < $100M, dataQuality < 40%, maxAtrPct60d < 1.2%)
+- **Universal quality gate:** Filters ~100+ stocks before scoring (price < $10, mcap < $10B, dollarVol < $150M, dataQuality < 40%, maxAtrPct60d < 1.5%)
 - **Non-scorer gate:** Skips tickers never seen in any scanner table (saves API calls). Loaded once at cron start via `loadAllScoredTickers()`.
 - **Vercel limit:** 300s maxDuration, 240s time guard for Telegram
-- **Single-pass system:** ~467 tickers typically fits in one pass. Resume pass available if needed.
+- **Single-pass system:** ~470 tickers typically fits in one pass. Resume pass available if needed.
 - **4h scanner:** May still need 2 passes (larger Yahoo 2y:1h chart responses slow each ticker)
 - **Batch settings:** BATCH_SIZE=15, BATCH_DELAY=500ms, PERSIST_INTERVAL=50
 - **Params:** `?clear=true` (delete today's data before scan), `?resume=true` (skip existing tickers)
 - **Telegram:** Always sends summary using full DB data (not in-memory partial)
 - **Noise guards:** `finalScore > 0` required for persistence, Leading preset uses `finalScore` not `totalScore`
 
-### ADDITIONAL_MEMBERS (87 curated tickers)
-Non-index stocks added to the scan universe for momentum/breakout relevance. Defined in `src/data/index-tiers.ts`. Tier 2 for `getTickerTier()`. Last updated 2026-07-11.
+### ADDITIONAL_MEMBERS (100 curated tickers)
+Non-index stocks added to the scan universe for momentum/breakout relevance. Defined in `src/data/index-tiers.ts`. Tier 2 for `getTickerTier()`. **Exempt from mcap quality gate** in `passesUniverseQualityGates()` — hand-curated stocks skip the $10B mcap check (other gates still apply). Last updated 2026-08-08.
 
 | Category | Tickers |
 |----------|---------|
@@ -129,6 +129,7 @@ Non-index stocks added to the scan universe for momentum/breakout relevance. Def
 | Recent IPOs / High Momentum | MDLN, VIK, QNT, IONQ |
 | Notable ex-SP400 | MANH, DUOL, RBRK, MDGL, WING, CROX, DKS, ETSY, MOD, POWL, IESC, FND, NBIX, UTHR, CYTK, LNTH, ITCI, THC, SFM, GLOB, CART |
 | Other | MTCH |
+| High Momentum / Speculative | SHAK, UPST, MARA, CLSK, PLNT, QS, RH, LCID, LMND, WOLF, LUNR, SEDG, PLUG |
 
 ### Preset Qualification Criteria
 | Preset | Key Criteria |
@@ -157,7 +158,7 @@ All scoring functions are in `src/lib/prerun/` and use `fetchPreRunData()` from 
 
 ### Scanner Architecture & Value Map
 
-9 scanning engines, unified via nightly confluence. 5 count for confluence, 4 are badge-only. All scanners share a universal quality gate (`passesUniverseQualityGates()`) that filters stocks before scoring: price >= $10, price <= $1000 (except Semiconductors), mcap >= $8B, dollarVol >= $100M/day, dataQuality >= 40%.
+9 scanning engines, unified via nightly confluence. 5 count for confluence, 4 are badge-only. All scanners share a universal quality gate (`passesUniverseQualityGates()`) that filters stocks before scoring: price >= $10, price <= $1000 (except Semiconductors), mcap >= $10B (exempt: ADDITIONAL_MEMBERS), dollarVol >= $150M/day, dataQuality >= 40%, maxAtrPct60d >= 1.5%.
 
 **Confluence scanners (5):**
 
@@ -249,7 +250,7 @@ Detects market structure transitions from accumulation into early markup using s
 | `supabase/migrations/019_transition_daily.sql` | DB table with 8 component scores, state, alert_state, trigger/invalidation |
 
 **Cron details:**
-- Uses same universe as other scanners (~467 tickers)
+- Uses same universe as other scanners (~470 tickers)
 - Fetches 3mo daily chart separately via `fetchYahooChart()` for OHLC data
 - Calls `scoreTransitionWithOHLC()` with raw highs/lows/closes + 3-bar pivot
 - Skips MARKDOWN state and gate failures before persisting
@@ -272,7 +273,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | Cross-Asset | 5 | GLD, TLT, HYG, EEM, UUP |
 | Leadership Baskets | 4 | MAGS, QQQ, IWM, ARKK |
 
-**Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment. Acceleration uses fixed-range normalization (clamped to `COMPOSITE.ACCEL_NORM_FLOOR` / `ACCEL_NORM_CEILING`, default [-10, 10]) instead of min-max, preventing inflation during broad deterioration. Momentum composite weights are graduated (`SCORING_SIGNALS.MOMENTUM_WEIGHTS`: 63d=0.35, 126d=0.25, 189d=0.25, 252d=0.15). Stock enrichment applies universal quality gates (price >= $15, mcap >= $8B, dollarVol >= $150M, avgVol >= 1M, institutional >= 5%) plus sector-specific gates (volume spike, extension, trend, correlation), SCAN_EXCLUSIONS filtering, and null market cap rejection. Remaining null gate bypasses (institutional/ret20d) are tracked via `dataWarnings` on `EnrichedStock`.
+**Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment. Acceleration uses fixed-range normalization (clamped to `COMPOSITE.ACCEL_NORM_FLOOR` / `ACCEL_NORM_CEILING`, default [-10, 10]) instead of min-max, preventing inflation during broad deterioration. Momentum composite weights are graduated (`SCORING_SIGNALS.MOMENTUM_WEIGHTS`: 63d=0.35, 126d=0.25, 189d=0.25, 252d=0.15). Stock enrichment applies universal quality gates (price >= $15, mcap >= $10B, dollarVol >= $200M, avgVol >= 1.0M, institutional >= 5%) plus sector-specific gates (volume spike, extension, trend, correlation), SCAN_EXCLUSIONS filtering, and null market cap rejection. Remaining null gate bypasses (institutional/ret20d) are tracked via `dataWarnings` on `EnrichedStock`.
 
 **Centralized Config:** All thresholds live in `src/lib/sector-rotation/config.ts`. Sections: REGIME, COMPOSITE, ROTATION, QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, CLASSIFICATION, SCORING_SIGNALS, ROTATION_LIFECYCLE, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS, PRERUNNER, CRYPTO_WEIGHTS, PREMARKET_SCORING, POLICY_PULSE. **Never hardcode thresholds** — always add to config.ts and import.
 
@@ -444,7 +445,7 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 | `REGIME` | `DXY_TREND_THRESHOLD: 1` (absolute point change, not percentage) |
 | `CLASSIFICATION` | `P4_RS_ACCEL`, `P4_SECTOR_ACCEL` (both must be negative — AND logic), `P3_MIN_VOL_RATIO` |
 
-| `QUALITY_GATES` | `REJECT_NULL_MARKET_CAP: true` (null mcap = fail), `APPLY_SCAN_EXCLUSIONS: true` (133-ticker exclusion filter for enrichment + rotation tracker), `MAX_VOLUME_SPIKE: 10` (was 5 — allows breakout-day volume), `MAX_ETF_DEVIATION: 60` (was 30 — lets sector leaders diverge from ETF) |
+| `QUALITY_GATES` | `REJECT_NULL_MARKET_CAP: true` (null mcap = fail), `APPLY_SCAN_EXCLUSIONS: true` (145-ticker exclusion filter for enrichment + rotation tracker), `MIN_MARKET_CAP: 10B`, `MIN_DOLLAR_VOLUME: 200M`, `MIN_AVG_VOLUME: 1.0M`, `MAX_VOLUME_SPIKE: 10` (was 5 — allows breakout-day volume), `MAX_ETF_DEVIATION: 60` (was 30 — lets sector leaders diverge from ETF) |
 | `CRYPTO_REGIME_THRESHOLDS` | `BTC_VOL_LOW: 60`, `BTC_VOL_HIGH: 80`, `DOMINANCE_DELTA_RISING: 2`, `MARKET_TREND_THRESHOLD: 3`, `CONFIDENCE_VOL_STRONG: 50`, `CONFIDENCE_VOL_EXTREME: 90`, `ALT_SEASON_DISPERSION: 8` |
 | `CRYPTO_BRIEF` | `BTC_VOL_SPIKE: 80`, `AGGRESSIVE_DISPERSION: 5`, `ACTIONABLE_COMPOSITE: 55`, `PANIC_DISPERSION: 10`, `BIAS_DISPERSION_HIGH: 6`, `BIAS_DISPERSION_LOW: 2`, `LOW_CONFIDENCE_THRESHOLD: 50`, `BTC_RETURN_THRESHOLD: 5`, `SECTOR_BALANCE_THRESHOLD: 2` |
 | `COMPARISON` | `CHANGE_THRESHOLD: 2` (sector score delta for improved/declined classification) |
@@ -655,8 +656,8 @@ Cross-scanner stock picker that replaces sequential AND gates with a composite s
 
 ## Open Items / Known Gaps
 - **Transition scanner promoted to confluence:** Structural complement to Inflection (pivots/ChoCH/BOS vs statistical components). VCP demoted to badge-only (significant overlap with Setup criteria N + L). NON_CONFLUENCE set: QFE, VCP, Setup4h.
-- **VCP + Institutional crons untested:** Built but not manually triggered yet — universe is ~467, likely fits in one pass.
-- **Preset-resume may be redundant:** With SP400 dropped and universe at ~467, the preset cron likely completes in a single pass. The resume cron at 02:06 is still scheduled as a safety net but may not be needed. Monitor scan completion counts.
+- **VCP + Institutional crons untested:** Built but not manually triggered yet — universe is ~470, likely fits in one pass.
+- **Preset-resume may be redundant:** With SP400 dropped and universe at ~470, the preset cron likely completes in a single pass. The resume cron at 02:06 is still scheduled as a safety net but may not be needed. Monitor scan completion counts.
 - **NDX100 rebalance maintenance:** NDX100_MEMBERS updated for June 22, 2026 rebalance + July 7, 2026 SPCX addition. Next rebalance is September 2026 — update `src/data/index-tiers.ts` when announced. No automated rebalance cron (index changes are infrequent, ADDITIONAL_MEMBERS requires human judgment).
 - **ADDITIONAL_MEMBERS maintenance:** The 86 curated tickers in ADDITIONAL_MEMBERS need periodic review. Stocks may delist, change tickers, or fall below quality gate thresholds permanently. Review quarterly alongside NDX100 rebalance. Last cleanup 2026-07-11: removed CELH/ELF/LEGN (mcap), DDOC (invalid ticker), SPCX (promoted to NDX100); fixed SQ→XYZ; added TTAN, IONQ.
 

@@ -14,19 +14,22 @@ import type {
 } from "./types";
 import { matchBestPattern, type PatternMatchResult } from "./patterns";
 import { getSectorForTicker } from "@/data/prerun-universe";
+import { ADDITIONAL_MEMBERS } from "@/data/index-tiers";
 
 /** Universal quality gate: filters low-quality stocks before scoring.
- *  price >= $10, price <= $1000 (except Semiconductors), marketCap >= $8B, avgDollarVolume >= $100M/day,
- *  maxAtrPct60d >= 1.2% (structurally boring filter). */
+ *  price >= $10, price <= $1000 (except Semiconductors), marketCap >= $10B (exempt: ADDITIONAL_MEMBERS),
+ *  avgDollarVolume >= $150M/day, maxAtrPct60d >= 1.5% (structurally boring filter). */
 export function passesUniverseQualityGates(data: PreRunStockData, ticker: string): boolean {
   const price = data.currentPrice ?? 0;
   const mcap = data.marketCap ?? 0;
   const dollarVol = data.vcpAvgDollarVolume ?? 0;
   const dq = data.dataQuality ?? 100; // treat missing as full quality
-  if (price < 10 || mcap < 8_000_000_000 || dollarVol < 100_000_000 || dq < 40) return false;
+  if (price < 10 || dollarVol < 150_000_000 || dq < 40) return false;
+  // ADDITIONAL_MEMBERS are hand-curated — skip mcap gate (other gates still apply)
+  if (mcap < 10_000_000_000 && !ADDITIONAL_MEMBERS.has(ticker)) return false;
   if (price > 1000 && getSectorForTicker(ticker) !== "Semiconductors") return false;
   const maxAtr = data.maxAtrPct60d ?? 999; // treat missing as pass
-  if (maxAtr < 1.2) return false;
+  if (maxAtr < 1.5) return false;
   return true;
 }
 
