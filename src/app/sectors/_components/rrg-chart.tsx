@@ -96,7 +96,7 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [],
   // Tooltip position
   const tooltipX = activeScore ? scaleX(activeScore.rsRatio) : 0;
   const tooltipY = activeScore ? scaleY(activeScore.rsMomentum) : 0;
-  const tooltipFlipX = tooltipX > W - PAD - 120;
+  const tooltipFlipX = tooltipX > W - PAD - 160;
   const tooltipFlipY = tooltipY < PAD + 80;
 
   const dimOpacity = pinned ? 0.15 : undefined;
@@ -295,7 +295,7 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [],
 
           {/* Enhanced tooltip */}
           {activeScore && (() => {
-            const tx = tooltipFlipX ? tooltipX - 140 : tooltipX + 12;
+            const tx = tooltipFlipX ? tooltipX - 165 : tooltipX + 12;
             const ty = tooltipFlipY ? tooltipY + 12 : tooltipY - 90;
             const color = quadrantDotColor(activeScore.quadrant);
             const prevTrailPt = activeScore.rrgTrail && activeScore.rrgTrail.length >= 2
@@ -309,9 +309,9 @@ export function RRGChart({ sectors, subSectorScores = [], crossAssetScores = [],
               : "—";
             return (
               <g filter="url(#rrg-shadow)">
-                <rect x={tx} y={ty} width={130} height={82} rx={6} fill="#1a1a1a" stroke="#333" strokeWidth={1} />
+                <rect x={tx} y={ty} width={155} height={82} rx={6} fill="#1a1a1a" stroke="#333" strokeWidth={1} />
                 <text x={tx + 8} y={ty + 16} fill={color} fontSize={11} fontWeight="bold">{activeScore.etf}</text>
-                <text x={tx + 122} y={ty + 16} textAnchor="end" fill="#888" fontSize={9}>{activeScore.quadrant}</text>
+                <text x={tx + 147} y={ty + 16} textAnchor="end" fill="#888" fontSize={9}>{activeScore.quadrant}</text>
                 <text x={tx + 8} y={ty + 30} fill="#a0a0a0" fontSize={9}>{activeScore.sector}</text>
                 <text x={tx + 8} y={ty + 44} fill="#888" fontSize={9}>Score: <tspan fill="#fff">{activeScore.compositeScore}</tspan></text>
                 <text x={tx + 8} y={ty + 57} fill="#888" fontSize={9}>RS-R: <tspan fill="#fff">{activeScore.rsRatio.toFixed(2)}</tspan>  RS-M: <tspan fill="#fff">{activeScore.rsMomentum.toFixed(2)}</tspan></text>

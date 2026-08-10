@@ -138,9 +138,10 @@ export async function fetchMacroRegime(): Promise<MacroRegimeData | null> {
     else if (regime === "INFLATIONARY" && yield10y > REGIME_CFG.YIELD_EXTREME) regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_SMALL;
     if (vixSlope === "rising" && regime === "RISK_OFF") regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_SMALL;
     if (vixSlope === "falling" && regime === "RISK_ON") regimeConfidence += REGIME_CFG.CONFIDENCE_BOOST_SMALL;
-    // Confidence penalty when macro data is incomplete — classification is less reliable
-    if (!hasTnx) regimeConfidence -= 5;
-    if (!hasDxy) regimeConfidence -= 5;
+    // Confidence penalty when macro data is incomplete — classification is less reliable.
+    // TNX missing = INFLATIONARY detection disabled; DXY missing = same. Significant blind spots.
+    if (!hasTnx) regimeConfidence -= REGIME_CFG.MISSING_DATA_PENALTY;
+    if (!hasDxy) regimeConfidence -= REGIME_CFG.MISSING_DATA_PENALTY;
 
     const sectorMap = REGIME_SECTOR_MAP[regime];
     const data: MacroRegimeData = {

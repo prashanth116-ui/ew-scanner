@@ -7,6 +7,7 @@ import { InfoTip } from "./info-tip";
 export function SummaryStrip({ data, sectors }: { data: SectorRotationResult; sectors: SectorRotationScore[] }) {
   const improving = sectors.filter((s) => s.acceleration > 0).length;
   const declining = sectors.filter((s) => s.acceleration < 0).length;
+  const stable = sectors.length - improving - declining;
 
   return (
     <div className="flex items-center gap-4 rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-2 overflow-x-auto">
@@ -48,6 +49,8 @@ export function SummaryStrip({ data, sectors }: { data: SectorRotationResult; se
       {/* Improving / declining */}
       <div className="flex items-center gap-2 shrink-0">
         <span className="text-green-400 text-[11px] font-medium">{improving} improving</span>
+        <span className="text-[#555]">/</span>
+        <span className="text-[#888] text-[11px] font-medium">{stable} stable</span>
         <span className="text-[#555]">/</span>
         <span className="text-red-400 text-[11px] font-medium">{declining} declining</span>
       </div>

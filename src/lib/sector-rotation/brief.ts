@@ -105,8 +105,6 @@ export function computeMarketPosture(
   const highModerate = convictions.filter(
     (c) => c.level === "HIGH" || c.level === "MODERATE"
   );
-  const positiveConviction = convictions.filter((c) => c.level !== "EXIT");
-
   const leadingImproving = data.sectors.filter(
     (s) => s.quadrant === "LEADING" || s.quadrant === "IMPROVING"
   );
@@ -185,9 +183,9 @@ export function computeMarketPosture(
     };
   }
 
-  // SELECTIVE: RISK_ON/MIXED + ≥1 active rotation with MODERATE+ OR ≥3 sectors LEADING/IMPROVING
+  // SELECTIVE: RISK_ON/MIXED/INFLATIONARY + ≥1 active rotation with MODERATE+ OR ≥3 sectors LEADING/IMPROVING
   if (
-    (isRiskOn || regime?.regime === "MIXED") &&
+    (isRiskOn || regime?.regime === "MIXED" || regime?.regime === "INFLATIONARY") &&
     (highModerate.length >= POSTURE.SELECTIVE_MIN_ROTATIONS || leadingImproving.length >= POSTURE.SELECTIVE_MIN_SECTORS)
   ) {
     return {
@@ -305,7 +303,7 @@ export function computeRiskFlags(
         const priorWindow = hist.slice(-10, -5);
         const recentAvg = recentWindow.reduce((s, h) => s + h.signalCount, 0) / recentWindow.length;
         const priorAvg = priorWindow.reduce((s, h) => s + h.signalCount, 0) / priorWindow.length;
-        if (recentAvg < priorAvg - 0.5) {
+        if (recentAvg < priorAvg - RISK_FLAGS.SIGNAL_DECLINE_THRESHOLD) {
           flags.push({
             severity: "medium",
             message: `${r.event.sectorName} signals declining`,
@@ -456,7 +454,7 @@ interface PostureStore {
 
 export function savePosture(posture: MarketPosture): void {
   if (typeof window === "undefined") return;
-  const date = new Date().toISOString().slice(0, 10);
+  const date = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   try {
     localStorage.setItem(POSTURE_KEY, JSON.stringify({ date, posture }));
   } catch { /* ignore */ }
@@ -468,7 +466,7 @@ export function loadPreviousPosture(now = new Date()): MarketPosture | null {
     const raw = localStorage.getItem(POSTURE_KEY);
     if (!raw) return null;
     const store = JSON.parse(raw) as PostureStore;
-    const today = now.toISOString().slice(0, 10);
+    const today = now.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
     // Return stored posture only if it's from a previous day
     if (store.date === today) return null;
     return store.posture;

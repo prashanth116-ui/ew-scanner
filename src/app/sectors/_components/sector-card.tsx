@@ -66,7 +66,7 @@ function getConvictionScore(s: StockInSector): number {
   if ((s.volumeVsAvg ?? 0) >= 1.5) score += 2;
   else if ((s.volumeVsAvg ?? 0) >= 1.2) score += 1;
   if (s.rsImproving) score += 1;
-  if (s.verdict === "BUY" || s.verdict === "PRIORITY_BUY") score += 2;
+  if (s.verdict === "KEEP" || s.verdict === "PRIORITY BUY") score += 2;
   return score;
 }
 
@@ -88,6 +88,15 @@ function getWhyText(sector: SectorRotationScore): string {
   }
   if (action === "WATCH" && sector.quadrant === "LEADING" && sector.acceleration < 0) {
     return "Still leading but losing steam \u2014 watch for weakening";
+  }
+  if (action === "WATCH" && sector.quadrant === "LEADING") {
+    return "Leading but below composite threshold \u2014 monitor for breakout";
+  }
+  if (action === "WATCH" && sector.quadrant === "IMPROVING" && sector.acceleration <= 0) {
+    return "Improving quadrant but acceleration stalling \u2014 wait for momentum";
+  }
+  if (action === "WATCH" && sector.quadrant === "LAGGING") {
+    return "Lagging with early positive signals \u2014 too early to commit";
   }
   if (action === "TRIM" && sector.quadrant === "WEAKENING") {
     return "Momentum fading \u2014 consider reducing exposure";
@@ -248,7 +257,9 @@ export function ExpandedStockTable({ stocks, sector }: { stocks: StockInSector[]
       .sort((a, b) => {
         const convDiff = b._conviction - a._conviction;
         if (convDiff !== 0) return convDiff;
-        return (b.rsAccel ?? 0) - (a.rsAccel ?? 0);
+        const rsAccelDiff = (b.rsAccel ?? 0) - (a.rsAccel ?? 0);
+        if (rsAccelDiff !== 0) return rsAccelDiff;
+        return a.ticker.localeCompare(b.ticker);
       });
   }, [stocks]);
 

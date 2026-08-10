@@ -52,9 +52,14 @@ export function actionBadge(action: TradingAction): { label: string; className: 
 export function getStockPhase(s: StockInSector): import("@/lib/phase-utils").StockPhase {
   const rsAccel = s.rsAccel ?? 0;
   const rs20d = s.rs20d ?? 0;
+  // Below 50MA: basing or turnaround (never exhausting)
+  if (s.aboveSma50 === false) {
+    if (rs20d > 0 && rsAccel > 0 && (s.volumeVsAvg ?? 0) >= 1.2) return "turnaround";
+    if (rsAccel > 0 && rs20d <= 0) return "basing";
+    return "basing";
+  }
+  // Above 50MA (or null): exhausting, trending, or neutral
   if (rsAccel < -2) return "exhausting";
-  if (s.aboveSma50 === false && rs20d > 0 && rsAccel > 0 && (s.volumeVsAvg ?? 0) >= 1.2) return "turnaround";
-  if (s.aboveSma50 === false && rsAccel > 0 && rs20d <= 0) return "basing";
   if (s.aboveSma50 === true && rsAccel > 0) return "trending";
   return "neutral";
 }

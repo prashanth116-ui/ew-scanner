@@ -46,6 +46,8 @@ export const REGIME = {
   CROSS_ASSET_STRONG_ACCEL: 5,
   /** Cross-asset falling threshold for MIXED→RISK_ON upgrade */
   CROSS_ASSET_STRONG_FALLING: -3,
+  /** Confidence penalty for missing TNX or DXY data (per missing source) */
+  MISSING_DATA_PENALTY: 10,
 } as const;
 
 // ── Composite Scoring ──
@@ -235,6 +237,8 @@ export const RISK_FLAGS = {
   NARROW_LEADERSHIP_BUFFER: 3,
   /** Leadership health score below this = high severity flag */
   DETERIORATING_LEADERSHIP: 35,
+  /** Signal decline threshold: avg signal count drop to flag declining signals */
+  SIGNAL_DECLINE_THRESHOLD: 0.5,
 } as const;
 
 // ── Posture Thresholds ──

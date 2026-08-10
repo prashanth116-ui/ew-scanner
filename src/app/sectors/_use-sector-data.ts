@@ -71,10 +71,17 @@ export function useSectorData() {
 
   useEffect(() => { fetchRotation(); }, [fetchRotation]);
   useEffect(() => {
-    if (!document.hidden) {
-      const id = setInterval(fetchRotation, 10 * 60 * 1000);
-      return () => clearInterval(id);
-    }
+    const id = setInterval(() => {
+      if (!document.hidden) fetchRotation();
+    }, 10 * 60 * 1000);
+    const handleVisibility = () => {
+      if (!document.hidden) fetchRotation();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [fetchRotation]);
   useEffect(() => {
     if (!rotationFetchFailed || rotationData) return;
@@ -203,10 +210,10 @@ export function useSectorData() {
     if (!data) return [];
     const sectors = [...data.sectors];
     switch (sortMode) {
-      case "score": return sectors.sort((a, b) => b.compositeScore - a.compositeScore);
-      case "action": return sectors.sort((a, b) => { const diff = ACTION_RANK[getTradingAction(a)] - ACTION_RANK[getTradingAction(b)]; return diff !== 0 ? diff : b.compositeScore - a.compositeScore; });
-      case "quadrant": return sectors.sort((a, b) => { const diff = QUADRANT_RANK[a.quadrant] - QUADRANT_RANK[b.quadrant]; return diff !== 0 ? diff : b.compositeScore - a.compositeScore; });
-      case "acceleration": return sectors.sort((a, b) => b.acceleration - a.acceleration);
+      case "score": return sectors.sort((a, b) => b.compositeScore - a.compositeScore || a.sector.localeCompare(b.sector));
+      case "action": return sectors.sort((a, b) => { const diff = ACTION_RANK[getTradingAction(a)] - ACTION_RANK[getTradingAction(b)]; return diff !== 0 ? diff : b.compositeScore - a.compositeScore || a.sector.localeCompare(b.sector); });
+      case "quadrant": return sectors.sort((a, b) => { const diff = QUADRANT_RANK[a.quadrant] - QUADRANT_RANK[b.quadrant]; return diff !== 0 ? diff : b.compositeScore - a.compositeScore || a.sector.localeCompare(b.sector); });
+      case "acceleration": return sectors.sort((a, b) => b.acceleration - a.acceleration || a.sector.localeCompare(b.sector));
       case "name": return sectors.sort((a, b) => a.sector.localeCompare(b.sector));
       default: return sectors;
     }

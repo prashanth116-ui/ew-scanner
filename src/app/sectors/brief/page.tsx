@@ -16,7 +16,7 @@ import {
 } from "../_components";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
-import type { FuturesSnapshot, ChecklistItem, TradingBias, SectorBreadth, VixData, TradingBiasSnapshot } from "@/lib/premarket/types";
+import type { FuturesSnapshot, ChecklistItem, TradingBias, SectorBreadth, TradingBiasSnapshot } from "@/lib/premarket/types";
 import { computeBiasScore } from "@/lib/premarket/scoring";
 import { PREMARKET_SCORING } from "@/lib/sector-rotation/config";
 import { loadHistory } from "@/lib/sector-rotation/history";
@@ -57,7 +57,6 @@ export default function DailyBriefPage() {
   const [activeTab, setActiveTab] = useState<TabView>("brief");
   const [futures, setFutures] = useState<FuturesSnapshot[]>([]);
   const [sectorBreadth, setSectorBreadth] = useState<SectorBreadth | null>(null);
-  const [vixData, setVixData] = useState<VixData | null>(null);
   const [pulseLoading, setPulseLoading] = useState(true);
   const [tradingBias, setTradingBias] = useState<TradingBias | null>(null);
   const [biasSnapshot, setBiasSnapshot] = useState<TradingBiasSnapshot | null>(null);
@@ -75,11 +74,10 @@ export default function DailyBriefPage() {
     const fetchPulse = () => {
       fetch("/api/premarket")
         .then((res) => (res.ok ? res.json() : null))
-        .then((result: { futures: FuturesSnapshot[]; sectorBreadth?: SectorBreadth | null; vixData?: VixData | null; tradingBias?: TradingBias | null } | null) => {
+        .then((result: { futures: FuturesSnapshot[]; sectorBreadth?: SectorBreadth | null; tradingBias?: TradingBias | null } | null) => {
           if (result) {
             setFutures(result.futures);
             setSectorBreadth(result.sectorBreadth ?? null);
-            setVixData(result.vixData ?? null);
             setTradingBias(result.tradingBias ?? null);
           }
         })
@@ -111,10 +109,21 @@ export default function DailyBriefPage() {
     return () => clearInterval(pulseInterval);
   }, []);
 
-  // Compute analysis
+  // Leadership health — computed once, passed to posture + riskFlags
+  const leadershipHealth = useMemo(() => {
+    if (!data?.leadershipBasketScores?.length) return null;
+    return computeLeadershipHealth(
+      data.leadershipBasketScores,
+      data.crossAssetScores ?? [],
+      data.sectors,
+      data.subSectorScores ?? [],
+    );
+  }, [data]);
+
+  // Compute analysis (pass leadershipHealth to avoid recomputing)
   const posture = useMemo<PostureResult | null>(
-    () => (data ? computeMarketPosture(data, rotationData) : null),
-    [data, rotationData]
+    () => (data ? computeMarketPosture(data, rotationData, leadershipHealth) : null),
+    [data, rotationData, leadershipHealth]
   );
 
   const tiers = useMemo<SectorTiers | null>(
@@ -123,14 +132,14 @@ export default function DailyBriefPage() {
   );
 
   const riskFlags = useMemo<RiskFlag[]>(
-    () => (data ? computeRiskFlags(data, rotationData) : []),
-    [data, rotationData]
+    () => (data ? computeRiskFlags(data, rotationData, leadershipHealth) : []),
+    [data, rotationData, leadershipHealth]
   );
 
   // Load yesterday's snapshot from localStorage
   const previousSnapshot = useMemo(() => {
     const history = loadHistory();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
     // Find most recent snapshot that ISN'T today and is within 3 days
     const match = [...history]
       .filter((s) => s.date !== today)
@@ -154,7 +163,7 @@ export default function DailyBriefPage() {
   );
 
   // Compute bias score from pre-market + existing regime/posture data
-  const biasResult = (() => {
+  const biasResult = useMemo(() => {
     if (!posture || futures.length === 0) return null;
     const regimeData = data?.regime ? {
       regime: data.regime.regime,
@@ -169,18 +178,7 @@ export default function DailyBriefPage() {
       vixBounds: data.regime.vixBounds ?? PREMARKET_SCORING.DEFAULT_VIX_BOUNDS,
     } : null;
     return computeBiasScore(futures, posture, regimeData, sectorBreadth);
-  })();
-
-  // Leadership health
-  const leadershipHealth = useMemo(() => {
-    if (!data?.leadershipBasketScores?.length) return null;
-    return computeLeadershipHealth(
-      data.leadershipBasketScores,
-      data.crossAssetScores ?? [],
-      data.sectors,
-      data.subSectorScores ?? [],
-    );
-  }, [data]);
+  }, [posture, futures, data?.regime, sectorBreadth]);
 
   // Sub-sector divergences
   const subSectorDivergences = useMemo(() => {
@@ -497,7 +495,7 @@ export default function DailyBriefPage() {
         <NavCard
           href="/sectors"
           title="Sector Dashboard"
-          description="Full 23-ETF scores, RRG chart, regime, correlations"
+          description="Full 31-ETF scores, RRG chart, regime, correlations"
           stat={`${data.sectors.length} sectors scored`}
         />
         <NavCard
@@ -1437,7 +1435,7 @@ function BriefGuide() {
             <tbody className="text-[#ccc]">
               <tr className="border-b border-[#1a1a1a]">
                 <td className="py-2.5 pr-4 text-white font-medium">Sectors Dashboard</td>
-                <td className="py-2.5 pr-4">Raw data &mdash; 27 ETF scores (14 sectors + 8 sub-sectors + 5 cross-asset), quadrants, RRG chart, regime, correlations</td>
+                <td className="py-2.5 pr-4">Raw data &mdash; 31 ETF scores (14 sectors + 8 sub-sectors + 5 cross-asset + 4 leadership), quadrants, RRG chart, regime, correlations</td>
                 <td className="py-2.5 text-[#888]">The spreadsheet</td>
               </tr>
               <tr className="border-b border-[#1a1a1a]">
