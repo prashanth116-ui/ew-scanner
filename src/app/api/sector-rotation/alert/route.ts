@@ -126,30 +126,65 @@ export async function GET(request: NextRequest) {
     try {
       const rotationResult = await calculateRotationTracker();
 
-      // Build stock map: sectorId → top 5 stocks
-      // Entry: isTurnaroundCandidate flag (curated: below SMA50 + positive RS accel + volume)
-      // Leading: above SMA50 + positive RS accel + RS direction improving (not decelerating)
+      // Build stock map: sectorId → top 15 stocks across 3 categories
+      // Turnaround: below SMA50, curated isTurnaroundCandidate, sustained volume
+      // Inflection: near SMA50 crossover (±5%), RS accelerating, sustained volume
+      // Leading: above SMA50, RS accelerating + improving, sustained volume
+      // All sorted by rsDelta (fastest RS acceleration change)
       const stockMap = new Map<string, RotationTopStock[]>();
-      const toTopStock = (s: typeof rotationResult.activeRotations[0]["stocks"][0]): RotationTopStock => ({
+      type Stock = typeof rotationResult.activeRotations[0]["stocks"][0];
+      const toTopStock = (s: Stock, category: RotationTopStock["category"]): RotationTopStock => ({
         symbol: s.symbol,
         performancePct: s.performancePct,
         rsAcceleration: s.rsAcceleration,
+        rsDelta: s.rsDelta,
         aboveSma50: s.aboveSma50,
         volumeVsAvg: s.volumeVsAvg,
+        volumeConsistency: s.volumeConsistency,
         isTurnaroundCandidate: s.isTurnaroundCandidate,
+        category,
       });
+
       for (const r of rotationResult.activeRotations) {
+        const turnaroundSet = new Set<string>();
+
+        // 1. Turnarounds: below SMA50, turning with sustained volume
         const turnarounds = r.stocks
-          .filter((s) => s.isTurnaroundCandidate)
-          .sort((a, b) => b.rsAcceleration - a.rsAcceleration)
-          .slice(0, 3)
-          .map(toTopStock);
+          .filter((s) => s.isTurnaroundCandidate && s.volumeConsistency >= 2)
+          .sort((a, b) => b.rsDelta - a.rsDelta)
+          .slice(0, 5);
+        for (const s of turnarounds) turnaroundSet.add(s.symbol);
+
+        // 2. Inflections: near SMA50 crossover, RS accelerating, sustained volume
+        //    pctFrom50ma not available directly, so approximate: !aboveSma50 stocks
+        //    with high RS accel (close to crossing) that aren't turnaround candidates
+        const inflections = r.stocks
+          .filter((s) =>
+            !turnaroundSet.has(s.symbol) &&
+            !s.isTurnaroundCandidate &&
+            s.rsDelta > 0 &&
+            s.volumeConsistency >= 2 &&
+            s.rsAcceleration > 0
+          )
+          .sort((a, b) => b.rsDelta - a.rsDelta)
+          .slice(0, 5);
+
+        // 3. Leaders: above SMA50, RS accelerating + improving, sustained volume
         const leaders = r.stocks
-          .filter((s) => s.aboveSma50 && s.rsAcceleration > 0 && s.rsImproving)
-          .sort((a, b) => b.rsAcceleration - a.rsAcceleration)
-          .slice(0, 2)
-          .map(toTopStock);
-        const combined = [...turnarounds, ...leaders].slice(0, 5);
+          .filter((s) =>
+            s.aboveSma50 &&
+            s.rsAcceleration > 0 &&
+            s.rsImproving &&
+            s.volumeConsistency >= 2
+          )
+          .sort((a, b) => b.rsDelta - a.rsDelta)
+          .slice(0, 5);
+
+        const combined = [
+          ...turnarounds.map((s) => toTopStock(s, "turnaround")),
+          ...inflections.map((s) => toTopStock(s, "inflection")),
+          ...leaders.map((s) => toTopStock(s, "leading")),
+        ].slice(0, 15);
         if (combined.length > 0) stockMap.set(r.event.sectorId, combined);
       }
 

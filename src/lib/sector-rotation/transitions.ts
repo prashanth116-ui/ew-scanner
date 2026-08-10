@@ -160,13 +160,18 @@ export interface RotationSnapshot {
   startDate: string;
 }
 
+export type StockPickCategory = "turnaround" | "inflection" | "leading";
+
 export interface RotationTopStock {
   symbol: string;
   performancePct: number;
   rsAcceleration: number;
+  rsDelta: number;
   aboveSma50: boolean;
   volumeVsAvg: number;
+  volumeConsistency: number;
   isTurnaroundCandidate: boolean;
+  category: StockPickCategory;
 }
 
 export interface RotationChange {
@@ -392,18 +397,21 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
         lines.push(`    ${qTag(c.quadrant)} \u2022 ${c.lifecycle} \u2022 ${c.conviction}`);
       }
 
-      // Show top stocks for Focus and Monitor tiers
-      // Turnarounds first (below SMA50, turning — most upside), then leaders (confirmation)
+      // Show top stocks for Focus and Monitor tiers, grouped by category
       if (tier !== "exit" && c.topStocks && c.topStocks.length > 0) {
         const fmt = (s: RotationTopStock) => {
           const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
-          const vol = s.volumeVsAvg >= 1.5 ? "\uD83D\uDD25" : "";
+          const vol = s.volumeConsistency >= 3 ? "\uD83D\uDD25" : "";
           return `${s.symbol} ${perf} ${vol}`.trim();
         };
-        const turnarounds = c.topStocks.filter((s) => !s.aboveSma50);
-        const leaders = c.topStocks.filter((s) => s.aboveSma50);
+        const turnarounds = c.topStocks.filter((s) => s.category === "turnaround");
+        const inflections = c.topStocks.filter((s) => s.category === "inflection");
+        const leaders = c.topStocks.filter((s) => s.category === "leading");
         if (turnarounds.length > 0) {
-          lines.push(`    \uD83D\uDD04 Entry: ${turnarounds.map(fmt).join(", ")}`);
+          lines.push(`    \uD83D\uDD04 Turnaround: ${turnarounds.map(fmt).join(", ")}`);
+        }
+        if (inflections.length > 0) {
+          lines.push(`    \u21A9\uFE0F Inflection: ${inflections.map(fmt).join(", ")}`);
         }
         if (leaders.length > 0) {
           lines.push(`    \u2705 Leading: ${leaders.map(fmt).join(", ")}`);
