@@ -146,3 +146,170 @@ export function formatRotationAlert(
 
   return lines.join("\n").trim();
 }
+
+// ── Rotation Tracker Change Detection ──
+
+export interface RotationSnapshot {
+  sectorId: string;
+  sectorName: string;
+  etf: string;
+  lifecycle: string;
+  conviction: string;
+  daysActive: number;
+  startDate: string;
+}
+
+export interface RotationChange {
+  type: "new_rotation" | "rotation_ended" | "lifecycle_upgrade" | "lifecycle_warning";
+  sectorName: string;
+  etf: string;
+  startDate: string;
+  daysActive: number;
+  lifecycle: string;
+  conviction: string;
+  previousLifecycle?: string;
+}
+
+const LIFECYCLE_ORDER: Record<string, number> = {
+  EARLY: 0,
+  MATURING: 1,
+  LATE: 2,
+  EXHAUSTING: 3,
+};
+
+/**
+ * Compare current vs previous rotation tracker snapshots.
+ * Detects new rotations, ended rotations, and lifecycle stage changes.
+ */
+export function detectRotationChanges(
+  current: RotationSnapshot[] | undefined,
+  previous: RotationSnapshot[] | undefined
+): RotationChange[] {
+  if (!current && !previous) return [];
+
+  const changes: RotationChange[] = [];
+  const currentMap = new Map<string, RotationSnapshot>();
+  const previousMap = new Map<string, RotationSnapshot>();
+
+  for (const r of current ?? []) currentMap.set(r.sectorId, r);
+  for (const r of previous ?? []) previousMap.set(r.sectorId, r);
+
+  // New rotations: in current but not in previous
+  for (const [id, cur] of currentMap) {
+    const prev = previousMap.get(id);
+    if (!prev) {
+      changes.push({
+        type: "new_rotation",
+        sectorName: cur.sectorName,
+        etf: cur.etf,
+        startDate: cur.startDate,
+        daysActive: cur.daysActive,
+        lifecycle: cur.lifecycle,
+        conviction: cur.conviction,
+      });
+    } else if (cur.lifecycle !== prev.lifecycle) {
+      // Lifecycle changed — classify as upgrade or warning
+      const curOrder = LIFECYCLE_ORDER[cur.lifecycle] ?? 0;
+      const prevOrder = LIFECYCLE_ORDER[prev.lifecycle] ?? 0;
+      changes.push({
+        type: curOrder < prevOrder ? "lifecycle_upgrade" : "lifecycle_warning",
+        sectorName: cur.sectorName,
+        etf: cur.etf,
+        startDate: cur.startDate,
+        daysActive: cur.daysActive,
+        lifecycle: cur.lifecycle,
+        conviction: cur.conviction,
+        previousLifecycle: prev.lifecycle,
+      });
+    }
+  }
+
+  // Ended rotations: in previous but not in current
+  for (const [id, prev] of previousMap) {
+    if (!currentMap.has(id)) {
+      changes.push({
+        type: "rotation_ended",
+        sectorName: prev.sectorName,
+        etf: prev.etf,
+        startDate: prev.startDate,
+        daysActive: prev.daysActive,
+        lifecycle: prev.lifecycle,
+        conviction: prev.conviction,
+      });
+    }
+  }
+
+  return changes;
+}
+
+const CHANGE_TYPE_ORDER: RotationChange["type"][] = [
+  "new_rotation",
+  "lifecycle_upgrade",
+  "lifecycle_warning",
+  "rotation_ended",
+];
+
+const CHANGE_TYPE_LABELS: Record<RotationChange["type"], { emoji: string; title: string }> = {
+  new_rotation:       { emoji: "\uD83C\uDD95", title: "New Rotation Started" },
+  lifecycle_upgrade:  { emoji: "\u2B06\uFE0F", title: "Lifecycle Upgrade" },
+  lifecycle_warning:  { emoji: "\u26A0\uFE0F", title: "Lifecycle Warning" },
+  rotation_ended:     { emoji: "\uD83D\uDD1A", title: "Rotation Ended" },
+};
+
+function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00Z"); // noon UTC to avoid timezone shift
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/**
+ * Format rotation tracker changes as a Telegram HTML message.
+ * Groups by change type, most actionable first.
+ */
+export function formatRotationChanges(changes: RotationChange[], calculatedAt: string): string {
+  if (changes.length === 0) return "";
+
+  const date = new Date(calculatedAt).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  const lines: string[] = [];
+  lines.push("\uD83D\uDD14 <b>Rotation Tracker Alert</b>");
+  lines.push(date);
+  lines.push("");
+
+  // Group by type
+  const grouped = new Map<RotationChange["type"], RotationChange[]>();
+  for (const c of changes) {
+    const arr = grouped.get(c.type) ?? [];
+    arr.push(c);
+    grouped.set(c.type, arr);
+  }
+
+  for (const type of CHANGE_TYPE_ORDER) {
+    const group = grouped.get(type);
+    if (!group || group.length === 0) continue;
+
+    const { emoji, title } = CHANGE_TYPE_LABELS[type];
+    lines.push(`${emoji} <b>${title}</b>`);
+
+    for (const c of group) {
+      if (type === "new_rotation") {
+        lines.push(`${c.sectorName} (${c.etf}): started ${formatShortDate(c.startDate)}`);
+        lines.push(`  Day ${c.daysActive} | ${c.lifecycle} | Conviction: ${c.conviction}`);
+      } else if (type === "lifecycle_upgrade" || type === "lifecycle_warning") {
+        lines.push(`${c.sectorName} (${c.etf}): ${c.previousLifecycle} \u2192 ${c.lifecycle}`);
+        lines.push(`  Day ${c.daysActive} | Started ${formatShortDate(c.startDate)} | Conviction: ${c.conviction}`);
+      } else {
+        // rotation_ended
+        lines.push(`${c.sectorName} (${c.etf}): ended after ${c.daysActive} days`);
+        lines.push(`  Started ${formatShortDate(c.startDate)}`);
+      }
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trim();
+}

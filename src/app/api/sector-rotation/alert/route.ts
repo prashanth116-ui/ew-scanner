@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
-import { detectTransitions, formatRotationAlert } from "@/lib/sector-rotation/transitions";
+import { calculateRotationTracker } from "@/lib/sector-rotation/rotation-tracker";
+import { computeLifecycleStage, computeConviction } from "@/lib/sector-rotation/rotation-helpers";
+import {
+  detectTransitions,
+  formatRotationAlert,
+  detectRotationChanges,
+  formatRotationChanges,
+} from "@/lib/sector-rotation/transitions";
+import type { RotationSnapshot } from "@/lib/sector-rotation/transitions";
 import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { logError } from "@/lib/error-logger";
 
@@ -22,6 +30,7 @@ const VALID_QUADRANTS = new Set(["LEADING", "WEAKENING", "LAGGING", "IMPROVING"]
 interface PreviousState {
   date: string;
   sectors: { sector: string; quadrant: string }[];
+  rotations?: RotationSnapshot[];  // optional for backward compat with existing KV data
 }
 
 const KV_KEY = "sector-rotation:previous";
@@ -111,6 +120,25 @@ export async function GET(request: NextRequest) {
 
     const transitions = detectTransitions(current, previousSnapshot);
 
+    // 3b. Fetch rotation tracker data and detect rotation changes
+    let currentRotations: RotationSnapshot[] = [];
+    let rotationChanges: ReturnType<typeof detectRotationChanges> = [];
+    try {
+      const rotationResult = await calculateRotationTracker();
+      currentRotations = rotationResult.activeRotations.map((r) => ({
+        sectorId: r.event.sectorId,
+        sectorName: r.event.sectorName,
+        etf: r.event.etf,
+        lifecycle: computeLifecycleStage(r.event),
+        conviction: computeConviction(r.event).level,
+        daysActive: r.event.daysActive,
+        startDate: r.event.startDate,
+      }));
+      rotationChanges = detectRotationChanges(currentRotations, previous?.rotations);
+    } catch (err) {
+      logError("sector-rotation/alert:rotation-tracker", err);
+    }
+
     // 4. Persist current state for next run (module cache + KV)
     cachedPrevious = {
       date: current.calculatedAt.slice(0, 10),
@@ -118,38 +146,58 @@ export async function GET(request: NextRequest) {
         sector: s.sector,
         quadrant: s.quadrant,
       })),
+      rotations: currentRotations,
     };
 
     // Non-blocking KV persist
     saveToKV(cachedPrevious).catch(() => {});
 
-    // 5. Send Telegram alert if transitions found
-    let sent = false;
-    if (transitions.length > 0) {
-      const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      const chatId = getTelegramChatId("SECTOR");
+    // 5. Send Telegram alerts
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = getTelegramChatId("SECTOR");
 
-      if (botToken && chatId) {
-        const message = formatRotationAlert(
-          transitions,
-          current.topStocksToWatch,
-          current.calculatedAt
-        );
+    // 5a. Quadrant transition alert (existing)
+    let quadrantSent = false;
+    if (transitions.length > 0 && botToken && chatId) {
+      const message = formatRotationAlert(
+        transitions,
+        current.topStocksToWatch,
+        current.calculatedAt
+      );
+      const result = await sendTelegramMessage(botToken, chatId, message);
+      quadrantSent = result.ok;
+      if (!result.ok) {
+        logError("sector-rotation/alert", new Error(result.error ?? "Telegram send failed"));
+      }
+    }
+
+    // 5b. Rotation tracker change alert (new)
+    let rotationSent = false;
+    if (rotationChanges.length > 0 && botToken && chatId) {
+      const message = formatRotationChanges(rotationChanges, current.calculatedAt);
+      if (message) {
         const result = await sendTelegramMessage(botToken, chatId, message);
-        sent = result.ok;
+        rotationSent = result.ok;
         if (!result.ok) {
-          logError("sector-rotation/alert", new Error(result.error ?? "Telegram send failed"));
+          logError("sector-rotation/alert:rotation-changes", new Error(result.error ?? "Telegram send failed"));
         }
       }
     }
 
     return NextResponse.json({
-      sent,
+      sent: quadrantSent || rotationSent,
       transitionCount: transitions.length,
       transitions: transitions.map((t) => ({
         sector: t.sector,
         from: t.from,
         to: t.to,
+      })),
+      rotationChangeCount: rotationChanges.length,
+      rotationChanges: rotationChanges.map((c) => ({
+        type: c.type,
+        sectorName: c.sectorName,
+        lifecycle: c.lifecycle,
+        previousLifecycle: c.previousLifecycle,
       })),
       currentQuadrants: cachedPrevious,
       stateSource,
