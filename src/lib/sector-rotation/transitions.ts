@@ -196,6 +196,12 @@ export interface RotationChange {
   quadrant: string;
   previousLifecycle?: string;
   topStocks?: RotationTopStock[];
+  // Rotation breadth: how many stocks qualify vs total in sector
+  breadth?: { qualified: number; total: number };
+  // Historical pattern stats for this sector
+  historicalAvgReturn?: number;
+  historicalAvgDuration?: number;
+  historicalCount?: number;
 }
 
 const LIFECYCLE_ORDER: Record<string, number> = {
@@ -406,6 +412,21 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
         lines.push(`  <b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
         lines.push(`    Started ${formatShortDate(c.startDate)} \u2022 Day ${c.daysActive}`);
         lines.push(`    ${qTag(c.quadrant)} \u2022 ${c.lifecycle} \u2022 ${c.conviction}`);
+      }
+
+      // Rotation breadth (non-ended only)
+      if (c.breadth && c.type !== "rotation_ended") {
+        const pct = c.breadth.total > 0
+          ? Math.round((c.breadth.qualified / c.breadth.total) * 100)
+          : 0;
+        const breadthLabel = pct >= 50 ? "Broad" : pct >= 25 ? "Moderate" : "Narrow";
+        lines.push(`    \uD83D\uDCCA ${c.breadth.qualified}/${c.breadth.total} stocks qualify (${breadthLabel})`);
+      }
+
+      // Historical pattern stats
+      if (c.historicalCount && c.historicalCount > 0 && c.historicalAvgReturn !== undefined) {
+        const sign = c.historicalAvgReturn >= 0 ? "+" : "";
+        lines.push(`    \uD83D\uDCC8 Avg ${sign}${c.historicalAvgReturn.toFixed(1)}% over ${c.historicalAvgDuration}d (${c.historicalCount} prior rotations)`);
       }
 
       // Show top stocks for Focus and Monitor tiers, grouped by category

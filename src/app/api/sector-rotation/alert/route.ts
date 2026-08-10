@@ -15,6 +15,7 @@ import {
   loadPreRunDaily,
   loadInflectionDaily,
   loadTransitionDaily,
+  loadInstitutionalDaily,
 } from "@/lib/supabase/persistence";
 
 /**
@@ -133,10 +134,11 @@ export async function GET(request: NextRequest) {
 
       // Load cross-scanner data for confluence detection
       const today = current.calculatedAt.slice(0, 10);
-      const [prerunData, inflectionData, transitionData] = await Promise.all([
+      const [prerunData, inflectionData, transitionData, institutionalData] = await Promise.all([
         loadPreRunDaily(today).catch(() => []),
         loadInflectionDaily(today).catch(() => []),
         loadTransitionDaily(today).catch(() => []),
+        loadInstitutionalDaily(today).catch(() => []),
       ]);
 
       // Build scanner hit maps: ticker → ScannerHit[]
@@ -161,6 +163,11 @@ export async function GET(request: NextRequest) {
           addHit(r.ticker, { scanner: "Trans", detail: r.alert_state });
         }
       }
+      for (const r of institutionalData) {
+        if (r.tier === "SHORTLIST" || r.tier === "WATCHLIST") {
+          addHit(r.ticker, { scanner: "Inst", detail: r.tier });
+        }
+      }
 
       // Build enriched stock lookup from sector rotation result
       const enrichedMap = new Map<string, { conviction: string; category: string }>();
@@ -175,6 +182,7 @@ export async function GET(request: NextRequest) {
       // Exclude: AVOID-classified stocks from enrichment
       // Sort: rsDelta descending (fastest RS acceleration change)
       const stockMap = new Map<string, RotationTopStock[]>();
+      const breadthMap = new Map<string, { qualified: number; total: number }>();
       type Stock = typeof rotationResult.activeRotations[0]["stocks"][0];
 
       const passesFilters = (s: Stock): boolean => {
@@ -252,6 +260,12 @@ export async function GET(request: NextRequest) {
           ...leaders.map((s) => toTopStock(s, "leading")),
         ].slice(0, 15);
         if (combined.length > 0) stockMap.set(r.event.sectorId, combined);
+
+        // Track rotation breadth: qualified (pass filters) vs total stocks
+        breadthMap.set(r.event.sectorId, {
+          qualified: eligible.length,
+          total: r.stocks.length,
+        });
       }
 
       currentRotations = rotationResult.activeRotations.map((r) => ({
@@ -265,6 +279,41 @@ export async function GET(request: NextRequest) {
         startDate: r.event.startDate,
       }));
       rotationChanges = detectRotationChanges(currentRotations, previous?.rotations, stockMap);
+
+      // Enrich rotation changes with breadth and historical pattern stats
+      const historyMap = new Map<string, { avgReturn: number; avgDuration: number; count: number }>();
+      for (const ps of rotationResult.patternStats) {
+        if (ps.totalRotations > 0) {
+          historyMap.set(ps.sectorId, {
+            avgReturn: ps.avgPerformancePct,
+            avgDuration: ps.avgDurationDays,
+            count: ps.totalRotations,
+          });
+        }
+      }
+
+      // Build sectorName → sectorId lookup for enrichment
+      const sectorIdLookup = new Map<string, string>();
+      for (const r of currentRotations) sectorIdLookup.set(r.sectorName, r.sectorId);
+      for (const r of (previous?.rotations ?? [])) sectorIdLookup.set(r.sectorName, r.sectorId);
+
+      for (const change of rotationChanges) {
+        const sectorId = sectorIdLookup.get(change.sectorName);
+        if (!sectorId) continue;
+
+        // Attach breadth (non-ended only)
+        if (change.type !== "rotation_ended") {
+          change.breadth = breadthMap.get(sectorId);
+        }
+
+        // Attach historical stats
+        const hist = historyMap.get(sectorId);
+        if (hist) {
+          change.historicalAvgReturn = hist.avgReturn;
+          change.historicalAvgDuration = hist.avgDuration;
+          change.historicalCount = hist.count;
+        }
+      }
     } catch (err) {
       logError("sector-rotation/alert:rotation-tracker", err);
     }
