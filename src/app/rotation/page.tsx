@@ -1339,7 +1339,30 @@ function StrategySummaryBar({
 
 // ── Section 3: Historical Timeline ──
 
-function HistoricalTimeline({ events }: { events: RotationEvent[] }) {
+type TimelineSortMode = "alpha" | "quadrant";
+
+const QUADRANT_ORDER: Record<string, number> = { LEADING: 0, IMPROVING: 1, WEAKENING: 2, LAGGING: 3 };
+const QUADRANT_COLORS: Record<string, { text: string; bg: string; border: string }> = {
+  LEADING: { text: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/30" },
+  IMPROVING: { text: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/30" },
+  WEAKENING: { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/30" },
+  LAGGING: { text: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30" },
+};
+
+function HistoricalTimeline({ events, activeRotations }: { events: RotationEvent[]; activeRotations?: ActiveRotationDetail[] }) {
+  const [sortMode, setSortMode] = useState<TimelineSortMode>("alpha");
+
+  // Build current quadrant map from active rotations
+  const quadrantMap = useMemo(() => {
+    const map = new Map<string, RRGQuadrant>();
+    if (activeRotations) {
+      for (const rot of activeRotations) {
+        map.set(rot.event.sectorId, rot.event.health.quadrant);
+      }
+    }
+    return map;
+  }, [activeRotations]);
+
   // Group events by sector
   const sectors = useMemo(() => {
     const map = new Map<string, { etf: string; name: string; events: RotationEvent[] }>();
@@ -1350,11 +1373,20 @@ function HistoricalTimeline({ events }: { events: RotationEvent[] }) {
       const entry = map.get(e.sectorId);
       if (entry) entry.events.push(e);
     }
-    // Sort by sector name
-    return Array.from(map.entries()).sort((a, b) =>
-      a[1].name.localeCompare(b[1].name)
-    );
-  }, [events]);
+    const arr = Array.from(map.entries());
+    if (sortMode === "quadrant") {
+      arr.sort((a, b) => {
+        const qa = quadrantMap.get(a[0]);
+        const qb = quadrantMap.get(b[0]);
+        const oa = qa ? QUADRANT_ORDER[qa] : 99;
+        const ob = qb ? QUADRANT_ORDER[qb] : 99;
+        return oa - ob || a[1].name.localeCompare(b[1].name);
+      });
+    } else {
+      arr.sort((a, b) => a[1].name.localeCompare(b[1].name));
+    }
+    return arr;
+  }, [events, sortMode, quadrantMap]);
 
   if (sectors.length === 0) {
     return (
@@ -1393,8 +1425,54 @@ function HistoricalTimeline({ events }: { events: RotationEvent[] }) {
     });
   }
 
+  // Build quadrant group dividers for SVG rendering
+  const quadrantDividers = useMemo(() => {
+    if (sortMode !== "quadrant") return [];
+    const dividers: { y: number; label: string; color: string }[] = [];
+    let lastQuadrant: string | undefined;
+    for (let i = 0; i < sectors.length; i++) {
+      const q = quadrantMap.get(sectors[i][0]) ?? "NONE";
+      if (q !== lastQuadrant) {
+        dividers.push({
+          y: TOP + i * 32 - 4,
+          label: q === "NONE" ? "No Active Rotation" : q,
+          color: QUADRANT_COLORS[q]?.text ?? "text-[#555]",
+        });
+        lastQuadrant = q;
+      }
+    }
+    return dividers;
+  }, [sectors, sortMode, quadrantMap]);
+
   return (
-    <div className="overflow-x-auto">
+    <div>
+      {/* Sort toggle */}
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[10px] text-[#555] uppercase tracking-wider">Sort:</span>
+        <button
+          type="button"
+          onClick={() => setSortMode("alpha")}
+          className={`rounded border px-2 py-0.5 text-[10px] transition-colors ${
+            sortMode === "alpha"
+              ? "border-[#5ba3e6]/30 bg-[#5ba3e6]/10 text-[#5ba3e6]"
+              : "border-[#333] bg-[#1a1a1a] text-[#888] hover:text-white"
+          }`}
+        >
+          A-Z
+        </button>
+        <button
+          type="button"
+          onClick={() => setSortMode("quadrant")}
+          className={`rounded border px-2 py-0.5 text-[10px] transition-colors ${
+            sortMode === "quadrant"
+              ? "border-[#5ba3e6]/30 bg-[#5ba3e6]/10 text-[#5ba3e6]"
+              : "border-[#333] bg-[#1a1a1a] text-[#888] hover:text-white"
+          }`}
+        >
+          By Quadrant
+        </button>
+      </div>
+      <div className="overflow-x-auto">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full min-w-[600px]"
@@ -1424,12 +1502,30 @@ function HistoricalTimeline({ events }: { events: RotationEvent[] }) {
           </g>
         ))}
 
+        {/* Quadrant divider labels (when sorting by quadrant) */}
+        {quadrantDividers.map((d, i) => {
+          const svgColor = d.label === "LEADING" ? "#22c55e" : d.label === "IMPROVING" ? "#06b6d4" : d.label === "WEAKENING" ? "#f59e0b" : d.label === "LAGGING" ? "#ef4444" : "#555";
+          return (
+            <g key={i}>
+              <line x1={LEFT} y1={d.y} x2={W - RIGHT} y2={d.y} stroke={svgColor} strokeWidth={0.5} opacity={0.4} />
+            </g>
+          );
+        })}
+
         {/* Sector rows */}
         {sectors.map(([sectorId, { etf, name, events: sectorEvents }], rowIdx) => {
           const y = TOP + rowIdx * 32;
+          const quadrant = quadrantMap.get(sectorId);
+          const qDotColor = quadrant === "LEADING" ? "#22c55e" : quadrant === "IMPROVING" ? "#06b6d4" : quadrant === "WEAKENING" ? "#f59e0b" : quadrant === "LAGGING" ? "#ef4444" : undefined;
 
           return (
             <g key={sectorId}>
+              {/* Quadrant dot (when sorting by quadrant) */}
+              {sortMode === "quadrant" && qDotColor && (
+                <circle cx={4} cy={y + BAR_H / 2} r={3} fill={qDotColor} opacity={0.7}>
+                  <title>{quadrant}</title>
+                </circle>
+              )}
               {/* Sector label */}
               <text
                 x={LEFT - 5}
@@ -1535,6 +1631,7 @@ function HistoricalTimeline({ events }: { events: RotationEvent[] }) {
           Today
         </text>
       </svg>
+    </div>
     </div>
   );
 }
@@ -2279,7 +2376,7 @@ export default function RotationTrackerPage() {
             onToggle={togglePanel}
           >
             <div className="rounded-lg border border-[#2a2a2a] bg-[#111] p-4">
-              <HistoricalTimeline events={data.allEvents} />
+              <HistoricalTimeline events={data.allEvents} activeRotations={data.activeRotations} />
               <div className="mt-2 flex items-center justify-center gap-4 text-xs text-[#666]">
                 <span className="flex items-center gap-1">
                   <span className="inline-block h-2 w-6 rounded bg-green-500/50" />{" "}
