@@ -284,13 +284,13 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | `src/lib/sector-rotation/sector-rotation.ts` | Main scoring engine — `calculateSectorRotation()` |
 | `src/lib/sector-rotation/stock-enrichment.ts` | Stock quality gates, classification (LEADER/CATCH_UP/TURNAROUND/AVOID), phase (P1-P4), conviction scoring, null-data warnings |
 | `src/lib/sector-rotation/rotation-tracker.ts` | Active rotation detection — inflection-point detector + slow-burn detector, quadrant guard, rolling volume trend, config-driven SMA periods/batch sizes/cap, stock quality gates (price, dollarVol, SCAN_EXCLUSIONS) |
-| `src/lib/sector-rotation/rotation-helpers.ts` | Lifecycle stage (health override for long-duration rotations, soft exhaustion zone), conviction level (trailing 5-day window signal trend), action signals. All lifecycle constants imported from config (no local duplicates). |
+| `src/lib/sector-rotation/rotation-helpers.ts` | Lifecycle stage (health override for long-duration rotations, soft exhaustion zone), conviction level (trailing 5-day window signal trend), action signals, regime alignment. `REGIME_SECTOR_DISPLAY_MAP` maps all GICS parents to sub-sector display names (e.g., Technology → Semiconductors, Software & Cloud, AI & Robotics). Cross-asset/leadership sectors intentionally unmapped (return "neutral"). `signalHistory` typed as optional to match `?? []` usage. All lifecycle constants imported from config (no local duplicates). |
 | `src/lib/sector-rotation/regime.ts` | Macro regime classification (RISK_ON/OFF/INFLATIONARY/MIXED) with adaptive VIX bounds. All regimes have favored/avoid sectors (MIXED favors Health Care, Financials). |
 | `src/lib/sector-rotation/brief.ts` | Market posture (AGGRESSIVE/SELECTIVE/DEFENSIVE/CASH), sector tiers, risk flags. `computeMarketPosture()` and `computeRiskFlags()` accept optional pre-computed `LeadershipHealth` to avoid duplicate computation. SELECTIVE posture reasoning handles 3 cases: rotations-only, sectors-only, and both qualifying. |
 | `src/lib/sector-rotation/leadership-health.ts` | Leadership Health Score (0-100) from MAGS/QQQ/IWM/ARKK |
 | `src/lib/sector-rotation/math.ts` | Momentum scoring, RS ratios (Mansfield with `isFinite` guard), RRG trail (lookback margin 20), CMF, OBV slope |
 | `src/lib/sector-rotation/types.ts` | Core types: `SectorRotationScore`, `EnrichedStock`, `SectorRotationResult` |
-| `src/lib/sector-rotation/rotation-types.ts` | Rotation tracker types: `RotationEvent`, `ActiveRotationDetail` |
+| `src/lib/sector-rotation/rotation-types.ts` | Rotation tracker types: `RotationEvent` (signalHistory optional), `ActiveRotationDetail` |
 | `src/lib/sector-rotation/sub-sector-constants.ts` | Sub-sector → parent GICS mapping, divergence threshold |
 | `src/data/sector-universe.ts` | ETF definitions, category assignments, constituent stocks |
 
@@ -301,7 +301,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias, leadership health, sector tiers, risk flags. Stale snapshot guard: ignores previous snapshots older than 3 days. |
 | `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks + Rotation Signals panel (early detection timing) + INF cross-reference badges |
 | `/sectors/crypto` | `src/app/sectors/crypto/page.tsx` | Crypto rotation dashboard |
-| `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables. Phase classification uses `isTurnaroundCandidate` flag (aligned with `categorizeStock()`). |
+| `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables. Phase classification uses `isTurnaroundCandidate` flag (aligned with `categorizeStock()`). Sparkline uses average-per-bin downsampling (50 max points). Exit warnings require non-overlapping 3-day windows (min 6 history entries for short path, 10 for full 5v5). StrategySummaryBar uses `sortOrder`-based stock classification (not label strings). Historical projection shows "—" when avg return is 0%. |
 
 **API Routes:**
 | Route | Purpose |
@@ -506,6 +506,21 @@ Null-data tracking: `marketCap` null is now rejected (when `REJECT_NULL_MARKET_C
 | 6 | IMPROVING (accel <= 0) | WATCH |
 | 7 | LAGGING + accel > 0 + composite >= watch threshold | WATCH |
 | 8 | Default | AVOID |
+
+### Regime Sector Alignment
+`isRegimeAligned()` in `rotation-helpers.ts` maps sector display names to their GICS parent via `REGIME_SECTOR_DISPLAY_MAP`. The regime's `favoredSectors`/`avoidSectors` use GICS parent names (e.g., "Technology"), so sub-sectors must be mapped to inherit alignment.
+
+**Sub-sector mappings:**
+
+| GICS Parent | Mapped Sub-Sectors |
+|---|---|
+| Technology | Semiconductors, Software & Cloud, AI & Robotics |
+| Health Care | Biotech |
+| Consumer Discretionary | Homebuilders, Retail |
+| Financials | Regional Banks |
+| Industrials | Transports, Aerospace & Defense, Space & Defense Innovation |
+
+**Intentionally unmapped:** Cross-asset (Gold, Treasuries 20Y+, High Yield Corp, Emerging Markets, US Dollar) and leadership baskets (Magnificent 7, Nasdaq 100, Russell 2000, ARK Innovation) always return "neutral" — regime opinions are equity-sector focused.
 
 ### Rotation Signals Panel (`/sectors/picks`)
 The Rotation Signals panel on the picks page shows sector rotations at inflection points with timing labels. Replaces the previous "Entry Signals" panel which applied 4 confirmation gates (action=ENTER/ADD, CMF > 0, accel > 0, quality stocks) that delayed signals 10-15 days.
