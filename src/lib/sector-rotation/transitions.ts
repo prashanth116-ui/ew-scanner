@@ -393,14 +393,21 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
       }
 
       // Show top stocks for Focus and Monitor tiers
+      // Turnarounds first (below SMA50, turning — most upside), then leaders (confirmation)
       if (tier !== "exit" && c.topStocks && c.topStocks.length > 0) {
-        const stockLines = c.topStocks.map((s) => {
+        const fmt = (s: RotationTopStock) => {
           const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
-          const vol = s.volumeVsAvg >= 1.5 ? " \uD83D\uDD25" : ""; // fire for high volume
-          const tag = s.isTurnaroundCandidate ? " T" : s.aboveSma50 ? " L" : "";
-          return `${s.symbol}(${perf}${tag}${vol})`;
-        });
-        lines.push(`    \u2192 ${stockLines.join(", ")}`);
+          const vol = s.volumeVsAvg >= 1.5 ? "\uD83D\uDD25" : "";
+          return `${s.symbol} ${perf} ${vol}`.trim();
+        };
+        const turnarounds = c.topStocks.filter((s) => !s.aboveSma50);
+        const leaders = c.topStocks.filter((s) => s.aboveSma50);
+        if (turnarounds.length > 0) {
+          lines.push(`    \uD83D\uDD04 Entry: ${turnarounds.map(fmt).join(", ")}`);
+        }
+        if (leaders.length > 0) {
+          lines.push(`    \u2705 Leading: ${leaders.map(fmt).join(", ")}`);
+        }
       }
     }
     tierIndex++;

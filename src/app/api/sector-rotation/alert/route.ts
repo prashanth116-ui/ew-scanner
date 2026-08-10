@@ -126,22 +126,31 @@ export async function GET(request: NextRequest) {
     try {
       const rotationResult = await calculateRotationTracker();
 
-      // Build stock map: sectorId → top 3 stocks (above SMA50 + positive RS, sorted by RS accel)
+      // Build stock map: sectorId → top 5 stocks
+      // Prioritize turnaround candidates (below SMA50, turning) — most upside in early rotations
+      // Then leaders (above SMA50, strong) — confirm rotation is working
       const stockMap = new Map<string, RotationTopStock[]>();
+      const toTopStock = (s: typeof rotationResult.activeRotations[0]["stocks"][0]): RotationTopStock => ({
+        symbol: s.symbol,
+        performancePct: s.performancePct,
+        rsAcceleration: s.rsAcceleration,
+        aboveSma50: s.aboveSma50,
+        volumeVsAvg: s.volumeVsAvg,
+        isTurnaroundCandidate: s.isTurnaroundCandidate,
+      });
       for (const r of rotationResult.activeRotations) {
-        const top = r.stocks
-          .filter((s) => s.aboveSma50 && s.rsAcceleration > 0)
+        const turnarounds = r.stocks
+          .filter((s) => !s.aboveSma50 && s.rsAcceleration > 0 && s.volumeVsAvg >= 1.0)
           .sort((a, b) => b.rsAcceleration - a.rsAcceleration)
           .slice(0, 3)
-          .map((s) => ({
-            symbol: s.symbol,
-            performancePct: s.performancePct,
-            rsAcceleration: s.rsAcceleration,
-            aboveSma50: s.aboveSma50,
-            volumeVsAvg: s.volumeVsAvg,
-            isTurnaroundCandidate: s.isTurnaroundCandidate,
-          }));
-        if (top.length > 0) stockMap.set(r.event.sectorId, top);
+          .map(toTopStock);
+        const leaders = r.stocks
+          .filter((s) => s.aboveSma50 && s.rsAcceleration > 0)
+          .sort((a, b) => b.rsAcceleration - a.rsAcceleration)
+          .slice(0, 2)
+          .map(toTopStock);
+        const combined = [...turnarounds, ...leaders].slice(0, 5);
+        if (combined.length > 0) stockMap.set(r.event.sectorId, combined);
       }
 
       currentRotations = rotationResult.activeRotations.map((r) => ({
