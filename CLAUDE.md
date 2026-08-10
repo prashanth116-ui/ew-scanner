@@ -58,7 +58,7 @@ npm run build             # Production build
 | UTC | ET | Days | Route | Notes |
 |-----|-----|------|-------|-------|
 | 00:00 | 8:00 PM | Tue-Sat | `/api/discovery/cron` | Trending ticker discovery (CoinGecko + Yahoo) |
-| 22:00 | 6:00 PM | Mon-Fri | `/api/sector-rotation/alert` | Sector quadrant transition alerts |
+| 22:00 | 6:00 PM | Mon-Fri | `/api/sector-rotation/alert` | Sector quadrant transition + rotation tracker change alerts |
 | 01:15 | 9:15 PM | Tue-Sat | `/api/catalyst/cron` | AI catalyst/spike detection |
 | 01:45 | 9:45 PM | Tue-Sat | `/api/inflection/cron/daily` | Inflection scan |
 | 01:55 | 9:55 PM | Tue-Sat | `/api/transition/cron/daily` | Transition scan (market structure) |
@@ -307,8 +307,37 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | Route | Purpose |
 |-------|---------|
 | `/api/sector-rotation` | Main data endpoint — returns all 31 ETF scores, leadership baskets, regime |
-| `/api/sector-rotation/alert` | Sector snapshot persistence for alerting |
+| `/api/sector-rotation/alert` | Sector quadrant transitions + rotation tracker change alerts (2 Telegram messages) |
 | `/api/premarket` | Pre-market futures, internals, trading bias, sector checklist |
+
+### Sector Rotation Alert Cron
+The `/api/sector-rotation/alert` cron (22:00 UTC weekdays) sends up to 2 Telegram messages to `TELEGRAM_CHAT_ID_SECTOR`:
+
+**Message 1 — Quadrant Transitions (existing):** Detects when sectors change RRG quadrant (e.g., LAGGING → IMPROVING). Uses `detectTransitions()` comparing current vs previous `SectorRotationResult`. Grouped by category: Rotation Starting, Breakout Confirmed, Momentum Fading, Rotation Out.
+
+**Message 2 — Rotation Tracker Changes (new):** Detects changes in the rotation tracker's active rotations. Uses `calculateRotationTracker()` + `detectRotationChanges()` comparing current vs previous `RotationSnapshot[]`.
+
+**Change types detected:**
+
+| Type | Condition | Actionability |
+|------|-----------|---------------|
+| `new_rotation` | sectorId in current but not in previous | High — position early |
+| `rotation_ended` | sectorId in previous but not in current | Medium — exit/reduce |
+| `lifecycle_upgrade` | Lifecycle stage improved (e.g., EARLY → MATURING) | Medium — add on confirmation |
+| `lifecycle_warning` | Lifecycle stage worsened (e.g., MATURING → LATE) | High — tighten stops |
+
+**Lifecycle ordering:** EARLY (0) → MATURING (1) → LATE (2) → EXHAUSTING (3). Current < previous = upgrade, current > previous = warning.
+
+**State persistence:** `PreviousState` includes optional `rotations?: RotationSnapshot[]` field (backward-compatible). Persisted via 3-tier system: module cache → Vercel KV → env var. Each `RotationSnapshot` stores `sectorId`, `sectorName`, `etf`, `lifecycle`, `conviction`, `daysActive`, `startDate`.
+
+**Resilience:** `calculateRotationTracker()` is wrapped in try/catch — if it fails, quadrant transition alerts still fire. Rotation tracker errors logged via `logError("sector-rotation/alert:rotation-tracker")`.
+
+**Key files:**
+
+| File | Purpose |
+|------|---------|
+| `src/app/api/sector-rotation/alert/route.ts` | Cron route — calls both `calculateSectorRotation()` and `calculateRotationTracker()` |
+| `src/lib/sector-rotation/transitions.ts` | `detectRotationChanges()`, `formatRotationChanges()`, `RotationSnapshot`, `RotationChange` types |
 
 ### Pre-Market Trading Bias Engine
 Computes structured trading bias from equity futures, VIX, and market internals.
