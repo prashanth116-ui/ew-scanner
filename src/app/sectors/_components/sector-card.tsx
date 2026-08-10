@@ -66,7 +66,7 @@ function getConvictionScore(s: StockInSector): number {
   if ((s.volumeVsAvg ?? 0) >= 1.5) score += 2;
   else if ((s.volumeVsAvg ?? 0) >= 1.2) score += 1;
   if (s.rsImproving) score += 1;
-  if (s.verdict === "KEEP" || s.verdict === "PRIORITY BUY") score += 2;
+  if (s.verdict === "KEEP" || s.verdict === "PRIORITY") score += 2;
   return score;
 }
 

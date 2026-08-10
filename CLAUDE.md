@@ -297,7 +297,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 **UI Pages:**
 | Route | File | Purpose |
 |-------|------|---------|
-| `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart (tooltip 155px), sector cards (stable sort by conviction → rsAccel → ticker, correct verdict strings KEEP/PRIORITY BUY, WATCH subcase why text), leadership baskets, sub-sectors, cross-asset. Summary strip: improving / stable / declining counts. All sort modes have alphabetical tiebreakers. Rotation tracker polls with visibilitychange listener. |
+| `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart (tooltip 155px), sector cards (stable sort by conviction → rsAccel → ticker, correct verdict strings KEEP/PRIORITY, WATCH subcase why text), leadership baskets, sub-sectors, cross-asset. Summary strip: improving / stable / declining counts. All sort modes have alphabetical tiebreakers. Rotation tracker polls with visibilitychange listener. |
 | `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias (memoized), leadership health (computed once, shared with posture + riskFlags), sector tiers, risk flags. Stale snapshot guard: ignores previous snapshots older than 3 days. All date comparisons use ET timezone (not UTC). |
 | `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks (9 filters incl. AVOID category, null-safe SMA50) + Rotation Signals panel (early detection timing) + INF/TRANS cross-reference badges |
 | `/sectors/crypto` | `src/app/sectors/crypto/page.tsx` | Crypto rotation dashboard |
@@ -596,7 +596,7 @@ Each sector card shows composite score ring, quadrant badge, trading action, CMF
 | volumeVsAvg >= 1.5 | 2 | High volume |
 | volumeVsAvg >= 1.2 | 1 | Above-average volume |
 | rsImproving | 1 | RS direction improving |
-| verdict KEEP or PRIORITY BUY | 2 | PreRun verdict match |
+| verdict KEEP or PRIORITY | 2 | PreRun verdict match |
 
 Conviction labels: HIGH >= 7, MED >= 4, LOW < 4.
 
