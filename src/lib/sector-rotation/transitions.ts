@@ -349,11 +349,13 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
   lines.push("\uD83D\uDD14 <b>Rotation Tracker Alert</b>");
   lines.push(date);
 
+  let tierIndex = 0;
   for (const tier of TIER_ORDER) {
     const group = tierGroups.get(tier);
     if (!group || group.length === 0) continue;
 
     const { emoji, title } = TIER_LABELS[tier];
+    if (tierIndex > 0) lines.push("\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
     lines.push("");
     lines.push(`${emoji} <b>${title}</b>`);
 
@@ -362,19 +364,20 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
       lines.push("");
 
       if (c.type === "rotation_ended") {
-        lines.push(`<b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
-        lines.push(`  Ended after ${c.daysActive} days`);
-        lines.push(`  Started ${formatShortDate(c.startDate)} \u2022 Was ${c.lifecycle}`);
+        lines.push(`  <b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
+        lines.push(`    Ended after ${c.daysActive} days`);
+        lines.push(`    Started ${formatShortDate(c.startDate)} \u2022 Was ${c.lifecycle}`);
       } else if (c.type === "lifecycle_upgrade" || c.type === "lifecycle_warning") {
-        lines.push(`<b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
-        lines.push(`  ${c.previousLifecycle} \u2192 ${c.lifecycle}`);
-        lines.push(`  ${qTag(c.quadrant)} \u2022 Day ${c.daysActive} \u2022 ${c.conviction}`);
+        lines.push(`  <b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
+        lines.push(`    ${c.previousLifecycle} \u2192 ${c.lifecycle}`);
+        lines.push(`    ${qTag(c.quadrant)} \u2022 Day ${c.daysActive} \u2022 ${c.conviction}`);
       } else {
-        lines.push(`<b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
-        lines.push(`  Started ${formatShortDate(c.startDate)} \u2022 Day ${c.daysActive}`);
-        lines.push(`  ${qTag(c.quadrant)} \u2022 ${c.lifecycle} \u2022 ${c.conviction}`);
+        lines.push(`  <b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
+        lines.push(`    Started ${formatShortDate(c.startDate)} \u2022 Day ${c.daysActive}`);
+        lines.push(`    ${qTag(c.quadrant)} \u2022 ${c.lifecycle} \u2022 ${c.conviction}`);
       }
     }
+    tierIndex++;
   }
 
   return lines.join("\n").trim();
