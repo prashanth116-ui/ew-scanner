@@ -107,6 +107,20 @@ export const ROTATION = {
   DELAYED_TIMING_DAYS: 15,
   /** Minimum avg signalCount across history for sustained rotation */
   MIN_AVG_SIGNAL_COUNT: 1.0,
+  /** Rolling window for volume trend check (days) */
+  VOLUME_TREND_LOOKBACK: 5,
+  /** Minimum spike days within lookback to fire volume signal */
+  VOLUME_TREND_MIN_DAYS: 2,
+  /** Volume SMA period for volume surge calculation */
+  VOLUME_SMA_PERIOD: 20,
+  /** Price SMA period for price breakout calculation */
+  PRICE_SMA_PERIOD: 50,
+  /** Min consecutive strong-signal days for slow-burn detection */
+  SLOW_BURN_MIN_DAYS: 10,
+  /** Days to suppress RS golden cross when RRG quadrant disagrees */
+  QUADRANT_GUARD_DAYS: 5,
+  /** Max active rotations returned */
+  MAX_ACTIVE_ROTATIONS: 15,
 } as const;
 
 // ── Stock Quality Gates ──

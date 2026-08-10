@@ -126,7 +126,7 @@ interface DailySignal {
   signals: RotationSignalState;
 }
 
-function computeDailySignals(aligned: AlignedBar[]): DailySignal[] {
+function computeDailySignals(aligned: AlignedBar[], currentQuadrant?: RRGQuadrant): DailySignal[] {
   if (aligned.length < ROTATION.MIN_ALIGNED_BARS) return [];
 
   // Compute RS ratio series (ETF close / SPY close)
@@ -137,8 +137,8 @@ function computeDailySignals(aligned: AlignedBar[]): DailySignal[] {
   // Compute SMAs
   const rsSma10 = computeSMASeries(rsRatios, ROTATION.RS_SMA_SHORT);
   const rsSma30 = computeSMASeries(rsRatios, ROTATION.RS_SMA_LONG);
-  const volumeSma20 = computeSMASeries(volumes, 20);
-  const closeSma50 = computeSMASeries(closes, 50);
+  const volumeSma20 = computeSMASeries(volumes, ROTATION.VOLUME_SMA_PERIOD);
+  const closeSma50 = computeSMASeries(closes, ROTATION.PRICE_SMA_PERIOD);
 
   const results: DailySignal[] = [];
   for (let i = 0; i < aligned.length; i++) {
@@ -153,7 +153,18 @@ function computeDailySignals(aligned: AlignedBar[]): DailySignal[] {
     }
 
     const rsGoldenCross = rs10 > rs30;
-    const volumeSurge = volAvg > 0 && volumes[i] > ROTATION.VOLUME_SURGE * volAvg;
+
+    // Rolling volume trend: fire if enough recent days had volume spikes
+    let volumeTrendCount = 0;
+    const vtLookback = Math.min(ROTATION.VOLUME_TREND_LOOKBACK, i + 1);
+    for (let k = i; k > i - vtLookback; k--) {
+      if (volumeSma20[k] !== null && volumeSma20[k]! > 0
+          && volumes[k] > ROTATION.VOLUME_SURGE * volumeSma20[k]!) {
+        volumeTrendCount++;
+      }
+    }
+    const volumeSurge = volumeTrendCount >= ROTATION.VOLUME_TREND_MIN_DAYS;
+
     const priceAbove50MA = closes[i] > sma50;
 
     const signalCount =
@@ -166,6 +177,23 @@ function computeDailySignals(aligned: AlignedBar[]): DailySignal[] {
       close: closes[i],
       signals: { rsGoldenCross, volumeSurge, priceAbove50MA, signalCount },
     });
+  }
+
+  // Quadrant guard: when RRG says WEAKENING/LAGGING, suppress RS golden cross
+  // on the most recent N days to prevent tracker from counting RS strength
+  // that contradicts the EMA-smoothed RRG classification.
+  if (
+    currentQuadrant &&
+    (currentQuadrant === "WEAKENING" || currentQuadrant === "LAGGING") &&
+    results.length > 0
+  ) {
+    const guardStart = Math.max(0, results.length - ROTATION.QUADRANT_GUARD_DAYS);
+    for (let g = guardStart; g < results.length; g++) {
+      if (results[g].signals.rsGoldenCross) {
+        results[g].signals.rsGoldenCross = false;
+        results[g].signals.signalCount--;
+      }
+    }
   }
 
   return results;
@@ -237,6 +265,54 @@ function detectRotationEvents(
   }
 
   return events;
+}
+
+/**
+ * Detect slow-burn rotations: sectors with persistent signal strength
+ * that the inflection-point detector misses because they already had
+ * 2+ signals daily before the lookback window.
+ *
+ * Fires only when:
+ *   1. No active (endDate === null) inflection-detected rotation exists
+ *   2. Quadrant is IMPROVING or LEADING
+ *   3. At least one health signal positive (acceleration > 0 OR cmf20 > 0)
+ *   4. Most recent SLOW_BURN_MIN_DAYS daily signals all have signalCount >= SIGNAL_START
+ */
+function detectSlowBurnRotation(
+  sectorId: string,
+  sectorName: string,
+  etf: string,
+  dailySignals: DailySignal[],
+  health: RotationHealthSignals,
+  existingEvents: RotationEvent[]
+): RotationEvent | null {
+  // Skip if an active inflection-detected rotation already exists
+  if (existingEvents.some((e) => e.endDate === null)) return null;
+
+  // Quadrant must be IMPROVING or LEADING
+  if (health.quadrant !== "IMPROVING" && health.quadrant !== "LEADING") return null;
+
+  // At least one health signal must be positive
+  if (health.acceleration <= 0 && health.cmf20 <= 0) return null;
+
+  // Check that the most recent N days all have strong signals
+  const minDays = ROTATION.SLOW_BURN_MIN_DAYS;
+  if (dailySignals.length < minDays) return null;
+
+  for (let i = dailySignals.length - minDays; i < dailySignals.length; i++) {
+    if (dailySignals[i].signals.signalCount < ROTATION.SIGNAL_START) return null;
+  }
+
+  // Walk backward to find the start of the current persistent-strength streak
+  let streakStart = dailySignals.length - minDays;
+  while (
+    streakStart > 0 &&
+    dailySignals[streakStart - 1].signals.signalCount >= ROTATION.SIGNAL_START
+  ) {
+    streakStart--;
+  }
+
+  return buildEvent(sectorId, sectorName, etf, dailySignals, streakStart, null, health);
 }
 
 function buildEvent(
@@ -598,12 +674,12 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
 
     if (aligned.length < ROTATION.MIN_ALIGNED_BARS) continue;
 
-    // Compute daily signals
-    const dailySignals = computeDailySignals(aligned);
-    if (dailySignals.length < 6) continue;
-
-    // Compute health signals (acceleration, CMF, RRG quadrant)
+    // Compute health first so quadrant is available for daily signal guard
     const health = computeHealthSignals(aligned);
+
+    // Compute daily signals (quadrant guard suppresses RS golden cross when RRG disagrees)
+    const dailySignals = computeDailySignals(aligned, health.quadrant);
+    if (dailySignals.length < 6) continue;
 
     // Detect rotation events
     const events = detectRotationEvents(
@@ -614,17 +690,24 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
       health
     );
 
+    // Slow-burn detection: catch sectors with persistent strength that
+    // the inflection-point detector misses (already have 2+ signals daily)
+    const slowBurn = detectSlowBurnRotation(
+      sector.id, sector.displayName, sector.etf, dailySignals, health, events
+    );
+    if (slowBurn) events.push(slowBurn);
+
     allEvents.push(...events);
     patternStats.push(
       computePatternStats(sector.id, sector.displayName, sector.etf, events)
     );
   }
 
-  // 4. Identify active rotations (still ongoing) — pick top 8 by signal strength
+  // 4. Identify active rotations (still ongoing) — pick top N by signal strength
   const activeEvents = allEvents
     .filter((e) => e.endDate === null)
     .sort((a, b) => b.signals.signalCount - a.signals.signalCount || b.etfPerformancePct - a.etfPerformancePct)
-    .slice(0, 8);
+    .slice(0, ROTATION.MAX_ACTIVE_ROTATIONS);
 
   // 5. Fetch stock-level performance for active rotations
   // First, collect all stock symbols we need quotes for (skip sectors with no stocks)
