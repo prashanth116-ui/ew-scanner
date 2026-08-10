@@ -22,15 +22,16 @@ import { CollapsiblePanel } from "./shared";
 
 // ── Timing Classification ──
 
-type SignalTiming = "EARLY" | "CONFIRMED" | "DELAYED";
+type SignalTiming = "EARLY" | "CONFIRMED" | "DELAYED" | "MATURE";
 
 const TIMING_STYLE: Record<SignalTiming, { bg: string; border: string; text: string; label: string }> = {
   EARLY: { bg: "bg-green-500/10", border: "border-green-500/30", text: "text-green-400", label: "Early" },
   CONFIRMED: { bg: "bg-cyan-500/10", border: "border-cyan-500/30", text: "text-cyan-400", label: "Confirmed" },
   DELAYED: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-400", label: "Delayed" },
+  MATURE: { bg: "bg-purple-500/10", border: "border-purple-500/30", text: "text-purple-400", label: "Mature" },
 };
 
-const TIMING_RANK: Record<SignalTiming, number> = { EARLY: 0, CONFIRMED: 1, DELAYED: 2 };
+const TIMING_RANK: Record<SignalTiming, number> = { EARLY: 0, CONFIRMED: 1, DELAYED: 2, MATURE: 3 };
 
 function classifyTiming(daysActive: number, health: { acceleration: number; cmf20: number }): SignalTiming {
   const hasHealthConfirmation = health.cmf20 > 0 && health.acceleration > 0;
@@ -38,13 +39,23 @@ function classifyTiming(daysActive: number, health: { acceleration: number; cmf2
   if (daysActive <= ROTATION.EARLY_TIMING_DAYS) return "EARLY";
   if (daysActive <= ROTATION.EARLY_TIMING_DAYS + 3 && !hasHealthConfirmation) return "EARLY";
   if (daysActive <= ROTATION.DELAYED_TIMING_DAYS) return "CONFIRMED";
-  return "DELAYED";
+  if (daysActive <= 30) return "DELAYED";
+  return "MATURE";
 }
 
+/** Use trailing 20-day window (or full history if shorter) for sustained signal check. */
 function isSignalSustained(signalHistory: { date: string; signalCount: number; close: number }[]): boolean {
   if (signalHistory.length < 3) return false;
-  const avgSignal = signalHistory.reduce((sum, h) => sum + h.signalCount, 0) / signalHistory.length;
+  const window = signalHistory.slice(-20);
+  const avgSignal = window.reduce((sum, h) => sum + h.signalCount, 0) / window.length;
   return avgSignal >= ROTATION.MIN_AVG_SIGNAL_COUNT;
+}
+
+/** Trailing 20-day average signal count for display. */
+function trailingAvgSignalCount(signalHistory: { date: string; signalCount: number; close: number }[]): number {
+  if (signalHistory.length === 0) return 0;
+  const window = signalHistory.slice(-20);
+  return window.reduce((sum, h) => sum + h.signalCount, 0) / window.length;
 }
 
 // ── Types ──
@@ -150,7 +161,7 @@ export function RotationEntrySignals({
       map.set(e.timing, arr);
     }
     const ordered: { timing: SignalTiming; items: EntrySignalSector[] }[] = [];
-    for (const t of ["EARLY", "CONFIRMED", "DELAYED"] as SignalTiming[]) {
+    for (const t of ["EARLY", "CONFIRMED", "DELAYED", "MATURE"] as SignalTiming[]) {
       const items = map.get(t);
       if (items && items.length > 0) ordered.push({ timing: t, items });
     }
@@ -219,9 +230,7 @@ function SignalCard({ entry, sectors, inflectionMap, transitionMap }: { entry: E
   const style = TIMING_STYLE[timing];
 
   const signalHistory = event.signalHistory ?? [];
-  const avgSignalCount = signalHistory.length > 0
-    ? signalHistory.reduce((sum, h) => sum + h.signalCount, 0) / signalHistory.length
-    : 0;
+  const avgSignalCount = trailingAvgSignalCount(signalHistory);
 
   // Health indicator colors
   const cmfColor = health.cmf20 > 0 ? "bg-green-500/10 text-green-400 border-green-500/30"

@@ -251,8 +251,27 @@ function SignalSparkline({ history }: { history: { date: string; signalCount: nu
   const H = 24;
   const pad = 2;
   const maxSig = 3;
-  const points = history.map((h, i) => {
-    const x = pad + (i / (history.length - 1)) * (W - 2 * pad);
+  const MAX_POINTS = 50;
+
+  // Downsample long histories using max-per-bin to preserve peaks
+  let data = history;
+  if (history.length > MAX_POINTS) {
+    const binSize = history.length / MAX_POINTS;
+    const sampled: typeof history = [];
+    for (let b = 0; b < MAX_POINTS; b++) {
+      const start = Math.floor(b * binSize);
+      const end = Math.floor((b + 1) * binSize);
+      let best = history[start];
+      for (let j = start + 1; j < end && j < history.length; j++) {
+        if (history[j].signalCount > best.signalCount) best = history[j];
+      }
+      sampled.push(best);
+    }
+    data = sampled;
+  }
+
+  const points = data.map((h, i) => {
+    const x = pad + (i / (data.length - 1)) * (W - 2 * pad);
     const y = H - pad - (h.signalCount / maxSig) * (H - 2 * pad);
     return `${x},${y}`;
   });
@@ -278,8 +297,16 @@ function computeExitWarnings(event: RotationEvent): string[] {
   const h = getHealth(event);
   const hist = event.signalHistory ?? [];
 
-  // Signal count drop
-  if (hist.length >= 5) {
+  // Signal count drop: compare last 5 days vs prior 5 days for stable detection
+  if (hist.length >= 10) {
+    const recent = hist.slice(-5);
+    const prior = hist.slice(-10, -5);
+    const recentAvg = recent.reduce((s, entry) => s + entry.signalCount, 0) / recent.length;
+    const priorAvg = prior.reduce((s, entry) => s + entry.signalCount, 0) / prior.length;
+    if (recentAvg < priorAvg - EXIT_SIGNAL_DECLINE_THRESHOLD) {
+      warnings.push("Signal strength declining");
+    }
+  } else if (hist.length >= 5) {
     const recent = hist.slice(-3);
     const prior = hist.slice(-5, -2);
     const recentAvg = recent.reduce((s, entry) => s + entry.signalCount, 0) / recent.length;
@@ -564,7 +591,7 @@ function HistoricalProjection({
       <span className="text-[#666]">Based on {completedCount} prior rotations:</span>{" "}
       avg {stats.avgDurationDays}d (you&apos;re at {event.daysActive}d —{" "}
       <span className={isPastAvgDuration ? "text-red-400" : "text-green-400/70"}>
-        {pctThroughDuration}%
+        {pctThroughDuration > 200 ? ">200" : pctThroughDuration}%
       </span>
       ), avg return{" "}
       {stats.avgPerformancePct > 0 ? "+" : ""}{stats.avgPerformancePct.toFixed(1)}% (you&apos;re at{" "}

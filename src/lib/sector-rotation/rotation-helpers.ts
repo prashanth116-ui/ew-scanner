@@ -29,15 +29,24 @@ export function getHealth(event: RotationEvent): RotationHealthSignals {
 
 export function computeLifecycleStage(event: RotationEvent): LifecycleStage {
   const h = getHealth(event);
-  // Hard cutoff: beyond EXHAUSTING_DAYS or clear structural weakness
-  if (
-    event.daysActive > ROTATION_LIFECYCLE.EXHAUSTING_DAYS ||
-    (h.acceleration < 0 && (h.quadrant === "WEAKENING" || h.quadrant === "LAGGING"))
-  ) {
+
+  // Health override: genuinely healthy long-duration rotations stay LATE, not EXHAUSTING.
+  // Requires positive acceleration AND positive CMF AND favorable quadrant.
+  const healthConfirmed =
+    h.acceleration > 0 && h.cmf20 > 0 &&
+    (h.quadrant === "IMPROVING" || h.quadrant === "LEADING");
+
+  // Clear structural weakness → EXHAUSTING regardless of duration
+  if (h.acceleration < 0 && (h.quadrant === "WEAKENING" || h.quadrant === "LAGGING")) {
+    return "EXHAUSTING";
+  }
+
+  // Hard cutoff: beyond EXHAUSTING_DAYS — unless health confirms continued strength
+  if (event.daysActive > ROTATION_LIFECYCLE.EXHAUSTING_DAYS && !healthConfirmed) {
     return "EXHAUSTING";
   }
   // Soft zone: between EXHAUSTING_SOFT_DAYS and EXHAUSTING_DAYS, only EXHAUSTING if
-  // health confirms (both acceleration and CMF negative). Prevents binary cliff at day 30.
+  // health confirms weakness (both acceleration and CMF negative). Prevents binary cliff at day 30.
   if (
     event.daysActive > ROTATION_LIFECYCLE.EXHAUSTING_SOFT_DAYS &&
     h.acceleration < 0 && h.cmf20 < 0
@@ -76,11 +85,17 @@ export function computeConviction(event: RotationEvent): ConvictionResult {
   else if (h.cmf20 > 0) { score += 1; factors.push("moderate inflow"); }
   else { score -= 1; factors.push("money outflow"); }
 
-  // Signal trend (-1 to +1)
+  // Signal trend (-1 to +1): compare trailing 5-day averages for stability
   const hist = event.signalHistory ?? [];
-  if (hist.length >= 3) {
-    const recent = hist.slice(-3);
-    const trending = recent[2].signalCount >= recent[0].signalCount;
+  if (hist.length >= 10) {
+    const recentWindow = hist.slice(-5);
+    const priorWindow = hist.slice(-10, -5);
+    const recentAvg = recentWindow.reduce((s, h) => s + h.signalCount, 0) / recentWindow.length;
+    const priorAvg = priorWindow.reduce((s, h) => s + h.signalCount, 0) / priorWindow.length;
+    if (recentAvg >= priorAvg) { score += 1; factors.push("signals improving"); }
+    else { score -= 1; factors.push("signals declining"); }
+  } else if (hist.length >= 3) {
+    const trending = hist[hist.length - 1].signalCount >= hist[hist.length - 3].signalCount;
     if (trending) { score += 1; factors.push("signals improving"); }
     else { score -= 1; factors.push("signals declining"); }
   }

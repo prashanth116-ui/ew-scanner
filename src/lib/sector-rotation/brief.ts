@@ -296,11 +296,23 @@ export function computeRiskFlags(
     }
   }
 
-  // 2. Active rotation with declining signal count (last 3 days)
+  // 2. Active rotation with declining signal count (trailing 5-day windows)
   if (rotationData) {
     for (const r of rotationData.activeRotations) {
       const hist = r.event.signalHistory ?? [];
-      if (hist.length >= 3) {
+      if (hist.length >= 10) {
+        const recentWindow = hist.slice(-5);
+        const priorWindow = hist.slice(-10, -5);
+        const recentAvg = recentWindow.reduce((s, h) => s + h.signalCount, 0) / recentWindow.length;
+        const priorAvg = priorWindow.reduce((s, h) => s + h.signalCount, 0) / priorWindow.length;
+        if (recentAvg < priorAvg - 0.5) {
+          flags.push({
+            severity: "medium",
+            message: `${r.event.sectorName} signals declining`,
+            detail: `Avg signal count dropped from ${priorAvg.toFixed(1)} to ${recentAvg.toFixed(1)} over trailing 5-day windows.`,
+          });
+        }
+      } else if (hist.length >= 3) {
         const recent = hist.slice(-3);
         if (recent[2].signalCount < recent[0].signalCount) {
           flags.push({
