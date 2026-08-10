@@ -247,18 +247,11 @@ export function detectRotationChanges(
   return changes;
 }
 
-const CHANGE_TYPE_ORDER: RotationChange["type"][] = [
-  "new_rotation",
-  "lifecycle_upgrade",
-  "lifecycle_warning",
-  "rotation_ended",
-];
-
-const CHANGE_TYPE_LABELS: Record<RotationChange["type"], { emoji: string; title: string }> = {
-  new_rotation:       { emoji: "\uD83C\uDD95", title: "New Rotation Started" },
-  lifecycle_upgrade:  { emoji: "\u2B06\uFE0F", title: "Lifecycle Upgrade" },
-  lifecycle_warning:  { emoji: "\u26A0\uFE0F", title: "Lifecycle Warning" },
-  rotation_ended:     { emoji: "\uD83D\uDD1A", title: "Rotation Ended" },
+const CHANGE_TYPE_TAGS: Record<RotationChange["type"], string> = {
+  new_rotation:       "NEW",
+  lifecycle_upgrade:  "UPGRADED",
+  lifecycle_warning:  "WARNING",
+  rotation_ended:     "ENDED",
 };
 
 const QUADRANT_EMOJI: Record<string, string> = {
@@ -268,6 +261,49 @@ const QUADRANT_EMOJI: Record<string, string> = {
   LAGGING: "\uD83D\uDD34",    // red circle
 };
 
+type ActionTier = "focus" | "monitor" | "exit";
+
+const TIER_LABELS: Record<ActionTier, { emoji: string; title: string }> = {
+  focus:   { emoji: "\uD83C\uDFAF", title: "Focus" },        // dart
+  monitor: { emoji: "\uD83D\uDC41", title: "Monitor" },      // eye
+  exit:    { emoji: "\u26D4",        title: "Ignore / Exit" }, // no entry
+};
+
+const TIER_ORDER: ActionTier[] = ["focus", "monitor", "exit"];
+
+const FAVORABLE_QUADRANTS = new Set(["LEADING", "IMPROVING"]);
+const STRONG_CONVICTION = new Set(["HIGH", "MODERATE"]);
+
+/**
+ * Classify a rotation change into an actionability tier.
+ *
+ * FOCUS: early/maturing + strong conviction + favorable quadrant
+ * EXIT:  exhausting, EXIT conviction, ended, or late + weak signals
+ * MONITOR: everything else (mixed signals)
+ */
+function classifyActionTier(c: RotationChange): ActionTier {
+  // Ended rotations are always exit
+  if (c.type === "rotation_ended") return "exit";
+
+  // EXIT conviction or EXHAUSTING lifecycle → exit
+  if (c.conviction === "EXIT" || c.lifecycle === "EXHAUSTING") return "exit";
+
+  // LATE + weak conviction → exit
+  if (c.lifecycle === "LATE" && !STRONG_CONVICTION.has(c.conviction)) return "exit";
+
+  // Early/Maturing + strong conviction + favorable quadrant → focus
+  if (
+    (c.lifecycle === "EARLY" || c.lifecycle === "MATURING") &&
+    STRONG_CONVICTION.has(c.conviction) &&
+    FAVORABLE_QUADRANTS.has(c.quadrant)
+  ) {
+    return "focus";
+  }
+
+  // Everything else → monitor
+  return "monitor";
+}
+
 function formatShortDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00Z"); // noon UTC to avoid timezone shift
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -275,7 +311,8 @@ function formatShortDate(dateStr: string): string {
 
 /**
  * Format rotation tracker changes as a Telegram HTML message.
- * Groups by change type, most actionable first.
+ * Groups by actionability tier (Focus → Monitor → Ignore/Exit).
+ * Each entry tagged with change type (NEW, UPGRADED, WARNING, ENDED).
  */
 export function formatRotationChanges(changes: RotationChange[], calculatedAt: string): string {
   if (changes.length === 0) return "";
@@ -289,20 +326,18 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
 
   const qTag = (q: string) => `${QUADRANT_EMOJI[q] ?? "\u26AA"} ${q}`;
 
-  const lines: string[] = [];
-  lines.push("\uD83D\uDD14 <b>Rotation Tracker Alert</b>");
-  lines.push(date);
-  lines.push("");
-
-  // Group by type, sort within each group by lifecycle (EARLY first) then conviction (HIGH first)
-  const CONVICTION_ORDER: Record<string, number> = { HIGH: 0, MODERATE: 1, LOW: 2, EXIT: 3 };
-  const grouped = new Map<RotationChange["type"], RotationChange[]>();
+  // Classify each change into a tier
+  const tierGroups = new Map<ActionTier, RotationChange[]>();
   for (const c of changes) {
-    const arr = grouped.get(c.type) ?? [];
+    const tier = classifyActionTier(c);
+    const arr = tierGroups.get(tier) ?? [];
     arr.push(c);
-    grouped.set(c.type, arr);
+    tierGroups.set(tier, arr);
   }
-  for (const [, group] of grouped) {
+
+  // Sort within each tier: lifecycle (EARLY first) then conviction (HIGH first)
+  const CONVICTION_ORDER: Record<string, number> = { HIGH: 0, MODERATE: 1, LOW: 2, EXIT: 3 };
+  for (const [, group] of tierGroups) {
     group.sort((a, b) => {
       const lifeDiff = (LIFECYCLE_ORDER[a.lifecycle] ?? 9) - (LIFECYCLE_ORDER[b.lifecycle] ?? 9);
       if (lifeDiff !== 0) return lifeDiff;
@@ -310,31 +345,35 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
     });
   }
 
-  for (const type of CHANGE_TYPE_ORDER) {
-    const group = grouped.get(type);
+  const lines: string[] = [];
+  lines.push("\uD83D\uDD14 <b>Rotation Tracker Alert</b>");
+  lines.push(date);
+
+  for (const tier of TIER_ORDER) {
+    const group = tierGroups.get(tier);
     if (!group || group.length === 0) continue;
 
-    const { emoji, title } = CHANGE_TYPE_LABELS[type];
-    lines.push(`${emoji} <b>${title}</b>`);
+    const { emoji, title } = TIER_LABELS[tier];
     lines.push("");
+    lines.push(`${emoji} <b>${title}</b>`);
 
     for (const c of group) {
-      if (type === "new_rotation") {
-        lines.push(`<b>${c.sectorName}</b> (${c.etf})`);
-        lines.push(`  Started ${formatShortDate(c.startDate)} \u2022 Day ${c.daysActive}`);
-        lines.push(`  ${qTag(c.quadrant)} \u2022 ${c.lifecycle} \u2022 ${c.conviction}`);
-      } else if (type === "lifecycle_upgrade" || type === "lifecycle_warning") {
-        lines.push(`<b>${c.sectorName}</b> (${c.etf})`);
-        lines.push(`  ${c.previousLifecycle} \u2192 ${c.lifecycle}`);
-        lines.push(`  ${qTag(c.quadrant)} \u2022 Day ${c.daysActive} \u2022 ${c.conviction}`);
-        lines.push(`  Started ${formatShortDate(c.startDate)}`);
-      } else {
-        // rotation_ended
-        lines.push(`<b>${c.sectorName}</b> (${c.etf})`);
+      const tag = CHANGE_TYPE_TAGS[c.type];
+      lines.push("");
+
+      if (c.type === "rotation_ended") {
+        lines.push(`<b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
         lines.push(`  Ended after ${c.daysActive} days`);
         lines.push(`  Started ${formatShortDate(c.startDate)} \u2022 Was ${c.lifecycle}`);
+      } else if (c.type === "lifecycle_upgrade" || c.type === "lifecycle_warning") {
+        lines.push(`<b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
+        lines.push(`  ${c.previousLifecycle} \u2192 ${c.lifecycle}`);
+        lines.push(`  ${qTag(c.quadrant)} \u2022 Day ${c.daysActive} \u2022 ${c.conviction}`);
+      } else {
+        lines.push(`<b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
+        lines.push(`  Started ${formatShortDate(c.startDate)} \u2022 Day ${c.daysActive}`);
+        lines.push(`  ${qTag(c.quadrant)} \u2022 ${c.lifecycle} \u2022 ${c.conviction}`);
       }
-      lines.push("");
     }
   }
 
