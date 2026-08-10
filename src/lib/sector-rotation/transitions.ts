@@ -162,16 +162,27 @@ export interface RotationSnapshot {
 
 export type StockPickCategory = "turnaround" | "inflection" | "leading";
 
+export interface ScannerHit {
+  scanner: string;   // "Setup", "Inflect", "Trans"
+  detail: string;    // e.g. "PRIORITY", "STARTER", "TRIGGERED"
+}
+
 export interface RotationTopStock {
   symbol: string;
   performancePct: number;
   rsAcceleration: number;
   rsDelta: number;
+  trendAccel: number | null;
+  dailyChangePct: number;
   aboveSma50: boolean;
   volumeVsAvg: number;
   volumeConsistency: number;
   isTurnaroundCandidate: boolean;
   category: StockPickCategory;
+  // Cross-system signals
+  scannerHits?: ScannerHit[];
+  enrichedConviction?: string;   // "HIGH" | "MEDIUM" | "WATCH"
+  enrichedCategory?: string;     // "LEADER" | "CATCH_UP" | "TURNAROUND" | "AVOID"
 }
 
 export interface RotationChange {
@@ -399,14 +410,33 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
 
       // Show top stocks for Focus and Monitor tiers, grouped by category
       if (tier !== "exit" && c.topStocks && c.topStocks.length > 0) {
+        // Multi-system confirmations first (highlighted)
+        const confirmed = c.topStocks.filter((s) => s.scannerHits && s.scannerHits.length > 0);
+        if (confirmed.length > 0) {
+          lines.push("");
+          lines.push(`    \u2B50 <b>Multi-System Confirmed</b>`);
+          for (const s of confirmed) {
+            const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
+            const scanners = s.scannerHits!.map((h) => `${h.scanner}:${h.detail}`).join(" + ");
+            const conv = s.enrichedConviction ? ` | ${s.enrichedConviction}` : "";
+            const vol = s.volumeConsistency >= 3 ? " \uD83D\uDD25" : "";
+            const chase = Math.abs(s.dailyChangePct) >= 5 ? " \u26A0\uFE0F+5%today" : "";
+            lines.push(`    <b>${s.symbol}</b> ${perf}${vol}${chase}`);
+            lines.push(`      ${scanners}${conv}`);
+          }
+        }
+
+        // Then remaining stocks by category
         const fmt = (s: RotationTopStock) => {
           const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
           const vol = s.volumeConsistency >= 3 ? "\uD83D\uDD25" : "";
-          return `${s.symbol} ${perf} ${vol}`.trim();
+          const chase = Math.abs(s.dailyChangePct) >= 5 ? "\u26A0\uFE0F" : "";
+          return `${s.symbol} ${perf}${vol}${chase}`.trim();
         };
-        const turnarounds = c.topStocks.filter((s) => s.category === "turnaround");
-        const inflections = c.topStocks.filter((s) => s.category === "inflection");
-        const leaders = c.topStocks.filter((s) => s.category === "leading");
+        const nonConfirmed = c.topStocks.filter((s) => !s.scannerHits || s.scannerHits.length === 0);
+        const turnarounds = nonConfirmed.filter((s) => s.category === "turnaround");
+        const inflections = nonConfirmed.filter((s) => s.category === "inflection");
+        const leaders = nonConfirmed.filter((s) => s.category === "leading");
         if (turnarounds.length > 0) {
           lines.push(`    \uD83D\uDD04 Turnaround: ${turnarounds.map(fmt).join(", ")}`);
         }
