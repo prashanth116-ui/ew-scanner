@@ -283,8 +283,8 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | `src/lib/sector-rotation/config.ts` | All thresholds and scoring breakpoints |
 | `src/lib/sector-rotation/sector-rotation.ts` | Main scoring engine — `calculateSectorRotation()` |
 | `src/lib/sector-rotation/stock-enrichment.ts` | Stock quality gates, classification (LEADER/CATCH_UP/TURNAROUND/AVOID), phase (P1-P4), conviction scoring, null-data warnings |
-| `src/lib/sector-rotation/rotation-tracker.ts` | Active rotation detection — signal history, lifecycle stages (config-driven SMA periods, batch sizes), stock quality gates (price, dollarVol, SCAN_EXCLUSIONS) |
-| `src/lib/sector-rotation/rotation-helpers.ts` | Lifecycle stage (with soft exhaustion zone at `EXHAUSTING_SOFT_DAYS`), conviction level, action signals. All lifecycle constants imported from config (no local duplicates). |
+| `src/lib/sector-rotation/rotation-tracker.ts` | Active rotation detection — inflection-point detector + slow-burn detector, quadrant guard, rolling volume trend, config-driven SMA periods/batch sizes/cap, stock quality gates (price, dollarVol, SCAN_EXCLUSIONS) |
+| `src/lib/sector-rotation/rotation-helpers.ts` | Lifecycle stage (health override for long-duration rotations, soft exhaustion zone), conviction level (trailing 5-day window signal trend), action signals. All lifecycle constants imported from config (no local duplicates). |
 | `src/lib/sector-rotation/regime.ts` | Macro regime classification (RISK_ON/OFF/INFLATIONARY/MIXED) with adaptive VIX bounds. All regimes have favored/avoid sectors (MIXED favors Health Care, Financials). |
 | `src/lib/sector-rotation/brief.ts` | Market posture (AGGRESSIVE/SELECTIVE/DEFENSIVE/CASH), sector tiers, risk flags. `computeMarketPosture()` and `computeRiskFlags()` accept optional pre-computed `LeadershipHealth` to avoid duplicate computation. SELECTIVE posture reasoning handles 3 cases: rotations-only, sectors-only, and both qualifying. |
 | `src/lib/sector-rotation/leadership-health.ts` | Leadership Health Score (0-100) from MAGS/QQQ/IWM/ARKK |
@@ -440,8 +440,8 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 |---------|-------------------|
 | `COMPOSITE` | `ACCEL_NORM_FLOOR: -10`, `ACCEL_NORM_CEILING: 10` (fixed-range acceleration normalization), `ACTIONABLE_THRESHOLD`, `ACTIONABLE_HYSTERESIS`, `WATCH_THRESHOLD` |
 | `SCORING_SIGNALS` | `MOMENTUM_WEIGHTS: { roc63: 0.35, roc126: 0.25, roc189: 0.25, roc252: 0.15 }`, `SIGMOID_EXPONENT: 0.4` |
-| `ROTATION` | `RS_SMA_SHORT: 10`, `RS_SMA_LONG: 30`, `MIN_ALIGNED_BARS: 50`, `TRACKER_BATCH_SIZE: 15`, `TRACKER_BATCH_DELAY: 200`, `VOLUME_SURGE`, `SIGNAL_START`, `SIGNAL_END_DAYS`, `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.0` |
-| `ROTATION_LIFECYCLE` | `EXHAUSTING_DAYS: 30` (hard cutoff), `EXHAUSTING_SOFT_DAYS: 25` (health-confirmed soft zone), `EARLY_MAX_DAYS`, `MATURING_MAX_DAYS` |
+| `ROTATION` | `RS_SMA_SHORT: 10`, `RS_SMA_LONG: 30`, `MIN_ALIGNED_BARS: 50`, `TRACKER_BATCH_SIZE: 15`, `TRACKER_BATCH_DELAY: 200`, `VOLUME_SURGE: 1.5`, `SIGNAL_START: 2`, `SIGNAL_END_DAYS: 3`, `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.0`, `VOLUME_TREND_LOOKBACK: 5` (rolling window for volume), `VOLUME_TREND_MIN_DAYS: 2` (min spike days in window), `VOLUME_SMA_PERIOD: 20`, `PRICE_SMA_PERIOD: 50`, `SLOW_BURN_MIN_DAYS: 10` (persistent-strength detection), `QUADRANT_GUARD_DAYS: 5` (suppress RS when RRG disagrees), `MAX_ACTIVE_ROTATIONS: 15` |
+| `ROTATION_LIFECYCLE` | `EXHAUSTING_DAYS: 30` (health override: stays LATE if accel > 0, CMF > 0, IMPROVING/LEADING), `EXHAUSTING_SOFT_DAYS: 25` (health-confirmed soft zone), `EARLY_MAX_DAYS`, `MATURING_MAX_DAYS` |
 | `REGIME` | `DXY_TREND_THRESHOLD: 1` (absolute point change, not percentage) |
 | `CLASSIFICATION` | `P4_RS_ACCEL`, `P4_SECTOR_ACCEL` (both must be negative — AND logic), `P3_MIN_VOL_RATIO` |
 
@@ -518,7 +518,7 @@ The Rotation Signals panel on the picks page shows sector rotations at inflectio
 |--------|-------|----------|
 | EXIT filter | `action === "EXIT"` excluded | `action === ENTER or ADD` gate |
 | Blip filter | `daysActive < MIN_ROTATION_DAYS (5)` excluded | *(new)* |
-| Sustained filter | `isSignalSustained()`: requires 3+ history entries with avg signalCount >= `MIN_AVG_SIGNAL_COUNT` (1.0) | *(new)* |
+| Sustained filter | `isSignalSustained()`: trailing 20-day window avg signalCount >= `MIN_AVG_SIGNAL_COUNT` (1.0) | *(new)* |
 | *(removed)* | CMF shown as colored badge, not a gate | `cmf20 > 0` gate |
 | *(removed)* | Accel shown as colored badge, not a gate | `acceleration > 0` gate |
 | *(removed)* | "No quality stocks yet" shown if empty | `hasQualityStock` gate |
@@ -529,11 +529,12 @@ The Rotation Signals panel on the picks page shows sector rotations at inflectio
 |--------|-----------|-------|
 | EARLY | Days 1-`EARLY_TIMING_DAYS` (7), or days 8-`EARLY_TIMING_DAYS+3` (10) without health confirmation (CMF > 0 AND accel > 0) | Green |
 | CONFIRMED | Days 8-15 with any health confirmation | Cyan |
-| DELAYED | Days 16+ | Amber |
+| DELAYED | Days 16-30 | Amber |
+| MATURE | Days 31+ (aligns with lifecycle LATE/EXHAUSTING boundary) | Purple |
 
-**Sort order:** EARLY first → CONFIRMED → DELAYED. Within tier: conviction score descending.
+**Sort order:** EARLY first → CONFIRMED → DELAYED → MATURE. Within tier: conviction score descending.
 
-**Card rendering:** Each card shows timing badge with day count, action badge (ENTER/ADD/HOLD), health indicator badges (CMF: green/amber/red, Accel: green/amber/red, signal count with color, conviction level), top picks or "No quality stocks yet" placeholder.
+**Card rendering:** Each card shows timing badge with day count, action badge (ENTER/ADD/HOLD), health indicator badges (CMF: green/amber/red, Accel: green/amber/red, trailing 20-day avg signal count with color, conviction level), top picks or "No quality stocks yet" placeholder.
 
 **Grouped display:** Cards grouped by timing tier with section headers (`── Early Signals (N) ──`).
 
