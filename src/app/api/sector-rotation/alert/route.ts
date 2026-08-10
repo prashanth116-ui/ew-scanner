@@ -127,8 +127,8 @@ export async function GET(request: NextRequest) {
       const rotationResult = await calculateRotationTracker();
 
       // Build stock map: sectorId → top 5 stocks
-      // Prioritize turnaround candidates (below SMA50, turning) — most upside in early rotations
-      // Then leaders (above SMA50, strong) — confirm rotation is working
+      // Entry: isTurnaroundCandidate flag (curated: below SMA50 + positive RS accel + volume)
+      // Leading: above SMA50 + positive RS accel + RS direction improving (not decelerating)
       const stockMap = new Map<string, RotationTopStock[]>();
       const toTopStock = (s: typeof rotationResult.activeRotations[0]["stocks"][0]): RotationTopStock => ({
         symbol: s.symbol,
@@ -140,12 +140,12 @@ export async function GET(request: NextRequest) {
       });
       for (const r of rotationResult.activeRotations) {
         const turnarounds = r.stocks
-          .filter((s) => !s.aboveSma50 && s.rsAcceleration > 0 && s.volumeVsAvg >= 1.0)
+          .filter((s) => s.isTurnaroundCandidate)
           .sort((a, b) => b.rsAcceleration - a.rsAcceleration)
           .slice(0, 3)
           .map(toTopStock);
         const leaders = r.stocks
-          .filter((s) => s.aboveSma50 && s.rsAcceleration > 0)
+          .filter((s) => s.aboveSma50 && s.rsAcceleration > 0 && s.rsImproving)
           .sort((a, b) => b.rsAcceleration - a.rsAcceleration)
           .slice(0, 2)
           .map(toTopStock);
