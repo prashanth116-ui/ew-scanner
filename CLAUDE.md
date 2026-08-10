@@ -297,11 +297,11 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 **UI Pages:**
 | Route | File | Purpose |
 |-------|------|---------|
-| `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart (tooltip 155px), sector cards (stable sort by conviction → rsAccel → ticker, correct verdict strings KEEP/PRIORITY, WATCH subcase why text), leadership baskets, sub-sectors, cross-asset. Summary strip: improving / stable / declining counts. All sort modes have alphabetical tiebreakers. Rotation tracker polls with visibilitychange listener. |
-| `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias (memoized), leadership health (computed once, shared with posture + riskFlags), sector tiers, risk flags. Stale snapshot guard: ignores previous snapshots older than 3 days. All date comparisons use ET timezone (not UTC). |
-| `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks (9 filters incl. AVOID category, null-safe SMA50) + Rotation Signals panel (early detection timing) + INF/TRANS cross-reference badges |
+| `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart (tooltip 155px), sector cards (stable sort by conviction → rsAccel → ticker, correct verdict strings KEEP/PRIORITY, WATCH subcase why text). Tabbed asset panel (Leadership / Sub-Sectors / Cross-Asset in single `TabbedAssetPanel`). Summary strip: improving / stable / declining counts + dispersion/spread interpretation labels + rotation summary tooltip. Section "3. Reference — Analysis Tools". `DEFAULT_COLLAPSED`: `["asset-panels", "correlation", "cross-pairs", "sector-comparison", "sector-history"]`. Rotation status folded into Summary Strip (no separate panel). All sort modes have alphabetical tiebreakers. Rotation tracker polls with visibilitychange listener. |
+| `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture (position 1), trading bias with embedded pulse data (`PulseCompactRow` — futures/VIX/DXY/sub-sector pills inside `TradingBiasCard`), leadership health (computed once, shared with posture + riskFlags), simplified sector tiers (ETF-level only, no stock columns, "See stocks →" link to picks), risk flags. No standalone Pre-Market Pulse or Sub-Sector Divergences panels (removed — pulse merged into bias card, divergences redundant with tier table badges). Stale snapshot guard: ignores previous snapshots older than 3 days. All date comparisons use ET timezone (not UTC). |
+| `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks (9 filters incl. AVOID category, null-safe SMA50) + Rotation Signals panel (early detection timing, L/T badges, cross-section filtering via `onSectorClick`) + INF/TRANS cross-reference badges. Cross-filter: clicking sector in Entry Signals sets `crossFilterSector` on StockPicksPanel with "Showing: {sector}" badge. Scan refresh UI (progress bar, cancel) in StockPicksPanel via `scanActions` prop. No separate Top Picks by Sector, PreRunner Radar, or Sector Details panels (consolidated). Dashboard link at bottom. |
 | `/sectors/crypto` | `src/app/sectors/crypto/page.tsx` | Crypto rotation dashboard |
-| `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables. Phase classification uses `isTurnaroundCandidate` flag (aligned with `categorizeStock()`). Sparkline uses average-per-bin downsampling (50 max points). Exit warnings require non-overlapping 3-day windows (min 6 history entries for short path, 10 for full 5v5). StrategySummaryBar uses `sortOrder`-based stock classification (not label strings). Historical projection shows "—" when avg return is 0%. |
+| `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables. Collapsible panels: Recently Ended, 12-Month Timeline, Pattern Statistics (collapsed by default via `useCollapsedPanels`). Compact regime pill (inline, not full `RegimeBanner`). "Stock Picks →" cross-link in header. Phase classification uses `isTurnaroundCandidate` flag (aligned with `categorizeStock()`). Sparkline uses average-per-bin downsampling (50 max points). Exit warnings require non-overlapping 3-day windows (min 6 history entries for short path, 10 for full 5v5). StrategySummaryBar uses `sortOrder`-based stock classification (not label strings). Historical projection shows "—" when avg return is 0%. |
 
 **API Routes:**
 | Route | Purpose |
@@ -551,9 +551,15 @@ The Rotation Signals panel on the picks page shows sector rotations at inflectio
 
 **Sort order:** EARLY first → CONFIRMED → DELAYED → MATURE. Within tier: conviction score descending.
 
-**Card rendering:** Each card shows timing badge with day count, action badge (ENTER/ADD/HOLD), health indicator badges (CMF: green/amber/red using `HEALTH_CMF_AMBER`, Accel: green/amber/red using `HEALTH_ACCEL_AMBER`, trailing 20-day avg signal count with color, conviction level with EXIT=red/LOW=amber/MODERATE=cyan/HIGH=green), top picks or "No quality stocks yet" placeholder.
+**Card rendering:** Each card shows timing badge with day count, action badge (ENTER/ADD/HOLD), health indicator badges (CMF: green/amber/red using `HEALTH_CMF_AMBER`, Accel: green/amber/red using `HEALTH_ACCEL_AMBER`, trailing 20-day avg signal count with color, conviction level with EXIT=red/LOW=amber/MODERATE=cyan/HIGH=green), top picks or "No quality stocks yet" placeholder. Sector name is clickable when `onSectorClick` prop provided (cross-section filtering). Top stocks show `L` (green) and `T` (cyan) compact badges for LEADER/TURNAROUND categories (merged from PreRunner Radar).
 
 **Top stocks filter:** Quality stocks require (HIGH or MEDIUM conviction) AND (LEADER or TURNAROUND, or CATCH_UP with HIGH conviction). Sorted by conviction tier then RS acceleration. Top 3 shown per rotation.
+
+**Panel badge:** Shows signal count + leader/turnaround counts (e.g., "3 signals" + "2L + 1T").
+
+**Cross-section filtering:** `onSectorClick?: (sectorName: string) => void` prop. Clicking a sector card sets `crossFilterSector` state in picks page, which filters StockPicksPanel to that sector with a "Showing: {sector}" badge.
+
+**Cross-link:** "Full lifecycle analysis →" link to `/rotation` below panel header.
 
 **Grouped display:** Cards grouped by timing tier with section headers (`── Early Signals (N) ──`).
 
@@ -564,7 +570,7 @@ The Rotation Signals panel on the picks page shows sector rotations at inflectio
 ### Stock Picks Panel (`/sectors/picks`)
 Two stock display components in `src/app/sectors/_components/stock-picks-panel.tsx`:
 
-**`TopPicksBySector`:** Top 3 stocks per sector, sorted by conviction then RS acceleration. Requires at least 1 HIGH or MEDIUM conviction stock per sector (WATCH-only sectors filtered as noise). Price displayed with 2 decimal places.
+**`TopPicksBySector`:** Top 3 stocks per sector, sorted by conviction then RS acceleration. Requires at least 1 HIGH or MEDIUM conviction stock per sector (WATCH-only sectors filtered as noise). Price displayed with 2 decimal places. Component still exists but is **no longer rendered on the picks page** (was its own CollapsiblePanel, removed during UX consolidation).
 
 **`StockPicksPanel`:** Full filterable/sortable table with 9 filter dimensions (all persisted via localStorage):
 
@@ -578,6 +584,11 @@ Two stock display components in `src/app/sectors/_components/stock-picks-panel.t
 | RS Accel | all / positive / strong (>=3) | RS acceleration filter |
 | Volume | all / above avg (>=1.0x) / high (>=1.5x) | Volume ratio filter |
 | 50MA | all / above / below | Null-safe: "below" excludes stocks with null SMA50 (unknown position ≠ below) |
+
+**Additional props:**
+- `scanActions?: React.ReactNode` — scan refresh UI (progress bar, cancel button) rendered in panel header actions area
+- `crossFilterSector?: string | null` — when set (from Entry Signals click), overrides internal sector filter and shows "Showing: {sector}" badge with clear button
+- `onClearCrossFilter?: () => void` — clears the cross-filter
 
 **Special buttons:** "Top Picks" preset (HIGH + LEADER + Leading/Improving + strong RS + P3), "Reset" clears all filters.
 
@@ -617,15 +628,16 @@ Conviction labels: HIGH >= 7, MED >= 4, LOW < 4.
 ### INF Cross-Reference Badge (`/sectors/picks`)
 The picks page fetches inflection scanner data (`/api/inflection/daily`) in parallel and displays sky-blue `INF` badges on stocks that also appear in today's inflection results. Same pattern as the transition-daily page.
 
-**Data flow:** `picks/page.tsx` fetches inflection data once when `data` loads → builds `Map<string, { trade_read, score }>` keyed by ticker → passes `inflectionMap` prop to 3 components.
+**Data flow:** `picks/page.tsx` fetches inflection + transition data once on mount → builds `Map<string, { trade_read, score }>` and `Map<string, { alert_state, state, score }>` keyed by ticker → passes `inflectionMap` and `transitionMap` props to 2 components.
 
-**Badge locations:**
+**Badge locations (picks page):**
 
 | Component | File | Placement |
 |-----------|------|-----------|
 | `RotationEntrySignals` → `SignalCard` | `entry-signals.tsx` | After stock symbol link, before conviction badge |
-| `TopPicksBySector` | `stock-picks-panel.tsx` | After phase span, before price (smaller `text-[7px]` to fit pill) |
 | `StockPicksPanel` | `stock-picks-panel.tsx` | After ROT badge, before company name |
+
+Note: `TopPicksBySector` still supports INF/TRANS badges but is no longer rendered on the picks page.
 
 **Badge styling:** `border-sky-500/30 bg-sky-500/10 text-sky-400 text-[8px] font-bold` (consistent with transition-daily). Tooltip: `Inflection: {trade_read} ({score})`.
 
