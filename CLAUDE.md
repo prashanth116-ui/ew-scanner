@@ -297,8 +297,8 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 **UI Pages:**
 | Route | File | Purpose |
 |-------|------|---------|
-| `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart, sector cards (stable sort by conviction → rsAccel → ticker), leadership baskets, sub-sectors, cross-asset. Summary strip counts declining sectors explicitly (not `total - improving`). |
-| `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias, leadership health, sector tiers, risk flags. Stale snapshot guard: ignores previous snapshots older than 3 days. |
+| `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart (tooltip 155px), sector cards (stable sort by conviction → rsAccel → ticker, correct verdict strings KEEP/PRIORITY BUY, WATCH subcase why text), leadership baskets, sub-sectors, cross-asset. Summary strip: improving / stable / declining counts. All sort modes have alphabetical tiebreakers. Rotation tracker polls with visibilitychange listener. |
+| `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias (memoized), leadership health (computed once, shared with posture + riskFlags), sector tiers, risk flags. Stale snapshot guard: ignores previous snapshots older than 3 days. All date comparisons use ET timezone (not UTC). |
 | `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks (9 filters incl. AVOID category, null-safe SMA50) + Rotation Signals panel (early detection timing) + INF/TRANS cross-reference badges |
 | `/sectors/crypto` | `src/app/sectors/crypto/page.tsx` | Crypto rotation dashboard |
 | `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables. Phase classification uses `isTurnaroundCandidate` flag (aligned with `categorizeStock()`). Sparkline uses average-per-bin downsampling (50 max points). Exit warnings require non-overlapping 3-day windows (min 6 history entries for short path, 10 for full 5v5). StrategySummaryBar uses `sortOrder`-based stock classification (not label strings). Historical projection shows "—" when avg return is 0%. |
@@ -442,7 +442,7 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 | `SCORING_SIGNALS` | `MOMENTUM_WEIGHTS: { roc63: 0.35, roc126: 0.25, roc189: 0.25, roc252: 0.15 }`, `SIGMOID_EXPONENT: 0.4` |
 | `ROTATION` | `RS_SMA_SHORT: 10`, `RS_SMA_LONG: 30`, `MIN_ALIGNED_BARS: 50`, `TRACKER_BATCH_SIZE: 15`, `TRACKER_BATCH_DELAY: 200`, `VOLUME_SURGE: 1.5`, `SIGNAL_START: 2`, `SIGNAL_END_DAYS: 3`, `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MATURE_TIMING_DAYS: 30` (DELAYED→MATURE boundary), `MIN_AVG_SIGNAL_COUNT: 1.0`, `VOLUME_TREND_LOOKBACK: 5` (rolling window for volume), `VOLUME_TREND_MIN_DAYS: 2` (min spike days in window), `VOLUME_SMA_PERIOD: 20`, `PRICE_SMA_PERIOD: 50`, `SLOW_BURN_MIN_DAYS: 10` (persistent-strength detection), `QUADRANT_GUARD_DAYS: 5` (suppress RS when RRG disagrees), `MAX_ACTIVE_ROTATIONS: 15`, `HEALTH_CMF_AMBER: -0.05` (CMF amber/red boundary for UI badges), `HEALTH_ACCEL_AMBER: -0.3` (accel amber/red boundary for UI badges) |
 | `ROTATION_LIFECYCLE` | `EXHAUSTING_DAYS: 30` (health override: stays LATE if accel > 0, CMF > 0, IMPROVING/LEADING), `EXHAUSTING_SOFT_DAYS: 25` (health-confirmed soft zone), `EARLY_MAX_DAYS`, `MATURING_MAX_DAYS` |
-| `REGIME` | `DXY_TREND_THRESHOLD: 1` (absolute point change, not percentage) |
+| `REGIME` | `DXY_TREND_THRESHOLD: 1` (absolute point change, not percentage), `MISSING_DATA_PENALTY: 10` (confidence penalty per missing TNX/DXY source — disables INFLATIONARY detection) |
 | `CLASSIFICATION` | `P4_RS_ACCEL`, `P4_SECTOR_ACCEL` (both must be negative — AND logic), `P3_MIN_VOL_RATIO` |
 
 | `QUALITY_GATES` | `REJECT_NULL_MARKET_CAP: true` (null mcap = fail), `APPLY_SCAN_EXCLUSIONS: true` (145-ticker exclusion filter for enrichment + rotation tracker), `MIN_MARKET_CAP: 10B`, `MIN_DOLLAR_VOLUME: 200M`, `MIN_AVG_VOLUME: 1.0M`, `MAX_VOLUME_SPIKE: 10` (was 5 — allows breakout-day volume), `MAX_ETF_DEVIATION: 60` (was 30 — lets sector leaders diverge from ETF) |
@@ -455,7 +455,9 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 
 | `PREMARKET_SCORING` | `SIGN_THRESHOLD: 0.1` (flat futures cutoff), `VIX_DIRECTION_PCT: 3` (VIX move threshold), `EQUITY_DIRECTION_THRESHOLD: 0.1`, `SUSPICIOUS_RALLY_THRESHOLD: 0.3`, `MAGNITUDE_GATE: 0.08` (tiny-move neutral gate), `MAJORITY_RATIO: 1.5` (bull/bear weight majority), `TIEBREAKER_THRESHOLD: 0.15` (even-split tiebreaker), `AVOID_MIN_DEVIATION: 0.15` (median-deviation floor for asset-to-avoid) |
 
-Other sections: LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS.
+| `RISK_FLAGS` | `SIGNAL_DECLINE_THRESHOLD: 0.5` (avg signal count drop to flag declining rotation signals), `NARROW_LEADERSHIP: 50`, `NARROW_LEADERSHIP_BUFFER: 3`, `DETERIORATING_LEADERSHIP: 35`, `MISSING_DATA_PENALTY` in REGIME (was hardcoded 5, now 10 via config) |
+
+Other sections: LEADERSHIP, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS.
 
 ### Stock Enrichment Phase Classification
 Stocks passing quality gates are classified into phases in `stock-enrichment.ts`:
@@ -581,6 +583,37 @@ Two stock display components in `src/app/sectors/_components/stock-picks-panel.t
 
 **Grouping:** Stocks grouped by sector ETF, each collapsible. Default: all expanded.
 
+### Dashboard Sector Cards (`/sectors`)
+Each sector card shows composite score ring, quadrant badge, trading action, CMF/RS/breadth stats, why text, top 3 stock pills, and an expandable stock table.
+
+**Card conviction scoring** (`getConvictionScore()` in `sector-card.tsx`): Simplified additive scoring (0-11 scale) for stock pills on sector cards. Different from the 6-weighted-signal `scoreConviction()` in `stock-enrichment.ts` used by the picks page.
+
+| Signal | Points | Notes |
+|--------|--------|-------|
+| rsAccel > 1 | 3 | Strong RS acceleration |
+| rsAccel > 0 | 1 | Positive RS acceleration |
+| aboveSma50 | 2 | Above 50-day SMA |
+| volumeVsAvg >= 1.5 | 2 | High volume |
+| volumeVsAvg >= 1.2 | 1 | Above-average volume |
+| rsImproving | 1 | RS direction improving |
+| verdict KEEP or PRIORITY BUY | 2 | PreRun verdict match |
+
+Conviction labels: HIGH >= 7, MED >= 4, LOW < 4.
+
+**Dashboard stock phase** (`getStockPhase()` in `helpers.ts`): Simplified phase classification for dashboard display. Correctly guards `aboveSma50` — stocks below 50MA cannot be "exhausting".
+
+| Phase | Condition | Notes |
+|-------|-----------|-------|
+| turnaround | Below 50MA + RS20d > 0 + rsAccel > 0 + vol >= 1.2x | Below 50MA with positive signals |
+| basing | Below 50MA (all other cases) | Default for below-50MA stocks |
+| exhausting | Above 50MA (or null) + rsAccel < -2 | Only when above or unknown SMA50 |
+| trending | Above 50MA + rsAccel > 0 | Strong uptrend |
+| neutral | Everything else | Default for above-50MA with mixed signals |
+
+**Why text** (`getWhyText()`): Maps trading action + quadrant + acceleration to descriptive text. Covers all WATCH subcases: LEADING-decelerating, LEADING-below-threshold, IMPROVING-stalled, LAGGING-early-signals.
+
+**Sort stability**: All sort modes in `_use-sector-data.ts` include alphabetical tiebreaker (`a.sector.localeCompare(b.sector)`) to prevent card flicker on re-render.
+
 ### INF Cross-Reference Badge (`/sectors/picks`)
 The picks page fetches inflection scanner data (`/api/inflection/daily`) in parallel and displays sky-blue `INF` badges on stocks that also appear in today's inflection results. Same pattern as the transition-daily page.
 
@@ -597,6 +630,22 @@ The picks page fetches inflection scanner data (`/api/inflection/daily`) in para
 **Badge styling:** `border-sky-500/30 bg-sky-500/10 text-sky-400 text-[8px] font-bold` (consistent with transition-daily). Tooltip: `Inflection: {trade_read} ({score})`.
 
 **Resilience:** Fetch uses `.catch(() => {})` — if inflection API fails, no badges shown, no errors.
+
+### Market Posture (`/sectors/brief`)
+`computeMarketPosture()` in `brief.ts` classifies overall market posture:
+
+| Posture | Condition | Notes |
+|---------|-----------|-------|
+| CASH | RISK_OFF + no non-EXIT conviction + extreme/rising VIX | Capital preservation |
+| DEFENSIVE | RISK_OFF with no conviction, OR VIX rising + majority weak | Defensive sectors |
+| AGGRESSIVE | RISK_ON + ≥2 HIGH/MODERATE rotations + dispersion > 5 | Capped to SELECTIVE if narrow leadership |
+| SELECTIVE | RISK_ON/MIXED/INFLATIONARY + rotations or ≥3 leading/improving | Default for mixed conditions |
+
+INFLATIONARY regime now explicitly routes to SELECTIVE (was falling through to generic default). Accepts optional `precomputedLeadershipHealth` parameter to avoid recomputing leadership health (brief page passes it from shared `useMemo`).
+
+**Posture persistence** (`savePosture`/`loadPreviousPosture`): Uses ET timezone (`toLocaleDateString("en-CA", { timeZone: "America/New_York" })`) for date keys. Ensures posture change detection works correctly after 8 PM ET (when UTC date rolls over but market day hasn't changed).
+
+**Previous snapshot timezone**: The brief page's `previousSnapshot` lookup also uses ET dates to find the correct "yesterday" snapshot.
 
 ### Persistence Functions (per table)
 Each daily table has 5 standard functions in `persistence.ts`:
