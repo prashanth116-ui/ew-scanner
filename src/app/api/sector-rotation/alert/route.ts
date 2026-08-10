@@ -131,6 +131,7 @@ export async function GET(request: NextRequest) {
         etf: r.event.etf,
         lifecycle: computeLifecycleStage(r.event),
         conviction: computeConviction(r.event).level,
+        quadrant: r.event.health.quadrant,
         daysActive: r.event.daysActive,
         startDate: r.event.startDate,
       }));

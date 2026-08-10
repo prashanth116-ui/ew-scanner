@@ -155,6 +155,7 @@ export interface RotationSnapshot {
   etf: string;
   lifecycle: string;
   conviction: string;
+  quadrant: string;
   daysActive: number;
   startDate: string;
 }
@@ -167,6 +168,7 @@ export interface RotationChange {
   daysActive: number;
   lifecycle: string;
   conviction: string;
+  quadrant: string;
   previousLifecycle?: string;
 }
 
@@ -206,6 +208,7 @@ export function detectRotationChanges(
         daysActive: cur.daysActive,
         lifecycle: cur.lifecycle,
         conviction: cur.conviction,
+        quadrant: cur.quadrant,
       });
     } else if (cur.lifecycle !== prev.lifecycle) {
       // Lifecycle changed — classify as upgrade or warning
@@ -219,6 +222,7 @@ export function detectRotationChanges(
         daysActive: cur.daysActive,
         lifecycle: cur.lifecycle,
         conviction: cur.conviction,
+        quadrant: cur.quadrant,
         previousLifecycle: prev.lifecycle,
       });
     }
@@ -235,6 +239,7 @@ export function detectRotationChanges(
         daysActive: prev.daysActive,
         lifecycle: prev.lifecycle,
         conviction: prev.conviction,
+        quadrant: prev.quadrant,
       });
     }
   }
@@ -256,6 +261,13 @@ const CHANGE_TYPE_LABELS: Record<RotationChange["type"], { emoji: string; title:
   rotation_ended:     { emoji: "\uD83D\uDD1A", title: "Rotation Ended" },
 };
 
+const QUADRANT_EMOJI: Record<string, string> = {
+  LEADING: "\uD83D\uDFE2",    // green circle
+  IMPROVING: "\uD83D\uDFE1",  // yellow circle
+  WEAKENING: "\uD83D\uDFE0",  // orange circle
+  LAGGING: "\uD83D\uDD34",    // red circle
+};
+
 function formatShortDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00Z"); // noon UTC to avoid timezone shift
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -274,6 +286,8 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
     day: "numeric",
     year: "numeric",
   });
+
+  const qTag = (q: string) => `${QUADRANT_EMOJI[q] ?? "\u26AA"} ${q}`;
 
   const lines: string[] = [];
   lines.push("\uD83D\uDD14 <b>Rotation Tracker Alert</b>");
@@ -294,21 +308,26 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
 
     const { emoji, title } = CHANGE_TYPE_LABELS[type];
     lines.push(`${emoji} <b>${title}</b>`);
+    lines.push("");
 
     for (const c of group) {
       if (type === "new_rotation") {
-        lines.push(`${c.sectorName} (${c.etf}): started ${formatShortDate(c.startDate)}`);
-        lines.push(`  Day ${c.daysActive} | ${c.lifecycle} | Conviction: ${c.conviction}`);
+        lines.push(`<b>${c.sectorName}</b> (${c.etf})`);
+        lines.push(`  Started ${formatShortDate(c.startDate)} \u2022 Day ${c.daysActive}`);
+        lines.push(`  ${qTag(c.quadrant)} \u2022 ${c.lifecycle} \u2022 ${c.conviction}`);
       } else if (type === "lifecycle_upgrade" || type === "lifecycle_warning") {
-        lines.push(`${c.sectorName} (${c.etf}): ${c.previousLifecycle} \u2192 ${c.lifecycle}`);
-        lines.push(`  Day ${c.daysActive} | Started ${formatShortDate(c.startDate)} | Conviction: ${c.conviction}`);
+        lines.push(`<b>${c.sectorName}</b> (${c.etf})`);
+        lines.push(`  ${c.previousLifecycle} \u2192 ${c.lifecycle}`);
+        lines.push(`  ${qTag(c.quadrant)} \u2022 Day ${c.daysActive} \u2022 ${c.conviction}`);
+        lines.push(`  Started ${formatShortDate(c.startDate)}`);
       } else {
         // rotation_ended
-        lines.push(`${c.sectorName} (${c.etf}): ended after ${c.daysActive} days`);
-        lines.push(`  Started ${formatShortDate(c.startDate)}`);
+        lines.push(`<b>${c.sectorName}</b> (${c.etf})`);
+        lines.push(`  Ended after ${c.daysActive} days`);
+        lines.push(`  Started ${formatShortDate(c.startDate)} \u2022 Was ${c.lifecycle}`);
       }
+      lines.push("");
     }
-    lines.push("");
   }
 
   return lines.join("\n").trim();
