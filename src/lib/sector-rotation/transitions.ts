@@ -294,12 +294,20 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
   lines.push(date);
   lines.push("");
 
-  // Group by type
+  // Group by type, sort within each group by lifecycle (EARLY first) then conviction (HIGH first)
+  const CONVICTION_ORDER: Record<string, number> = { HIGH: 0, MODERATE: 1, LOW: 2, EXIT: 3 };
   const grouped = new Map<RotationChange["type"], RotationChange[]>();
   for (const c of changes) {
     const arr = grouped.get(c.type) ?? [];
     arr.push(c);
     grouped.set(c.type, arr);
+  }
+  for (const [, group] of grouped) {
+    group.sort((a, b) => {
+      const lifeDiff = (LIFECYCLE_ORDER[a.lifecycle] ?? 9) - (LIFECYCLE_ORDER[b.lifecycle] ?? 9);
+      if (lifeDiff !== 0) return lifeDiff;
+      return (CONVICTION_ORDER[a.conviction] ?? 9) - (CONVICTION_ORDER[b.conviction] ?? 9);
+    });
   }
 
   for (const type of CHANGE_TYPE_ORDER) {
