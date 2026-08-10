@@ -299,7 +299,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 |-------|------|---------|
 | `/sectors` | `src/app/sectors/page.tsx` | Dashboard: RRG chart, sector cards (stable sort by conviction → rsAccel → ticker), leadership baskets, sub-sectors, cross-asset. Summary strip counts declining sectors explicitly (not `total - improving`). |
 | `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture, trading bias, leadership health, sector tiers, risk flags. Stale snapshot guard: ignores previous snapshots older than 3 days. |
-| `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks + Rotation Signals panel (early detection timing) + INF cross-reference badges |
+| `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks (9 filters incl. AVOID category, null-safe SMA50) + Rotation Signals panel (early detection timing) + INF/TRANS cross-reference badges |
 | `/sectors/crypto` | `src/app/sectors/crypto/page.tsx` | Crypto rotation dashboard |
 | `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables. Phase classification uses `isTurnaroundCandidate` flag (aligned with `categorizeStock()`). Sparkline uses average-per-bin downsampling (50 max points). Exit warnings require non-overlapping 3-day windows (min 6 history entries for short path, 10 for full 5v5). StrategySummaryBar uses `sortOrder`-based stock classification (not label strings). Historical projection shows "—" when avg return is 0%. |
 
@@ -440,7 +440,7 @@ All scoring thresholds for the sector rotation system live in `src/lib/sector-ro
 |---------|-------------------|
 | `COMPOSITE` | `ACCEL_NORM_FLOOR: -10`, `ACCEL_NORM_CEILING: 10` (fixed-range acceleration normalization), `ACTIONABLE_THRESHOLD`, `ACTIONABLE_HYSTERESIS`, `WATCH_THRESHOLD` |
 | `SCORING_SIGNALS` | `MOMENTUM_WEIGHTS: { roc63: 0.35, roc126: 0.25, roc189: 0.25, roc252: 0.15 }`, `SIGMOID_EXPONENT: 0.4` |
-| `ROTATION` | `RS_SMA_SHORT: 10`, `RS_SMA_LONG: 30`, `MIN_ALIGNED_BARS: 50`, `TRACKER_BATCH_SIZE: 15`, `TRACKER_BATCH_DELAY: 200`, `VOLUME_SURGE: 1.5`, `SIGNAL_START: 2`, `SIGNAL_END_DAYS: 3`, `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.0`, `VOLUME_TREND_LOOKBACK: 5` (rolling window for volume), `VOLUME_TREND_MIN_DAYS: 2` (min spike days in window), `VOLUME_SMA_PERIOD: 20`, `PRICE_SMA_PERIOD: 50`, `SLOW_BURN_MIN_DAYS: 10` (persistent-strength detection), `QUADRANT_GUARD_DAYS: 5` (suppress RS when RRG disagrees), `MAX_ACTIVE_ROTATIONS: 15` |
+| `ROTATION` | `RS_SMA_SHORT: 10`, `RS_SMA_LONG: 30`, `MIN_ALIGNED_BARS: 50`, `TRACKER_BATCH_SIZE: 15`, `TRACKER_BATCH_DELAY: 200`, `VOLUME_SURGE: 1.5`, `SIGNAL_START: 2`, `SIGNAL_END_DAYS: 3`, `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MATURE_TIMING_DAYS: 30` (DELAYED→MATURE boundary), `MIN_AVG_SIGNAL_COUNT: 1.0`, `VOLUME_TREND_LOOKBACK: 5` (rolling window for volume), `VOLUME_TREND_MIN_DAYS: 2` (min spike days in window), `VOLUME_SMA_PERIOD: 20`, `PRICE_SMA_PERIOD: 50`, `SLOW_BURN_MIN_DAYS: 10` (persistent-strength detection), `QUADRANT_GUARD_DAYS: 5` (suppress RS when RRG disagrees), `MAX_ACTIVE_ROTATIONS: 15`, `HEALTH_CMF_AMBER: -0.05` (CMF amber/red boundary for UI badges), `HEALTH_ACCEL_AMBER: -0.3` (accel amber/red boundary for UI badges) |
 | `ROTATION_LIFECYCLE` | `EXHAUSTING_DAYS: 30` (health override: stays LATE if accel > 0, CMF > 0, IMPROVING/LEADING), `EXHAUSTING_SOFT_DAYS: 25` (health-confirmed soft zone), `EARLY_MAX_DAYS`, `MATURING_MAX_DAYS` |
 | `REGIME` | `DXY_TREND_THRESHOLD: 1` (absolute point change, not percentage) |
 | `CLASSIFICATION` | `P4_RS_ACCEL`, `P4_SECTOR_ACCEL` (both must be negative — AND logic), `P3_MIN_VOL_RATIO` |
@@ -544,18 +544,42 @@ The Rotation Signals panel on the picks page shows sector rotations at inflectio
 |--------|-----------|-------|
 | EARLY | Days 1-`EARLY_TIMING_DAYS` (7), or days 8-`EARLY_TIMING_DAYS+3` (10) without health confirmation (CMF > 0 AND accel > 0) | Green |
 | CONFIRMED | Days 8-15 with any health confirmation | Cyan |
-| DELAYED | Days 16-30 | Amber |
-| MATURE | Days 31+ (aligns with lifecycle LATE/EXHAUSTING boundary) | Purple |
+| DELAYED | Days 16-`MATURE_TIMING_DAYS` (30) | Amber |
+| MATURE | Days `MATURE_TIMING_DAYS`+ (aligns with lifecycle LATE/EXHAUSTING boundary) | Purple |
 
 **Sort order:** EARLY first → CONFIRMED → DELAYED → MATURE. Within tier: conviction score descending.
 
-**Card rendering:** Each card shows timing badge with day count, action badge (ENTER/ADD/HOLD), health indicator badges (CMF: green/amber/red, Accel: green/amber/red, trailing 20-day avg signal count with color, conviction level), top picks or "No quality stocks yet" placeholder.
+**Card rendering:** Each card shows timing badge with day count, action badge (ENTER/ADD/HOLD), health indicator badges (CMF: green/amber/red using `HEALTH_CMF_AMBER`, Accel: green/amber/red using `HEALTH_ACCEL_AMBER`, trailing 20-day avg signal count with color, conviction level with EXIT=red/LOW=amber/MODERATE=cyan/HIGH=green), top picks or "No quality stocks yet" placeholder.
+
+**Top stocks filter:** Quality stocks require (HIGH or MEDIUM conviction) AND (LEADER or TURNAROUND, or CATCH_UP with HIGH conviction). Sorted by conviction tier then RS acceleration. Top 3 shown per rotation.
 
 **Grouped display:** Cards grouped by timing tier with section headers (`── Early Signals (N) ──`).
 
 **Empty state:** Shows counts for emerging (< 5 days), exiting (EXIT action), and unsustained rotations.
 
-**Config constants (ROTATION section):** `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MIN_AVG_SIGNAL_COUNT: 1.0`.
+**Config constants (ROTATION section):** `EARLY_TIMING_DAYS: 7`, `DELAYED_TIMING_DAYS: 15`, `MATURE_TIMING_DAYS: 30`, `MIN_AVG_SIGNAL_COUNT: 1.0`, `HEALTH_CMF_AMBER: -0.05`, `HEALTH_ACCEL_AMBER: -0.3`.
+
+### Stock Picks Panel (`/sectors/picks`)
+Two stock display components in `src/app/sectors/_components/stock-picks-panel.tsx`:
+
+**`TopPicksBySector`:** Top 3 stocks per sector, sorted by conviction then RS acceleration. Requires at least 1 HIGH or MEDIUM conviction stock per sector (WATCH-only sectors filtered as noise). Price displayed with 2 decimal places.
+
+**`StockPicksPanel`:** Full filterable/sortable table with 9 filter dimensions (all persisted via localStorage):
+
+| Filter | Options | Notes |
+|--------|---------|-------|
+| Conviction | ALL / HIGH / MEDIUM / WATCH | Stock-level conviction (not rotation conviction) |
+| Sector | ALL / per-sector | Dynamic from data |
+| Category | ALL / LEADER / CATCH_UP / TURNAROUND / AVOID | AVOID added for filtering stocks to avoid |
+| Phase | ALL / P1-P4 | Stock enrichment phase |
+| Quadrant | ALL / Leading+Improving / individual | Sector quadrant filter |
+| RS Accel | all / positive / strong (>=3) | RS acceleration filter |
+| Volume | all / above avg (>=1.0x) / high (>=1.5x) | Volume ratio filter |
+| 50MA | all / above / below | Null-safe: "below" excludes stocks with null SMA50 (unknown position ≠ below) |
+
+**Special buttons:** "Top Picks" preset (HIGH + LEADER + Leading/Improving + strong RS + P3), "Reset" clears all filters.
+
+**Grouping:** Stocks grouped by sector ETF, each collapsible. Default: all expanded.
 
 ### INF Cross-Reference Badge (`/sectors/picks`)
 The picks page fetches inflection scanner data (`/api/inflection/daily`) in parallel and displays sky-blue `INF` badges on stocks that also appear in today's inflection results. Same pattern as the transition-daily page.
