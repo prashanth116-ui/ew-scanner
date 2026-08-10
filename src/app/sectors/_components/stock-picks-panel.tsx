@@ -107,7 +107,7 @@ export function TopPicksBySector({ stocks, sectors, inflectionMap, transitionMap
                       title={`Transition: ${transitionMap.get(s.symbol)!.alert_state} / ${transitionMap.get(s.symbol)!.state} (${transitionMap.get(s.symbol)!.score})`}
                     >TRANS</span>
                   )}
-                  <span className="text-[10px] opacity-70">${s.price.toFixed(0)}</span>
+                  <span className="text-[10px] opacity-70">${s.price.toFixed(2)}</span>
                 </span>
               ))}
             </div>
@@ -151,7 +151,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
     if (volFilter === "above") list = list.filter((s) => s.volRatio >= 1.0);
     if (volFilter === "high") list = list.filter((s) => s.volRatio >= 1.5);
     if (aboveSmaFilter === "above") list = list.filter((s) => s.above50ma);
-    if (aboveSmaFilter === "below") list = list.filter((s) => !s.above50ma);
+    if (aboveSmaFilter === "below") list = list.filter((s) => !s.above50ma && s.sma50 != null);
 
     const sorted = [...list].sort((a, b) => {
       let cmp = 0;
@@ -252,6 +252,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
           <option value="LEADER">LEADER</option>
           <option value="CATCH_UP">CATCH_UP</option>
           <option value="TURNAROUND">TURNAROUND</option>
+          <option value="AVOID">AVOID</option>
         </select>
         <select value={phaseFilter} onChange={(e) => setPhaseFilter(e.target.value as RotationStockPhase | "ALL")} className={selectClass}>
           <option value="ALL">All Phase</option>

@@ -121,6 +121,12 @@ export const ROTATION = {
   QUADRANT_GUARD_DAYS: 5,
   /** Max active rotations returned */
   MAX_ACTIVE_ROTATIONS: 15,
+  /** Days above which timing is MATURE (beyond DELAYED) */
+  MATURE_TIMING_DAYS: 30,
+  /** CMF threshold for amber health indicator (below 0 but above this = amber, below = red) */
+  HEALTH_CMF_AMBER: -0.05,
+  /** Acceleration threshold for amber health indicator (below 0 but above this = amber, below = red) */
+  HEALTH_ACCEL_AMBER: -0.3,
 } as const;
 
 // ── Stock Quality Gates ──

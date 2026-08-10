@@ -39,7 +39,7 @@ function classifyTiming(daysActive: number, health: { acceleration: number; cmf2
   if (daysActive <= ROTATION.EARLY_TIMING_DAYS) return "EARLY";
   if (daysActive <= ROTATION.EARLY_TIMING_DAYS + 3 && !hasHealthConfirmation) return "EARLY";
   if (daysActive <= ROTATION.DELAYED_TIMING_DAYS) return "CONFIRMED";
-  if (daysActive <= 30) return "DELAYED";
+  if (daysActive <= ROTATION.MATURE_TIMING_DAYS) return "DELAYED";
   return "MATURE";
 }
 
@@ -119,7 +119,8 @@ export function RotationEntrySignals({
 
       const sectorStocks = enrichedStocks.filter((s) => s.sectorEtf === event.etf);
       const qualityStocks = sectorStocks.filter(
-        (s) => (s.conviction === "HIGH" || s.conviction === "MEDIUM") && (s.category === "LEADER" || s.category === "TURNAROUND")
+        (s) => (s.conviction === "HIGH" || s.conviction === "MEDIUM") &&
+          (s.category === "LEADER" || s.category === "TURNAROUND" || (s.category === "CATCH_UP" && s.conviction === "HIGH"))
       );
 
       const CONVICTION_SORT: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
@@ -234,14 +235,15 @@ function SignalCard({ entry, sectors, inflectionMap, transitionMap }: { entry: E
 
   // Health indicator colors
   const cmfColor = health.cmf20 > 0 ? "bg-green-500/10 text-green-400 border-green-500/30"
-    : health.cmf20 > -0.05 ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+    : health.cmf20 > ROTATION.HEALTH_CMF_AMBER ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
     : "bg-red-500/10 text-red-400 border-red-500/30";
   const accelColor = health.acceleration > 0 ? "bg-green-500/10 text-green-400 border-green-500/30"
-    : health.acceleration > -0.3 ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+    : health.acceleration > ROTATION.HEALTH_ACCEL_AMBER ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
     : "bg-red-500/10 text-red-400 border-red-500/30";
   const signalColor = avgSignalCount >= 2.5 ? "text-green-400" : avgSignalCount >= 1.5 ? "text-cyan-400" : "text-amber-400";
   const convictionColor = conviction.level === "HIGH" ? "border-green-500/30 bg-green-500/10 text-green-400"
     : conviction.level === "MODERATE" ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+    : conviction.level === "EXIT" ? "border-red-500/30 bg-red-500/10 text-red-400"
     : "border-amber-500/30 bg-amber-500/10 text-amber-400";
 
   // Action badge
