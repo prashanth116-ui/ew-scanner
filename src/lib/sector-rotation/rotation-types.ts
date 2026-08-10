@@ -31,7 +31,7 @@ export interface RotationEvent {
   etfPerformancePct: number;
   signals: RotationSignalState; // current signal state
   health: RotationHealthSignals; // rotation conviction signals
-  signalHistory: { date: string; signalCount: number; close: number }[];
+  signalHistory?: { date: string; signalCount: number; close: number }[];
 }
 
 export interface RotationStockPerformance {

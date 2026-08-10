@@ -114,14 +114,18 @@ export function computeConviction(event: RotationEvent): ConvictionResult {
 
 // ── Macro Regime alignment ──
 
+// Maps regime sector names → all display names that fall under that GICS parent.
+// Cross-asset (Gold, Treasuries, etc.) and leadership baskets (MAGS, QQQ, etc.)
+// are intentionally unmapped — regime opinions are equity-sector focused, so
+// rotations in those categories correctly return "neutral" from isRegimeAligned().
 export const REGIME_SECTOR_DISPLAY_MAP: Record<string, string[]> = {
-  "Technology": ["Technology", "Semiconductors", "Software & Cloud"],
+  "Technology": ["Technology", "Semiconductors", "Software & Cloud", "AI & Robotics"],
   "Health Care": ["Health Care", "Biotech"],
-  "Consumer Discretionary": ["Consumer Discretionary"],
+  "Consumer Discretionary": ["Consumer Discretionary", "Homebuilders", "Retail"],
   "Consumer Staples": ["Consumer Staples"],
   "Communication Services": ["Communication Services"],
-  "Financials": ["Financials"],
-  "Industrials": ["Industrials"],
+  "Financials": ["Financials", "Regional Banks"],
+  "Industrials": ["Industrials", "Transports", "Aerospace & Defense", "Space & Defense Innovation"],
   "Energy": ["Energy"],
   "Materials": ["Materials"],
   "Utilities": ["Utilities"],

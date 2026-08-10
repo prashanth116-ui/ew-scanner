@@ -253,7 +253,7 @@ function SignalSparkline({ history }: { history: { date: string; signalCount: nu
   const maxSig = 3;
   const MAX_POINTS = 50;
 
-  // Downsample long histories using max-per-bin to preserve peaks
+  // Downsample long histories using average-per-bin for honest representation
   let data = history;
   if (history.length > MAX_POINTS) {
     const binSize = history.length / MAX_POINTS;
@@ -261,11 +261,15 @@ function SignalSparkline({ history }: { history: { date: string; signalCount: nu
     for (let b = 0; b < MAX_POINTS; b++) {
       const start = Math.floor(b * binSize);
       const end = Math.floor((b + 1) * binSize);
-      let best = history[start];
-      for (let j = start + 1; j < end && j < history.length; j++) {
-        if (history[j].signalCount > best.signalCount) best = history[j];
+      let sum = 0;
+      let count = 0;
+      for (let j = start; j < end && j < history.length; j++) {
+        sum += history[j].signalCount;
+        count++;
       }
-      sampled.push(best);
+      // Use last entry in bin for date/close, averaged signalCount
+      const representative = history[Math.min(end - 1, history.length - 1)];
+      sampled.push({ ...representative, signalCount: count > 0 ? sum / count : 0 });
     }
     data = sampled;
   }
@@ -306,9 +310,10 @@ function computeExitWarnings(event: RotationEvent): string[] {
     if (recentAvg < priorAvg - EXIT_SIGNAL_DECLINE_THRESHOLD) {
       warnings.push("Signal strength declining");
     }
-  } else if (hist.length >= 5) {
+  } else if (hist.length >= 6) {
+    // Non-overlapping windows: last 3 vs prior 3 (no shared entries)
     const recent = hist.slice(-3);
-    const prior = hist.slice(-5, -2);
+    const prior = hist.slice(-6, -3);
     const recentAvg = recent.reduce((s, entry) => s + entry.signalCount, 0) / recent.length;
     const priorAvg = prior.reduce((s, entry) => s + entry.signalCount, 0) / prior.length;
     if (recentAvg < priorAvg - EXIT_SIGNAL_DECLINE_THRESHOLD) {
@@ -577,14 +582,14 @@ function HistoricalProjection({
     stats.avgDurationDays > 0
       ? Math.round((event.daysActive / stats.avgDurationDays) * 100)
       : 0;
-  const pctThroughReturn =
-    stats.avgPerformancePct !== 0
-      ? Math.round((event.etfPerformancePct / stats.avgPerformancePct) * 100)
-      : 0;
+  const hasAvgReturn = stats.avgPerformancePct !== 0;
+  const pctThroughReturn = hasAvgReturn
+    ? Math.round((event.etfPerformancePct / stats.avgPerformancePct) * 100)
+    : null;
   const isPastAvgDuration = event.daysActive > stats.avgDurationDays;
-  const isBeatingAvg = stats.avgPerformancePct >= 0
+  const isBeatingAvg = pctThroughReturn !== null && (stats.avgPerformancePct >= 0
     ? pctThroughReturn > 100
-    : pctThroughReturn < 100;
+    : pctThroughReturn < 100);
 
   return (
     <div className="mt-2 rounded-md bg-[#151515] px-3 py-2 text-[11px] text-[#999]">
@@ -597,7 +602,7 @@ function HistoricalProjection({
       {stats.avgPerformancePct > 0 ? "+" : ""}{stats.avgPerformancePct.toFixed(1)}% (you&apos;re at{" "}
       {event.etfPerformancePct > 0 ? "+" : ""}{event.etfPerformancePct.toFixed(1)}% —{" "}
       <span className={isBeatingAvg ? "text-green-400" : "text-[#999]"}>
-        {pctThroughReturn}% of historical
+        {pctThroughReturn !== null ? `${pctThroughReturn}% of historical` : "—"}
       </span>
       )
     </div>
@@ -1354,7 +1359,7 @@ function StrategySummaryBar({
       ? detail.stocks.reduce((s, st) => s + st.performancePct, 0) / detail.stocks.length
       : 0;
 
-  let leaders = 0;
+  let holdTrimCount = 0;
   let entryCandidates = 0;
   let avoidCount = 0;
   let turnaroundCount = 0;
@@ -1362,10 +1367,12 @@ function StrategySummaryBar({
   for (const s of detail.stocks) {
     const cat = categorizeStock(s, sectorAvgPct);
     const action = computeStockAction(cat, lifecycle);
-    if (action.label === "Hold" || action.label === "Trim") leaders++;
-    else if (action.label === "Buy") entryCandidates++;
-    else if (action.label === "Speculative Buy" || action.label === "Risky") turnaroundCount++;
-    else if (action.label === "Avoid" || action.label === "Exit") avoidCount++;
+    // Use sortOrder instead of label strings to avoid silent breakage on rename:
+    // 0 = Buy/Speculative Buy, 1 = Hold, 2 = Trim, 3 = Watch/Risky, 4 = Avoid, 5 = Exit
+    if (cat === "turnaround") turnaroundCount++;
+    else if (action.sortOrder <= 0) entryCandidates++;
+    else if (action.sortOrder <= 2) holdTrimCount++;
+    else avoidCount++;
   }
 
   return (
@@ -1377,7 +1384,7 @@ function StrategySummaryBar({
           <span className="text-xs text-[#888]">— {actionSignal.description}</span>
         </div>
         <div className="flex items-center gap-3 text-xs text-[#888]">
-          {leaders > 0 && <span>Leaders: <span className="text-green-400 font-medium">{leaders}</span></span>}
+          {holdTrimCount > 0 && <span>Positioned: <span className="text-green-400 font-medium">{holdTrimCount}</span></span>}
           {entryCandidates > 0 && <span>Entry Candidates: <span className="text-cyan-400 font-medium">{entryCandidates}</span></span>}
           {turnaroundCount > 0 && <span>Turnarounds: <span className="text-purple-400 font-medium">{turnaroundCount}</span></span>}
           {avoidCount > 0 && <span>Avoid: <span className="text-red-400 font-medium">{avoidCount}</span></span>}
