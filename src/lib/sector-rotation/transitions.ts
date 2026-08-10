@@ -160,6 +160,15 @@ export interface RotationSnapshot {
   startDate: string;
 }
 
+export interface RotationTopStock {
+  symbol: string;
+  performancePct: number;
+  rsAcceleration: number;
+  aboveSma50: boolean;
+  volumeVsAvg: number;
+  isTurnaroundCandidate: boolean;
+}
+
 export interface RotationChange {
   type: "new_rotation" | "rotation_ended" | "lifecycle_upgrade" | "lifecycle_warning";
   sectorName: string;
@@ -170,6 +179,7 @@ export interface RotationChange {
   conviction: string;
   quadrant: string;
   previousLifecycle?: string;
+  topStocks?: RotationTopStock[];
 }
 
 const LIFECYCLE_ORDER: Record<string, number> = {
@@ -182,10 +192,12 @@ const LIFECYCLE_ORDER: Record<string, number> = {
 /**
  * Compare current vs previous rotation tracker snapshots.
  * Detects new rotations, ended rotations, and lifecycle stage changes.
+ * Optional stockMap attaches top stocks to each change for the alert.
  */
 export function detectRotationChanges(
   current: RotationSnapshot[] | undefined,
-  previous: RotationSnapshot[] | undefined
+  previous: RotationSnapshot[] | undefined,
+  stockMap?: Map<string, RotationTopStock[]>
 ): RotationChange[] {
   if (!current && !previous) return [];
 
@@ -199,6 +211,7 @@ export function detectRotationChanges(
   // New rotations: in current but not in previous
   for (const [id, cur] of currentMap) {
     const prev = previousMap.get(id);
+    const stocks = stockMap?.get(id);
     if (!prev) {
       changes.push({
         type: "new_rotation",
@@ -209,6 +222,7 @@ export function detectRotationChanges(
         lifecycle: cur.lifecycle,
         conviction: cur.conviction,
         quadrant: cur.quadrant,
+        topStocks: stocks,
       });
     } else if (cur.lifecycle !== prev.lifecycle) {
       // Lifecycle changed — classify as upgrade or warning
@@ -224,6 +238,7 @@ export function detectRotationChanges(
         conviction: cur.conviction,
         quadrant: cur.quadrant,
         previousLifecycle: prev.lifecycle,
+        topStocks: stocks,
       });
     }
   }
@@ -375,6 +390,17 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
         lines.push(`  <b>${c.sectorName}</b> (${c.etf}) \u2014 ${tag}`);
         lines.push(`    Started ${formatShortDate(c.startDate)} \u2022 Day ${c.daysActive}`);
         lines.push(`    ${qTag(c.quadrant)} \u2022 ${c.lifecycle} \u2022 ${c.conviction}`);
+      }
+
+      // Show top stocks for Focus and Monitor tiers
+      if (tier !== "exit" && c.topStocks && c.topStocks.length > 0) {
+        const stockLines = c.topStocks.map((s) => {
+          const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
+          const vol = s.volumeVsAvg >= 1.5 ? " \uD83D\uDD25" : ""; // fire for high volume
+          const tag = s.isTurnaroundCandidate ? " T" : s.aboveSma50 ? " L" : "";
+          return `${s.symbol}(${perf}${tag}${vol})`;
+        });
+        lines.push(`    \u2192 ${stockLines.join(", ")}`);
       }
     }
     tierIndex++;

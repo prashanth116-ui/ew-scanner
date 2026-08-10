@@ -8,7 +8,7 @@ import {
   detectRotationChanges,
   formatRotationChanges,
 } from "@/lib/sector-rotation/transitions";
-import type { RotationSnapshot } from "@/lib/sector-rotation/transitions";
+import type { RotationSnapshot, RotationTopStock } from "@/lib/sector-rotation/transitions";
 import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { logError } from "@/lib/error-logger";
 
@@ -125,6 +125,25 @@ export async function GET(request: NextRequest) {
     let rotationChanges: ReturnType<typeof detectRotationChanges> = [];
     try {
       const rotationResult = await calculateRotationTracker();
+
+      // Build stock map: sectorId → top 3 stocks (above SMA50 + positive RS, sorted by RS accel)
+      const stockMap = new Map<string, RotationTopStock[]>();
+      for (const r of rotationResult.activeRotations) {
+        const top = r.stocks
+          .filter((s) => s.aboveSma50 && s.rsAcceleration > 0)
+          .sort((a, b) => b.rsAcceleration - a.rsAcceleration)
+          .slice(0, 3)
+          .map((s) => ({
+            symbol: s.symbol,
+            performancePct: s.performancePct,
+            rsAcceleration: s.rsAcceleration,
+            aboveSma50: s.aboveSma50,
+            volumeVsAvg: s.volumeVsAvg,
+            isTurnaroundCandidate: s.isTurnaroundCandidate,
+          }));
+        if (top.length > 0) stockMap.set(r.event.sectorId, top);
+      }
+
       currentRotations = rotationResult.activeRotations.map((r) => ({
         sectorId: r.event.sectorId,
         sectorName: r.event.sectorName,
@@ -135,7 +154,7 @@ export async function GET(request: NextRequest) {
         daysActive: r.event.daysActive,
         startDate: r.event.startDate,
       }));
-      rotationChanges = detectRotationChanges(currentRotations, previous?.rotations);
+      rotationChanges = detectRotationChanges(currentRotations, previous?.rotations, stockMap);
     } catch (err) {
       logError("sector-rotation/alert:rotation-tracker", err);
     }
