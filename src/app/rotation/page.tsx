@@ -43,6 +43,7 @@ import {
 } from "@/lib/sector-rotation/rotation-helpers";
 import { loadScanResults } from "@/lib/prerun/storage";
 import { DataAgeBadge } from "@/components/data-age-badge";
+import { CollapsiblePanel, useCollapsedPanels } from "@/app/sectors/_components";
 import { type StockPhase, phaseBadge, PHASE_RANK } from "@/lib/phase-utils";
 
 // ── localStorage cache (4-hour TTL) ──
@@ -343,72 +344,6 @@ function regimeColor(regime: RegimeData["regime"]): string {
     case "INFLATIONARY": return "text-amber-400";
     case "MIXED": return "text-[#888]";
   }
-}
-
-function regimeBorderColor(regime: RegimeData["regime"]): string {
-  switch (regime) {
-    case "RISK_ON": return "border-green-500/30";
-    case "RISK_OFF": return "border-red-500/30";
-    case "INFLATIONARY": return "border-amber-500/30";
-    case "MIXED": return "border-[#333]";
-  }
-}
-
-function RegimeBanner({ regime }: { regime: RegimeData }) {
-  return (
-    <div className={`rounded-lg border ${regimeBorderColor(regime.regime)} bg-[#1a1a1a] p-4`}>
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <div>
-          <span className="text-xs text-[#888]">Regime</span>
-          <div className={`text-sm font-semibold ${regimeColor(regime.regime)}`}>
-            {regime.regime.replace("_", " ")}
-          </div>
-        </div>
-        <div>
-          <span className="text-xs text-[#888]">VIX</span>
-          <div className={`text-sm font-medium ${regime.vix > 25 ? "text-red-400" : regime.vix < 18 ? "text-green-400" : "text-amber-400"}`}>
-            {regime.vix.toFixed(1)}
-            <span className="ml-1 text-[10px] text-[#666]">{regime.vixSlope}</span>
-          </div>
-        </div>
-        <div>
-          <span className="text-xs text-[#888]">10Y Yield</span>
-          <div className="text-sm font-medium text-[#ccc]">{regime.yield10y.toFixed(2)}%</div>
-        </div>
-        <div>
-          <span className="text-xs text-[#888]">USD (DXY)</span>
-          <div className="text-sm font-medium text-[#ccc]">
-            {regime.dxy.toFixed(1)}
-            <span className="ml-1 text-[10px] text-[#666]">{regime.dxyTrend}</span>
-          </div>
-        </div>
-        {regime.favoredSectors.length > 0 && (
-          <div>
-            <span className="text-xs text-[#888]">Favored</span>
-            <div className="flex flex-wrap gap-1 mt-0.5">
-              {regime.favoredSectors.map((s) => (
-                <span key={s} className="rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] text-green-400">
-                  {s}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-        {regime.avoidSectors.length > 0 && (
-          <div>
-            <span className="text-xs text-[#888]">Avoid</span>
-            <div className="flex flex-wrap gap-1 mt-0.5">
-              {regime.avoidSectors.map((s) => (
-                <span key={s} className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400">
-                  {s}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 // ── Enhancement #7: Pair Z-Score Bar ──
@@ -2016,6 +1951,7 @@ export default function RotationTrackerPage() {
   const [showAllSectors, setShowAllSectors] = useState(false);
   const [heatmapSectors, setHeatmapSectors] = useState<SectorRotationScore[] | null>(null);
   const [prerunServerMap, setPrerunServerMap] = useState<Map<string, { verdict: string; score: number; daysToEarnings: number | null; nextEarningsDate: string | null; rs20d: number | null }>>(new Map());
+  const [collapsedPanels, togglePanel] = useCollapsedPanels("ew-rotation-collapsed-v1", ["timeline", "pattern-stats", "recently-ended"]);
   const consecutiveFailures = useRef(0);
 
   // Fetch prerun data from server when localStorage is empty
@@ -2193,6 +2129,12 @@ export default function RotationTrackerPage() {
           >
             Sectors
           </Link>
+          <Link
+            href="/sectors/picks"
+            className="rounded-md border border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-xs text-[#a0a0a0] transition-colors hover:text-white hover:border-[#444]"
+          >
+            Stock Picks
+          </Link>
           {data && <DataAgeBadge calculatedAt={data.calculatedAt} />}
           <button
             onClick={() => fetchData(true)}
@@ -2227,11 +2169,21 @@ export default function RotationTrackerPage() {
       {/* Content */}
       {data && (
         <div className="space-y-8">
-          {/* Enhancement #4: Regime Banner */}
+          {/* Compact Regime Pill */}
           {data.regime && (
-            <section>
-              <RegimeBanner regime={data.regime} />
-            </section>
+            <div className="flex items-center gap-4 rounded-lg border border-[#2a2a2a] bg-[#141414] px-4 py-2">
+              <span className="text-[10px] text-[#555] uppercase tracking-wider">Regime</span>
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${regimeColor(data.regime.regime)} ${
+                data.regime.regime === "RISK_ON" ? "bg-green-500/15" :
+                data.regime.regime === "RISK_OFF" ? "bg-red-500/15" :
+                data.regime.regime === "INFLATIONARY" ? "bg-amber-500/15" :
+                "bg-[#2a2a2a]"
+              }`}>
+                {data.regime.regime.replace("_", " ")}
+              </span>
+              <span className="text-[11px] text-[#888]">VIX {data.regime.vix.toFixed(1)}</span>
+              <span className="text-[11px] text-[#888]">Confidence {data.regime.regimeConfidence}%</span>
+            </div>
           )}
 
           {/* Sector Heatmap Strip (all sectors at a glance) */}
@@ -2308,20 +2260,24 @@ export default function RotationTrackerPage() {
 
           {/* Recently Ended */}
           {data.recentlyEndedRotations.length > 0 && (
-            <section>
-              <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
-                <TrendingDown className="h-5 w-5 text-[#888]" />
-                Recently Ended
-              </h2>
+            <CollapsiblePanel
+              id="recently-ended"
+              title="Recently Ended"
+              collapsed={collapsedPanels.has("recently-ended")}
+              onToggle={togglePanel}
+              badge={<span className="text-[10px] text-[#888]">{data.recentlyEndedRotations.length}</span>}
+            >
               <RecentlyEndedList events={data.recentlyEndedRotations} />
-            </section>
+            </CollapsiblePanel>
           )}
 
           {/* Historical Timeline */}
-          <section>
-            <h2 className="mb-3 text-lg font-semibold text-white">
-              12-Month Timeline
-            </h2>
+          <CollapsiblePanel
+            id="timeline"
+            title="12-Month Timeline"
+            collapsed={collapsedPanels.has("timeline")}
+            onToggle={togglePanel}
+          >
             <div className="rounded-lg border border-[#2a2a2a] bg-[#111] p-4">
               <HistoricalTimeline events={data.allEvents} />
               <div className="mt-2 flex items-center justify-center gap-4 text-xs text-[#666]">
@@ -2339,17 +2295,19 @@ export default function RotationTrackerPage() {
                 </span>
               </div>
             </div>
-          </section>
+          </CollapsiblePanel>
 
           {/* Pattern Statistics */}
-          <section>
-            <h2 className="mb-3 text-lg font-semibold text-white">
-              Pattern Statistics
-            </h2>
+          <CollapsiblePanel
+            id="pattern-stats"
+            title="Pattern Statistics"
+            collapsed={collapsedPanels.has("pattern-stats")}
+            onToggle={togglePanel}
+          >
             <div className="rounded-lg border border-[#2a2a2a] bg-[#111]">
               <PatternStatsTable stats={data.patternStats} />
             </div>
-          </section>
+          </CollapsiblePanel>
 
           {/* Filter Recipes */}
           <FilterRecipes />

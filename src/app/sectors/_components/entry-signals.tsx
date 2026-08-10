@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { ArrowUpCircle, Plus, Shield, TrendingUp } from "lucide-react";
+import { ArrowUpCircle, Plus, Shield, TrendingUp, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import type {
   SectorRotationScore,
   RRGQuadrant,
@@ -82,6 +83,7 @@ export function RotationEntrySignals({
   onToggle,
   inflectionMap,
   transitionMap,
+  onSectorClick,
 }: {
   rotationData: RotationTrackerResult;
   enrichedStocks: EnrichedStock[];
@@ -90,6 +92,7 @@ export function RotationEntrySignals({
   onToggle: (id: string) => void;
   inflectionMap?: Map<string, { trade_read: string; score: number }>;
   transitionMap?: Map<string, { alert_state: string; state: string; score: number }>;
+  onSectorClick?: (sectorName: string) => void;
 }) {
   const { entries, emerging, exiting, unsustained } = useMemo(() => {
     const results: EntrySignalSector[] = [];
@@ -153,6 +156,10 @@ export function RotationEntrySignals({
   const bestTiming: SignalTiming | null = entries.length > 0 ? entries[0].timing : null;
   const badgeStyle = bestTiming ? TIMING_STYLE[bestTiming] : null;
 
+  // Leader/turnaround counts across all signals
+  const leaderCount = entries.reduce((sum, e) => sum + e.topStocks.filter((s) => s.category === "LEADER").length, 0);
+  const turnaroundCount = entries.reduce((sum, e) => sum + e.topStocks.filter((s) => s.category === "TURNAROUND").length, 0);
+
   // Group entries by timing tier
   const groups = useMemo(() => {
     const map = new Map<SignalTiming, EntrySignalSector[]>();
@@ -178,13 +185,25 @@ export function RotationEntrySignals({
       badge={
         entries.length === 0
           ? <span className="rounded-full border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-medium text-[#666]">No signals</span>
-          : <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${badgeStyle!.border} ${badgeStyle!.bg} ${badgeStyle!.text}`}>
-            {entries.length} {entries.length === 1 ? "signal" : "signals"}
-          </span>
+          : <div className="flex items-center gap-1.5">
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${badgeStyle!.border} ${badgeStyle!.bg} ${badgeStyle!.text}`}>
+                {entries.length} {entries.length === 1 ? "signal" : "signals"}
+              </span>
+              {(leaderCount > 0 || turnaroundCount > 0) && (
+                <span className="text-[10px] text-[#666]">
+                  {leaderCount > 0 && <span className="text-green-400/70">{leaderCount}L</span>}
+                  {leaderCount > 0 && turnaroundCount > 0 && " + "}
+                  {turnaroundCount > 0 && <span className="text-cyan-400/70">{turnaroundCount}T</span>}
+                </span>
+              )}
+            </div>
       }
       className={entries.length > 0 && badgeStyle ? badgeStyle.border : ""}
     >
       <div className="space-y-3">
+        <Link href="/rotation" className="inline-flex items-center gap-1 text-[10px] text-[#666] hover:text-[#5ba3e6] transition-colors">
+          Full lifecycle analysis <ChevronRight className="h-3 w-3" />
+        </Link>
         {entries.length === 0 && (
           <div className="space-y-1.5">
             <p className="text-xs text-[#666]">No active rotations pass noise filters. Check the <a href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</a> for current rotation status.</p>
@@ -211,7 +230,7 @@ export function RotationEntrySignals({
 
               <div className="space-y-3">
                 {group.items.map((entry) => (
-                  <SignalCard key={entry.rotation.event.etf} entry={entry} sectors={sectors} inflectionMap={inflectionMap} transitionMap={transitionMap} />
+                  <SignalCard key={entry.rotation.event.etf} entry={entry} sectors={sectors} inflectionMap={inflectionMap} transitionMap={transitionMap} onSectorClick={onSectorClick} />
                 ))}
               </div>
             </div>
@@ -224,7 +243,7 @@ export function RotationEntrySignals({
 
 // ── Signal Card ──
 
-function SignalCard({ entry, sectors, inflectionMap, transitionMap }: { entry: EntrySignalSector; sectors: SectorRotationScore[]; inflectionMap?: Map<string, { trade_read: string; score: number }>; transitionMap?: Map<string, { alert_state: string; state: string; score: number }> }) {
+function SignalCard({ entry, sectors, inflectionMap, transitionMap, onSectorClick }: { entry: EntrySignalSector; sectors: SectorRotationScore[]; inflectionMap?: Map<string, { trade_read: string; score: number }>; transitionMap?: Map<string, { alert_state: string; state: string; score: number }>; onSectorClick?: (sectorName: string) => void }) {
   const { rotation, signal, lifecycle, conviction, regimeAlignment, health, patternStats, topStocks, timing } = entry;
   const event = rotation.event;
   const sectorScore = sectors.find((s) => s.sector === event.sectorName);
@@ -258,7 +277,13 @@ function SignalCard({ entry, sectors, inflectionMap, transitionMap }: { entry: E
     <div className={`rounded-lg border ${style.border} ${style.bg} p-3`}>
       {/* Header row */}
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-white">{event.sectorName}</span>
+        {onSectorClick ? (
+          <button type="button" onClick={() => onSectorClick(event.sectorName)} className="font-semibold text-white hover:text-[#5ba3e6] transition-colors cursor-pointer">
+            {event.sectorName}
+          </button>
+        ) : (
+          <span className="font-semibold text-white">{event.sectorName}</span>
+        )}
         <span className="text-xs text-[#666]">{event.etf}</span>
         {sectorScore && (
           <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${quadrantColor(sectorScore.quadrant)}`}>
@@ -321,6 +346,12 @@ function SignalCard({ entry, sectors, inflectionMap, transitionMap }: { entry: E
                 >
                   {stock.symbol}
                 </a>
+                {stock.category === "LEADER" && (
+                  <span className="rounded border border-green-500/30 bg-green-500/10 px-1 py-0.5 text-[8px] font-bold text-green-400" title="Sector Leader">L</span>
+                )}
+                {stock.category === "TURNAROUND" && (
+                  <span className="rounded border border-cyan-500/30 bg-cyan-500/10 px-1 py-0.5 text-[8px] font-bold text-cyan-400" title="Turnaround Candidate">T</span>
+                )}
                 {inflectionMap?.has(stock.symbol) && (
                   <span
                     className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[8px] font-bold text-sky-400"
@@ -335,9 +366,6 @@ function SignalCard({ entry, sectors, inflectionMap, transitionMap }: { entry: E
                 )}
                 <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${stock.conviction === "HIGH" ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"}`}>
                   {stock.conviction}
-                </span>
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${stock.category === "LEADER" ? "bg-green-500/10 text-green-400" : "bg-purple-500/10 text-purple-400"}`}>
-                  {stock.category === "CATCH_UP" ? "Catch-up" : stock.category === "TURNAROUND" ? "Turnaround" : stock.category.charAt(0) + stock.category.slice(1).toLowerCase()}
                 </span>
                 {stock.rsAccel != null && (
                   <span className={`text-[10px] ${stock.rsAccel > 0 ? "text-green-400" : "text-red-400"}`}>

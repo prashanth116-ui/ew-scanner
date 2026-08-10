@@ -36,7 +36,7 @@ import {
   computeRiskFlags,
 } from "@/lib/sector-rotation/brief";
 
-const DEFAULT_COLLAPSED = ["sub-sectors", "cross-asset", "correlation", "cross-pairs"];
+const DEFAULT_COLLAPSED = ["asset-panels", "correlation", "cross-pairs", "sector-comparison", "sector-history"];
 
 const ETF_COUNT = getEquitySectors().length + getSubSectors().length + getCrossAssetETFs().length + getLeadershipBaskets().length;
 
@@ -214,35 +214,6 @@ export default function SectorRotationPage() {
         <RegimeBanner regime={data.regime} />
       </CollapsiblePanel>
 
-      {/* Rotation Status Banner */}
-      <CollapsiblePanel id="rotation-status" title="Rotation Status" collapsed={collapsedPanels.has("rotation-status")} onToggle={togglePanel}
-        badge={<span className={`text-[10px] font-medium ${data.rotationActive ? "text-green-400" : "text-[#888]"}`}>{data.rotationActive ? "Active" : "Inactive"}</span>}
-      >
-        <div className={`rounded-lg border p-4 ${data.rotationActive ? "border-green-500/30 bg-green-500/5" : "border-[#2a2a2a] bg-[#0f0f0f]"}`}>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className={`h-3 w-3 rounded-full ${data.rotationActive ? "bg-green-500 animate-pulse" : "bg-[#555]"}`} />
-              <div>
-                <div className="font-semibold text-white">{data.rotationActive ? "Rotation Active" : "No Clear Rotation"}</div>
-                <div className="text-sm text-[#a0a0a0]">{data.rotationSummary}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-6">
-              <div className="text-right">
-                <div className="text-xs text-[#666]">Dispersion</div>
-                <div className={`text-lg font-bold ${data.dispersionIndex > 4 ? "text-green-400" : data.dispersionIndex > 2 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{data.dispersionIndex.toFixed(1)}</div>
-                <div className="text-xs text-[#555]">{data.dispersionIndex > 4 ? "High" : data.dispersionIndex > 2 ? "Moderate" : "Low"}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-[#666]">Sector Spread</div>
-                <div className={`text-lg font-bold ${(data.sectorSpread ?? 0) > 8 ? "text-green-400" : (data.sectorSpread ?? 0) > 4 ? "text-amber-400" : "text-[#a0a0a0]"}`}>{(data.sectorSpread ?? 0).toFixed(1)}%</div>
-                <div className="text-xs text-[#555]">{(data.sectorSpread ?? 0) > 8 ? "Wide" : (data.sectorSpread ?? 0) > 4 ? "Moderate" : "Narrow"}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </CollapsiblePanel>
-
       {/* ── 2. Analyze ── */}
       <div className="flex items-center gap-3 pt-2">
         <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">2. Analyze &mdash; Sector Strength</span>
@@ -366,24 +337,18 @@ export default function SectorRotationPage() {
 
       {/* ── 3. Act ── */}
       <div className="flex items-center gap-3 pt-2">
-        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">3. Act &mdash; Supporting Data</span>
+        <span className="text-[10px] uppercase tracking-widest text-[#555] font-medium">3. Reference &mdash; Analysis Tools</span>
         <div className="h-px flex-1 bg-[#2a2a2a]" />
       </div>
 
-      {/* Leadership Baskets */}
-      {leadershipBasketScores.length > 0 && (
-        <LeadershipBasketsPanel scores={leadershipBasketScores} collapsed={collapsedPanels.has("leadership-baskets")} onToggle={togglePanel} />
-      )}
-
-      {/* Sub-Sector Leading Indicators */}
-      {subSectorScores.length > 0 && (
-        <SubSectorPanel scores={subSectorScores} collapsed={collapsedPanels.has("sub-sectors")} onToggle={togglePanel} />
-      )}
-
-      {/* Cross-Asset Money Flow */}
-      {crossAssetScores.length > 0 && (
-        <CrossAssetPanel scores={crossAssetScores} collapsed={collapsedPanels.has("cross-asset")} onToggle={togglePanel} />
-      )}
+      {/* Asset Panels (Tabbed: Leadership | Sub-Sectors | Cross-Asset) */}
+      <TabbedAssetPanel
+        leadershipBasketScores={leadershipBasketScores}
+        subSectorScores={subSectorScores}
+        crossAssetScores={crossAssetScores}
+        collapsed={collapsedPanels.has("asset-panels")}
+        onToggle={togglePanel}
+      />
 
       {/* Data Staleness Warning */}
       <DataStalenessWarning calculatedAt={data.calculatedAt} />
@@ -421,6 +386,73 @@ export default function SectorRotationPage() {
       <ScannerCTA />
       </div>
     </div>
+  );
+}
+
+type AssetTab = "leadership" | "sub-sectors" | "cross-asset";
+
+function TabbedAssetPanel({
+  leadershipBasketScores,
+  subSectorScores,
+  crossAssetScores,
+  collapsed,
+  onToggle,
+}: {
+  leadershipBasketScores: Parameters<typeof LeadershipBasketsPanel>[0]["scores"];
+  subSectorScores: Parameters<typeof SubSectorPanel>[0]["scores"];
+  crossAssetScores: Parameters<typeof CrossAssetPanel>[0]["scores"];
+  collapsed: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const [tab, setTab] = useState<AssetTab>("leadership");
+
+  const hasLeadership = leadershipBasketScores.length > 0;
+  const hasSubSectors = subSectorScores.length > 0;
+  const hasCrossAsset = crossAssetScores.length > 0;
+
+  if (!hasLeadership && !hasSubSectors && !hasCrossAsset) return null;
+
+  const tabs: { key: AssetTab; label: string; visible: boolean }[] = [
+    { key: "leadership", label: "Leadership", visible: hasLeadership },
+    { key: "sub-sectors", label: "Sub-Sectors", visible: hasSubSectors },
+    { key: "cross-asset", label: "Cross-Asset", visible: hasCrossAsset },
+  ];
+
+  return (
+    <CollapsiblePanel
+      id="asset-panels"
+      title="Asset Analysis"
+      collapsed={collapsed}
+      onToggle={onToggle}
+      actions={
+        <div className="flex items-center gap-1">
+          {tabs.filter((t) => t.visible).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                tab === t.key
+                  ? "bg-[#5ba3e6]/20 text-[#5ba3e6] border border-[#5ba3e6]/30"
+                  : "text-[#666] hover:text-[#a0a0a0] border border-transparent"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {tab === "leadership" && hasLeadership && (
+        <LeadershipBasketsPanel scores={leadershipBasketScores} collapsed={false} onToggle={() => {}} embedded />
+      )}
+      {tab === "sub-sectors" && hasSubSectors && (
+        <SubSectorPanel scores={subSectorScores} collapsed={false} onToggle={() => {}} embedded />
+      )}
+      {tab === "cross-asset" && hasCrossAsset && (
+        <CrossAssetPanel scores={crossAssetScores} collapsed={false} onToggle={() => {}} embedded />
+      )}
+    </CollapsiblePanel>
   );
 }
 

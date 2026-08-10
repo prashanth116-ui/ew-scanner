@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useState, useEffect, useMemo } from "react";
-import { Loader2, RefreshCw, AlertTriangle, TrendingUp, TrendingDown, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Loader2, RefreshCw, AlertTriangle, TrendingUp, Shield, Banknote, Crosshair, BookOpen, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import Link from "next/link";
 import { DataAgeBadge } from "@/components/data-age-badge";
 import { useNow } from "@/lib/hooks/use-now";
@@ -16,12 +16,8 @@ import {
 } from "../_components";
 import type { CatalystCalendarEvent } from "@/lib/catalyst/types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
-import type { FuturesSnapshot, ChecklistItem, TradingBias, SectorBreadth, TradingBiasSnapshot } from "@/lib/premarket/types";
-import { computeBiasScore } from "@/lib/premarket/scoring";
-import { PREMARKET_SCORING } from "@/lib/sector-rotation/config";
+import type { FuturesSnapshot, TradingBias, SectorBreadth, TradingBiasSnapshot } from "@/lib/premarket/types";
 import { loadHistory } from "@/lib/sector-rotation/history";
-import { SUB_SECTOR_PARENT, subSectorDivergenceTooltip, computeSubSectorDivergences } from "@/lib/sector-rotation/sub-sector-constants";
-import type { SubSectorDivergence } from "@/lib/sector-rotation/sub-sector-constants";
 import {
   computeMarketPosture,
   computeSectorTiers,
@@ -163,29 +159,6 @@ export default function DailyBriefPage() {
   );
 
   // Compute bias score from pre-market + existing regime/posture data
-  const biasResult = useMemo(() => {
-    if (!posture || futures.length === 0) return null;
-    const regimeData = data?.regime ? {
-      regime: data.regime.regime,
-      regimeConfidence: data.regime.regimeConfidence,
-      vix: data.regime.vix,
-      vixSlope: data.regime.vixSlope,
-      yield10y: data.regime.yield10y,
-      dxy: data.regime.dxy,
-      dxyTrend: data.regime.dxyTrend,
-      favoredSectors: data.regime.favoredSectors,
-      avoidSectors: data.regime.avoidSectors,
-      vixBounds: data.regime.vixBounds ?? PREMARKET_SCORING.DEFAULT_VIX_BOUNDS,
-    } : null;
-    return computeBiasScore(futures, posture, regimeData, sectorBreadth);
-  }, [posture, futures, data?.regime, sectorBreadth]);
-
-  // Sub-sector divergences
-  const subSectorDivergences = useMemo(() => {
-    if (!data?.subSectorScores?.length || !data.sectors.length) return [];
-    return computeSubSectorDivergences(data.subSectorScores, data.sectors);
-  }, [data]);
-
   // Persist today's posture (side effect)
   useEffect(() => {
     if (posture) savePosture(posture.posture);
@@ -287,46 +260,25 @@ export default function DailyBriefPage() {
       {/* Brief Content */}
       {activeTab === "brief" && <>
 
-      {/* 0. Pre-Market Pulse */}
-      <CollapsiblePanel
-        id="pulse"
-        title={`Pre-Market Pulse \u2014 ${new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" })}`}
-        collapsed={collapsed.has("pulse")}
-        onToggle={toggle}
-        badge={
-          biasResult ? (
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium border ${
-              biasResult.score >= 2 ? "bg-green-500/10 border-green-500/30 text-green-400"
-                : biasResult.score <= -2 ? "bg-red-500/10 border-red-500/30 text-red-400"
-                : "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
-            }`}>
-              {tradingBias?.bias ?? biasResult.label} ({biasResult.score > 0 ? "+" : ""}{biasResult.score})
-            </span>
-          ) : pulseLoading ? (
-            <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">Loading...</span>
-          ) : null
-        }
-      >
-        <PreMarketPulseContent
-          futures={futures}
-          regime={data?.regime ?? null}
-          biasResult={biasResult}
-          loading={pulseLoading}
-          subSectorScores={data?.subSectorScores ?? []}
-        />
-      </CollapsiblePanel>
+      {/* 1. Market Posture Banner (position 1 — most important signal) */}
+      {posture && <PostureBanner posture={posture} />}
 
-      {/* 0.5 Pre-Market Trading Bias */}
-      <TradingBiasCard bias={tradingBias} loading={pulseLoading} snapshot={biasSnapshot} snapshotLoading={snapshotLoading} />
+      {/* Pre-Market Overview (Pulse + Bias merged) */}
+      <TradingBiasCard
+        bias={tradingBias}
+        loading={pulseLoading}
+        snapshot={biasSnapshot}
+        snapshotLoading={snapshotLoading}
+        futures={futures}
+        regime={data?.regime ?? null}
+        subSectorScores={data?.subSectorScores ?? []}
+      />
 
       {/* 0.6 Leadership Health */}
       {leadershipHealth && <LeadershipHealthCard health={leadershipHealth} />}
 
       {/* 0.7 Policy Pulse */}
       <PolicyPulseWidget />
-
-      {/* 1. Market Posture Banner */}
-      {posture && <PostureBanner posture={posture} />}
 
       {/* 2. What Changed Today */}
       {whatChanged && (
@@ -403,47 +355,9 @@ export default function DailyBriefPage() {
           }
         >
           <div className="space-y-4">
-            <TierTable label="Actionable" sectors={tiers.actionable} labelColor="text-green-400" subSectorScores={data?.subSectorScores ?? []} />
-            <TierTable label="Watch" sectors={tiers.watch} labelColor="text-amber-400" subSectorScores={data?.subSectorScores ?? []} />
-            <TierTable label="Avoid" sectors={tiers.avoid} labelColor="text-red-400" subSectorScores={data?.subSectorScores ?? []} />
-          </div>
-        </CollapsiblePanel>
-      )}
-
-      {/* 4.5 Sub-Sector Divergences */}
-      {subSectorDivergences.filter((d) => d.signal !== "aligned").length > 0 && (
-        <CollapsiblePanel
-          id="divergences"
-          title="Sub-Sector Divergences"
-          collapsed={collapsed.has("divergences")}
-          onToggle={toggle}
-          badge={
-            <span className="rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 text-[10px] text-cyan-400">
-              {subSectorDivergences.filter((d) => d.signal !== "aligned").length} active
-            </span>
-          }
-        >
-          <p className="text-[10px] text-[#555] mb-3">Sub-sectors diverging from parent GICS sectors — early rotation signals.</p>
-          <div className="space-y-2">
-            {subSectorDivergences.filter((d) => d.signal !== "aligned").map((d) => (
-              <div key={d.subEtf} className={`rounded-lg border p-3 ${d.signal === "leading" ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-white">{d.subEtf}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${quadrantColor(d.subQuadrant)}`}>{d.subQuadrant}</span>
-                    <span className="text-[#555]">{"\u2192"}</span>
-                    <span className="text-xs text-[#888]">{d.parentEtf}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${quadrantColor(d.parentQuadrant)}`}>{d.parentQuadrant}</span>
-                  </div>
-                  <span className={`text-xs font-mono ${d.scoreDelta > 0 ? "text-green-400" : "text-red-400"}`}>
-                    {d.scoreDelta > 0 ? "+" : ""}{d.scoreDelta}
-                  </span>
-                </div>
-                <p className="mt-1 text-[10px] text-[#888]">
-                  {d.subName} {d.signal === "leading" ? "leading" : "lagging"} {d.parentName} — {d.context}
-                </p>
-              </div>
-            ))}
+            <TierTable label="Actionable" sectors={tiers.actionable} labelColor="text-green-400" showPicksLink />
+            <TierTable label="Watch" sectors={tiers.watch} labelColor="text-amber-400" />
+            <TierTable label="Avoid" sectors={tiers.avoid} labelColor="text-red-400" />
           </div>
         </CollapsiblePanel>
       )}
@@ -570,16 +484,26 @@ function computeDivergence(snapshotBias: string, liveBias: string): { label: str
   return { label: "Adjusted", color: "text-[#666] bg-[#181818] border-[#2a2a2a]" };
 }
 
-function TradingBiasCard({ bias, loading, snapshot, snapshotLoading }: {
+function TradingBiasCard({ bias, loading, snapshot, snapshotLoading, futures, regime, subSectorScores }: {
   bias: TradingBias | null;
   loading: boolean;
   snapshot: TradingBiasSnapshot | null;
   snapshotLoading: boolean;
+  futures?: FuturesSnapshot[];
+  regime?: { vix: number; vixSlope: "rising" | "falling" | "flat"; yield10y: number; dxy: number; dxyTrend: "rising" | "falling" | "flat"; regimeConfidence: number } | null;
+  subSectorScores?: SectorRotationScore[];
 }) {
   if (loading && !bias) return null;
 
   const hasSnapshot = !!snapshot;
-  const cardTitle = hasSnapshot ? "Live Trading Bias" : "Pre-Market Trading Bias";
+  const cardTitle = hasSnapshot ? "Pre-Market Overview" : "Pre-Market Overview";
+
+  // Compact pulse summary row
+  const indexFutures = (futures ?? []).filter((f) => INDEX_FUTURES.has(f.symbol));
+  const commodities = (futures ?? []).filter((f) => !INDEX_FUTURES.has(f.symbol));
+  const hasPulseData = indexFutures.length > 0 || regime;
+  const trendArrow = (slope: string) =>
+    slope === "rising" ? "\u2191" : slope === "falling" ? "\u2193" : "\u2192";
 
   if (!bias) {
     return (
@@ -589,6 +513,8 @@ function TradingBiasCard({ bias, loading, snapshot, snapshotLoading }: {
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold text-[#888]">{cardTitle}</h2>
         </div>
+        {/* Compact pulse data */}
+        {hasPulseData && <PulseCompactRow indexFutures={indexFutures} commodities={commodities} regime={regime ?? null} subSectorScores={subSectorScores ?? []} trendArrow={trendArrow} />}
         <p className="text-xs text-[#555]">Insufficient data — waiting for futures</p>
       </div>
     );
@@ -606,6 +532,9 @@ function TradingBiasCard({ bias, loading, snapshot, snapshotLoading }: {
     <div className={`rounded-xl border ${style.border} ${style.bg} p-4 space-y-3`}>
       {/* 9 AM Snapshot header */}
       <SnapshotHeader snapshot={snapshot} snapshotLoading={snapshotLoading} liveBias={bias.bias} />
+
+      {/* Compact pulse data (futures, macro, sub-sectors) */}
+      {hasPulseData && <PulseCompactRow indexFutures={indexFutures} commodities={commodities} regime={regime ?? null} subSectorScores={subSectorScores ?? []} trendArrow={trendArrow} />}
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -693,6 +622,78 @@ function TradingBiasCard({ bias, loading, snapshot, snapshotLoading }: {
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function PulseCompactRow({ indexFutures, commodities, regime, subSectorScores, trendArrow }: {
+  indexFutures: FuturesSnapshot[];
+  commodities: FuturesSnapshot[];
+  regime: { vix: number; vixSlope: "rising" | "falling" | "flat"; yield10y: number; dxy: number; dxyTrend: "rising" | "falling" | "flat"; regimeConfidence: number } | null;
+  subSectorScores: SectorRotationScore[];
+  trendArrow: (slope: string) => string;
+}) {
+  return (
+    <div className="rounded-lg border border-[#222] bg-[#0d0d0d] px-3 py-2 space-y-1.5">
+      {/* Futures row */}
+      {indexFutures.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          {indexFutures.map((f) => {
+            const isUp = f.changePct >= 0;
+            return (
+              <div key={f.symbol} className="flex items-center gap-1 text-[10px]">
+                <span className="text-[#666]">{f.symbol.replace("=F", "")}</span>
+                <span className={`font-mono font-medium ${isUp ? "text-green-400/70" : "text-red-400/70"}`}>
+                  {isUp ? "+" : ""}{f.changePct.toFixed(2)}%
+                </span>
+              </div>
+            );
+          })}
+          {commodities.map((f) => {
+            const isUp = f.changePct >= 0;
+            return (
+              <div key={f.symbol} className="flex items-center gap-1 text-[10px]">
+                <span className="text-[#555]">{f.symbol.replace("=F", "")}</span>
+                <span className={`font-mono ${isUp ? "text-green-400/50" : "text-red-400/50"}`}>
+                  {isUp ? "+" : ""}{f.changePct.toFixed(2)}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {/* Macro + Sub-sector row */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+        {regime && (<>
+          <div className="flex items-center gap-1 text-[10px]">
+            <span className="text-[#666]">VIX</span>
+            <span className={`font-medium ${regime.vix < 15 ? "text-green-400" : regime.vix > 25 ? "text-red-400" : "text-[#888]"}`}>
+              {regime.vix.toFixed(1)}
+            </span>
+            <span className="text-[#555]">{trendArrow(regime.vixSlope)}</span>
+          </div>
+          <div className="flex items-center gap-1 text-[10px]">
+            <span className="text-[#666]">DXY</span>
+            <span className="text-[#888]">{regime.dxy.toFixed(1)}</span>
+            <span className="text-[#555]">{trendArrow(regime.dxyTrend)}</span>
+          </div>
+        </>)}
+        {subSectorScores.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1">
+            {subSectorScores.map((s) => {
+              const qColor = s.quadrant === "LEADING" ? "bg-green-500/20 text-green-400 border-green-500/30"
+                : s.quadrant === "IMPROVING" ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
+                : s.quadrant === "WEAKENING" ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                : "bg-red-500/20 text-red-400 border-red-500/30";
+              return (
+                <span key={s.etf} className={`inline-flex rounded-full border px-1.5 py-0 text-[9px] font-medium ${qColor}`}>
+                  {s.etf}
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -846,200 +847,10 @@ function PostureBanner({ posture }: { posture: PostureResult }) {
   );
 }
 
-// SUB_SECTOR_PARENT and divergence helpers imported from @/lib/sector-rotation/sub-sector-constants
-
-// ── Pre-Market Pulse ──
-
-function generateBiasSummary(bias: { score: number; checklist: ChecklistItem[] }): string {
-  const bullish = bias.checklist.filter((i) => i.status === "bullish");
-  const bearish = bias.checklist.filter((i) => i.status === "bearish");
-
-  const futuresBull = bullish.some((i) => i.category === "futures");
-  const futuresBear = bearish.some((i) => i.category === "futures");
-  const lowVol = bullish.some((i) => i.id === "vix");
-  const highVol = bearish.some((i) => i.id === "vix");
-  const rotationBull = bullish.some((i) => i.category === "sectors");
-  const rotationBear = bearish.some((i) => i.category === "sectors");
-
-  const parts: string[] = [];
-  if (futuresBull) parts.push("futures are up");
-  else if (futuresBear) parts.push("futures are down");
-  if (lowVol) parts.push("volatility is low");
-  else if (highVol) parts.push("VIX is elevated");
-  if (rotationBull) parts.push("rotation favors risk-on");
-  else if (rotationBear) parts.push("rotation leans defensive");
-
-  if (bias.score >= 3) {
-    const detail = parts.length > 0 ? parts.join(", ") + " — " : "";
-    return `${detail}conditions lean bullish.`;
-  }
-  if (bias.score <= -3) {
-    const detail = parts.length > 0 ? parts.join(" and ") + " — " : "";
-    return `${detail}caution warranted.`;
-  }
-  return "Mixed signals across futures, macro, and rotation — no clear directional edge.";
-}
 
 const INDEX_FUTURES = new Set(["ES=F", "NQ=F", "RTY=F", "YM=F"]);
 
-function FuturesRow({ items, label }: { items: FuturesSnapshot[]; label: string }) {
-  if (items.length === 0) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-      <span className="text-[10px] text-[#555] font-medium uppercase tracking-wider w-12 shrink-0">{label}</span>
-      {items.map((f) => {
-        const isUp = f.changePct >= 0;
-        return (
-          <div key={f.symbol} className="flex items-center gap-1.5 text-xs">
-            <span className="text-[#888] font-medium">{f.symbol.replace("=F", "")}</span>
-            <span className="text-[#ccc] font-mono">{f.price.toFixed(2)}</span>
-            <span className={`flex items-center gap-0.5 font-semibold ${isUp ? "text-green-400" : "text-red-400"}`}>
-              {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {isUp ? "+" : ""}{f.changePct.toFixed(2)}%
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function PreMarketPulseContent({
-  futures,
-  regime,
-  biasResult,
-  loading,
-  subSectorScores,
-}: {
-  futures: FuturesSnapshot[];
-  regime: { vix: number; vixSlope: "rising" | "falling" | "flat"; yield10y: number; dxy: number; dxyTrend: "rising" | "falling" | "flat"; regimeConfidence: number } | null;
-  biasResult: { score: number; label: string; checklist: ChecklistItem[] } | null;
-  loading: boolean;
-  subSectorScores: SectorRotationScore[];
-}) {
-  if (loading && futures.length === 0) {
-    return <p className="text-sm text-[#666]">Loading pre-market data...</p>;
-  }
-
-  if (futures.length === 0 && !regime) {
-    return <p className="text-sm text-[#666]">Pre-market data unavailable.</p>;
-  }
-
-  const trendArrow = (slope: string) =>
-    slope === "rising" ? "\u2191" : slope === "falling" ? "\u2193" : "\u2192";
-
-  const indexFutures = futures.filter((f) => INDEX_FUTURES.has(f.symbol));
-  const commodities = futures.filter((f) => !INDEX_FUTURES.has(f.symbol));
-
-  // Data timestamp from the most recent futures quote
-  const latestTs = futures.reduce((max, f) => Math.max(max, f.timestamp), 0);
-
-  return (
-    <div className="space-y-3">
-      {/* Bias Gauge */}
-      {biasResult && (
-        <div className="space-y-1.5">
-          <div className="relative h-2.5 rounded-full bg-gradient-to-r from-red-600/40 via-yellow-500/40 to-green-600/40">
-            <div
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-4 w-4 rounded-full border-2 border-white/80 shadow-lg transition-all duration-500"
-              style={{
-                left: `${((biasResult.score + 10) / 20) * 100}%`,
-                backgroundColor: biasResult.score >= 2 ? "#22c55e" : biasResult.score <= -2 ? "#ef4444" : "#eab308",
-              }}
-            />
-          </div>
-          <div className="flex justify-between text-[9px] text-[#555]">
-            <span>-10</span>
-            <span>0</span>
-            <span>+10</span>
-          </div>
-          <p className="text-xs text-[#999] mt-1">{generateBiasSummary(biasResult)}</p>
-        </div>
-      )}
-
-      {/* Index Futures */}
-      <FuturesRow items={indexFutures} label="Index" />
-      {indexFutures.length > 0 && (
-        <p className="text-[10px] text-[#555] ml-12">S&amp;P 500, Nasdaq, Russell 2000 futures — shows overnight market direction</p>
-      )}
-
-      {/* Commodities */}
-      <FuturesRow items={commodities} label="Cmdty" />
-      {commodities.length > 0 && (
-        <p className="text-[10px] text-[#555] ml-12">Oil (economic activity) and gold (safety demand) — context for risk appetite</p>
-      )}
-
-      {/* Macro indicators: VIX, 10Y, DXY, Regime Confidence */}
-      {regime && (<>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-          <span className="text-[10px] text-[#555] font-medium uppercase tracking-wider w-12 shrink-0">Macro</span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[#888]">VIX</span>
-            <span className={`font-medium ${regime.vix < 15 ? "text-green-400" : regime.vix > 25 ? "text-red-400" : "text-[#ccc]"}`}>
-              {regime.vix.toFixed(1)}
-            </span>
-            <span className="text-[#666]">{trendArrow(regime.vixSlope)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[#888]">10Y</span>
-            <span className="text-[#ccc] font-medium">{regime.yield10y.toFixed(2)}%</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[#888]">DXY</span>
-            <span className="text-[#ccc] font-medium">{regime.dxy.toFixed(1)}</span>
-            <span className="text-[#666]">{trendArrow(regime.dxyTrend)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[#888]">Confidence</span>
-            <span className={`font-medium ${regime.regimeConfidence >= 70 ? "text-green-400" : regime.regimeConfidence >= 50 ? "text-[#ccc]" : "text-amber-400"}`}>
-              {regime.regimeConfidence}%
-            </span>
-          </div>
-        </div>
-        <p className="text-[10px] text-[#555] ml-12">{"VIX = fear gauge (< 15 calm, > 25 stressed) · 10Y = bond yields · DXY = US dollar strength"}</p>
-      </>)}
-
-      {/* Sub-Sector Rotation */}
-      {subSectorScores.length > 0 && (<>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-          <span className="text-[10px] text-[#555] font-medium uppercase tracking-wider w-12 shrink-0">Rotatn</span>
-          {subSectorScores.map((s) => {
-            const qColor = s.quadrant === "LEADING" ? "bg-green-500/20 text-green-400 border-green-500/30"
-              : s.quadrant === "IMPROVING" ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
-              : s.quadrant === "WEAKENING" ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-              : s.quadrant === "LAGGING" ? "bg-red-500/20 text-red-400 border-red-500/30"
-              : "bg-[#222] text-[#888] border-[#333]";
-            return (
-              <span key={s.etf} className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${qColor}`}>
-                {s.etf}
-              </span>
-            );
-          })}
-        </div>
-        <p className="text-[10px] text-[#555] ml-12">Sub-sector quadrants — leading indicators that move before broad GICS sectors. Divergence from parent = early rotation signal.</p>
-      </>)}
-
-      {/* Data timestamp */}
-      {latestTs > 0 && (
-        <p className="text-[10px] text-[#444]">
-          As of {new Date(latestTs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" })}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function TierTable({ label, sectors, labelColor, subSectorScores }: { label: string; sectors: SectorRotationScore[]; labelColor: string; subSectorScores: SectorRotationScore[] }) {
-  // Build lookup: parent ETF → matching sub-sector scores
-  const childrenByParent = new Map<string, SectorRotationScore[]>();
-  for (const sub of subSectorScores) {
-    const parent = SUB_SECTOR_PARENT[sub.etf];
-    if (!parent) continue;
-    const list = childrenByParent.get(parent) ?? [];
-    list.push(sub);
-    childrenByParent.set(parent, list);
-  }
-
+function TierTable({ label, sectors, labelColor, showPicksLink }: { label: string; sectors: SectorRotationScore[]; labelColor: string; showPicksLink?: boolean }) {
   if (sectors.length === 0) {
     return (
       <div>
@@ -1059,70 +870,33 @@ function TierTable({ label, sectors, labelColor, subSectorScores }: { label: str
               <th className="pb-1.5 pr-3">ETF</th>
               <th className="pb-1.5 pr-3">Quadrant</th>
               <th className="pb-1.5 pr-3 text-right">Composite</th>
-              <th className="pb-1.5 pr-3 text-right">Accel</th>
-              <th className="pb-1.5 pr-3 text-right">CMF</th>
-              <th className="pb-1.5 pr-3 text-right">Breadth</th>
               <th className="pb-1.5">Action</th>
             </tr>
           </thead>
           <tbody>
-            {sectors.map((s) => {
-              const children = childrenByParent.get(s.etf) ?? [];
-              return (
-                <Fragment key={s.etf}>
-                  <tr className="border-t border-[#1a1a1a]">
-                    <td className="py-1.5 pr-3 text-white font-medium">{s.sector}</td>
-                    <td className="py-1.5 pr-3 text-[#888]">{s.etf}</td>
-                    <td className="py-1.5 pr-3">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${quadrantColor(s.quadrant)}`}>
-                        {s.quadrant}
-                      </span>
-                    </td>
-                    <td className="py-1.5 pr-3 text-right text-[#ccc]">{s.compositeScore}</td>
-                    <td className={`py-1.5 pr-3 text-right ${s.acceleration > 0 ? "text-green-400" : s.acceleration < 0 ? "text-red-400" : "text-[#666]"}`}>
-                      {s.acceleration > 0 ? "+" : ""}{s.acceleration.toFixed(2)}
-                    </td>
-                    <td className={`py-1.5 pr-3 text-right ${s.cmf20 > 0 ? "text-green-400" : s.cmf20 < 0 ? "text-red-400" : "text-[#666]"}`}>
-                      {s.cmf20.toFixed(3)}
-                    </td>
-                    <td className="py-1.5 pr-3 text-right text-[#ccc]">
-                      {s.breadthPct != null ? `${s.breadthPct.toFixed(0)}%` : "\u2014"}
-                    </td>
-                    <td className="py-1.5">
-                      <TradingActionBadge sector={s} />
-                    </td>
-                  </tr>
-                  {children.map((c) => {
-                    const diverging = s.quadrant !== c.quadrant;
-                    return (
-                      <tr key={c.etf} className="border-t border-[#111]">
-                        <td className="py-1 pr-3 pl-4 text-[#999] text-[11px]">
-                          <span className="text-[#444] mr-1">{"\u2514"}</span>{c.sector}
-                        </td>
-                        <td className="py-1 pr-3 text-[#666] text-[11px]">{c.etf}</td>
-                        <td className="py-1 pr-3">
-                          <span className={`inline-flex rounded-full border px-1.5 py-0 text-[9px] font-medium ${quadrantColor(c.quadrant)}`}>
-                            {c.quadrant}
-                          </span>
-                          {diverging && (
-                            <span className="ml-1 text-[9px] text-amber-400" title={subSectorDivergenceTooltip(c.etf)}>!</span>
-                          )}
-                        </td>
-                        <td className="py-1 pr-3 text-right text-[#888] text-[11px]">{c.compositeScore}</td>
-                        <td className={`py-1 pr-3 text-right text-[11px] ${c.acceleration > 0 ? "text-green-400" : c.acceleration < 0 ? "text-red-400" : "text-[#666]"}`}>
-                          {c.acceleration > 0 ? "+" : ""}{c.acceleration.toFixed(2)}
-                        </td>
-                        <td className="py-1 pr-3" colSpan={2} />
-                        <td className="py-1" />
-                      </tr>
-                    );
-                  })}
-                </Fragment>
-              );
-            })}
+            {sectors.map((s) => (
+              <tr key={s.etf} className="border-t border-[#1a1a1a]">
+                <td className="py-1.5 pr-3 text-white font-medium">{s.sector}</td>
+                <td className="py-1.5 pr-3 text-[#888]">{s.etf}</td>
+                <td className="py-1.5 pr-3">
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${quadrantColor(s.quadrant)}`}>
+                    {s.quadrant}
+                  </span>
+                </td>
+                <td className="py-1.5 pr-3 text-right text-[#ccc]">{s.compositeScore}</td>
+                <td className="py-1.5">
+                  <TradingActionBadge sector={s} />
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
+      {showPicksLink && (
+        <Link href="/sectors/picks" className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#5ba3e6] hover:text-white transition-colors">
+          See stocks <ArrowRight className="h-3 w-3" />
+        </Link>
+      )}
     </div>
   );
 }

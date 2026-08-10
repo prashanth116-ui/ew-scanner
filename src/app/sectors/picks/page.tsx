@@ -8,13 +8,9 @@ import { ScannerCTA } from "@/components/scanner-cta";
 import { getEquitySectors, getSubSectors, getCrossAssetETFs } from "@/data/sector-universe";
 import {
   useCollapsedPanels,
-  CollapsiblePanel,
   RotationEntrySignals,
-  PreRunnerRadar,
   StockPicksPanel,
   PullbackWatchPanel,
-  SectorDetail,
-  TopPicksBySector,
   FilterRecipes,
   SectorNav,
   LOADING_PHASES,
@@ -32,18 +28,12 @@ export default function PicksPage() {
     loading,
     error,
     fetchData,
-    scanResults,
     scanResultsDate,
     loadingPhase,
     loadingTimeout,
     setLoadingTimeout,
     rotationData,
     rotationFetchFailed,
-    rotationSectorRS,
-    stocksBySector,
-    sortedSectors,
-    subSectorScores,
-    comparisonMap,
     setScanResults,
     setScanResultsDate,
   } = useSectorData();
@@ -56,6 +46,7 @@ export default function PicksPage() {
   const { scanning: scanRefreshing, progress: scanProgress, scannedCount, totalCount, refreshScan, cancelScan } = useScanRefresh(scanResultsDate, handleScanComplete);
 
   const [collapsedPanels, togglePanel] = useCollapsedPanels(PICKS_COLLAPSED_KEY);
+  const [crossFilterSector, setCrossFilterSector] = useState<string | null>(null);
 
   // Cross-scanner reference maps (fetch once on mount)
   const [inflectionMap, setInflectionMap] = useState<Map<string, { trade_read: string; score: number }>>(new Map());
@@ -166,6 +157,7 @@ export default function PicksPage() {
           onToggle={togglePanel}
           inflectionMap={inflectionMap}
           transitionMap={transitionMap}
+          onSectorClick={setCrossFilterSector}
         />
       )}
       {!rotationData && rotationFetchFailed && (
@@ -174,61 +166,49 @@ export default function PicksPage() {
         </div>
       )}
 
-      {/* Pre-Runner Radar */}
-      {rotationData && data.enrichedStocks && (
-        <PreRunnerRadar
-          rotationData={rotationData}
-          enrichedStocks={data.enrichedStocks.passed}
-          sectors={[...data.sectors, ...subSectorScores]}
-          collapsed={collapsedPanels.has("prerunner-radar")}
-          onToggle={togglePanel}
-        />
-      )}
-
-      {/* Top Picks by Sector */}
-      <CollapsiblePanel
-        id="top-picks-sector"
-        title="Top Picks by Sector"
-        collapsed={collapsedPanels.has("top-picks-sector")}
-        onToggle={togglePanel}
-        badge={<ScanAgeBadge date={scanResultsDate} variant="badge" />}
-        actions={
-          <div className="flex items-center gap-2">
-            {scanRefreshing ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#2a2a2a]">
-                    <div
-                      className="h-full rounded-full bg-[#5ba3e6] transition-all duration-300"
-                      style={{ width: totalCount > 0 ? `${(scannedCount / totalCount) * 100}%` : "0%" }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-[#888] tabular-nums">{scanProgress}</span>
-                </div>
-                <button type="button"
-                  onClick={cancelScan}
-                  className="flex items-center gap-1 rounded-md border border-[#333] px-2 py-1 text-[10px] text-[#888] hover:bg-[#1a1a1a] hover:text-white"
-                >
-                  <X className="h-3 w-3" /> Cancel
-                </button>
-              </>
-            ) : (
-              <button type="button"
-                onClick={refreshScan}
-                className="flex items-center gap-1 rounded-md border border-[#333] px-2 py-1 text-[10px] text-[#888] hover:bg-[#1a1a1a] hover:text-white"
-              >
-                <RefreshCw className="h-3 w-3" /> Refresh Scan
-              </button>
-            )}
-          </div>
-        }
-      >
-        <TopPicksBySector stocks={data.enrichedStocks?.passed ?? []} sectors={[...data.sectors, ...subSectorScores]} inflectionMap={inflectionMap} transitionMap={transitionMap} />
-      </CollapsiblePanel>
-
       {/* Stock Picks */}
       {data.enrichedStocks && data.enrichedStocks.passed.length > 0 && (
-        <StockPicksPanel stocks={data.enrichedStocks.passed} collapsed={collapsedPanels.has("stock-picks")} onToggle={togglePanel} rotationPerfMap={rotationPerfMap} inflectionMap={inflectionMap} transitionMap={transitionMap} />
+        <StockPicksPanel
+          stocks={data.enrichedStocks.passed}
+          collapsed={collapsedPanels.has("stock-picks")}
+          onToggle={togglePanel}
+          rotationPerfMap={rotationPerfMap}
+          inflectionMap={inflectionMap}
+          transitionMap={transitionMap}
+          crossFilterSector={crossFilterSector}
+          onClearCrossFilter={() => setCrossFilterSector(null)}
+          scanActions={
+            <div className="flex items-center gap-2">
+              <ScanAgeBadge date={scanResultsDate} variant="badge" />
+              {scanRefreshing ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#2a2a2a]">
+                      <div
+                        className="h-full rounded-full bg-[#5ba3e6] transition-all duration-300"
+                        style={{ width: totalCount > 0 ? `${(scannedCount / totalCount) * 100}%` : "0%" }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-[#888] tabular-nums">{scanProgress}</span>
+                  </div>
+                  <button type="button"
+                    onClick={cancelScan}
+                    className="flex items-center gap-1 rounded-md border border-[#333] px-2 py-1 text-[10px] text-[#888] hover:bg-[#1a1a1a] hover:text-white"
+                  >
+                    <X className="h-3 w-3" /> Cancel
+                  </button>
+                </>
+              ) : (
+                <button type="button"
+                  onClick={refreshScan}
+                  className="flex items-center gap-1 rounded-md border border-[#333] px-2 py-1 text-[10px] text-[#888] hover:bg-[#1a1a1a] hover:text-white"
+                >
+                  <RefreshCw className="h-3 w-3" /> Refresh Scan
+                </button>
+              )}
+            </div>
+          }
+        />
       )}
 
       {/* Pullback Watch */}
@@ -236,32 +216,11 @@ export default function PicksPage() {
         <PullbackWatchPanel stocks={data.enrichedStocks.pullbackWatch} collapsed={collapsedPanels.has("pullback-watch")} onToggle={togglePanel} />
       )}
 
-      {/* No scan data hint */}
-      {scanResults.length === 0 && (
-        <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-2.5 text-xs text-[#888]">
-          No Pre-Run scan data loaded. Run a <a href="/prerun" className="text-[#5ba3e6] hover:underline">Pre-Run scan</a> to see stock-level scores, verdicts, and earnings data in sector details below.
-        </div>
-      )}
-
-      {/* Sector Details */}
-      <CollapsiblePanel
-        id="sector-details"
-        title="Sector Details"
-        collapsed={collapsedPanels.has("sector-details")}
-        onToggle={togglePanel}
-        badge={<span className="text-[10px] text-[#555]" title="6 factors: momentum, acceleration, Mansfield RS, CMF, breadth, smart money. Missing factors have weights redistributed.">% = missing data</span>}
-        actions={
-          <div className="flex items-center gap-2">
-            <ScanAgeBadge date={scanResultsDate} variant="inline" />
-          </div>
-        }
-      >
-        <div className="space-y-2">
-          {sortedSectors.map((s) => (
-            <SectorDetail key={s.sector} sector={s} stocks={stocksBySector.get(s.sector) ?? []} prevSnapshot={comparisonMap?.get(s.sector)} etfReturns={data.etfReturns20d?.[s.etf]} hasRotationData={rotationSectorRS.size > 0} rotationFetchFailed={rotationFetchFailed} />
-          ))}
-        </div>
-      </CollapsiblePanel>
+      {/* Dashboard link */}
+      <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] px-4 py-2.5 text-xs text-[#888]">
+        View detailed sector analysis on the{" "}
+        <a href="/sectors" className="text-[#5ba3e6] hover:underline">Dashboard</a>.
+      </div>
 
       {/* Filter Recipes */}
       <FilterRecipes />

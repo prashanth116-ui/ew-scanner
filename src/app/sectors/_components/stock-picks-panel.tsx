@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, Fragment } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import type {
   SectorRotationScore,
   RRGQuadrant,
@@ -120,7 +120,7 @@ export function TopPicksBySector({ stocks, sectors, inflectionMap, transitionMap
 
 // ── Stock Picks Panel ──
 
-export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, inflectionMap, transitionMap }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void; rotationPerfMap?: Map<string, number>; inflectionMap?: Map<string, { trade_read: string; score: number }>; transitionMap?: Map<string, { alert_state: string; state: string; score: number }> }) {
+export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, inflectionMap, transitionMap, scanActions, crossFilterSector, onClearCrossFilter }: { stocks: EnrichedStock[]; collapsed?: boolean; onToggle?: (id: string) => void; rotationPerfMap?: Map<string, number>; inflectionMap?: Map<string, { trade_read: string; score: number }>; transitionMap?: Map<string, { alert_state: string; state: string; score: number }>; scanActions?: React.ReactNode; crossFilterSector?: string | null; onClearCrossFilter?: () => void }) {
   const [filter, setFilter] = usePersistedFilter<ConvictionLevel | "ALL">("ew-filter:picks:conviction", "ALL");
   const [sectorFilter, setSectorFilter] = usePersistedFilter<string>("ew-filter:picks:sector", "ALL");
   const [categoryFilter, setCategoryFilter] = usePersistedFilter<StockCategory | "ALL">("ew-filter:picks:category", "ALL");
@@ -141,7 +141,8 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
   const filtered = useMemo(() => {
     let list = stocks;
     if (filter !== "ALL") list = list.filter((s) => s.conviction === filter);
-    if (sectorFilter !== "ALL") list = list.filter((s) => s.sector === sectorFilter);
+    if (crossFilterSector) list = list.filter((s) => s.sector === crossFilterSector);
+    else if (sectorFilter !== "ALL") list = list.filter((s) => s.sector === sectorFilter);
     if (categoryFilter !== "ALL") list = list.filter((s) => s.category === categoryFilter);
     if (phaseFilter !== "ALL") list = list.filter((s) => s.phase === phaseFilter);
     if (quadrantFilter === "LEADING_IMPROVING") list = list.filter((s) => s.sectorQuadrant === "LEADING" || s.sectorQuadrant === "IMPROVING");
@@ -169,7 +170,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
       return sortDir === "desc" ? -cmp : cmp;
     });
     return sorted;
-  }, [stocks, filter, sectorFilter, categoryFilter, phaseFilter, quadrantFilter, rsAccelFilter, volFilter, aboveSmaFilter, sortKey, sortDir]);
+  }, [stocks, filter, sectorFilter, crossFilterSector, categoryFilter, phaseFilter, quadrantFilter, rsAccelFilter, volFilter, aboveSmaFilter, sortKey, sortDir]);
 
   const stocksBySector = useMemo(() => {
     const groups = new Map<string, { etf: string; sector: string; quadrant: RRGQuadrant; stocks: EnrichedStock[] }>();
@@ -236,7 +237,17 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
   const selectClass = "rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-xs text-[#a0a0a0]";
 
   return (
-    <CollapsiblePanel id="stock-picks" title="Stock Picks" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})} badge={badge}>
+    <CollapsiblePanel id="stock-picks" title="Stock Picks" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})} badge={badge} actions={scanActions}>
+      {crossFilterSector && (
+        <div className="flex items-center gap-2 px-1 pb-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#5ba3e6]/30 bg-[#5ba3e6]/10 px-2.5 py-1 text-xs text-[#5ba3e6]">
+            Showing: {crossFilterSector}
+            <button type="button" onClick={onClearCrossFilter} className="ml-0.5 hover:text-white transition-colors">
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 px-1 pb-3">
         <select value={filter} onChange={(e) => setFilter(e.target.value as ConvictionLevel | "ALL")} className={selectClass}>
           <option value="ALL">All Conviction</option>

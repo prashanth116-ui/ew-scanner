@@ -289,11 +289,9 @@ export function SectorComparison({ sectors }: { sectors: SectorRotationScore[] }
 
 // ── Sub-Sector Leading Indicators Panel ──
 
-export function SubSectorPanel({ scores, collapsed, onToggle }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
-  if (scores.length === 0) return null;
-
+function SubSectorContent({ scores }: { scores: SectorRotationScore[] }) {
   return (
-    <CollapsiblePanel id="sub-sectors" title="Leading Indicators (Sub-Sectors)" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
+    <>
       <p className="text-[10px] text-[#555] mb-3 px-1">SMH (semis), IGV (software), KRE (credit cycle), XHB (housing), XRT (consumer), IYT (transport), ITA (aerospace &amp; defense), ARKX (space innovation), UFO (space), AIQ (AI &amp; robotics) — early signals before GICS sectors move.</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 px-1">
         {scores.map((s) => (
@@ -328,17 +326,25 @@ export function SubSectorPanel({ scores, collapsed, onToggle }: { scores: Sector
           </div>
         ))}
       </div>
+    </>
+  );
+}
+
+export function SubSectorPanel({ scores, collapsed, onToggle, embedded }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void; embedded?: boolean }) {
+  if (scores.length === 0) return null;
+  if (embedded) return <SubSectorContent scores={scores} />;
+  return (
+    <CollapsiblePanel id="sub-sectors" title="Leading Indicators (Sub-Sectors)" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
+      <SubSectorContent scores={scores} />
     </CollapsiblePanel>
   );
 }
 
 // ── Leadership Baskets Panel ──
 
-export function LeadershipBasketsPanel({ scores, collapsed, onToggle }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
-  if (scores.length === 0) return null;
-
+function LeadershipContent({ scores }: { scores: SectorRotationScore[] }) {
   return (
-    <CollapsiblePanel id="leadership-baskets" title="Leadership Baskets" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
+    <>
       <p className="text-[10px] text-[#555] mb-3 px-1">MAGS, QQQ, IWM, ARKK — institutional leadership breadth and risk appetite.</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 px-1">
         {scores.map((s) => (
@@ -370,17 +376,25 @@ export function LeadershipBasketsPanel({ scores, collapsed, onToggle }: { scores
           </div>
         ))}
       </div>
+    </>
+  );
+}
+
+export function LeadershipBasketsPanel({ scores, collapsed, onToggle, embedded }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void; embedded?: boolean }) {
+  if (scores.length === 0) return null;
+  if (embedded) return <LeadershipContent scores={scores} />;
+  return (
+    <CollapsiblePanel id="leadership-baskets" title="Leadership Baskets" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
+      <LeadershipContent scores={scores} />
     </CollapsiblePanel>
   );
 }
 
 // ── Cross-Asset Money Flow Panel ──
 
-export function CrossAssetPanel({ scores, collapsed, onToggle }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void }) {
-  if (scores.length === 0) return null;
-
+function CrossAssetContent({ scores }: { scores: SectorRotationScore[] }) {
   return (
-    <CollapsiblePanel id="cross-asset" title="Cross-Asset Money Flow" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
+    <>
       <p className="text-[10px] text-[#555] mb-3 px-1">GLD, TLT, HYG, EEM, UUP — detect money leaving/entering equities entirely.</p>
       <div className="overflow-x-auto px-1">
         <table className="w-full text-xs">
@@ -420,6 +434,16 @@ export function CrossAssetPanel({ scores, collapsed, onToggle }: { scores: Secto
           </tbody>
         </table>
       </div>
+    </>
+  );
+}
+
+export function CrossAssetPanel({ scores, collapsed, onToggle, embedded }: { scores: SectorRotationScore[]; collapsed?: boolean; onToggle?: (id: string) => void; embedded?: boolean }) {
+  if (scores.length === 0) return null;
+  if (embedded) return <CrossAssetContent scores={scores} />;
+  return (
+    <CollapsiblePanel id="cross-asset" title="Cross-Asset Money Flow" collapsed={collapsed ?? false} onToggle={onToggle ?? (() => {})}>
+      <CrossAssetContent scores={scores} />
     </CollapsiblePanel>
   );
 }
