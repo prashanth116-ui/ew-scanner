@@ -433,47 +433,37 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
         lines.push(`    \uD83D\uDCC8 Avg ${sign}${c.historicalAvgReturn.toFixed(1)}% over ${c.historicalAvgDuration}d (${c.historicalCount} prior rotations)`);
       }
 
-      // Show top stocks for Focus and Monitor tiers, grouped by category
+      // Show top stocks for Focus and Monitor tiers
       if (tier !== "exit" && c.topStocks && c.topStocks.length > 0) {
-        // Multi-system confirmations first (highlighted)
-        const confirmed = c.topStocks.filter((s) => s.scannerHits && s.scannerHits.length > 0);
-        if (confirmed.length > 0) {
-          lines.push("");
-          lines.push(`    \u2B50 <b>Multi-System Confirmed</b>`);
+        if (tier === "focus") {
+          // Scanner-confirmed stocks first (single line each)
+          const confirmed = c.topStocks.filter((s) => s.scannerHits && s.scannerHits.length > 0);
           for (const s of confirmed) {
             const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
             const scanners = s.scannerHits!.map((h) => `${h.scanner}:${h.detail}`).join(" + ");
-            const conv = s.enrichedConviction ? ` | ${s.enrichedConviction}` : "";
+            const conv = s.enrichedConviction && s.enrichedConviction !== "WATCH"
+              ? ` | ${s.enrichedConviction}` : "";
             const vol = s.volumeConsistency >= 3 ? " \uD83D\uDD25" : "";
-            const chase = Math.abs(s.dailyChangePct) >= 5 ? " \u26A0\uFE0F+5%today" : "";
-            lines.push(`    <b>${s.symbol}</b> ${perf}${vol}${chase}`);
-            lines.push(`      ${scanners}${conv}`);
+            const star = (s.scannerHits?.length ?? 0) >= 2 ? "\u2B50 " : "";
+            lines.push(`    ${star}<b>${s.symbol}</b> ${perf}${vol} \u00B7 ${scanners}${conv}`);
           }
-        }
-
-        // Then remaining stocks by category
-        const fmt = (s: RotationTopStock) => {
-          const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
-          const vol = s.volumeConsistency >= 3 ? "\uD83D\uDD25" : "";
-          const chase = Math.abs(s.dailyChangePct) >= 5 ? "\u26A0\uFE0F" : "";
-          return `${s.symbol} ${perf}${vol}${chase}`.trim();
-        };
-        const nonConfirmed = c.topStocks.filter((s) => !s.scannerHits || s.scannerHits.length === 0);
-        const turnarounds = nonConfirmed.filter((s) => s.category === "turnaround");
-        const inflections = nonConfirmed.filter((s) => s.category === "inflection");
-        const leaders = nonConfirmed.filter((s) => s.category === "leading");
-        if (turnarounds.length > 0) {
-          lines.push(`    \uD83D\uDD04 Turnaround: ${turnarounds.map(fmt).join(", ")}`);
-        }
-        if (inflections.length > 0) {
-          lines.push(`    \u21A9\uFE0F Inflection: ${inflections.map(fmt).join(", ")}`);
-        }
-        if (leaders.length > 0) {
-          lines.push(`    \u2705 Leading: ${leaders.map(fmt).join(", ")}`);
-        }
-        const momentum = nonConfirmed.filter((s) => s.category === "momentum");
-        if (momentum.length > 0) {
-          lines.push(`    \u26A1 Momentum: ${momentum.map(fmt).join(", ")}`);
+          // Remaining stocks as compact category lists
+          const fmtTicker = (s: RotationTopStock) => {
+            const vol = s.volumeConsistency >= 3 ? "\uD83D\uDD25" : "";
+            return `${s.symbol}${vol}`;
+          };
+          const nonConfirmed = c.topStocks.filter((s) => !s.scannerHits || s.scannerHits.length === 0);
+          const turnarounds = nonConfirmed.filter((s) => s.category === "turnaround");
+          const others = nonConfirmed.filter((s) => s.category !== "turnaround");
+          if (turnarounds.length > 0) {
+            lines.push(`    \uD83D\uDD04 Turnaround: ${turnarounds.map(fmtTicker).join(", ")}`);
+          }
+          if (others.length > 0) {
+            lines.push(`    \u26A1 ${others.map(fmtTicker).join(", ")}`);
+          }
+        } else {
+          // Monitor: just ticker list
+          lines.push(`    ${c.topStocks.map((s) => s.symbol).join(", ")}`);
         }
       }
     }
@@ -609,8 +599,11 @@ export function formatRotationConfluence(
 
   // Copyable watchlist grouped by sector
   const totalStocks = new Set(entries.flatMap((e) => e.stocks.map((s) => s.symbol))).size;
+  const scannerNames = [...new Set(entries.flatMap((e) =>
+    e.stocks.flatMap((s) => (s.scannerHits ?? []).map((h) => h.scanner))
+  ))].sort();
   lines.push("");
-  lines.push(`\uD83D\uDCCA ${totalStocks} stocks across ${entries.length} rotations`);
+  lines.push(`\uD83D\uDCCA ${totalStocks} stocks across ${entries.length} rotations (${scannerNames.join(", ")})`);
   for (const entry of entries) {
     const tickers = entry.stocks.map((s) => s.symbol).join(", ");
     lines.push(`<code>${entry.rotation.etf}: ${tickers}</code>`);
