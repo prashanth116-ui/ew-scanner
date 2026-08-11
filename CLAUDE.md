@@ -54,7 +54,7 @@ npm run build             # Production build
 | `sector_snapshots` | `/api/sector-rotation/alert` | Sector rotation quadrants |
 | `trading_bias_daily` | `/api/daily-briefing/cron` | Daily trading bias predictions + next-day futures outcome backfill (90-day retention) |
 
-### Cron Schedule (15 jobs)
+### Cron Schedule (16 jobs)
 | UTC | ET | Days | Route | Notes |
 |-----|-----|------|-------|-------|
 | 00:00 | 8:00 PM | Tue-Sat | `/api/discovery/cron` | Trending ticker discovery (CoinGecko + Yahoo) |
@@ -70,6 +70,7 @@ npm run build             # Production build
 | 02:45 | 10:45 PM | Tue-Sat | `/api/qfe/cron/backfill` | QFE forward return backfill |
 | 02:50 | 10:50 PM | Tue-Sat | `/api/prerunner/cron/daily` | Rotation leaders/turnarounds radar |
 | 03:00 | 11:00 PM | Tue-Sat | `/api/nightly-summary/cron` | Consolidated nightly scan summary |
+| 03:02 | 11:02 PM | Tue-Sat | `/api/sector-rotation/confluence` | Rotation × Scanner confluence (fresh scanner data) |
 | 13:00 | 9:00 AM | Mon-Fri | `/api/daily-briefing/cron` | Pre-trade 4-level briefing + direction + bias logging + outcome backfill |
 | 06:00 Sun | 2:00 AM Sun | Sunday | `/api/sector-rotation/institutional-refresh` | Weekly institutional data refresh |
 
@@ -311,21 +312,13 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | `/api/premarket` | Pre-market futures, internals, trading bias, sector checklist |
 
 ### Sector Rotation Alert Cron
-The `/api/sector-rotation/alert` cron (22:00 UTC weekdays) sends up to 3 Telegram messages to `TELEGRAM_CHAT_ID_SECTOR`:
+The `/api/sector-rotation/alert` cron (22:00 UTC weekdays) sends up to 2 Telegram messages to `TELEGRAM_CHAT_ID_SECTOR`:
 
 **Message 1 — Quadrant Transitions:** Detects when sectors change RRG quadrant (e.g., LAGGING → IMPROVING). Uses `detectTransitions()` comparing current vs previous `SectorRotationResult`. Grouped by category: Rotation Starting, Breakout Confirmed, Momentum Fading, Rotation Out.
 
-**Message 2 — Rotation Tracker Changes:** Detects changes in the rotation tracker's active rotations. Uses `calculateRotationTracker()` + `detectRotationChanges()` comparing current vs previous `RotationSnapshot[]`. Compressed format: Focus tier shows scanner-confirmed stocks as single lines + non-confirmed as compact ticker lists; Monitor tier shows tickers only.
+**Message 2 — Rotation Tracker Changes:** Detects changes in the rotation tracker's active rotations. Uses `calculateRotationTracker()` + `detectRotationChanges()` comparing current vs previous `RotationSnapshot[]`. Compressed format: Focus tier shows scanner-confirmed stocks as single lines + non-confirmed as compact ticker lists; Monitor tier shows tickers only. Scanner badges on stocks use last night's scanner data (supplementary context — lifecycle changes are the primary signal).
 
-**Message 3 — Rotation × Scanner Confluence:** Scans ALL active rotations for stocks with scanner hits, regardless of whether the rotation itself changed. Catches the gap where a stock gets scanner confirmation (e.g., Trans:TRIGGERED) within an existing rotation that didn't fire Message 2 today. Uses `formatRotationConfluence()`.
-
-**Message 3 format:**
-- **Focus tier** (EARLY/MATURING): Full detail — single-line per stock with scanner hits, performance, volume. Multi-scanner stocks get ⭐. Only HIGH/MEDIUM conviction shown (WATCH dropped as noise).
-- **Monitor tier** (LATE/EXHAUSTING): Compact — sector header + ticker list only.
-- **NEW detection** (🆕): Stocks not in previous run's confluence get tagged. Uses `confluenceTickers` persisted in `PreviousState`. Skipped on cold start (no false positives).
-- **Footer:** Count + scanner names + copyable watchlist grouped by ETF (e.g., `IGV: PLTR, CRWD, NET`).
-- **Cap:** 5 stocks per rotation, deduped across rotations.
-- Returns `null` if no scanner-hit stocks found (no message sent).
+**Message 3 — Rotation × Scanner Confluence:** Moved to `/api/sector-rotation/confluence` cron at 03:02 UTC (11:02 PM ET) to use fresh scanner data. See "Rotation × Scanner Confluence Cron" section below.
 
 **Change types detected (Message 2):**
 
@@ -338,7 +331,7 @@ The `/api/sector-rotation/alert` cron (22:00 UTC weekdays) sends up to 3 Telegra
 
 **Lifecycle ordering:** EARLY (0) → MATURING (1) → LATE (2) → EXHAUSTING (3). Current < previous = upgrade, current > previous = warning.
 
-**State persistence:** `PreviousState` includes optional `rotations?: RotationSnapshot[]` and `confluenceTickers?: string[]` fields (backward-compatible). Persisted via 3-tier system: module cache → Vercel KV → env var. Each `RotationSnapshot` stores `sectorId`, `sectorName`, `etf`, `lifecycle`, `conviction`, `daysActive`, `startDate`.
+**State persistence:** `PreviousState` includes optional `rotations?: RotationSnapshot[]` field (backward-compatible). Persisted via 3-tier system: module cache → Vercel KV → env var (`sector-rotation:previous` KV key). `confluenceTickers` field vestigial in this route — confluence state managed by the confluence cron via separate `sector-rotation:confluence-tickers` KV key. Each `RotationSnapshot` stores `sectorId`, `sectorName`, `etf`, `lifecycle`, `conviction`, `daysActive`, `startDate`.
 
 **Stock selection pipeline (per-rotation top 15):** For each active rotation, stocks are filtered then classified into 4 categories. Categories are mutually exclusive (earlier category takes priority). Per-category cap of 8, combined cap of 15 per rotation.
 
@@ -357,14 +350,42 @@ The `/api/sector-rotation/alert` cron (22:00 UTC weekdays) sends up to 3 Telegra
 
 **Historical stats:** Pattern stats from `rotationResult.patternStats` enriched onto rotation changes. Shows `📈 Avg +X.X% over Nd (N prior rotations)`.
 
-**Resilience:** `calculateRotationTracker()` is wrapped in try/catch — if it fails, quadrant transition alerts still fire. Rotation tracker errors logged via `logError("sector-rotation/alert:rotation-tracker")`. Message 3 uses the same stockMap/currentRotations — if rotation tracker fails, no Message 2 or 3 but Message 1 still fires.
+**Resilience:** `calculateRotationTracker()` is wrapped in try/catch — if it fails, quadrant transition alerts still fire. Rotation tracker errors logged via `logError("sector-rotation/alert:rotation-tracker")`. If rotation tracker fails, no Message 2 but Message 1 still fires.
 
 **Key files:**
 
 | File | Purpose |
 |------|---------|
-| `src/app/api/sector-rotation/alert/route.ts` | Cron route — calls `calculateSectorRotation()` + `calculateRotationTracker()`, stock selection pipeline, cross-scanner confluence, 3 Telegram messages |
+| `src/app/api/sector-rotation/alert/route.ts` | Cron route — calls `calculateSectorRotation()` + `calculateRotationTracker()`, stock selection pipeline, 2 Telegram messages (quadrant transitions + rotation changes) |
+| `src/app/api/sector-rotation/confluence/route.ts` | Confluence cron — runs at 03:02 UTC with fresh scanner data, sends Message 3 (rotation × scanner confluence) |
 | `src/lib/sector-rotation/transitions.ts` | `detectRotationChanges()`, `formatRotationChanges()`, `formatRotationConfluence()`, `RotationSnapshot`, `RotationChange`, `RotationTopStock` types |
+| `src/lib/sector-rotation/confluence.ts` | Shared helpers: `buildScannerHitMap()`, `buildEnrichedMap()`, `buildStockMap()`, `buildCurrentRotations()`, `computeConfluenceTickers()` |
+
+### Rotation × Scanner Confluence Cron
+The `/api/sector-rotation/confluence` cron (03:02 UTC / 11:02 PM ET, Tue-Sat) sends 1 Telegram message to `TELEGRAM_CHAT_ID_SECTOR`. Runs AFTER all nightly scanners finish (~02:50 UTC), ensuring fresh scanner data from tonight's run instead of ~20-hour-old stale data from the previous night.
+
+**Why separated from the 6 PM alert:** The sector alert at 22:00 UTC (6 PM ET) fires before tonight's scanners run (02:00-02:50 UTC). At 6 PM, the only scanner data available is from last night's run, reflecting yesterday's market close. Moving confluence to 03:02 UTC means it uses tonight's scanner data, reflecting today's market close.
+
+**Message — Rotation × Scanner Confluence:** Scans ALL active rotations for stocks with scanner hits, regardless of whether the rotation itself changed. Catches stocks that get scanner confirmation (e.g., Trans:TRIGGERED) within existing rotations that didn't fire the 6 PM rotation change alert.
+
+**Message format:**
+- **Focus tier** (EARLY/MATURING): Full detail — single-line per stock with scanner hits, performance, volume. Multi-scanner stocks get star. Only HIGH/MEDIUM conviction shown (WATCH dropped as noise).
+- **Monitor tier** (LATE/EXHAUSTING): Compact — sector header + ticker list only.
+- **NEW detection:** Stocks not in previous run's confluence get tagged. Uses `confluenceTickers` persisted in separate KV key (`sector-rotation:confluence-tickers`). Skipped on cold start (no false positives).
+- **Footer:** Count + scanner names + copyable watchlist grouped by ETF (e.g., `IGV: PLTR, CRWD, NET`).
+- **Cap:** 5 stocks per rotation, deduped across rotations.
+- Returns `null` if no scanner-hit stocks found (no message sent).
+
+**Data flow:**
+1. `calculateSectorRotation()` — live sector data + enriched stocks
+2. `calculateRotationTracker()` — live active rotations + stock performance
+3. Load fresh scanner tables (PreRun, Inflection, Transition, Institutional) for today's UTC date
+4. Build stockMap using shared helpers from `confluence.ts`
+5. Load previous confluence tickers from KV for NEW detection
+6. `formatRotationConfluence()` → send to SECTOR channel
+7. Persist current confluence tickers to KV
+
+**Shared helpers** (`src/lib/sector-rotation/confluence.ts`): `buildScannerHitMap()`, `buildEnrichedMap()`, `buildStockMap()`, `buildCurrentRotations()`, `computeConfluenceTickers()` — used by both the 6 PM alert (for Message 2 scanner badges) and this 11 PM confluence cron (for Message 3).
 
 ### Pre-Market Trading Bias Engine
 Computes structured trading bias from equity futures, VIX, and market internals.
@@ -439,6 +460,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/app/api/institutional/cron/daily/route.ts` | Institutional daily cron |
 | `src/app/api/transition/cron/daily/route.ts` | Transition daily cron |
 | `src/app/api/nightly-summary/cron/route.ts` | Consolidated nightly scan summary (2 Telegram messages) |
+| `src/app/api/sector-rotation/confluence/route.ts` | Rotation × Scanner confluence (fresh scanner data, 1 Telegram message) |
 | `src/app/api/daily-briefing/cron/route.ts` | Daily briefing + trading bias logging + outcome backfill |
 
 ### Read API Routes
@@ -484,6 +506,7 @@ Mirrors the equity sector rotation system for crypto assets. Uses adapted qualit
 | `src/components/table-error-boundary.tsx` | React error boundary for data tables |
 | `src/components/nav.tsx` | Navigation with prerun sub-nav links |
 | `src/lib/ew-wave/telegram.ts` | `sendTelegramMessage()` for Telegram bot alerts |
+| `src/lib/sector-rotation/confluence.ts` | Shared helpers for scanner-rotation confluence (stockMap, scannerHitMap, enrichedMap builders) |
 
 ## Patterns & Conventions
 

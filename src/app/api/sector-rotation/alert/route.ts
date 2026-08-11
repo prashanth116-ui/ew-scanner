@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
 import { calculateRotationTracker } from "@/lib/sector-rotation/rotation-tracker";
-import { computeLifecycleStage, computeConviction } from "@/lib/sector-rotation/rotation-helpers";
 import {
   detectTransitions,
   formatRotationAlert,
   detectRotationChanges,
   formatRotationChanges,
-  formatRotationConfluence,
 } from "@/lib/sector-rotation/transitions";
-import type { RotationSnapshot, RotationTopStock, ScannerHit } from "@/lib/sector-rotation/transitions";
+import type { RotationSnapshot, RotationTopStock } from "@/lib/sector-rotation/transitions";
+import {
+  buildScannerHitMap,
+  buildEnrichedMap,
+  buildStockMap,
+  buildCurrentRotations,
+} from "@/lib/sector-rotation/confluence";
 import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { logError } from "@/lib/error-logger";
 import {
@@ -20,16 +24,22 @@ import {
 } from "@/lib/supabase/persistence";
 
 /**
- * Sector rotation alert cron — runs at 22:00 UTC weekdays.
- * Compares current quadrants vs previous snapshot.
- * Sends Telegram alert only when sectors change quadrants.
+ * Sector rotation alert cron — runs at 22:00 UTC (6 PM ET) weekdays.
+ * Sends up to 2 Telegram messages to the SECTOR channel:
+ *   Message 1: Quadrant transitions (sector RRG quadrant changes)
+ *   Message 2: Rotation tracker changes (lifecycle upgrades/warnings, new/ended)
+ *
+ * Message 3 (Rotation × Scanner Confluence) moved to /api/sector-rotation/confluence
+ * which runs at 03:02 UTC (11:02 PM ET) AFTER all nightly scanners finish,
+ * ensuring fresh scanner data instead of ~20-hour-old stale data.
+ *
+ * Scanner data is still loaded here for Message 2 scanner badges (supplementary
+ * context on rotation changes — staleness acceptable since the focus is lifecycle).
  *
  * State persistence (3-tier):
  *   1. Module-level cache — survives across warm Vercel invocations (same instance)
  *   2. Vercel KV — persists across cold starts (optional, requires @vercel/kv + KV_REST_API_URL)
  *   3. SECTOR_ROTATION_PREVIOUS env var — manual fallback
- *
- * If KV is not configured, behavior is identical to the previous 2-tier system.
  */
 
 const VALID_QUADRANTS = new Set(["LEADING", "WEAKENING", "LAGGING", "IMPROVING"]);
@@ -38,7 +48,7 @@ interface PreviousState {
   date: string;
   sectors: { sector: string; quadrant: string }[];
   rotations?: RotationSnapshot[];  // optional for backward compat with existing KV data
-  confluenceTickers?: string[];    // tickers with scanner hits from previous run
+  confluenceTickers?: string[];    // vestigial — kept for KV backward compat, no longer populated
 }
 
 const KV_KEY = "sector-rotation:previous";
@@ -135,7 +145,10 @@ export async function GET(request: NextRequest) {
     try {
       const rotationResult = await calculateRotationTracker();
 
-      // Load cross-scanner data for confluence detection
+      // Load scanner data for Message 2 scanner badges (supplementary context).
+      // NOTE: At 22:00 UTC, this loads last night's scanner data (~20h old).
+      // This is acceptable for Message 2 since badges are supplementary to lifecycle changes.
+      // Fresh scanner confluence (Message 3) runs at 03:02 UTC via /api/sector-rotation/confluence.
       const today = current.calculatedAt.slice(0, 10);
       const [prerunData, inflectionData, transitionData, institutionalData] = await Promise.all([
         loadPreRunDaily(today).catch(() => []),
@@ -144,156 +157,15 @@ export async function GET(request: NextRequest) {
         loadInstitutionalDaily(today).catch(() => []),
       ]);
 
-      // Build scanner hit maps: ticker → ScannerHit[]
-      const scannerHitMap = new Map<string, ScannerHit[]>();
-      const addHit = (ticker: string, hit: ScannerHit) => {
-        const arr = scannerHitMap.get(ticker) ?? [];
-        arr.push(hit);
-        scannerHitMap.set(ticker, arr);
-      };
-      for (const r of prerunData) {
-        if (r.final_score > 0 && (r.verdict === "PRIORITY" || r.verdict === "KEEP")) {
-          addHit(r.ticker, { scanner: "Setup", detail: r.verdict });
-        }
-      }
-      for (const r of inflectionData) {
-        if (r.trade_read === "STARTER" || r.trade_read === "ADD_ON") {
-          addHit(r.ticker, { scanner: "Inflect", detail: r.trade_read });
-        }
-      }
-      for (const r of transitionData) {
-        if (r.alert_state === "TRIGGERED" || r.alert_state === "READY") {
-          addHit(r.ticker, { scanner: "Trans", detail: r.alert_state });
-        }
-      }
-      for (const r of institutionalData) {
-        if (r.tier === "SHORTLIST" || r.tier === "WATCHLIST") {
-          addHit(r.ticker, { scanner: "Inst", detail: r.tier });
-        }
-      }
+      // Build stock map with scanner badges using shared helpers
+      const scannerHitMap = buildScannerHitMap(prerunData, inflectionData, transitionData, institutionalData);
+      const enrichedMap = buildEnrichedMap(current.enrichedStocks);
+      const { stockMap: builtStockMap, breadthMap } = buildStockMap(
+        rotationResult.activeRotations, scannerHitMap, enrichedMap,
+      );
+      stockMap = builtStockMap;
 
-      // Build enriched stock lookup from sector rotation result
-      const enrichedMap = new Map<string, { conviction: string; category: string }>();
-      if (current.enrichedStocks?.passed) {
-        for (const s of current.enrichedStocks.passed) {
-          enrichedMap.set(s.symbol, { conviction: s.conviction, category: s.category });
-        }
-      }
-
-      // Build stock map: sectorId → top 15 stocks across 3 categories
-      // Filters: dailyChangePct < 8% (no chasing), AVOID-classified stocks excluded
-      // Sort: rsDelta descending (fastest RS acceleration change)
-      stockMap = new Map<string, RotationTopStock[]>();
-      const breadthMap = new Map<string, { qualified: number; total: number }>();
-      type Stock = typeof rotationResult.activeRotations[0]["stocks"][0];
-
-      const passesFilters = (s: Stock): boolean => {
-        // Reject stocks that already moved 8%+ today (chasing)
-        if (Math.abs(s.dailyChangePct) >= 8) return false;
-        // Reject AVOID-classified stocks from enrichment
-        const enriched = enrichedMap.get(s.symbol);
-        if (enriched?.category === "AVOID") return false;
-        return true;
-      };
-
-      const toTopStock = (s: Stock, category: RotationTopStock["category"]): RotationTopStock => {
-        const enriched = enrichedMap.get(s.symbol);
-        return {
-          symbol: s.symbol,
-          performancePct: s.performancePct,
-          rsAcceleration: s.rsAcceleration,
-          rsDelta: s.rsDelta,
-          trendAccel: s.trendAccel,
-          dailyChangePct: s.dailyChangePct,
-          aboveSma50: s.aboveSma50,
-          volumeVsAvg: s.volumeVsAvg,
-          volumeConsistency: s.volumeConsistency,
-          isTurnaroundCandidate: s.isTurnaroundCandidate,
-          category,
-          scannerHits: scannerHitMap.get(s.symbol),
-          enrichedConviction: enriched?.conviction,
-          enrichedCategory: enriched?.category,
-        };
-      };
-
-      for (const r of rotationResult.activeRotations) {
-        const eligible = r.stocks.filter(passesFilters);
-        const turnaroundSet = new Set<string>();
-
-        // Per-category caps are generous; the combined .slice(0, 15) enforces the real limit
-        // 1. Turnarounds: below SMA50, curated flag, sustained volume
-        const turnarounds = eligible
-          .filter((s) => s.isTurnaroundCandidate && s.volumeConsistency >= 2)
-          .sort((a, b) => b.rsDelta - a.rsDelta)
-          .slice(0, 8);
-        for (const s of turnarounds) turnaroundSet.add(s.symbol);
-
-        // 2. Inflections: RS accelerating, some volume, not already picked
-        const inflectionSet = new Set<string>();
-        const inflections = eligible
-          .filter((s) =>
-            !turnaroundSet.has(s.symbol) &&
-            !s.isTurnaroundCandidate &&
-            s.rsDelta > 0 &&
-            s.volumeConsistency >= 1 &&
-            s.rsAcceleration > 0
-          )
-          .sort((a, b) => b.rsDelta - a.rsDelta)
-          .slice(0, 8);
-        for (const s of inflections) inflectionSet.add(s.symbol);
-
-        // 3. Leaders: above SMA50, positive RS, some volume
-        const leaderSet = new Set<string>();
-        const leaders = eligible
-          .filter((s) =>
-            !turnaroundSet.has(s.symbol) &&
-            !inflectionSet.has(s.symbol) &&
-            s.aboveSma50 &&
-            s.rsAcceleration > 0 &&
-            s.volumeConsistency >= 1
-          )
-          .sort((a, b) => b.rsDelta - a.rsDelta)
-          .slice(0, 8);
-        for (const s of leaders) leaderSet.add(s.symbol);
-
-        // 4. Momentum: above SMA50, positive performance, not in other categories
-        //    Catches stocks riding the sector wave but not individually outperforming ETF
-        const pickedSoFar = new Set([...turnaroundSet, ...inflectionSet, ...leaderSet]);
-        const momentum = eligible
-          .filter((s) =>
-            !pickedSoFar.has(s.symbol) &&
-            s.aboveSma50 &&
-            s.performancePct > 0
-          )
-          .sort((a, b) => b.performancePct - a.performancePct)
-          .slice(0, 8);
-
-        const combined = [
-          ...turnarounds.map((s) => toTopStock(s, "turnaround")),
-          ...inflections.map((s) => toTopStock(s, "inflection")),
-          ...leaders.map((s) => toTopStock(s, "leading")),
-          ...momentum.map((s) => toTopStock(s, "momentum")),
-        ].slice(0, 15);
-        if (combined.length > 0) stockMap.set(r.event.sectorId, combined);
-
-        // Track rotation breadth: qualified (pass filters) vs total stocks
-        breadthMap.set(r.event.sectorId, {
-          qualified: eligible.length,
-          total: r.stocks.length,
-        });
-
-      }
-
-      currentRotations = rotationResult.activeRotations.map((r) => ({
-        sectorId: r.event.sectorId,
-        sectorName: r.event.sectorName,
-        etf: r.event.etf,
-        lifecycle: computeLifecycleStage(r.event),
-        conviction: computeConviction(r.event).level,
-        quadrant: r.event.health.quadrant,
-        daysActive: r.event.daysActive,
-        startDate: r.event.startDate,
-      }));
+      currentRotations = buildCurrentRotations(rotationResult.activeRotations);
       rotationChanges = detectRotationChanges(currentRotations, previous?.rotations, stockMap);
 
       // Enrich rotation changes with breadth and historical pattern stats
@@ -334,18 +206,8 @@ export async function GET(request: NextRequest) {
       logError("sector-rotation/alert:rotation-tracker", err);
     }
 
-    // 4. Build confluence tickers for NEW detection on next run
-    const currentConfluenceTickers: string[] = [];
-    for (const [sectorId, stocks] of stockMap) {
-      if (!currentRotations.some((r) => r.sectorId === sectorId)) continue;
-      for (const s of stocks) {
-        if (s.scannerHits && s.scannerHits.length > 0) {
-          currentConfluenceTickers.push(s.symbol);
-        }
-      }
-    }
-
-    // 5. Persist current state for next run (module cache + KV)
+    // 4. Persist current state for next run (module cache + KV)
+    // confluenceTickers no longer populated here — managed by /api/sector-rotation/confluence
     cachedPrevious = {
       date: current.calculatedAt.slice(0, 10),
       sectors: current.sectors.map((s) => ({
@@ -353,17 +215,16 @@ export async function GET(request: NextRequest) {
         quadrant: s.quadrant,
       })),
       rotations: currentRotations,
-      confluenceTickers: [...new Set(currentConfluenceTickers)],
     };
 
     // Non-blocking KV persist
     saveToKV(cachedPrevious).catch(() => {});
 
-    // 6. Send Telegram alerts
+    // 5. Send Telegram alerts
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = getTelegramChatId("SECTOR");
 
-    // 5a. Quadrant transition alert (existing)
+    // 5a. Quadrant transition alert
     let quadrantSent = false;
     if (transitions.length > 0 && botToken && chatId) {
       const message = formatRotationAlert(
@@ -378,7 +239,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 5b. Rotation tracker change alert (new)
+    // 5b. Rotation tracker change alert
     let rotationSent = false;
     if (rotationChanges.length > 0 && botToken && chatId) {
       const message = formatRotationChanges(rotationChanges, current.calculatedAt);
@@ -391,36 +252,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 5c. Rotation × Scanner confluence alert
-    let confluenceSent = false;
-    let confluenceStockCount = 0;
-    if (botToken && chatId) {
-      const confluenceMsg = formatRotationConfluence(currentRotations, stockMap, current.calculatedAt, previous?.confluenceTickers);
-      if (confluenceMsg) {
-        // Count unique stocks with scanner hits (capped at 5 per rotation, deduped)
-        const seenTickers = new Set<string>();
-        for (const [sectorId, stocks] of stockMap) {
-          if (!currentRotations.some((r) => r.sectorId === sectorId)) continue;
-          let count = 0;
-          for (const s of stocks) {
-            if (s.scannerHits && s.scannerHits.length > 0 && count < 5) {
-              seenTickers.add(s.symbol);
-              count++;
-            }
-          }
-        }
-        confluenceStockCount = seenTickers.size;
-        const result = await sendTelegramMessage(botToken, chatId, confluenceMsg);
-        confluenceSent = result.ok;
-        if (!result.ok) {
-          logError("sector-rotation/alert:confluence", new Error(result.error ?? "Telegram send failed"));
-        }
-
-      }
-    }
+    // Message 3 (Rotation × Scanner Confluence) now runs at 03:02 UTC
+    // via /api/sector-rotation/confluence with fresh scanner data
 
     return NextResponse.json({
-      sent: quadrantSent || rotationSent || confluenceSent,
+      sent: quadrantSent || rotationSent,
       transitionCount: transitions.length,
       transitions: transitions.map((t) => ({
         sector: t.sector,
@@ -434,8 +270,6 @@ export async function GET(request: NextRequest) {
         lifecycle: c.lifecycle,
         previousLifecycle: c.previousLifecycle,
       })),
-      confluenceSent,
-      confluenceStockCount,
       currentQuadrants: cachedPrevious,
       stateSource,
     });
