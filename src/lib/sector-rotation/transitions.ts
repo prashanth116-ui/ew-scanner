@@ -600,12 +600,15 @@ export function formatRotationConfluence(
     tierIndex++;
   }
 
-  // Total count footer + copyable watchlist
+  // Watchlist grouped by sector
   const allTickers = [...new Set(entries.flatMap((e) => e.stocks.map((s) => s.symbol)))];
   lines.push("");
-  lines.push(`\uD83D\uDCCA ${allTickers.length} stocks across ${entries.length} rotations with scanner confirmation`);
+  lines.push(`\uD83D\uDCCA ${allTickers.length} stocks across ${entries.length} rotations`);
   lines.push("");
-  lines.push(`<code>${allTickers.join(", ")}</code>`);
+  for (const entry of entries) {
+    const tickers = entry.stocks.map((s) => s.symbol).join(", ");
+    lines.push(`<code>${entry.rotation.sectorName} (${entry.rotation.etf}): ${tickers}</code>`);
+  }
 
   return lines.join("\n").trim();
 }
