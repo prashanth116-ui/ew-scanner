@@ -160,7 +160,7 @@ export interface RotationSnapshot {
   startDate: string;
 }
 
-export type StockPickCategory = "turnaround" | "inflection" | "leading";
+export type StockPickCategory = "turnaround" | "inflection" | "leading" | "momentum";
 
 export interface ScannerHit {
   scanner: string;   // "Setup", "Inflect", "Trans"
@@ -470,6 +470,10 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
         }
         if (leaders.length > 0) {
           lines.push(`    \u2705 Leading: ${leaders.map(fmt).join(", ")}`);
+        }
+        const momentum = nonConfirmed.filter((s) => s.category === "momentum");
+        if (momentum.length > 0) {
+          lines.push(`    \u26A1 Momentum: ${momentum.map(fmt).join(", ")}`);
         }
       }
     }

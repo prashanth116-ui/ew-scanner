@@ -242,6 +242,7 @@ export async function GET(request: NextRequest) {
         for (const s of inflections) inflectionSet.add(s.symbol);
 
         // 3. Leaders: above SMA50, positive RS, some volume
+        const leaderSet = new Set<string>();
         const leaders = eligible
           .filter((s) =>
             !turnaroundSet.has(s.symbol) &&
@@ -252,11 +253,25 @@ export async function GET(request: NextRequest) {
           )
           .sort((a, b) => b.rsDelta - a.rsDelta)
           .slice(0, 5);
+        for (const s of leaders) leaderSet.add(s.symbol);
+
+        // 4. Momentum: above SMA50, positive performance, not in other categories
+        //    Catches stocks riding the sector wave but not individually outperforming ETF
+        const pickedSoFar = new Set([...turnaroundSet, ...inflectionSet, ...leaderSet]);
+        const momentum = eligible
+          .filter((s) =>
+            !pickedSoFar.has(s.symbol) &&
+            s.aboveSma50 &&
+            s.performancePct > 0
+          )
+          .sort((a, b) => b.performancePct - a.performancePct)
+          .slice(0, 5);
 
         const combined = [
           ...turnarounds.map((s) => toTopStock(s, "turnaround")),
           ...inflections.map((s) => toTopStock(s, "inflection")),
           ...leaders.map((s) => toTopStock(s, "leading")),
+          ...momentum.map((s) => toTopStock(s, "momentum")),
         ].slice(0, 15);
         if (combined.length > 0) stockMap.set(r.event.sectorId, combined);
 
