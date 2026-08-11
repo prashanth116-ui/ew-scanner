@@ -280,21 +280,34 @@ export async function GET(request: NextRequest) {
           total: r.stocks.length,
         });
 
-        // Diagnostic: track why stocks aren't being picked
+        // Diagnostic: track why stocks aren't being picked (IGV only)
         if (r.event.sectorId === "software-cloud") {
-          const aboveSma = eligible.filter((s) => s.aboveSma50);
-          const posPerf = eligible.filter((s) => s.performancePct > 0);
-          const posRS = eligible.filter((s) => s.rsAcceleration > 0);
-          const posDelta = eligible.filter((s) => s.rsDelta > 0);
-          const vol1 = eligible.filter((s) => s.volumeConsistency >= 1);
-          console.log(`[IGV DIAG] total=${r.stocks.length} eligible=${eligible.length} aboveSma50=${aboveSma.length} posPerf=${posPerf.length} posRS=${posRS.length} posDelta=${posDelta.length} vol1+=${vol1.length}`);
-          console.log(`[IGV DIAG] turnarounds=${turnarounds.length} inflections=${inflections.length} leaders=${leaders.length} momentum=${momentum.length} combined=${combined.length}`);
-          // Show first 5 eligible stocks that didn't get picked
-          const pickedAll = new Set([...pickedSoFar, ...momentum.map((s) => s.symbol)]);
-          const unpicked = eligible.filter((s) => !pickedAll.has(s.symbol)).slice(0, 5);
-          for (const s of unpicked) {
-            console.log(`[IGV UNPICKED] ${s.symbol}: perf=${s.performancePct.toFixed(1)}% rsAccel=${s.rsAcceleration} rsDelta=${s.rsDelta} aboveSma50=${s.aboveSma50} volCon=${s.volumeConsistency} isTurn=${s.isTurnaroundCandidate}`);
-          }
+          const pickedAll = new Set([
+            ...turnaroundSet, ...inflectionSet, ...leaderSet,
+            ...momentum.map((s) => s.symbol),
+          ]);
+          const unpicked = eligible
+            .filter((s) => !pickedAll.has(s.symbol))
+            .sort((a, b) => b.performancePct - a.performancePct)
+            .slice(0, 10)
+            .map((s) => ({
+              sym: s.symbol,
+              perf: +s.performancePct.toFixed(1),
+              rsAccel: s.rsAcceleration,
+              rsDelta: +s.rsDelta.toFixed(2),
+              aboveSma50: s.aboveSma50,
+              volCon: s.volumeConsistency,
+              isTurn: s.isTurnaroundCandidate,
+              volVsAvg: +s.volumeVsAvg.toFixed(2),
+            }));
+          // Attach to breadthMap for response
+          (breadthMap.get(r.event.sectorId) as Record<string, unknown>).unpicked = unpicked;
+          (breadthMap.get(r.event.sectorId) as Record<string, unknown>).counts = {
+            aboveSma50: eligible.filter((s) => s.aboveSma50).length,
+            posPerf: eligible.filter((s) => s.performancePct > 0).length,
+            posRS: eligible.filter((s) => s.rsAcceleration > 0).length,
+            posDelta: eligible.filter((s) => s.rsDelta > 0).length,
+          };
         }
       }
 
