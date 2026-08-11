@@ -420,7 +420,7 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
           ? Math.round((c.breadth.qualified / c.breadth.total) * 100)
           : 0;
         const breadthLabel = pct >= 50
-          ? "Broad \u2014 wide participation"
+          ? "Broad \u2014 wide participation, strong rotation"
           : pct >= 25
             ? "Moderate \u2014 selective participation"
             : "Narrow \u2014 few stocks participating";
