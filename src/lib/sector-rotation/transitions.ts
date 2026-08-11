@@ -482,3 +482,128 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
 
   return lines.join("\n").trim();
 }
+
+// ── Rotation × Scanner Confluence ──
+
+type ConfluenceTier = "focus" | "monitor";
+
+const CONFLUENCE_TIER_LABELS: Record<ConfluenceTier, { emoji: string; title: string; subtitle: string }> = {
+  focus:   { emoji: "\uD83C\uDFAF", title: "Focus", subtitle: "Early/Maturing Rotations" },
+  monitor: { emoji: "\uD83D\uDC41", title: "Monitor", subtitle: "Late/Exhausting" },
+};
+
+const CONFLUENCE_TIER_ORDER: ConfluenceTier[] = ["focus", "monitor"];
+
+const CONFLUENCE_CONVICTION_ORDER: Record<string, number> = { HIGH: 0, MODERATE: 1, LOW: 2, WATCH: 3, EXIT: 4 };
+
+const MAX_STOCKS_PER_ROTATION = 5;
+
+interface ConfluenceEntry {
+  rotation: RotationSnapshot;
+  stocks: RotationTopStock[];
+}
+
+/**
+ * Format a Telegram message showing stocks with scanner hits across ALL active rotations.
+ * Catches stocks that get scanner confirmation within existing rotations that didn't
+ * change today (no new_rotation / lifecycle change).
+ *
+ * Returns null if no scanner-confirmed stocks found (no message sent).
+ */
+export function formatRotationConfluence(
+  currentRotations: RotationSnapshot[],
+  stockMap: Map<string, RotationTopStock[]>,
+  calculatedAt: string
+): string | null {
+  // Build entries: rotations with scanner-hit stocks
+  const entries: ConfluenceEntry[] = [];
+  for (const rot of currentRotations) {
+    const stocks = stockMap.get(rot.sectorId);
+    if (!stocks) continue;
+    const withHits = stocks
+      .filter((s) => s.scannerHits && s.scannerHits.length > 0)
+      .sort((a, b) => {
+        // Multi-scanner stocks first, then by rsDelta descending
+        const aMulti = (a.scannerHits?.length ?? 0) >= 2 ? 1 : 0;
+        const bMulti = (b.scannerHits?.length ?? 0) >= 2 ? 1 : 0;
+        if (bMulti !== aMulti) return bMulti - aMulti;
+        return b.rsDelta - a.rsDelta;
+      })
+      .slice(0, MAX_STOCKS_PER_ROTATION);
+    if (withHits.length > 0) {
+      entries.push({ rotation: rot, stocks: withHits });
+    }
+  }
+
+  if (entries.length === 0) return null;
+
+  // Group into tiers
+  const tierGroups = new Map<ConfluenceTier, ConfluenceEntry[]>();
+  for (const entry of entries) {
+    const tier: ConfluenceTier =
+      entry.rotation.lifecycle === "EARLY" || entry.rotation.lifecycle === "MATURING"
+        ? "focus"
+        : "monitor";
+    const arr = tierGroups.get(tier) ?? [];
+    arr.push(entry);
+    tierGroups.set(tier, arr);
+  }
+
+  // Sort within each tier: lifecycle (EARLY first) then conviction
+  for (const [, group] of tierGroups) {
+    group.sort((a, b) => {
+      const lifeDiff = (LIFECYCLE_ORDER[a.rotation.lifecycle] ?? 9) - (LIFECYCLE_ORDER[b.rotation.lifecycle] ?? 9);
+      if (lifeDiff !== 0) return lifeDiff;
+      return (CONFLUENCE_CONVICTION_ORDER[a.rotation.conviction] ?? 9) - (CONFLUENCE_CONVICTION_ORDER[b.rotation.conviction] ?? 9);
+    });
+  }
+
+  // Format message
+  const date = new Date(calculatedAt).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  const lines: string[] = [];
+  lines.push("\u26A1 <b>Rotation \u00D7 Scanner Confluence</b>");
+  lines.push(date);
+
+  let tierIndex = 0;
+  for (const tier of CONFLUENCE_TIER_ORDER) {
+    const group = tierGroups.get(tier);
+    if (!group || group.length === 0) continue;
+
+    const { emoji, title, subtitle } = CONFLUENCE_TIER_LABELS[tier];
+    if (tierIndex > 0) lines.push("\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
+    lines.push("");
+    lines.push(`${emoji} <b>${title}</b> \u2014 ${subtitle}`);
+
+    for (const entry of group) {
+      const { rotation: rot, stocks } = entry;
+      lines.push("");
+      lines.push(`  <b>${rot.sectorName}</b> (${rot.etf}) \u2014 Day ${rot.daysActive} | ${rot.lifecycle} | ${rot.conviction}`);
+
+      for (const s of stocks) {
+        const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
+        const isMulti = (s.scannerHits?.length ?? 0) >= 2;
+        const vol = s.volumeConsistency >= 3 ? " \uD83D\uDD25" : "";
+        const star = isMulti ? "\u2B50 " : "";
+        lines.push(`    ${star}<b>${s.symbol}</b> ${perf}${vol}`);
+
+        const scanners = s.scannerHits!.map((h) => `${h.scanner}:${h.detail}`).join(" + ");
+        const conv = s.enrichedConviction ? ` | ${s.enrichedConviction}` : "";
+        lines.push(`      ${scanners}${conv}`);
+      }
+    }
+    tierIndex++;
+  }
+
+  // Total count footer
+  const totalStocks = entries.reduce((sum, e) => sum + e.stocks.length, 0);
+  lines.push("");
+  lines.push(`\uD83D\uDCCA ${totalStocks} stocks across ${entries.length} rotations with scanner confirmation`);
+
+  return lines.join("\n").trim();
+}

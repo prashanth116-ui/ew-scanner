@@ -7,6 +7,7 @@ import {
   formatRotationAlert,
   detectRotationChanges,
   formatRotationChanges,
+  formatRotationConfluence,
 } from "@/lib/sector-rotation/transitions";
 import type { RotationSnapshot, RotationTopStock, ScannerHit } from "@/lib/sector-rotation/transitions";
 import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
@@ -129,6 +130,7 @@ export async function GET(request: NextRequest) {
     // 3b. Fetch rotation tracker data and detect rotation changes
     let currentRotations: RotationSnapshot[] = [];
     let rotationChanges: ReturnType<typeof detectRotationChanges> = [];
+    let stockMap = new Map<string, RotationTopStock[]>();
     try {
       const rotationResult = await calculateRotationTracker();
 
@@ -180,7 +182,7 @@ export async function GET(request: NextRequest) {
       // Build stock map: sectorId → top 15 stocks across 3 categories
       // Filters: dailyChangePct < 8% (no chasing), AVOID-classified stocks excluded
       // Sort: rsDelta descending (fastest RS acceleration change)
-      const stockMap = new Map<string, RotationTopStock[]>();
+      stockMap = new Map<string, RotationTopStock[]>();
       const breadthMap = new Map<string, { qualified: number; total: number }>();
       type Stock = typeof rotationResult.activeRotations[0]["stocks"][0];
 
@@ -376,8 +378,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 5c. Rotation × Scanner confluence alert
+    let confluenceSent = false;
+    let confluenceStockCount = 0;
+    if (botToken && chatId) {
+      const confluenceMsg = formatRotationConfluence(currentRotations, stockMap, current.calculatedAt);
+      if (confluenceMsg) {
+        // Count stocks for response
+        for (const stocks of stockMap.values()) {
+          confluenceStockCount += stocks.filter((s) => s.scannerHits && s.scannerHits.length > 0).length;
+        }
+        const result = await sendTelegramMessage(botToken, chatId, confluenceMsg);
+        confluenceSent = result.ok;
+        if (!result.ok) {
+          logError("sector-rotation/alert:confluence", new Error(result.error ?? "Telegram send failed"));
+        }
+      }
+    }
+
     return NextResponse.json({
-      sent: quadrantSent || rotationSent,
+      sent: quadrantSent || rotationSent || confluenceSent,
       transitionCount: transitions.length,
       transitions: transitions.map((t) => ({
         sector: t.sector,
@@ -391,6 +411,8 @@ export async function GET(request: NextRequest) {
         lifecycle: c.lifecycle,
         previousLifecycle: c.previousLifecycle,
       })),
+      confluenceSent,
+      confluenceStockCount,
       currentQuadrants: cachedPrevious,
       stateSource,
     });
