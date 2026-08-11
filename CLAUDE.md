@@ -301,7 +301,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | `/sectors/brief` | `src/app/sectors/brief/page.tsx` | Daily Brief: posture (position 1), trading bias with embedded pulse data (`PulseCompactRow` — futures/VIX/DXY/sub-sector pills inside `TradingBiasCard`), leadership health (computed once, shared with posture + riskFlags), simplified sector tiers (ETF-level only, no stock columns, "See stocks →" link to picks), risk flags. No standalone Pre-Market Pulse or Sub-Sector Divergences panels (removed — pulse merged into bias card, divergences redundant with tier table badges). Stale snapshot guard: ignores previous snapshots older than 3 days. All date comparisons use ET timezone (not UTC). |
 | `/sectors/picks` | `src/app/sectors/picks/page.tsx` | Stock picks (9 filters incl. AVOID category, null-safe SMA50) + Rotation Signals panel (early detection timing, L/T badges, cross-section filtering via `onSectorClick`) + INF/TRANS cross-reference badges. Cross-filter: clicking sector in Entry Signals sets `crossFilterSector` on StockPicksPanel with "Showing: {sector}" badge. Scan refresh UI (progress bar, cancel) in StockPicksPanel via `scanActions` prop. No separate Top Picks by Sector, PreRunner Radar, or Sector Details panels (consolidated). Dashboard link at bottom. |
 | `/sectors/crypto` | `src/app/sectors/crypto/page.tsx` | Crypto rotation dashboard |
-| `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables. Collapsible panels: Recently Ended, 12-Month Timeline, Pattern Statistics (collapsed by default via `useCollapsedPanels`). Compact regime pill (inline, not full `RegimeBanner`). "Stock Picks →" cross-link in header. Phase classification uses `isTurnaroundCandidate` flag (aligned with `categorizeStock()`). Sparkline uses average-per-bin downsampling (50 max points). Exit warnings require non-overlapping 3-day windows (min 6 history entries for short path, 10 for full 5v5). StrategySummaryBar uses `sortOrder`-based stock classification (not label strings). Historical projection shows "—" when avg return is 0%. |
+| `/rotation` | `src/app/rotation/page.tsx` | Active rotation tracker with stock performance tables. Collapsible panels: Recently Ended, 12-Month Timeline, Pattern Statistics (collapsed by default via `useCollapsedPanels`). Compact regime pill (inline, not full `RegimeBanner`). "Stock Picks →" cross-link in header. Phase classification (`getRotationStockPhase`): turnaround uses `isTurnaroundCandidate` flag, below-50MA uses `trendAccel` (meaningful there), above-50MA uses `rsAcceleration` (stock vs sector ETF) instead of `trendAccel` (pctFrom50 - pctFrom200 is naturally negative for uptrends). Sparkline uses average-per-bin downsampling (50 max points). Exit warnings require non-overlapping 3-day windows (min 6 history entries for short path, 10 for full 5v5). StrategySummaryBar uses `sortOrder`-based stock classification (not label strings). Historical projection shows "—" when avg return is 0%. |
 
 **API Routes:**
 | Route | Purpose |
@@ -498,7 +498,7 @@ Stocks passing quality gates are classified into phases in `stock-enrichment.ts`
 | P3_TRENDING | Above 50MA AND pctFrom50ma > 3% AND rsAccel >= 0 AND volRatio >= 0.7 | Strong trend with volume confirmation |
 | P4_EXHAUSTING | Above 50MA AND rsAccel < `P4_RS_ACCEL` (-2.0) AND sectorAccel < `P4_SECTOR_ACCEL` (-3) | Requires BOTH deeply negative — single negative metric doesn't trigger |
 
-**Fallback logic (above 50MA):** If no explicit phase matches: `rsAccel < P4_RS_ACCEL` → P4_EXHAUSTING, `rsAccel >= 0 + volRatio >= 0.7` → P3_TRENDING, else → P2_TURNAROUND (not P1 — can't be "basing" above 50MA). Fallback respects the same RS accel threshold as the explicit P4 check — mildly decelerating stocks (accel between -2.0 and 0) stay P3/P2, not P4.
+**Fallback logic (above 50MA):** If no explicit phase matches: `rsAccel < P4_RS_ACCEL AND sectorAccel < P4_SECTOR_ACCEL` → P4_EXHAUSTING, `rsAccel >= 0 + volRatio >= 0.7` → P3_TRENDING, else → P2_TURNAROUND (not P1 — can't be "basing" above 50MA). Fallback P4 requires the same dual-metric gate as the explicit check — rsAccel alone (pctFrom50 - pctFrom200) is naturally deeply negative for established uptrends, so single-metric P4 misclassifies healthy trending stocks.
 
 **Fallback logic (below 50MA):** Always P1_BASING.
 
@@ -626,12 +626,12 @@ Two stock display components in `src/app/sectors/_components/stock-picks-panel.t
 ### Dashboard Sector Cards (`/sectors`)
 Each sector card shows composite score ring, quadrant badge, trading action, CMF/RS/breadth stats, why text, top 3 stock pills, and an expandable stock table.
 
-**Card conviction scoring** (`getConvictionScore()` in `sector-card.tsx`): Simplified additive scoring (0-11 scale) for stock pills on sector cards. Different from the 6-weighted-signal `scoreConviction()` in `stock-enrichment.ts` used by the picks page.
+**Card conviction scoring** (`getConvictionScore()` in `sector-card.tsx`): Simplified additive scoring (0-11 scale) for stock pills on sector cards. Different from the 6-weighted-signal `scoreConviction()` in `stock-enrichment.ts` used by the picks page. Uses `sectorRS` (stock vs sector ETF from rotation tracker) when available for the RS acceleration signal, falling back to `rsAccel` (pctFrom50 - pctFrom200). The fallback is necessary for stocks not in active rotations.
 
 | Signal | Points | Notes |
 |--------|--------|-------|
-| rsAccel > 1 | 3 | Strong RS acceleration |
-| rsAccel > 0 | 1 | Positive RS acceleration |
+| sectorRS (or rsAccel) > 1 | 3 | Strong RS acceleration (prefers rotation tracker metric) |
+| sectorRS (or rsAccel) > 0 | 1 | Positive RS acceleration |
 | aboveSma50 | 2 | Above 50-day SMA |
 | volumeVsAvg >= 1.5 | 2 | High volume |
 | volumeVsAvg >= 1.2 | 1 | Above-average volume |
@@ -640,14 +640,14 @@ Each sector card shows composite score ring, quadrant badge, trading action, CMF
 
 Conviction labels: HIGH >= 7, MED >= 4, LOW < 4.
 
-**Dashboard stock phase** (`getStockPhase()` in `helpers.ts`): Simplified phase classification for dashboard display. Correctly guards `aboveSma50` — stocks below 50MA cannot be "exhausting".
+**Dashboard stock phase** (`getStockPhase()` in `helpers.ts`): Simplified phase classification for dashboard display. Below-50MA stocks use `rsAccel` (pctFrom50 - pctFrom200) which is meaningful there (positive = recovering faster towards 50MA). Above-50MA stocks prefer `sectorRS` (stock vs sector ETF from rotation tracker) — `rsAccel` is naturally deeply negative for established uptrends and misclassifies healthy trends as "exhausting". Falls back to `rs20d` when no rotation data available.
 
 | Phase | Condition | Notes |
 |-------|-----------|-------|
 | turnaround | Below 50MA + RS20d > 0 + rsAccel > 0 + vol >= 1.2x | Below 50MA with positive signals |
 | basing | Below 50MA (all other cases) | Default for below-50MA stocks |
-| exhausting | Above 50MA (or null) + rsAccel < -2 | Only when above or unknown SMA50 |
-| trending | Above 50MA + rsAccel > 0 | Strong uptrend |
+| exhausting | Above 50MA + sectorRS < -2 + !rsImproving (or rs20d < -5 fallback) | Requires sector-relative underperformance |
+| trending | Above 50MA + sectorRS > 0 (or rs20d > 0 fallback) | Outperforming sector ETF |
 | neutral | Everything else | Default for above-50MA with mixed signals |
 
 **Why text** (`getWhyText()`): Maps trading action + quadrant + acceleration to descriptive text. Covers all WATCH subcases: LEADING-decelerating, LEADING-below-threshold, IMPROVING-stalled, LAGGING-early-signals.
