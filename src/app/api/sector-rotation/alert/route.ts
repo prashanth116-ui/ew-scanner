@@ -218,11 +218,12 @@ export async function GET(request: NextRequest) {
         const eligible = r.stocks.filter(passesFilters);
         const turnaroundSet = new Set<string>();
 
+        // Per-category caps are generous; the combined .slice(0, 15) enforces the real limit
         // 1. Turnarounds: below SMA50, curated flag, sustained volume
         const turnarounds = eligible
           .filter((s) => s.isTurnaroundCandidate && s.volumeConsistency >= 2)
           .sort((a, b) => b.rsDelta - a.rsDelta)
-          .slice(0, 5);
+          .slice(0, 8);
         for (const s of turnarounds) turnaroundSet.add(s.symbol);
 
         // 2. Inflections: RS accelerating, some volume, not already picked
@@ -236,7 +237,7 @@ export async function GET(request: NextRequest) {
             s.rsAcceleration > 0
           )
           .sort((a, b) => b.rsDelta - a.rsDelta)
-          .slice(0, 5);
+          .slice(0, 8);
         for (const s of inflections) inflectionSet.add(s.symbol);
 
         // 3. Leaders: above SMA50, positive RS, some volume
@@ -250,7 +251,7 @@ export async function GET(request: NextRequest) {
             s.volumeConsistency >= 1
           )
           .sort((a, b) => b.rsDelta - a.rsDelta)
-          .slice(0, 5);
+          .slice(0, 8);
         for (const s of leaders) leaderSet.add(s.symbol);
 
         // 4. Momentum: above SMA50, positive performance, not in other categories
@@ -263,7 +264,7 @@ export async function GET(request: NextRequest) {
             s.performancePct > 0
           )
           .sort((a, b) => b.performancePct - a.performancePct)
-          .slice(0, 5);
+          .slice(0, 8);
 
         const combined = [
           ...turnarounds.map((s) => toTopStock(s, "turnaround")),
