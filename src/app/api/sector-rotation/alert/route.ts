@@ -38,6 +38,7 @@ interface PreviousState {
   date: string;
   sectors: { sector: string; quadrant: string }[];
   rotations?: RotationSnapshot[];  // optional for backward compat with existing KV data
+  confluenceTickers?: string[];    // tickers with scanner hits from previous run
 }
 
 const KV_KEY = "sector-rotation:previous";
@@ -333,7 +334,18 @@ export async function GET(request: NextRequest) {
       logError("sector-rotation/alert:rotation-tracker", err);
     }
 
-    // 4. Persist current state for next run (module cache + KV)
+    // 4. Build confluence tickers for NEW detection on next run
+    const currentConfluenceTickers: string[] = [];
+    for (const [sectorId, stocks] of stockMap) {
+      if (!currentRotations.some((r) => r.sectorId === sectorId)) continue;
+      for (const s of stocks) {
+        if (s.scannerHits && s.scannerHits.length > 0) {
+          currentConfluenceTickers.push(s.symbol);
+        }
+      }
+    }
+
+    // 5. Persist current state for next run (module cache + KV)
     cachedPrevious = {
       date: current.calculatedAt.slice(0, 10),
       sectors: current.sectors.map((s) => ({
@@ -341,12 +353,13 @@ export async function GET(request: NextRequest) {
         quadrant: s.quadrant,
       })),
       rotations: currentRotations,
+      confluenceTickers: [...new Set(currentConfluenceTickers)],
     };
 
     // Non-blocking KV persist
     saveToKV(cachedPrevious).catch(() => {});
 
-    // 5. Send Telegram alerts
+    // 6. Send Telegram alerts
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = getTelegramChatId("SECTOR");
 
@@ -382,7 +395,7 @@ export async function GET(request: NextRequest) {
     let confluenceSent = false;
     let confluenceStockCount = 0;
     if (botToken && chatId) {
-      const confluenceMsg = formatRotationConfluence(currentRotations, stockMap, current.calculatedAt);
+      const confluenceMsg = formatRotationConfluence(currentRotations, stockMap, current.calculatedAt, previous?.confluenceTickers);
       if (confluenceMsg) {
         // Count unique stocks with scanner hits (capped at 5 per rotation, deduped)
         const seenTickers = new Set<string>();

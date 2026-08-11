@@ -503,8 +503,10 @@ interface ConfluenceEntry {
 export function formatRotationConfluence(
   currentRotations: RotationSnapshot[],
   stockMap: Map<string, RotationTopStock[]>,
-  calculatedAt: string
+  calculatedAt: string,
+  previousTickers?: string[]
 ): string | null {
+  const prevSet = new Set(previousTickers ?? []);
   // Build entries: rotations with scanner-hit stocks
   const entries: ConfluenceEntry[] = [];
   for (const rot of currentRotations) {
@@ -582,16 +584,21 @@ export function formatRotationConfluence(
           const isMulti = (s.scannerHits?.length ?? 0) >= 2;
           const vol = s.volumeConsistency >= 3 ? " \uD83D\uDD25" : "";
           const star = isMulti ? "\u2B50 " : "";
+          const isNew = prevSet.size > 0 && !prevSet.has(s.symbol) ? " \uD83C\uDD95" : "";
           const scanners = s.scannerHits!.map((h) => `${h.scanner}:${h.detail}`).join(" + ");
           // Only show HIGH / MEDIUM conviction (WATCH is noise)
           const conv = s.enrichedConviction && s.enrichedConviction !== "WATCH"
             ? ` | ${s.enrichedConviction}` : "";
-          lines.push(`    ${star}<b>${s.symbol}</b> ${perf}${vol} \u00B7 ${scanners}${conv}`);
+          lines.push(`    ${star}<b>${s.symbol}</b> ${perf}${vol}${isNew} \u00B7 ${scanners}${conv}`);
         }
       } else {
         // Compact for late/exhausting — just sector header + ticker list
         lines.push(`  <b>${rot.sectorName}</b> (${rot.etf}) \u00B7 Day ${rot.daysActive} | ${rot.lifecycle}`);
-        lines.push(`    ${stocks.map((s) => s.symbol).join(", ")}`);
+        const monitorTickers = stocks.map((s) => {
+          const isNew = prevSet.size > 0 && !prevSet.has(s.symbol) ? " \uD83C\uDD95" : "";
+          return `${s.symbol}${isNew}`;
+        });
+        lines.push(`    ${monitorTickers.join(", ")}`);
       }
     }
     tierIndex++;
