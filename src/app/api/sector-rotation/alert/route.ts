@@ -278,6 +278,23 @@ export async function GET(request: NextRequest) {
           qualified: eligible.length,
           total: r.stocks.length,
         });
+
+        // Diagnostic: track why stocks aren't being picked
+        if (r.event.sectorId === "software-cloud") {
+          const aboveSma = eligible.filter((s) => s.aboveSma50);
+          const posPerf = eligible.filter((s) => s.performancePct > 0);
+          const posRS = eligible.filter((s) => s.rsAcceleration > 0);
+          const posDelta = eligible.filter((s) => s.rsDelta > 0);
+          const vol1 = eligible.filter((s) => s.volumeConsistency >= 1);
+          console.log(`[IGV DIAG] total=${r.stocks.length} eligible=${eligible.length} aboveSma50=${aboveSma.length} posPerf=${posPerf.length} posRS=${posRS.length} posDelta=${posDelta.length} vol1+=${vol1.length}`);
+          console.log(`[IGV DIAG] turnarounds=${turnarounds.length} inflections=${inflections.length} leaders=${leaders.length} momentum=${momentum.length} combined=${combined.length}`);
+          // Show first 5 eligible stocks that didn't get picked
+          const pickedAll = new Set([...pickedSoFar, ...momentum.map((s) => s.symbol)]);
+          const unpicked = eligible.filter((s) => !pickedAll.has(s.symbol)).slice(0, 5);
+          for (const s of unpicked) {
+            console.log(`[IGV UNPICKED] ${s.symbol}: perf=${s.performancePct.toFixed(1)}% rsAccel=${s.rsAcceleration} rsDelta=${s.rsDelta} aboveSma50=${s.aboveSma50} volCon=${s.volumeConsistency} isTurn=${s.isTurnaroundCandidate}`);
+          }
+        }
       }
 
       currentRotations = rotationResult.activeRotations.map((r) => ({
@@ -375,6 +392,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Build per-rotation stock diagnostics
+    const stockDiagnostics: Record<string, unknown> = {};
+    for (const change of rotationChanges) {
+      const stocks = change.topStocks ?? [];
+      const byCategory: Record<string, string[]> = {};
+      for (const s of stocks) {
+        const cat = s.category;
+        if (!byCategory[cat]) byCategory[cat] = [];
+        byCategory[cat].push(s.symbol);
+      }
+      stockDiagnostics[change.sectorName] = {
+        totalPicked: stocks.length,
+        byCategory,
+        breadth: change.breadth,
+      };
+    }
+
     return NextResponse.json({
       sent: quadrantSent || rotationSent,
       transitionCount: transitions.length,
@@ -390,6 +424,7 @@ export async function GET(request: NextRequest) {
         lifecycle: c.lifecycle,
         previousLifecycle: c.previousLifecycle,
       })),
+      stockDiagnostics,
       currentQuadrants: cachedPrevious,
       stateSource,
     });
