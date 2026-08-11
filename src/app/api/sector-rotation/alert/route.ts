@@ -381,7 +381,6 @@ export async function GET(request: NextRequest) {
     // 5c. Rotation × Scanner confluence alert
     let confluenceSent = false;
     let confluenceStockCount = 0;
-    const confluenceDebug: Record<string, unknown> = {};
     if (botToken && chatId) {
       const confluenceMsg = formatRotationConfluence(currentRotations, stockMap, current.calculatedAt);
       if (confluenceMsg) {
@@ -403,10 +402,7 @@ export async function GET(request: NextRequest) {
         if (!result.ok) {
           logError("sector-rotation/alert:confluence", new Error(result.error ?? "Telegram send failed"));
         }
-        // Debug: include message in response temporarily
-        (confluenceDebug as Record<string, unknown>).msgLength = confluenceMsg.length;
-        (confluenceDebug as Record<string, unknown>).msg = confluenceMsg;
-        (confluenceDebug as Record<string, unknown>).telegramResult = result;
+
       }
     }
 
@@ -427,7 +423,6 @@ export async function GET(request: NextRequest) {
       })),
       confluenceSent,
       confluenceStockCount,
-      confluenceDebug,
       currentQuadrants: cachedPrevious,
       stateSource,
     });
