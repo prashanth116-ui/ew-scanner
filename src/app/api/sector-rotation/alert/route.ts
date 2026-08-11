@@ -178,8 +178,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Build stock map: sectorId → top 15 stocks across 3 categories
-      // Filters: trendAccel >= 0 (structural acceleration), dailyChangePct < 5% (no chasing)
-      // Exclude: AVOID-classified stocks from enrichment
+      // Filters: dailyChangePct < 8% (no chasing), AVOID-classified stocks excluded
       // Sort: rsDelta descending (fastest RS acceleration change)
       const stockMap = new Map<string, RotationTopStock[]>();
       const breadthMap = new Map<string, { qualified: number; total: number }>();

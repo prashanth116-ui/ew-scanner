@@ -50,17 +50,27 @@ export function actionBadge(action: TradingAction): { label: string; className: 
 // ── Stock ranking helpers ──
 
 export function getStockPhase(s: StockInSector): import("@/lib/phase-utils").StockPhase {
-  const rsAccel = s.rsAccel ?? 0;
   const rs20d = s.rs20d ?? 0;
   // Below 50MA: basing or turnaround (never exhausting)
+  // rsAccel (pctFrom50 - pctFrom200) IS meaningful below 50MA —
+  // positive = recovering faster towards 50MA than 200MA
   if (s.aboveSma50 === false) {
+    const rsAccel = s.rsAccel ?? 0;
     if (rs20d > 0 && rsAccel > 0 && (s.volumeVsAvg ?? 0) >= 1.2) return "turnaround";
     if (rsAccel > 0 && rs20d <= 0) return "basing";
     return "basing";
   }
-  // Above 50MA (or null): exhausting, trending, or neutral
-  if (rsAccel < -2) return "exhausting";
-  if (s.aboveSma50 === true && rsAccel > 0) return "trending";
+  // Above 50MA: prefer sectorRS (stock vs sector ETF from rotation tracker)
+  // over rsAccel (pctFrom50 - pctFrom200) which is naturally deeply negative
+  // for established uptrends (e.g. +14% from SMA50, +24% from SMA200 → -10)
+  if (s.sectorRS != null) {
+    if (s.sectorRS < -2 && !s.rsImproving) return "exhausting";
+    if (s.aboveSma50 === true && s.sectorRS > 0) return "trending";
+  } else {
+    // No rotation data: use rs20d as proxy (relative strength direction)
+    if (rs20d < -5) return "exhausting";
+    if (s.aboveSma50 === true && rs20d > 0) return "trending";
+  }
   return "neutral";
 }
 

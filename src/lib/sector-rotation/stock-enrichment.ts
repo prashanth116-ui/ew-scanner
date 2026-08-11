@@ -268,10 +268,12 @@ function classifyPhase(
   // without it, low-volume stocks bypass the P3_MIN_VOL_RATIO requirement.
   // Above-50MA stocks use P2_TURNAROUND (not P1_BASING) for low-volume fallback:
   // P1_BASING means below-50MA early recovery, which is semantically wrong for above-50MA.
-  // P4 fallback respects the same RS accel threshold as the explicit P4 check —
-  // mildly decelerating stocks (accel between P4_RS_ACCEL and 0) are trending, not exhausting.
+  // P4 fallback requires BOTH stock AND sector acceleration deeply negative
+  // (same gate as explicit P4 check). rsAccel alone (pctFrom50 - pctFrom200)
+  // is naturally deeply negative for established uptrends, so single-metric
+  // P4 misclassifies healthy trending stocks as exhausting.
   if (!above50ma) return "P1_BASING";
-  if (accel < CLASSIFICATION.P4_RS_ACCEL) return "P4_EXHAUSTING";
+  if (accel < CLASSIFICATION.P4_RS_ACCEL && sectorAcceleration < CLASSIFICATION.P4_SECTOR_ACCEL) return "P4_EXHAUSTING";
   if (accel >= 0 && volRatio >= CLASSIFICATION.P3_MIN_VOL_RATIO) return "P3_TRENDING";
   return "P2_TURNAROUND";
 }

@@ -60,8 +60,12 @@ function ScoreRing({ score }: { score: number }) {
 
 function getConvictionScore(s: StockInSector): number {
   let score = 0;
-  if ((s.rsAccel ?? 0) > 1) score += 3;
-  else if ((s.rsAccel ?? 0) > 0) score += 1;
+  // Use sectorRS (stock vs sector ETF acceleration from rotation tracker) when
+  // available. rsAccel (pctFrom50 - pctFrom200) is naturally deeply negative
+  // for established uptrends, making this bonus almost never trigger.
+  const rsAccel = s.sectorRS ?? (s.rsAccel ?? 0);
+  if (rsAccel > 1) score += 3;
+  else if (rsAccel > 0) score += 1;
   if (s.aboveSma50 === true) score += 2;
   if ((s.volumeVsAvg ?? 0) >= 1.5) score += 2;
   else if ((s.volumeVsAvg ?? 0) >= 1.2) score += 1;

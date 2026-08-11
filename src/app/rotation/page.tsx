@@ -126,11 +126,23 @@ function perfBg(pct: number): string {
 // StockPhase, phaseBadge, PHASE_RANK imported from @/lib/phase-utils
 
 function getRotationStockPhase(s: RotationStockPerformance): StockPhase {
-  const ta = s.trendAccel ?? 0; // stock's own momentum (pctFromSMA50 - pctFromSMA200)
-  if (ta < -2) return "exhausting";
+  // Turnaround candidates first — curated flag from rotation tracker
   if (s.isTurnaroundCandidate) return "turnaround";
-  if (!s.aboveSma50 && ta > 0 && s.performancePct <= 0) return "basing";
-  if (s.aboveSma50 && ta > 0) return "trending";
+
+  if (!s.aboveSma50) {
+    // Below SMA50: trendAccel (pctFrom50 - pctFrom200) IS meaningful here —
+    // positive = recovering faster towards 50MA than 200MA
+    const ta = s.trendAccel ?? 0;
+    if (ta > 0 && s.performancePct <= 0) return "basing";
+    return "basing";
+  }
+
+  // Above SMA50: use rsAcceleration (stock vs sector ETF, 5d vs 20d)
+  // instead of trendAccel (pctFrom50 - pctFrom200) which is naturally
+  // deeply negative for established uptrends (e.g. +14% from SMA50,
+  // +24% from SMA200 → trendAccel = -10, but stock is healthy)
+  if (s.rsAcceleration < -2 && !s.rsImproving) return "exhausting";
+  if (s.rsAcceleration > 0) return "trending";
   return "neutral";
 }
 
