@@ -227,29 +227,28 @@ export async function GET(request: NextRequest) {
           .slice(0, 5);
         for (const s of turnarounds) turnaroundSet.add(s.symbol);
 
-        // 2. Inflections: RS accelerating, sustained volume, not already picked
+        // 2. Inflections: RS accelerating, some volume, not already picked
         const inflectionSet = new Set<string>();
         const inflections = eligible
           .filter((s) =>
             !turnaroundSet.has(s.symbol) &&
             !s.isTurnaroundCandidate &&
             s.rsDelta > 0 &&
-            s.volumeConsistency >= 2 &&
+            s.volumeConsistency >= 1 &&
             s.rsAcceleration > 0
           )
           .sort((a, b) => b.rsDelta - a.rsDelta)
           .slice(0, 5);
         for (const s of inflections) inflectionSet.add(s.symbol);
 
-        // 3. Leaders: above SMA50, RS improving, sustained volume
+        // 3. Leaders: above SMA50, positive RS, some volume
         const leaders = eligible
           .filter((s) =>
             !turnaroundSet.has(s.symbol) &&
             !inflectionSet.has(s.symbol) &&
             s.aboveSma50 &&
             s.rsAcceleration > 0 &&
-            s.rsImproving &&
-            s.volumeConsistency >= 2
+            s.volumeConsistency >= 1
           )
           .sort((a, b) => b.rsDelta - a.rsDelta)
           .slice(0, 5);
