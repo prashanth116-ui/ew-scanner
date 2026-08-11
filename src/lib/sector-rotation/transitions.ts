@@ -607,10 +607,14 @@ export function formatRotationConfluence(
     tierIndex++;
   }
 
-  // Summary count
+  // Copyable watchlist grouped by sector
   const totalStocks = new Set(entries.flatMap((e) => e.stocks.map((s) => s.symbol))).size;
   lines.push("");
   lines.push(`\uD83D\uDCCA ${totalStocks} stocks across ${entries.length} rotations`);
+  for (const entry of entries) {
+    const tickers = entry.stocks.map((s) => s.symbol).join(", ");
+    lines.push(`<code>${entry.rotation.etf}: ${tickers}</code>`);
+  }
 
   return lines.join("\n").trim();
 }
