@@ -186,8 +186,6 @@ export async function GET(request: NextRequest) {
       type Stock = typeof rotationResult.activeRotations[0]["stocks"][0];
 
       const passesFilters = (s: Stock): boolean => {
-        // Reject structurally decelerating stocks (trendAccel deeply negative)
-        if (s.trendAccel !== null && s.trendAccel < -5) return false;
         // Reject stocks that already moved 8%+ today (chasing)
         if (Math.abs(s.dailyChangePct) >= 8) return false;
         // Reject AVOID-classified stocks from enrichment
