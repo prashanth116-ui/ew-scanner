@@ -311,13 +311,23 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 | `/api/premarket` | Pre-market futures, internals, trading bias, sector checklist |
 
 ### Sector Rotation Alert Cron
-The `/api/sector-rotation/alert` cron (22:00 UTC weekdays) sends up to 2 Telegram messages to `TELEGRAM_CHAT_ID_SECTOR`:
+The `/api/sector-rotation/alert` cron (22:00 UTC weekdays) sends up to 3 Telegram messages to `TELEGRAM_CHAT_ID_SECTOR`:
 
-**Message 1 — Quadrant Transitions (existing):** Detects when sectors change RRG quadrant (e.g., LAGGING → IMPROVING). Uses `detectTransitions()` comparing current vs previous `SectorRotationResult`. Grouped by category: Rotation Starting, Breakout Confirmed, Momentum Fading, Rotation Out.
+**Message 1 — Quadrant Transitions:** Detects when sectors change RRG quadrant (e.g., LAGGING → IMPROVING). Uses `detectTransitions()` comparing current vs previous `SectorRotationResult`. Grouped by category: Rotation Starting, Breakout Confirmed, Momentum Fading, Rotation Out.
 
-**Message 2 — Rotation Tracker Changes (new):** Detects changes in the rotation tracker's active rotations. Uses `calculateRotationTracker()` + `detectRotationChanges()` comparing current vs previous `RotationSnapshot[]`.
+**Message 2 — Rotation Tracker Changes:** Detects changes in the rotation tracker's active rotations. Uses `calculateRotationTracker()` + `detectRotationChanges()` comparing current vs previous `RotationSnapshot[]`. Compressed format: Focus tier shows scanner-confirmed stocks as single lines + non-confirmed as compact ticker lists; Monitor tier shows tickers only.
 
-**Change types detected:**
+**Message 3 — Rotation × Scanner Confluence:** Scans ALL active rotations for stocks with scanner hits, regardless of whether the rotation itself changed. Catches the gap where a stock gets scanner confirmation (e.g., Trans:TRIGGERED) within an existing rotation that didn't fire Message 2 today. Uses `formatRotationConfluence()`.
+
+**Message 3 format:**
+- **Focus tier** (EARLY/MATURING): Full detail — single-line per stock with scanner hits, performance, volume. Multi-scanner stocks get ⭐. Only HIGH/MEDIUM conviction shown (WATCH dropped as noise).
+- **Monitor tier** (LATE/EXHAUSTING): Compact — sector header + ticker list only.
+- **NEW detection** (🆕): Stocks not in previous run's confluence get tagged. Uses `confluenceTickers` persisted in `PreviousState`. Skipped on cold start (no false positives).
+- **Footer:** Count + scanner names + copyable watchlist grouped by ETF (e.g., `IGV: PLTR, CRWD, NET`).
+- **Cap:** 5 stocks per rotation, deduped across rotations.
+- Returns `null` if no scanner-hit stocks found (no message sent).
+
+**Change types detected (Message 2):**
 
 | Type | Condition | Actionability |
 |------|-----------|---------------|
@@ -328,7 +338,7 @@ The `/api/sector-rotation/alert` cron (22:00 UTC weekdays) sends up to 2 Telegra
 
 **Lifecycle ordering:** EARLY (0) → MATURING (1) → LATE (2) → EXHAUSTING (3). Current < previous = upgrade, current > previous = warning.
 
-**State persistence:** `PreviousState` includes optional `rotations?: RotationSnapshot[]` field (backward-compatible). Persisted via 3-tier system: module cache → Vercel KV → env var. Each `RotationSnapshot` stores `sectorId`, `sectorName`, `etf`, `lifecycle`, `conviction`, `daysActive`, `startDate`.
+**State persistence:** `PreviousState` includes optional `rotations?: RotationSnapshot[]` and `confluenceTickers?: string[]` fields (backward-compatible). Persisted via 3-tier system: module cache → Vercel KV → env var. Each `RotationSnapshot` stores `sectorId`, `sectorName`, `etf`, `lifecycle`, `conviction`, `daysActive`, `startDate`.
 
 **Stock selection pipeline (per-rotation top 15):** For each active rotation, stocks are filtered then classified into 4 categories. Categories are mutually exclusive (earlier category takes priority). Per-category cap of 8, combined cap of 15 per rotation.
 
@@ -341,20 +351,20 @@ The `/api/sector-rotation/alert` cron (22:00 UTC weekdays) sends up to 2 Telegra
 
 **Pre-filters:** `dailyChangePct < 8%` (no chasing) + AVOID-classified stocks excluded. Upstream rotation tracker gates (price >= $15, dollarVol >= $200M, SCAN_EXCLUSIONS) applied before stocks reach alert route.
 
-**Cross-scanner confluence:** Loads PreRun (`PRIORITY`/`KEEP`), Inflection (`STARTER`/`ADD_ON`), Transition (`TRIGGERED`/`READY`), Institutional (`SHORTLIST`/`WATCHLIST`) data for current date. Multi-system confirmed stocks shown with scanner badges in Telegram message.
+**Cross-scanner confluence:** Loads PreRun (`PRIORITY`/`KEEP`), Inflection (`STARTER`/`ADD_ON`), Transition (`TRIGGERED`/`READY`), Institutional (`SHORTLIST`/`WATCHLIST`) data for current date. Multi-system confirmed stocks shown with scanner badges in Telegram messages (Message 2 Focus tier + Message 3).
 
 **Rotation breadth:** Tracks qualified (pass filters) vs total stocks per rotation. Displayed as `📊 N/M stocks qualify (Broad/Moderate/Narrow — context)`.
 
 **Historical stats:** Pattern stats from `rotationResult.patternStats` enriched onto rotation changes. Shows `📈 Avg +X.X% over Nd (N prior rotations)`.
 
-**Resilience:** `calculateRotationTracker()` is wrapped in try/catch — if it fails, quadrant transition alerts still fire. Rotation tracker errors logged via `logError("sector-rotation/alert:rotation-tracker")`.
+**Resilience:** `calculateRotationTracker()` is wrapped in try/catch — if it fails, quadrant transition alerts still fire. Rotation tracker errors logged via `logError("sector-rotation/alert:rotation-tracker")`. Message 3 uses the same stockMap/currentRotations — if rotation tracker fails, no Message 2 or 3 but Message 1 still fires.
 
 **Key files:**
 
 | File | Purpose |
 |------|---------|
-| `src/app/api/sector-rotation/alert/route.ts` | Cron route — calls both `calculateSectorRotation()` and `calculateRotationTracker()`, stock selection pipeline, cross-scanner confluence |
-| `src/lib/sector-rotation/transitions.ts` | `detectRotationChanges()`, `formatRotationChanges()`, `RotationSnapshot`, `RotationChange`, `RotationTopStock` types |
+| `src/app/api/sector-rotation/alert/route.ts` | Cron route — calls `calculateSectorRotation()` + `calculateRotationTracker()`, stock selection pipeline, cross-scanner confluence, 3 Telegram messages |
+| `src/lib/sector-rotation/transitions.ts` | `detectRotationChanges()`, `formatRotationChanges()`, `formatRotationConfluence()`, `RotationSnapshot`, `RotationChange`, `RotationTopStock` types |
 
 ### Pre-Market Trading Bias Engine
 Computes structured trading bias from equity futures, VIX, and market internals.
