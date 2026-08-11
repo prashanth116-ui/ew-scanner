@@ -419,7 +419,11 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
         const pct = c.breadth.total > 0
           ? Math.round((c.breadth.qualified / c.breadth.total) * 100)
           : 0;
-        const breadthLabel = pct >= 50 ? "Broad" : pct >= 25 ? "Moderate" : "Narrow";
+        const breadthLabel = pct >= 50
+          ? "Broad \u2014 wide participation"
+          : pct >= 25
+            ? "Moderate \u2014 selective participation"
+            : "Narrow \u2014 few stocks participating";
         lines.push(`    \uD83D\uDCCA ${c.breadth.qualified}/${c.breadth.total} stocks qualify (${breadthLabel})`);
       }
 
