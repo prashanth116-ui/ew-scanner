@@ -330,14 +330,31 @@ The `/api/sector-rotation/alert` cron (22:00 UTC weekdays) sends up to 2 Telegra
 
 **State persistence:** `PreviousState` includes optional `rotations?: RotationSnapshot[]` field (backward-compatible). Persisted via 3-tier system: module cache → Vercel KV → env var. Each `RotationSnapshot` stores `sectorId`, `sectorName`, `etf`, `lifecycle`, `conviction`, `daysActive`, `startDate`.
 
+**Stock selection pipeline (per-rotation top 15):** For each active rotation, stocks are filtered then classified into 4 categories. Categories are mutually exclusive (earlier category takes priority). Per-category cap of 8, combined cap of 15 per rotation.
+
+| Category | Emoji | Filter | Sort | Notes |
+|----------|-------|--------|------|-------|
+| Turnaround | 🔄 | `isTurnaroundCandidate && volumeConsistency >= 2` | rsDelta DESC | Below SMA50, curated flag, sustained volume |
+| Inflection | 🎯 | `!turnaround && rsDelta > 0 && volumeConsistency >= 1 && rsAcceleration > 0` | rsDelta DESC | RS accelerating with some volume |
+| Leading | ⭐ | `!turnaround && !inflection && aboveSma50 && rsAcceleration > 0 && volumeConsistency >= 1` | rsDelta DESC | Above SMA50, positive RS |
+| Momentum | ⚡ | `!any_above && aboveSma50 && performancePct > 0` | performancePct DESC | Riding sector wave, not individually outperforming ETF |
+
+**Pre-filters:** `dailyChangePct < 8%` (no chasing) + AVOID-classified stocks excluded. Upstream rotation tracker gates (price >= $15, dollarVol >= $200M, SCAN_EXCLUSIONS) applied before stocks reach alert route.
+
+**Cross-scanner confluence:** Loads PreRun (`PRIORITY`/`KEEP`), Inflection (`STARTER`/`ADD_ON`), Transition (`TRIGGERED`/`READY`), Institutional (`SHORTLIST`/`WATCHLIST`) data for current date. Multi-system confirmed stocks shown with scanner badges in Telegram message.
+
+**Rotation breadth:** Tracks qualified (pass filters) vs total stocks per rotation. Displayed as `📊 N/M stocks qualify (Broad/Moderate/Narrow — context)`.
+
+**Historical stats:** Pattern stats from `rotationResult.patternStats` enriched onto rotation changes. Shows `📈 Avg +X.X% over Nd (N prior rotations)`.
+
 **Resilience:** `calculateRotationTracker()` is wrapped in try/catch — if it fails, quadrant transition alerts still fire. Rotation tracker errors logged via `logError("sector-rotation/alert:rotation-tracker")`.
 
 **Key files:**
 
 | File | Purpose |
 |------|---------|
-| `src/app/api/sector-rotation/alert/route.ts` | Cron route — calls both `calculateSectorRotation()` and `calculateRotationTracker()` |
-| `src/lib/sector-rotation/transitions.ts` | `detectRotationChanges()`, `formatRotationChanges()`, `RotationSnapshot`, `RotationChange` types |
+| `src/app/api/sector-rotation/alert/route.ts` | Cron route — calls both `calculateSectorRotation()` and `calculateRotationTracker()`, stock selection pipeline, cross-scanner confluence |
+| `src/lib/sector-rotation/transitions.ts` | `detectRotationChanges()`, `formatRotationChanges()`, `RotationSnapshot`, `RotationChange`, `RotationTopStock` types |
 
 ### Pre-Market Trading Bias Engine
 Computes structured trading bias from equity futures, VIX, and market internals.
@@ -502,6 +519,8 @@ Stocks passing quality gates are classified into phases in `stock-enrichment.ts`
 
 **Fallback logic (below 50MA):** Always P1_BASING.
 
+**trendAccel metric limitation:** The `rsAccel` metric used in enrichment phase classification (`pctFromSma50 - pctFromSma200`) is naturally deeply negative for established uptrending stocks. A stock at +14% from SMA50 and +24% from SMA200 yields `rsAccel = -10`, even though the stock is healthy. This metric IS meaningful below SMA50 (positive = recovering faster towards 50MA than 200MA) but unreliable for above-SMA50 phase classification without a second confirmation signal. The dual-metric P4 gate (requiring BOTH rsAccel AND sector acceleration deeply negative) prevents misclassification. Other pages use sector-relative metrics instead — see "Cross-Page Phase Classification" below.
+
 ### Stock Enrichment Conviction Scoring
 `scoreConviction()` in `stock-enrichment.ts` computes conviction from 6 weighted signals plus a phase penalty.
 
@@ -653,6 +672,21 @@ Conviction labels: HIGH >= 7, MED >= 4, LOW < 4.
 **Why text** (`getWhyText()`): Maps trading action + quadrant + acceleration to descriptive text. Covers all WATCH subcases: LEADING-decelerating, LEADING-below-threshold, IMPROVING-stalled, LAGGING-early-signals.
 
 **Sort stability**: All sort modes in `_use-sector-data.ts` include alphabetical tiebreaker (`a.sector.localeCompare(b.sector)`) to prevent card flicker on re-render.
+
+### Cross-Page Phase Classification
+Three pages classify stocks into phases using different metrics. This is an intentional design tradeoff — each page uses the best available metric for its context. The `rsAccel` metric (`pctFromSma50 - pctFromSma200`) is naturally deeply negative for established uptrends and must NOT be used as a single-metric gate for above-SMA50 stocks.
+
+| Page | Function | Above-50MA Metric | Exhausting Gate | Notes |
+|------|----------|-------------------|-----------------|-------|
+| `/sectors` dashboard | `getStockPhase()` in `helpers.ts` | `sectorRS` (stock vs sector ETF from rotation tracker), fallback `rs20d` | `sectorRS < -2 && !rsImproving` or `rs20d < -5` | Quick-glance view, single-metric gate acceptable |
+| `/sectors/picks` enrichment | `classifyPhase()` in `stock-enrichment.ts` | `rsAccel` (pctFrom50 - pctFrom200) | `rsAccel < -2.0 AND sectorAccel < -3` (dual gate) | Authoritative classification, requires both metrics deeply negative |
+| `/rotation` tracker | `getRotationStockPhase()` in `page.tsx` | `rsAcceleration` (stock vs sector ETF, 5d vs 20d) | `rsAcceleration < -2 && !rsImproving` | Sector-relative metric, avoids trendAccel pitfall |
+
+**Known cross-page differences (by design):**
+- A stock with `sectorRS = -3` but healthy sector acceleration (`sectorAccel > -3`) shows "exhausting" on dashboard but NOT P4_EXHAUSTING in enrichment (dual gate fails). Dashboard is a quick-glance signal; enrichment is the rigorous classification.
+- Dashboard card conviction (`getConvictionScore`, 0-11 additive, `sectorRS > 1` = +3 pts) differs from enrichment conviction (`scoreConviction`, 6 weighted signals, `rsAccel >= 3.0` threshold). These are intentionally different scoring systems for different contexts — documented in respective sections above.
+- When both `sectorRS` and `rs20d` are null (stock not in rotation, no prerun data), dashboard defaults to "neutral". This is correct behavior for insufficient data.
+- Below-50MA stocks use `rsAccel` (pctFrom50 - pctFrom200) consistently across all pages — the metric IS meaningful in this context (positive = recovering faster towards 50MA).
 
 ### INF Cross-Reference Badge (`/sectors/picks`)
 The picks page fetches inflection scanner data (`/api/inflection/daily`) in parallel and displays sky-blue `INF` badges on stocks that also appear in today's inflection results. Same pattern as the transition-daily page.
