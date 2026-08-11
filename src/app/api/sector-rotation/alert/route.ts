@@ -384,10 +384,19 @@ export async function GET(request: NextRequest) {
     if (botToken && chatId) {
       const confluenceMsg = formatRotationConfluence(currentRotations, stockMap, current.calculatedAt);
       if (confluenceMsg) {
-        // Count stocks for response
-        for (const stocks of stockMap.values()) {
-          confluenceStockCount += stocks.filter((s) => s.scannerHits && s.scannerHits.length > 0).length;
+        // Count unique stocks with scanner hits (capped at 5 per rotation, deduped)
+        const seenTickers = new Set<string>();
+        for (const [sectorId, stocks] of stockMap) {
+          if (!currentRotations.some((r) => r.sectorId === sectorId)) continue;
+          let count = 0;
+          for (const s of stocks) {
+            if (s.scannerHits && s.scannerHits.length > 0 && count < 5) {
+              seenTickers.add(s.symbol);
+              count++;
+            }
+          }
         }
+        confluenceStockCount = seenTickers.size;
         const result = await sendTelegramMessage(botToken, chatId, confluenceMsg);
         confluenceSent = result.ok;
         if (!result.ok) {

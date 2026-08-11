@@ -600,10 +600,12 @@ export function formatRotationConfluence(
     tierIndex++;
   }
 
-  // Total count footer
-  const totalStocks = entries.reduce((sum, e) => sum + e.stocks.length, 0);
+  // Total count footer + copyable watchlist
+  const allTickers = [...new Set(entries.flatMap((e) => e.stocks.map((s) => s.symbol)))];
   lines.push("");
-  lines.push(`\uD83D\uDCCA ${totalStocks} stocks across ${entries.length} rotations with scanner confirmation`);
+  lines.push(`\uD83D\uDCCA ${allTickers.length} stocks across ${entries.length} rotations with scanner confirmation`);
+  lines.push("");
+  lines.push(`<code>${allTickers.join(", ")}</code>`);
 
   return lines.join("\n").trim();
 }
