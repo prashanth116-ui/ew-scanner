@@ -583,32 +583,34 @@ export function formatRotationConfluence(
     for (const entry of group) {
       const { rotation: rot, stocks } = entry;
       lines.push("");
-      lines.push(`  <b>${rot.sectorName}</b> (${rot.etf}) \u2014 Day ${rot.daysActive} | ${rot.lifecycle} | ${rot.conviction}`);
 
-      for (const s of stocks) {
-        const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
-        const isMulti = (s.scannerHits?.length ?? 0) >= 2;
-        const vol = s.volumeConsistency >= 3 ? " \uD83D\uDD25" : "";
-        const star = isMulti ? "\u2B50 " : "";
-        lines.push(`    ${star}<b>${s.symbol}</b> ${perf}${vol}`);
-
-        const scanners = s.scannerHits!.map((h) => `${h.scanner}:${h.detail}`).join(" + ");
-        const conv = s.enrichedConviction ? ` | ${s.enrichedConviction}` : "";
-        lines.push(`      ${scanners}${conv}`);
+      if (tier === "focus") {
+        // Full detail for actionable rotations
+        lines.push(`  <b>${rot.sectorName}</b> (${rot.etf}) \u2014 Day ${rot.daysActive} | ${rot.lifecycle} | ${rot.conviction}`);
+        for (const s of stocks) {
+          const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
+          const isMulti = (s.scannerHits?.length ?? 0) >= 2;
+          const vol = s.volumeConsistency >= 3 ? " \uD83D\uDD25" : "";
+          const star = isMulti ? "\u2B50 " : "";
+          const scanners = s.scannerHits!.map((h) => `${h.scanner}:${h.detail}`).join(" + ");
+          // Only show HIGH / MEDIUM conviction (WATCH is noise)
+          const conv = s.enrichedConviction && s.enrichedConviction !== "WATCH"
+            ? ` | ${s.enrichedConviction}` : "";
+          lines.push(`    ${star}<b>${s.symbol}</b> ${perf}${vol} \u00B7 ${scanners}${conv}`);
+        }
+      } else {
+        // Compact for late/exhausting — just sector header + ticker list
+        lines.push(`  <b>${rot.sectorName}</b> (${rot.etf}) \u00B7 Day ${rot.daysActive} | ${rot.lifecycle}`);
+        lines.push(`    ${stocks.map((s) => s.symbol).join(", ")}`);
       }
     }
     tierIndex++;
   }
 
-  // Watchlist grouped by sector
-  const allTickers = [...new Set(entries.flatMap((e) => e.stocks.map((s) => s.symbol)))];
+  // Summary count
+  const totalStocks = new Set(entries.flatMap((e) => e.stocks.map((s) => s.symbol))).size;
   lines.push("");
-  lines.push(`\uD83D\uDCCA ${allTickers.length} stocks across ${entries.length} rotations`);
-  lines.push("");
-  for (const entry of entries) {
-    const tickers = entry.stocks.map((s) => s.symbol).join(", ");
-    lines.push(`<code>${entry.rotation.sectorName} (${entry.rotation.etf}): ${tickers}</code>`);
-  }
+  lines.push(`\uD83D\uDCCA ${totalStocks} stocks across ${entries.length} rotations`);
 
   return lines.join("\n").trim();
 }
