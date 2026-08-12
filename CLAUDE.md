@@ -276,7 +276,7 @@ Real-time sector rotation analysis scoring 31 ETFs across 4 categories via Yahoo
 
 **Scoring pipeline:** For each ETF: fetch 1y daily OHLCV → compute RS vs SPY → RRG quadrant (LEADING/IMPROVING/WEAKENING/LAGGING) → composite score (0-100) → acceleration, momentum, stealth detection → regime alignment. Acceleration uses fixed-range normalization (clamped to `COMPOSITE.ACCEL_NORM_FLOOR` / `ACCEL_NORM_CEILING`, default [-10, 10]) instead of min-max, preventing inflation during broad deterioration. Momentum composite weights are graduated (`SCORING_SIGNALS.MOMENTUM_WEIGHTS`: 63d=0.35, 126d=0.25, 189d=0.25, 252d=0.15). Stock enrichment applies universal quality gates (price >= $15, mcap >= $10B, dollarVol >= $200M, avgVol >= 1.0M, institutional >= 5%) plus sector-specific gates (volume spike, extension, trend, correlation), SCAN_EXCLUSIONS filtering, and null market cap rejection. Remaining null gate bypasses (institutional/ret20d) are tracked via `dataWarnings` on `EnrichedStock`.
 
-**Centralized Config:** All thresholds live in `src/lib/sector-rotation/config.ts`. Sections: REGIME, COMPOSITE, ROTATION, QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, CLASSIFICATION, SCORING_SIGNALS, ROTATION_LIFECYCLE, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS, PRERUNNER, CRYPTO_WEIGHTS, PREMARKET_SCORING, POLICY_PULSE. **Never hardcode thresholds** — always add to config.ts and import.
+**Centralized Config:** All thresholds live in `src/lib/sector-rotation/config.ts`. Sections: REGIME, COMPOSITE, ROTATION, QUALITY_GATES, CONVICTION, LEADERSHIP, RISK_FLAGS, POSTURE, SMART_MONEY, TOP_STOCK_WEIGHTS, CLASSIFICATION, SCORING_SIGNALS, ROTATION_LIFECYCLE, ROTATION_CONVICTION, SUB_SECTOR, CRYPTO_QUALITY_GATES, EXTENSION_TIERS, PRERUNNER, CRYPTO_WEIGHTS, PREMARKET_SCORING. **Never hardcode thresholds** — always add to config.ts and import.
 
 **Key files:**
 | File | Purpose |
@@ -864,7 +864,7 @@ Key env vars (set in Vercel + `.env.local`):
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` — Telegram alerts (default channel)
 - `TELEGRAM_CHAT_ID_NIGHTLY` — Nightly summary channel (falls back to `TELEGRAM_CHAT_ID`)
 - `TELEGRAM_CHAT_ID_BRIEFING` — Daily briefing channel (falls back to `TELEGRAM_CHAT_ID`)
-- `TELEGRAM_CHAT_ID_SECTOR` — Sector rotation + policy pulse channel (falls back to `TELEGRAM_CHAT_ID`)
+- `TELEGRAM_CHAT_ID_SECTOR` — Sector rotation channel (falls back to `TELEGRAM_CHAT_ID`)
 - `TELEGRAM_CHAT_ID_REALTIME` — Real-time alerts: targets, watchlist, squeeze, EW (falls back to `TELEGRAM_CHAT_ID`)
 - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — DB access
 - `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` — Payments

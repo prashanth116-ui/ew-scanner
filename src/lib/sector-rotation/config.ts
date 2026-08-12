@@ -600,20 +600,3 @@ export const PREMARKET_SCORING = {
   AVOID_MIN_DEVIATION: 0.15,
 } as const;
 
-// ── Policy Pulse Classification ──
-
-export const POLICY_PULSE = {
-  /** Source authority scores (out of 25) */
-  SOURCE_WHITEHOUSE_RSS: 25,
-  SOURCE_FED_REGISTER: 23,
-  SOURCE_HIGH_AUTHORITY: 20,
-  SOURCE_DEFAULT: 10,
-  /** Impact score component max weights */
-  WEIGHT_SOURCE: 25,
-  WEIGHT_DENSITY: 25,
-  WEIGHT_STRONG_KEYWORD: 15,
-  WEIGHT_HEADLINE: 15,
-  WEIGHT_MULTI_KEYWORD: 20,
-  /** Minimum impact score to persist */
-  MIN_PERSIST_SCORE: 40,
-} as const;

@@ -51,8 +51,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/sectors", label: "Dashboard" },
     { href: "/rotation", label: "Rotation Tracker" },
     { href: "/sectors/picks", label: "Picks" },
-    { href: "/policy-pulse", label: "Policy Pulse" },
-    { href: "/sectors/guide", label: "Guide" },
+{ href: "/sectors/guide", label: "Guide" },
     { href: "/sectors/crypto", label: "Crypto" },
     { href: "/sectors/crypto/guide", label: "Crypto Guide" },
   ],
@@ -90,8 +89,7 @@ function getActiveScanner(pathname: string): "ew" | "squeeze" | "prerun" | "sect
   if (pathname.startsWith("/earnings")) return "earnings";
   if (pathname.startsWith("/strat")) return "strat";
   if (pathname.startsWith("/confluence")) return "confluence";
-  if (pathname.startsWith("/policy-pulse")) return "sectors";
-  if (pathname.startsWith("/sectors") || pathname.startsWith("/rotation")) return "sectors";
+if (pathname.startsWith("/sectors") || pathname.startsWith("/rotation")) return "sectors";
   if (pathname.startsWith("/prerun")) return "prerun";
   if (pathname.startsWith("/squeeze")) return "squeeze";
   return "ew";
