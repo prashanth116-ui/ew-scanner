@@ -294,11 +294,15 @@ function scoreBosConfirmation(
   // and dipped below *either* one in the last 20 bars — a routine pullback, not the
   // "trend shift" it was scored as. Higher-high count comes from the same swing analysis
   // that produced the BOS and was computed but never scored anywhere.
+  // countHigherHighs looks at the last 4 swing highs, not specifically those after the
+  // break index, so this reads as "the swing structure is making higher highs" rather
+  // than strictly "since the BOS". Scored only when a BOS exists, which is what ties
+  // the two together.
   if (bosDetected) {
     let earned = 0;
-    if (higherHighCount >= 2) { earned = 30; evidence.push(`${higherHighCount} higher highs since the break — trend extending`); }
-    else if (higherHighCount >= 1) { earned = 18; evidence.push("Higher high after the break"); }
-    else { caution.push("BOS has not produced a higher high yet"); }
+    if (higherHighCount >= 2) { earned = 30; evidence.push(`BOS with ${higherHighCount} higher highs in recent structure — trend extending`); }
+    else if (higherHighCount >= 1) { earned = 18; evidence.push("BOS with a higher high in recent structure"); }
+    else { caution.push("BOS with no higher highs in recent structure"); }
     slots.push({ earned, possible: 30, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
