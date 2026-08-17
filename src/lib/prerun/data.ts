@@ -1435,6 +1435,201 @@ export function calcRvolTrajectory(volumes: number[], barMultiplier = 1): number
   return den === 0 ? 0 : num / den;
 }
 
+// ── Order-flow primitives ──
+//
+// These replace the lagging inputs in the Inflection and Transition scanners. All of them
+// read the OHLCV already fetched for a ticker — no additional API calls — and all describe
+// participant BEHAVIOUR (who is absorbing, who is stepping in, where supply sits) rather
+// than smoothed price history. Each returns null when the pattern is not measurable, so
+// null-neutral scorers exclude the slot instead of charging a zero.
+
+/** Share of recent down bars showing absorption: heavy volume producing little downward range.
+ *
+ *  Wyckoff effort-vs-result. A bar with 1.2x+ average volume and under 0.7x average range is
+ *  a bar where a seller pushed and someone absorbed it. Visible while price is still falling,
+ *  which is what makes it leading — an oscillator cannot turn up until price already has.
+ *
+ *  Returns 0-1, or null when there are too few down bars in the window to judge. */
+export function calcAbsorption(
+  highs: number[], lows: number[], closes: number[], volumes: number[], barMultiplier = 1,
+): number | null {
+  const w = 20 * barMultiplier;
+  if (closes.length < w + 1) return null;
+
+  const start = closes.length - w;
+  const winVols = volumes.slice(start);
+  const avgVol = winVols.reduce((a, b) => a + b, 0) / winVols.length;
+  if (avgVol <= 0) return null;
+
+  let trSum = 0;
+  for (let i = start; i < closes.length; i++) trSum += calcTR(highs[i], lows[i], closes[i - 1]);
+  const atr = trSum / w;
+  if (atr <= 0) return null;
+
+  let downBars = 0;
+  let absorbed = 0;
+  for (let i = start; i < closes.length; i++) {
+    if (closes[i] >= closes[i - 1]) continue;
+    downBars++;
+    const effort = volumes[i] / avgVol;
+    const result = (highs[i] - lows[i]) / atr;
+    if (effort >= 1.2 && result <= 0.7) absorbed++;
+  }
+  if (downBars < 3) return null; // not enough selling to characterise
+  return absorbed / downBars;
+}
+
+/** Mean close location within the daily range over the last 10 bars, plus whether price
+ *  went nowhere over that stretch.
+ *
+ *  Institutions accumulate into the close. Ten sessions closing in the upper half of their
+ *  range while price is flat is a footprint that appears well before any moving average can
+ *  cross. Uses today's bar with no smoothing. */
+export function calcCloseLocation(
+  highs: number[], lows: number[], closes: number[], barMultiplier = 1,
+): { mean: number; flatPrice: boolean } | null {
+  const w = 10 * barMultiplier;
+  if (closes.length < w + 1) return null;
+
+  let sum = 0;
+  let count = 0;
+  for (let i = closes.length - w; i < closes.length; i++) {
+    const range = highs[i] - lows[i];
+    if (range <= 0) continue;
+    sum += (closes[i] - lows[i]) / range;
+    count++;
+  }
+  if (count < Math.floor(w * 0.6)) return null;
+
+  const first = closes[closes.length - w - 1];
+  const last = closes[closes.length - 1];
+  const changePct = first > 0 ? ((last - first) / first) * 100 : 0;
+  return { mean: sum / count, flatPrice: changePct <= 2 };
+}
+
+/** Count of pocket pivots in the last 10 bars.
+ *
+ *  A pocket pivot is an up day whose volume exceeds the largest DOWN-day volume of the prior
+ *  10 sessions — the moment demand first outweighs all recent visible supply. "Up day on
+ *  above-average volume" fires roughly a third of the time and says almost nothing; this
+ *  fires rarely and marks a change in who is in control. */
+export function calcPocketPivots(closes: number[], volumes: number[], barMultiplier = 1): number | null {
+  const w = 10 * barMultiplier;
+  const lookback = 10 * barMultiplier;
+  if (closes.length < w + lookback + 1) return null;
+
+  let count = 0;
+  for (let i = closes.length - w; i < closes.length; i++) {
+    if (closes[i] <= closes[i - 1]) continue;
+    let maxDownVol = 0;
+    for (let j = Math.max(1, i - lookback); j < i; j++) {
+      if (closes[j] < closes[j - 1] && volumes[j] > maxDownVol) maxDownVol = volumes[j];
+    }
+    if (maxDownVol > 0 && volumes[i] > maxDownVol) count++;
+  }
+  return count;
+}
+
+/** Structural spring (Wyckoff shakeout): 2 = undercut on expansion volume then reclaimed,
+ *  1 = undercut reclaimed on normal volume, 0 = none, null = insufficient structure.
+ *
+ *  References an actual swing low rather than a moving average. That removes the lag from the
+ *  definition and, critically, makes the pattern measurable BELOW the 50-day — which is where
+ *  the Inflection scanner's target population lives and where the SMA50-based predecessor
+ *  always returned nothing. */
+export function calcStructuralSpring(
+  lows: number[], closes: number[], volumes: number[], barMultiplier = 1,
+): number | null {
+  const swings = findSwingLows(lows);
+  if (swings.length < 2) return null;
+
+  const n = closes.length;
+  const w = 20 * barMultiplier;
+  if (n < w + 1) return null;
+
+  const volWindow = volumes.slice(-50 * barMultiplier);
+  const avgVol = volWindow.length > 0 ? volWindow.reduce((a, b) => a + b, 0) / volWindow.length : 0;
+  if (avgVol <= 0) return null;
+
+  const lastClose = closes[n - 1];
+
+  for (let i = n - w; i < n; i++) {
+    // Most recent swing low confirmed before this bar
+    let ref: number | null = null;
+    for (let k = swings.length - 1; k >= 0; k--) {
+      if (swings[k].index < i - 2) { ref = swings[k].value; break; }
+    }
+    if (ref === null) continue;
+    if (lows[i] >= ref) continue; // no undercut
+
+    // Reclaimed within 2 bars, and still holding above the level today
+    let reclaimed = false;
+    for (let j = i; j <= Math.min(i + 2, n - 1); j++) {
+      if (closes[j] > ref) { reclaimed = true; break; }
+    }
+    if (!reclaimed || lastClose <= ref) continue;
+
+    return volumes[i] >= avgVol * 1.3 ? 2 : 1;
+  }
+  return 0;
+}
+
+/** Mean up-bar range divided by mean down-bar range over 20 bars.
+ *
+ *  Volume is effort, range is result. Down bars producing progressively less range is supply
+ *  drying up, stated in terms of the result rather than the effort — and unlike the up/down
+ *  volume ratio it is not already counted in another component. Above 1 means up bars are
+ *  expanding relative to down bars. */
+export function calcRangeAsymmetry(
+  highs: number[], lows: number[], closes: number[], barMultiplier = 1,
+): number | null {
+  const w = 20 * barMultiplier;
+  const n = closes.length;
+  if (n < w + 1) return null;
+
+  let upSum = 0, upN = 0, downSum = 0, downN = 0;
+  for (let i = n - w; i < n; i++) {
+    const range = highs[i] - lows[i];
+    if (range <= 0) continue;
+    if (closes[i] > closes[i - 1]) { upSum += range; upN++; }
+    else if (closes[i] < closes[i - 1]) { downSum += range; downN++; }
+  }
+  if (upN < 3 || downN < 3) return null;
+
+  const downMean = downSum / downN;
+  if (downMean <= 0) return null;
+  return (upSum / upN) / downMean;
+}
+
+/** Percentage of the last year's volume transacted ABOVE the current price.
+ *
+ *  The best single predictor of whether a breakout runs or stalls: a stock with 5% of yearly
+ *  volume above current price has almost nobody underwater waiting to sell into strength; one
+ *  with 45% above has several ceilings to work through. Each bar is assigned to its midpoint,
+ *  which is the simplest form of the volume-by-price idea and needs no binning.
+ *
+ *  Reads the 5-year WEEKLY chart already fetched for the all-time-high calculation, so this
+ *  costs no additional request. Lower is better. */
+export function calcOverheadSupply(
+  highs: number[], lows: number[], volumes: number[], currentPrice: number, weeks = 52,
+): number | null {
+  if (currentPrice <= 0) return null;
+  const n = Math.min(weeks, highs.length, lows.length, volumes.length);
+  if (n < 20) return null;
+
+  const hs = highs.slice(-n), ls = lows.slice(-n), vs = volumes.slice(-n);
+  let total = 0, above = 0;
+  for (let i = 0; i < n; i++) {
+    const vol = vs[i] ?? 0;
+    const mid = (hs[i] + ls[i]) / 2;
+    if (vol <= 0 || !(mid > 0)) continue;
+    total += vol;
+    if (mid > currentPrice) above += vol;
+  }
+  if (total <= 0) return null;
+  return (above / total) * 100;
+}
+
 /** Check last 2 weekly candles for reversal signals: hammer, bullish engulfing, outside bar.
  *  Uses weekly OHLCV from chart5y (already fetched). */
 export function calcWeeklyReversalSignal(
@@ -2163,6 +2358,30 @@ export async function fetchPreRunData(
   const rs50dVsSector = stockReturn50d !== null && sectorReturn50d !== null ? stockReturn50d - sectorReturn50d : null;
 
   // QFE signal fields — computed from already-fetched chart3mo/chart5y
+  // ── Order-flow primitives (leading inputs for Inflection / Transition) ──
+  let absorption: number | null = null;
+  let closeLocationMean: number | null = null;
+  let closeLocationFlat: boolean | null = null;
+  let pocketPivots: number | null = null;
+  let structuralSpring: number | null = null;
+  let rangeAsymmetry: number | null = null;
+
+  if (chart3mo && chart3mo.closes.length >= 21 * bm) {
+    const { highs, lows, closes, volumes } = chart3mo;
+    absorption = calcAbsorption(highs, lows, closes, volumes, bm);
+    const clv = calcCloseLocation(highs, lows, closes, bm);
+    closeLocationMean = clv?.mean ?? null;
+    closeLocationFlat = clv?.flatPrice ?? null;
+    pocketPivots = calcPocketPivots(closes, volumes, bm);
+    structuralSpring = calcStructuralSpring(lows, closes, volumes, bm);
+    rangeAsymmetry = calcRangeAsymmetry(highs, lows, closes, bm);
+  }
+
+  // Overhead supply reads the 5y WEEKLY chart already fetched for the ATH — no extra request
+  const overheadSupply = (chart5y && currentPrice !== null)
+    ? calcOverheadSupply(chart5y.highs, chart5y.lows, chart5y.volumes, currentPrice)
+    : null;
+
   const moneyFlowPersistence = chart3mo ? calcMoneyFlowPersistence(chart3mo.closes, chart3mo.opens, chart3mo.volumes, bm) : null;
   const rvolTrajectory = chart3mo ? calcRvolTrajectory(chart3mo.volumes, bm) : null;
   const weeklyReversal = chart5y ? calcWeeklyReversalSignal(chart5y.opens, chart5y.highs, chart5y.lows, chart5y.closes) : { signal: false, type: null };
@@ -2230,6 +2449,13 @@ export async function fetchPreRunData(
     // Phase 3: Stage 1→2 criteria
     higherLowsCount,
     recentSwingLow,
+    absorption,
+    closeLocationMean,
+    closeLocationFlat,
+    pocketPivots,
+    structuralSpring,
+    rangeAsymmetry,
+    overheadSupply,
     aboveEma21,
     aboveEma50,
     emaCrossoverWithin20d,

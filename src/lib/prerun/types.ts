@@ -76,6 +76,14 @@ export interface PreRunStockData {
   // Phase 3: Stage 1→2 criteria (L, M, N, O)
   higherLowsCount: number | null;          // L: How many of last 3 swing lows are higher. Range is 0-2 (3 swings = 2 pairs)
   recentSwingLow: number | null;           // Most recent confirmed 2-bar swing low from the 3mo chart (structural stop)
+  // ── Order-flow primitives (leading; replace the lagging inputs in Inflection/Transition) ──
+  absorption: number | null;               // 0-1: share of down bars with heavy volume + tiny range (supply absorbed)
+  closeLocationMean: number | null;        // 0-1: mean (close-low)/(high-low) over last 10 bars
+  closeLocationFlat: boolean | null;       // True when price went nowhere (<= +2%) over those 10 bars
+  pocketPivots: number | null;             // Up days in last 10 whose volume beat every down day of the prior 10
+  structuralSpring: number | null;         // 2 = undercut on volume then reclaimed, 1 = reclaimed, 0 = none
+  rangeAsymmetry: number | null;           // mean up-bar range / mean down-bar range over 20 bars
+  overheadSupply: number | null;           // % of last year's volume transacted above current price (lower = cleaner)
   aboveEma21: boolean | null;              // M: Is price currently above 21 EMA. null = chart shorter than EMA50 period
   aboveEma50: boolean | null;              // M: Is price currently above 50 EMA. null = chart shorter than EMA50 period
   emaCrossoverWithin20d: boolean | null;   // M: Did price cross above both EMAs within last 20 trading days
