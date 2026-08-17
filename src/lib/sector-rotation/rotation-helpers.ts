@@ -119,17 +119,20 @@ export function computeConviction(event: RotationEvent): ConvictionResult {
 // are intentionally unmapped — regime opinions are equity-sector focused, so
 // rotations in those categories correctly return "neutral" from isRegimeAligned().
 export const REGIME_SECTOR_DISPLAY_MAP: Record<string, string[]> = {
-  "Technology": ["Technology", "Semiconductors", "Software & Cloud", "AI & Robotics"],
+  "Technology": [
+    "Technology", "Semiconductors", "Software & Cloud", "AI & Robotics",
+    "Memory", "Lithography & Photonics", "Cybersecurity", "Robotics", "Quantum",
+  ],
   "Health Care": ["Health Care", "Biotech"],
   "Consumer Discretionary": ["Consumer Discretionary", "Homebuilders", "Retail"],
   "Consumer Staples": ["Consumer Staples"],
   "Communication Services": ["Communication Services"],
-  "Financials": ["Financials", "Regional Banks"],
+  "Financials": ["Financials", "Regional Banks", "HPC & Bitcoin Miners"],
   "Industrials": ["Industrials", "Transports", "Aerospace & Defense", "Space & Defense Innovation"],
-  "Energy": ["Energy"],
+  "Energy": ["Energy", "Nuclear"],
   "Materials": ["Materials"],
   "Utilities": ["Utilities"],
-  "Real Estate": ["Real Estate"],
+  "Real Estate": ["Real Estate", "Data Centers"],
 };
 
 export function isRegimeAligned(sectorName: string, regime: RegimeData): "aligned" | "headwind" | "neutral" {

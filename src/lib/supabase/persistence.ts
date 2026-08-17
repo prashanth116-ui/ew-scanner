@@ -542,6 +542,29 @@ export async function purgeOldInflectionDaily(retentionDays = 14): Promise<numbe
   }
 }
 
+/** Delete all inflection_daily rows for a date, for a clean re-scan (?clear=true). */
+export async function clearInflectionDaily(date: string): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const { data, error } = await supabase
+      .from("inflection_daily")
+      .delete()
+      .eq("scan_date", date)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] clearInflectionDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] clearInflectionDaily exception:", err);
+    return 0;
+  }
+}
+
 /** Load inflection daily results for a given date. */
 export async function loadInflectionDaily(date: string): Promise<InflectionDailyRecord[]> {
   try {
@@ -1833,6 +1856,10 @@ export interface TransitionDailyRecord {
   invalidation: number | null;
   is_primary: boolean;
   is_stronger: boolean;
+  /** Near ATH or stretched from EMA20 — blocks TRIGGERED and isPrimarySignal. */
+  extension_risk?: boolean;
+  /** False when the OHLC series was too short to run ChoCH/BOS detection. */
+  structure_available?: boolean;
   bullish_evidence: string[];
   caution_evidence: string[];
 }
@@ -2003,7 +2030,7 @@ export async function loadAllScoredTickers(): Promise<Set<string>> {
     const supabase = createAdminClient();
     if (!supabase) return new Set();
 
-    const [r1, r2, r3, r4, r5, r6, r7] = await Promise.all([
+    const [r1, r2, r3, r4, r5, r6, r7, r8] = await Promise.all([
       supabase.from("prerun_daily").select("ticker").limit(5000),
       supabase.from("prerun_4h_daily").select("ticker").limit(5000),
       supabase.from("inflection_daily").select("ticker").limit(5000),
@@ -2011,10 +2038,11 @@ export async function loadAllScoredTickers(): Promise<Set<string>> {
       supabase.from("institutional_daily").select("ticker").limit(5000),
       supabase.from("transition_daily").select("ticker").limit(5000),
       supabase.from("prerunner_daily").select("ticker").limit(5000),
+      supabase.from("ict_daily").select("ticker").limit(5000),
     ]);
 
     const all = new Set<string>();
-    for (const r of [r1, r2, r3, r4, r5, r6, r7]) {
+    for (const r of [r1, r2, r3, r4, r5, r6, r7, r8]) {
       if (r.data) for (const row of r.data) all.add(row.ticker as string);
     }
     return all;
@@ -2185,5 +2213,165 @@ export async function updateTradingBiasOutcomes(
   } catch (err) {
     console.error("[persistence] updateTradingBiasOutcomes exception:", err);
     return false;
+  }
+}
+
+// ── ICT Daily ──
+
+export type { ICTDailyRecord } from "@/lib/ict/types";
+
+/** Batch upsert ICT daily scan results. */
+export async function upsertICTDaily(records: import("@/lib/ict/types").ICTDailyRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] upsertICTDaily: no admin client");
+      return 0;
+    }
+
+    let upserted = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = records.slice(i, i + 500);
+      const { data, error } = await supabase
+        .from("ict_daily")
+        .upsert(batch, { onConflict: "scan_date,ticker" })
+        .select("id");
+
+      if (error) {
+        console.error("[persistence] upsertICTDaily error:", error.message);
+      } else {
+        upserted += data?.length ?? 0;
+      }
+    }
+    return upserted;
+  } catch (err) {
+    console.error("[persistence] upsertICTDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete ICT daily rows older than retentionDays. */
+export async function purgeOldICTDaily(retentionDays = 14): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from("ict_daily")
+      .delete()
+      .lt("scan_date", cutoffStr)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] purgeOldICTDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] purgeOldICTDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Delete all ICT daily results for a specific date. */
+export async function clearICTDaily(date: string): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    const { data, error } = await supabase
+      .from("ict_daily")
+      .delete()
+      .eq("scan_date", date)
+      .select("id");
+
+    if (error) {
+      console.error("[persistence] clearICTDaily error:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] clearICTDaily exception:", err);
+    return 0;
+  }
+}
+
+/** Load ICT daily results for a given date. */
+export async function loadICTDaily(date: string): Promise<import("@/lib/ict/types").ICTDailyRecord[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("ict_daily")
+      .select("*")
+      .eq("scan_date", date)
+      .order("best_score", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadICTDaily error:", error.message);
+      return [];
+    }
+    return (data ?? []) as import("@/lib/ict/types").ICTDailyRecord[];
+  } catch (err) {
+    console.error("[persistence] loadICTDaily exception:", err);
+    return [];
+  }
+}
+
+/** Load available ICT scan dates (up to limit, most recent first). */
+export async function loadICTDailyDates(limit = 14): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("ict_daily")
+      .select("scan_date")
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadICTDailyDates error:", error.message);
+      return [];
+    }
+
+    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
+    return unique.slice(0, limit);
+  } catch (err) {
+    console.error("[persistence] loadICTDailyDates exception:", err);
+    return [];
+  }
+}
+
+/** Load ICT daily results for multiple dates (for streak/delta). */
+export async function loadICTDailyMulti(
+  dates: string[]
+): Promise<Array<{ scan_date: string; ticker: string; best_score: number }>> {
+  if (dates.length === 0) return [];
+
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("ict_daily")
+      .select("scan_date, ticker, best_score")
+      .in("scan_date", dates)
+      .order("scan_date", { ascending: false });
+
+    if (error) {
+      console.error("[persistence] loadICTDailyMulti error:", error.message);
+      return [];
+    }
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; best_score: number }>;
+  } catch (err) {
+    console.error("[persistence] loadICTDailyMulti exception:", err);
+    return [];
   }
 }

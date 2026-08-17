@@ -246,7 +246,9 @@ export async function calculateSectorRotation(
       .map((sym) => batchQuotes.get(sym))
       .filter((q): q is BatchQuote => q != null && q.price > 0 && q.sma50 != null && q.sma50 > 0);
 
-    if (quotesInSector.length >= 5) {
+    const MIN_CONSTITUENTS = SCORING_SIGNALS.BREADTH_MIN_CONSTITUENTS;
+
+    if (quotesInSector.length >= MIN_CONSTITUENTS) {
       const aboveSma = quotesInSector.filter((q) => q.price > q.sma50!).length;
       breadthPct = Math.round((aboveSma / quotesInSector.length) * 100);
     } else if (sectorSymbols.length === 0) {
@@ -270,26 +272,25 @@ export async function calculateSectorRotation(
       const stocksWithSma20 = allStocks.filter(
         (r) => r.data.currentPrice !== null && r.data.sma20 !== null
       );
-      const stocksWithPrice = stocksWithSma50.length >= 5 ? stocksWithSma50 : stocksWithSma20;
-      const usingSma50 = stocksWithSma50.length >= 5;
+      const stocksWithPrice = stocksWithSma50.length >= MIN_CONSTITUENTS ? stocksWithSma50 : stocksWithSma20;
+      const usingSma50 = stocksWithSma50.length >= MIN_CONSTITUENTS;
 
-      if (stocksWithPrice.length >= 5) {
+      if (stocksWithPrice.length >= MIN_CONSTITUENTS) {
         const aboveSma = stocksWithPrice.filter(
           (r) => usingSma50 ? r.data.currentPrice! > r.data.vcpSma50! : r.data.currentPrice! > r.data.sma20!
         ).length;
         breadthPct = Math.round((aboveSma / stocksWithPrice.length) * 100);
         breadthEstimated = !usingSma50; // SMA-20 is less accurate than SMA-50
-      } else if (chart.closes.length >= 20) {
-        // Tier 3: ETF-level breadth proxy (sigmoid)
-        const sma20 = calcSMA(chart.closes, 20);
-        const lastClose = chart.closes[chart.closes.length - 1];
-        if (sma20 !== null && sma20 > 0) {
-          const pctFromSma = ((lastClose - sma20) / sma20) * 100;
-          breadthPct = sigmoidBreadth(pctFromSma);
-          breadthEstimated = true;
-          breadthUsingSigmoid = true;
-        }
       }
+      // No Tier-3 fallback for a basket that lists stocks. The sigmoid proxy is
+      // derived from the ETF's own price vs its SMA-20, so using it here would
+      // restate momentum (already 25% of the composite) as breadth (a further
+      // 15%) and inflate agreement between two components that share an input.
+      // Leaving breadthPct null makes computeComposite reweight the remaining
+      // components and drop dataQuality, which is the honest result.
+      // The sigmoid stays in use above for genuinely stock-less baskets
+      // (cross-asset ETFs and the money-flow theme ETFs), where the ETF price
+      // is the only signal that exists.
     }
 
     // Flow/price divergence — check that CMF was positive for 15+ of last 20 bars.

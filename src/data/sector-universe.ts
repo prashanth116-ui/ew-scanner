@@ -23,6 +23,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     category: "gics_sector",
     stocks: [
       { symbol: "ADI", name: "Analog Devices" },
+      { symbol: "ALAB", name: "Astera Labs" },
       { symbol: "AMAT", name: "Applied Materials" },
       { symbol: "AMD", name: "AMD" },
       { symbol: "ARM", name: "Arm Holdings" },
@@ -49,6 +50,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "ON", name: "ON Semiconductor" },
       { symbol: "QCOM", name: "Qualcomm" },
       { symbol: "QRVO", name: "Qorvo" },
+      { symbol: "SNDK", name: "Sandisk" },
       { symbol: "SNPS", name: "Synopsys" },
       { symbol: "STM", name: "STMicroelectronics" },
       { symbol: "SWKS", name: "Skyworks Solutions" },
@@ -71,22 +73,19 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "ADP", name: "ADP" },
       { symbol: "ADSK", name: "Autodesk" },
       { symbol: "AKAM", name: "Akamai Technologies" },
-      { symbol: "BASE", name: "Couchbase" },
-      { symbol: "CFLT", name: "Confluent" },
       { symbol: "CRM", name: "Salesforce" },
       { symbol: "CRWD", name: "CrowdStrike" },
       { symbol: "CSCO", name: "Cisco" },
       { symbol: "CTSH", name: "Cognizant" },
       { symbol: "CWAN", name: "Clearwater Analytics" },
-      { symbol: "CYBR", name: "CyberArk Software" },
-      { symbol: "DAY", name: "Dayforce" },
       { symbol: "DDOG", name: "Datadog" },
+      { symbol: "DUOL", name: "Duolingo" },
       { symbol: "ESTC", name: "Elastic" },
+      { symbol: "EXLS", name: "ExlService Holdings" },
       { symbol: "FICO", name: "Fair Isaac" },
       { symbol: "FTNT", name: "Fortinet" },
       { symbol: "GDDY", name: "GoDaddy" },
       { symbol: "GEN", name: "Gen Digital" },
-      { symbol: "GLOB", name: "Globant" },
       { symbol: "GTLB", name: "GitLab" },
       { symbol: "HUBS", name: "HubSpot" },
       { symbol: "IBM", name: "IBM" },
@@ -94,7 +93,6 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "IONQ", name: "IonQ" },
       { symbol: "IOT", name: "Samsara" },
       { symbol: "IT", name: "Gartner" },
-      { symbol: "JAMF", name: "Jamf" },
       { symbol: "MANH", name: "Manhattan Associates" },
       { symbol: "MDB", name: "MongoDB" },
       { symbol: "MNDY", name: "Monday.com" },
@@ -109,18 +107,22 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "PLTR", name: "Palantir" },
       { symbol: "PTC", name: "PTC" },
       { symbol: "RBRK", name: "Rubrik" },
+      { symbol: "ROP", name: "Roper Technologies" },
       { symbol: "S", name: "SentinelOne" },
       { symbol: "SAP", name: "SAP" },
+      { symbol: "SHOP", name: "Shopify" },
       { symbol: "SNOW", name: "Snowflake" },
       { symbol: "SWI", name: "SolarWinds" },
       { symbol: "TEAM", name: "Atlassian" },
       { symbol: "TOST", name: "Toast" },
+      { symbol: "TWLO", name: "Twilio" },
       { symbol: "TYL", name: "Tyler Technologies" },
       { symbol: "U", name: "Unity Software" },
-      { symbol: "VEEV", name: "Veeva Systems" },
       { symbol: "VRSN", name: "VeriSign" },
       { symbol: "WDAY", name: "Workday" },
+      { symbol: "ZETA", name: "Zeta Global Holdings" },
       { symbol: "ZI", name: "ZoomInfo" },
+      { symbol: "ZM", name: "Zoom Video" },
       { symbol: "ZS", name: "Zscaler" },
       { symbol: "ZUO", name: "Zuora" },
     ],
@@ -134,12 +136,12 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     // Trimmed 2026-08-08: removed 28 micro-cap/clinical-stage stocks (sub $3B mcap)
     stocks: [
       { symbol: "ALNY", name: "Alnylam Pharmaceuticals" },
-      { symbol: "APLS", name: "Apellis Pharmaceuticals" },
       { symbol: "BGNE", name: "BeiGene" },
       { symbol: "BIIB", name: "Biogen" },
       { symbol: "BMRN", name: "BioMarin Pharmaceutical" },
       { symbol: "BPMC", name: "Blueprint Medicines" },
       { symbol: "CYTK", name: "Cytokinetics" },
+      { symbol: "GMAB", name: "Genmab" },
       { symbol: "HALO", name: "Halozyme Therapeutics" },
       { symbol: "ILMN", name: "Illumina" },
       { symbol: "INCY", name: "Incyte" },
@@ -153,7 +155,6 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "RVMD", name: "Revolution Medicines" },
       { symbol: "SRPT", name: "Sarepta Therapeutics" },
       { symbol: "VKTX", name: "Viking Therapeutics" },
-      { symbol: "VRNA", name: "Verona Pharma" },
       { symbol: "VRTX", name: "Vertex Pharmaceuticals" },
     ],
   },
@@ -170,31 +171,22 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "ALGN", name: "Align Technology" },
       { symbol: "AMGN", name: "Amgen" },
       { symbol: "AZN", name: "AstraZeneca" },
-      { symbol: "BAX", name: "Baxter International" },
-      { symbol: "BDX", name: "Becton Dickinson" },
       { symbol: "BMY", name: "Bristol-Myers Squibb" },
       { symbol: "BSX", name: "Boston Scientific" },
-      { symbol: "CAH", name: "Cardinal Health" },
       { symbol: "CI", name: "Cigna" },
       { symbol: "CNC", name: "Centene" },
       { symbol: "COO", name: "CooperCompanies" },
       { symbol: "CRL", name: "Charles River Labs" },
       { symbol: "CVS", name: "CVS Health" },
-      { symbol: "DGX", name: "Quest Diagnostics" },
       { symbol: "DHR", name: "Danaher" },
-      { symbol: "DVA", name: "DaVita" },
       { symbol: "DXCM", name: "DexCom" },
       { symbol: "ELV", name: "Elevance Health" },
       { symbol: "EW", name: "Edwards Lifesciences" },
-      { symbol: "EXAS", name: "Exact Sciences" },
       { symbol: "GEHC", name: "GE HealthCare" },
-      { symbol: "GH", name: "Guardant Health" },
       { symbol: "GILD", name: "Gilead Sciences" },
       { symbol: "GSK", name: "GSK" },
       { symbol: "HCA", name: "HCA Healthcare" },
       { symbol: "HOLX", name: "Hologic" },
-      { symbol: "HSIC", name: "Henry Schein" },
-      { symbol: "HUM", name: "Humana" },
       { symbol: "IDXX", name: "IDEXX Laboratories" },
       { symbol: "IQV", name: "IQVIA" },
       { symbol: "ISRG", name: "Intuitive Surgical" },
@@ -209,20 +201,18 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "NTRA", name: "Natera" },
       { symbol: "NVO", name: "Novo Nordisk" },
       { symbol: "PFE", name: "Pfizer" },
-      { symbol: "PKI", name: "PerkinElmer" },
       { symbol: "PODD", name: "Insulet" },
       { symbol: "RMD", name: "ResMed" },
       { symbol: "RVTY", name: "Revvity" },
       { symbol: "STE", name: "STERIS" },
       { symbol: "SYK", name: "Stryker" },
       { symbol: "TECH", name: "Bio-Techne" },
-      { symbol: "TEVA", name: "Teva Pharmaceutical" },
       { symbol: "THC", name: "Tenet Healthcare" },
       { symbol: "TMO", name: "Thermo Fisher Scientific" },
       { symbol: "UHS", name: "Universal Health Services" },
       { symbol: "UNH", name: "UnitedHealth" },
       { symbol: "UTHR", name: "United Therapeutics" },
-      { symbol: "VTRS", name: "Viatris" },
+      { symbol: "VEEV", name: "Veeva Systems" },
       { symbol: "WAT", name: "Waters" },
       { symbol: "WST", name: "West Pharmaceutical" },
       { symbol: "ZBH", name: "Zimmer Biomet" },
@@ -237,46 +227,30 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     category: "gics_sector",
     stocks: [
       { symbol: "ACGL", name: "Arch Capital" },
-      { symbol: "AFL", name: "Aflac" },
       { symbol: "AFRM", name: "Affirm" },
-      { symbol: "AIG", name: "AIG" },
-      { symbol: "AIZ", name: "Assurant" },
       { symbol: "AJG", name: "Arthur J. Gallagher" },
-      { symbol: "ALL", name: "Allstate" },
-      { symbol: "AMBC", name: "Ambac Financial" },
       { symbol: "AMP", name: "Ameriprise Financial" },
       { symbol: "AON", name: "Aon" },
       { symbol: "APO", name: "Apollo Global Management" },
       { symbol: "ARES", name: "Ares Management" },
       { symbol: "AXP", name: "American Express" },
       { symbol: "BAC", name: "Bank of America" },
-      { symbol: "BEN", name: "Franklin Resources" },
-      { symbol: "BK", name: "Bank of New York Mellon" },
       { symbol: "BLK", name: "BlackRock" },
-      { symbol: "BR", name: "Broadridge Financial" },
       { symbol: "BRK.B", name: "Berkshire Hathaway" },
       { symbol: "BRO", name: "Brown & Brown" },
       { symbol: "BX", name: "Blackstone" },
       { symbol: "C", name: "Citigroup" },
       { symbol: "CB", name: "Chubb" },
-      { symbol: "CBOE", name: "Cboe Global Markets" },
       { symbol: "CFG", name: "Citizens Financial" },
-      { symbol: "CG", name: "Carlyle Group" },
-      { symbol: "CINF", name: "Cincinnati Financial" },
-      { symbol: "CMA", name: "Comerica" },
       { symbol: "CME", name: "CME Group" },
       { symbol: "COF", name: "Capital One" },
       { symbol: "COIN", name: "Coinbase" },
       { symbol: "CPAY", name: "Corpay" },
       { symbol: "DFS", name: "Discover Financial" },
-      { symbol: "EFX", name: "Equifax" },
-      { symbol: "ERIE", name: "Erie Indemnity" },
       { symbol: "ESGR", name: "Enstar Group" },
       { symbol: "FDS", name: "FactSet Research" },
-      { symbol: "FI", name: "Fiserv" },
       { symbol: "FIS", name: "Fidelity National Info" },
       { symbol: "FITB", name: "Fifth Third Bancorp" },
-      { symbol: "GL", name: "Globe Life" },
       { symbol: "GPN", name: "Global Payments" },
       { symbol: "GS", name: "Goldman Sachs" },
       { symbol: "HBAN", name: "Huntington Bancshares" },
@@ -284,42 +258,27 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "HOOD", name: "Robinhood" },
       { symbol: "IBKR", name: "Interactive Brokers" },
       { symbol: "ICE", name: "Intercontinental Exchange" },
-      { symbol: "IVZ", name: "Invesco" },
-      { symbol: "JKHY", name: "Jack Henry" },
       { symbol: "JPM", name: "JPMorgan Chase" },
-      { symbol: "KEY", name: "KeyCorp" },
       { symbol: "KKR", name: "KKR & Co" },
-      { symbol: "L", name: "Loews" },
-      { symbol: "LPLA", name: "LPL Financial" },
       { symbol: "MA", name: "Mastercard" },
       { symbol: "MCO", name: "Moody's" },
-      { symbol: "MET", name: "MetLife" },
       { symbol: "MMC", name: "Marsh & McLennan" },
       { symbol: "MS", name: "Morgan Stanley" },
       { symbol: "MSCI", name: "MSCI" },
       { symbol: "MTB", name: "M&T Bank" },
       { symbol: "NDAQ", name: "Nasdaq" },
-      { symbol: "NTRS", name: "Northern Trust" },
       { symbol: "NU", name: "Nu Holdings" },
-      { symbol: "OWL", name: "Blue Owl Capital" },
-      { symbol: "PFG", name: "Principal Financial" },
       { symbol: "PGR", name: "Progressive" },
       { symbol: "PNC", name: "PNC Financial" },
-      { symbol: "PRU", name: "Prudential Financial" },
       { symbol: "PYPL", name: "PayPal" },
-      { symbol: "RF", name: "Regions Financial" },
       { symbol: "RJF", name: "Raymond James" },
       { symbol: "SCHW", name: "Charles Schwab" },
-      { symbol: "SNV", name: "Synovus Financial" },
       { symbol: "SOFI", name: "SoFi Technologies" },
       { symbol: "SPGI", name: "S&P Global" },
       { symbol: "XYZ", name: "Block" },
-      { symbol: "STT", name: "State Street" },
       { symbol: "SYF", name: "Synchrony Financial" },
-      { symbol: "TFC", name: "Truist Financial" },
       { symbol: "TROW", name: "T. Rowe Price" },
       { symbol: "TRV", name: "Travelers" },
-      { symbol: "TW", name: "Tradeweb Markets" },
       { symbol: "USB", name: "U.S. Bancorp" },
       { symbol: "V", name: "Visa" },
       { symbol: "WFC", name: "Wells Fargo" },
@@ -336,8 +295,6 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     stocks: [
       { symbol: "ABNB", name: "Airbnb" },
       { symbol: "AMZN", name: "Amazon" },
-      { symbol: "APTV", name: "Aptiv" },
-      { symbol: "AXL", name: "American Axle" },
       { symbol: "AZO", name: "AutoZone" },
       { symbol: "BABA", name: "Alibaba" },
       { symbol: "BBY", name: "Best Buy" },
@@ -360,58 +317,42 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "EBAY", name: "eBay" },
       { symbol: "ETSY", name: "Etsy" },
       { symbol: "EXPE", name: "Expedia" },
-      { symbol: "F", name: "Ford Motor" },
       { symbol: "FL", name: "Foot Locker" },
       { symbol: "FND", name: "Floor & Decor" },
-      { symbol: "GES", name: "Guess?" },
-      { symbol: "GM", name: "General Motors" },
-      { symbol: "GPC", name: "Genuine Parts" },
-      { symbol: "GPS", name: "Gap" },
       { symbol: "GRMN", name: "Garmin" },
-      { symbol: "HAS", name: "Hasbro" },
-      { symbol: "HBI", name: "Hanesbrands" },
       { symbol: "HD", name: "Home Depot" },
       { symbol: "HEAR", name: "Turtle Beach" },
       { symbol: "HLT", name: "Hilton" },
       { symbol: "IGT", name: "International Game Technology" },
       { symbol: "JD", name: "JD.com" },
       { symbol: "LEN", name: "Lennar" },
-      { symbol: "LI", name: "Li Auto" },
       { symbol: "LOW", name: "Lowe's" },
       { symbol: "LULU", name: "Lululemon" },
-      { symbol: "LVS", name: "Las Vegas Sands" },
       { symbol: "MAR", name: "Marriott" },
-      { symbol: "MAS", name: "Masco" },
       { symbol: "MCD", name: "McDonald's" },
       { symbol: "MELI", name: "MercadoLibre" },
       { symbol: "MGM", name: "MGM Resorts" },
       { symbol: "NCLH", name: "Norwegian Cruise Line" },
+      { symbol: "NIO", name: "NIO Inc." },
       { symbol: "NKE", name: "Nike" },
       { symbol: "NVR", name: "NVR" },
       { symbol: "ONON", name: "On Holding" },
       { symbol: "ORLY", name: "O'Reilly Automotive" },
       { symbol: "PDD", name: "PDD Holdings" },
-      { symbol: "PHM", name: "PulteGroup" },
       { symbol: "RCL", name: "Royal Caribbean" },
       { symbol: "RIVN", name: "Rivian" },
-      { symbol: "RL", name: "Ralph Lauren" },
       { symbol: "ROST", name: "Ross Stores" },
       { symbol: "SBUX", name: "Starbucks" },
       { symbol: "SE", name: "Sea Limited" },
-      { symbol: "SHOP", name: "Shopify" },
-      { symbol: "SKX", name: "Skechers" },
-      { symbol: "SN", name: "SharkNinja" },
-      { symbol: "TGT", name: "Target" },
       { symbol: "TJX", name: "TJX" },
       { symbol: "TMHC", name: "Taylor Morrison" },
       { symbol: "TPR", name: "Tapestry" },
       { symbol: "TSCO", name: "Tractor Supply" },
       { symbol: "TSLA", name: "Tesla" },
-      { symbol: "UBER", name: "Uber" },
       { symbol: "ULTA", name: "Ulta Beauty" },
-      { symbol: "VSCO", name: "Victoria's Secret" },
       { symbol: "WING", name: "Wingstop" },
       { symbol: "WSM", name: "Williams-Sonoma" },
+      { symbol: "XPEV", name: "XPeng" },
       { symbol: "WYNN", name: "Wynn Resorts" },
       { symbol: "YUM", name: "Yum! Brands" },
     ],
@@ -424,19 +365,15 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     category: "gics_sector",
     stocks: [
       { symbol: "APP", name: "AppLovin" },
-      { symbol: "ASTS", name: "AST SpaceMobile" },
       { symbol: "BIDU", name: "Baidu" },
       { symbol: "CHTR", name: "Charter Communications" },
       { symbol: "CMCSA", name: "Comcast" },
       { symbol: "DIS", name: "Walt Disney" },
-      { symbol: "DUOL", name: "Duolingo" },
       { symbol: "EA", name: "Electronic Arts" },
       { symbol: "FOX", name: "Fox" },
       { symbol: "FOXA", name: "Fox (Class A)" },
       { symbol: "GOOG", name: "Alphabet (Class C)" },
       { symbol: "GOOGL", name: "Alphabet" },
-      { symbol: "IAC", name: "IAC" },
-      { symbol: "IPG", name: "Interpublic Group" },
       { symbol: "LYV", name: "Live Nation" },
       { symbol: "META", name: "Meta Platforms" },
       { symbol: "MTCH", name: "Match Group" },
@@ -451,15 +388,12 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "SNAP", name: "Snap" },
       { symbol: "SPOT", name: "Spotify" },
       { symbol: "T", name: "AT&T" },
-      { symbol: "TGNA", name: "TEGNA" },
       { symbol: "TKO", name: "TKO Group" },
       { symbol: "TMUS", name: "T-Mobile" },
       { symbol: "TTWO", name: "Take-Two Interactive" },
-      { symbol: "TWLO", name: "Twilio" },
       { symbol: "VZ", name: "Verizon" },
       { symbol: "WBD", name: "Warner Bros. Discovery" },
       { symbol: "ZG", name: "Zillow" },
-      { symbol: "ZM", name: "Zoom Video" },
     ],
   },
   {
@@ -469,10 +403,8 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     description: "Aerospace, defense, logistics, machinery, construction, waste",
     category: "gics_sector",
     stocks: [
-      { symbol: "ALLE", name: "Allegion" },
       { symbol: "AME", name: "AMETEK" },
-      { symbol: "AMWD", name: "American Woodmark" },
-      { symbol: "AOS", name: "A.O. Smith" },
+      { symbol: "AMPX", name: "Amprius Technologies" },
       { symbol: "AXON", name: "Axon Enterprise" },
       { symbol: "AZEK", name: "AZEK Company" },
       { symbol: "BA", name: "Boeing" },
@@ -480,9 +412,9 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "BECN", name: "Beacon Roofing Supply" },
       { symbol: "BLD", name: "TopBuild" },
       { symbol: "BLDR", name: "Builders FirstSource" },
+      { symbol: "BR", name: "Broadridge Financial" },
       { symbol: "CARR", name: "Carrier Global" },
       { symbol: "CAT", name: "Caterpillar" },
-      { symbol: "CHRW", name: "C.H. Robinson" },
       { symbol: "CMI", name: "Cummins" },
       { symbol: "CPRT", name: "Copart" },
       { symbol: "CSWI", name: "CSW Industrials" },
@@ -490,11 +422,10 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "CTAS", name: "Cintas" },
       { symbol: "DAL", name: "Delta Air Lines" },
       { symbol: "DE", name: "Deere & Company" },
-      { symbol: "DOV", name: "Dover" },
+      { symbol: "EFX", name: "Equifax" },
       { symbol: "EME", name: "EMCOR Group" },
       { symbol: "EMR", name: "Emerson Electric" },
       { symbol: "ETN", name: "Eaton" },
-      { symbol: "EXPD", name: "Expeditors International" },
       { symbol: "FAST", name: "Fastenal" },
       { symbol: "FDX", name: "FedEx" },
       { symbol: "FIX", name: "Comfort Systems" },
@@ -512,52 +443,35 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "IESC", name: "IES Holdings" },
       { symbol: "IEX", name: "IDEX" },
       { symbol: "IR", name: "Ingersoll Rand" },
-      { symbol: "ITW", name: "Illinois Tool Works" },
       { symbol: "J", name: "Jacobs Solutions" },
-      { symbol: "JBHT", name: "J.B. Hunt" },
-      { symbol: "JBT", name: "John Bean Technologies" },
       { symbol: "JCI", name: "Johnson Controls" },
       { symbol: "LDOS", name: "Leidos" },
       { symbol: "LHX", name: "L3Harris Technologies" },
       { symbol: "LII", name: "Lennox International" },
       { symbol: "LMT", name: "Lockheed Martin" },
       { symbol: "LUV", name: "Southwest Airlines" },
-      { symbol: "MMM", name: "3M" },
-      { symbol: "MOD", name: "Modine Manufacturing" },
       { symbol: "MTZ", name: "MasTec" },
-      { symbol: "NDSN", name: "Nordson" },
       { symbol: "NOC", name: "Northrop Grumman" },
       { symbol: "NSC", name: "Norfolk Southern" },
       { symbol: "ODFL", name: "Old Dominion Freight" },
-      { symbol: "OTIS", name: "Otis Worldwide" },
       { symbol: "PCAR", name: "PACCAR" },
       { symbol: "PH", name: "Parker-Hannifin" },
-      { symbol: "PNR", name: "Pentair" },
       { symbol: "POWL", name: "Powell Industries" },
       { symbol: "PWR", name: "Quanta Services" },
       { symbol: "RKLB", name: "Rocket Lab" },
-      { symbol: "ROK", name: "Rockwell Automation" },
-      { symbol: "ROL", name: "Rollins" },
-      { symbol: "ROP", name: "Roper Technologies" },
-      { symbol: "RSG", name: "Republic Services" },
       { symbol: "RTX", name: "RTX" },
-      { symbol: "SNA", name: "Snap-on" },
-      { symbol: "SWK", name: "Stanley Black & Decker" },
       { symbol: "TDG", name: "TransDigm" },
       { symbol: "TDY", name: "Teledyne Technologies" },
-      { symbol: "TRU", name: "TransUnion" },
       { symbol: "TT", name: "Trane Technologies" },
-      { symbol: "TXT", name: "Textron" },
       { symbol: "UAL", name: "United Airlines" },
+      { symbol: "UBER", name: "Uber" },
       { symbol: "UNP", name: "Union Pacific" },
       { symbol: "UPS", name: "UPS" },
       { symbol: "URI", name: "United Rentals" },
       { symbol: "VLTO", name: "Veralto" },
       { symbol: "VRSK", name: "Verisk Analytics" },
       { symbol: "VRT", name: "Vertiv Holdings" },
-      { symbol: "WAB", name: "Westinghouse Air Brake" },
       { symbol: "WM", name: "Waste Management" },
-      { symbol: "XYL", name: "Xylem" },
     ],
   },
   {
@@ -571,6 +485,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "BF.B", name: "Brown-Forman" },
       { symbol: "BG", name: "Bunge" },
       { symbol: "CAG", name: "Conagra Brands" },
+      { symbol: "CELH", name: "Celsius Holdings" },
       { symbol: "CHD", name: "Church & Dwight" },
       { symbol: "CL", name: "Colgate-Palmolive" },
       { symbol: "CLX", name: "Clorox" },
@@ -599,10 +514,8 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "STZ", name: "Constellation Brands" },
       { symbol: "SYY", name: "Sysco" },
       { symbol: "TAP", name: "Molson Coors" },
-      { symbol: "THS", name: "TreeHouse Foods" },
       { symbol: "TSN", name: "Tyson Foods" },
       { symbol: "USFD", name: "US Foods" },
-      { symbol: "WBA", name: "Walgreens Boots Alliance" },
       { symbol: "WMT", name: "Walmart" },
     ],
   },
@@ -616,16 +529,12 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "APA", name: "APA" },
       { symbol: "BKR", name: "Baker Hughes" },
       { symbol: "CCJ", name: "Cameco" },
-      { symbol: "CIVI", name: "Civitas Resources" },
       { symbol: "COP", name: "ConocoPhillips" },
-      { symbol: "CTRA", name: "Coterra Energy" },
       { symbol: "CVX", name: "Chevron" },
       { symbol: "DVN", name: "Devon Energy" },
-      { symbol: "ENPH", name: "Enphase Energy" },
       { symbol: "EOG", name: "EOG Resources" },
       { symbol: "EQT", name: "EQT" },
       { symbol: "FANG", name: "Diamondback Energy" },
-      { symbol: "FSLR", name: "First Solar" },
       { symbol: "HAL", name: "Halliburton" },
       { symbol: "KMI", name: "Kinder Morgan" },
       { symbol: "LNG", name: "Cheniere Energy" },
@@ -710,7 +619,6 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "IRM", name: "Iron Mountain" },
       { symbol: "KIM", name: "Kimco Realty" },
       { symbol: "MAA", name: "Mid-America Apartment" },
-      { symbol: "MPW", name: "Medical Properties Trust" },
       { symbol: "O", name: "Realty Income" },
       { symbol: "PLD", name: "Prologis" },
       { symbol: "PSA", name: "Public Storage" },
@@ -760,7 +668,6 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "PPG", name: "PPG Industries" },
       { symbol: "RIO", name: "Rio Tinto" },
       { symbol: "SCCO", name: "Southern Copper" },
-      { symbol: "SEE", name: "Sealed Air" },
       { symbol: "SHW", name: "Sherwin-Williams" },
       { symbol: "STLD", name: "Steel Dynamics" },
       { symbol: "SUM", name: "Summit Materials" },
@@ -788,9 +695,12 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "CDW", name: "CDW" },
       { symbol: "COMM", name: "CommScope" },
       { symbol: "CRM", name: "Salesforce" },
+      { symbol: "CRWV", name: "CoreWeave" },
       { symbol: "CSCO", name: "Cisco" },
       { symbol: "DELL", name: "Dell Technologies" },
+      { symbol: "ENPH", name: "Enphase Energy" },
       { symbol: "FFIV", name: "F5" },
+      { symbol: "FSLR", name: "First Solar" },
       { symbol: "FTNT", name: "Fortinet" },
       { symbol: "GLW", name: "Corning" },
       { symbol: "HPE", name: "Hewlett Packard Enterprise" },
@@ -805,13 +715,13 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "MSFT", name: "Microsoft" },
       { symbol: "MSI", name: "Motorola Solutions" },
       { symbol: "MSTR", name: "MicroStrategy" },
+      { symbol: "NBIS", name: "Nebius Group" },
       { symbol: "NOW", name: "ServiceNow" },
       { symbol: "NTAP", name: "NetApp" },
       { symbol: "NVDA", name: "NVIDIA" },
       { symbol: "ORCL", name: "Oracle" },
       { symbol: "PANW", name: "Palo Alto Networks" },
       { symbol: "PLTR", name: "Palantir" },
-      { symbol: "PSTG", name: "Pure Storage" },
       { symbol: "QCOM", name: "Qualcomm" },
       { symbol: "SMCI", name: "Super Micro Computer" },
       { symbol: "STX", name: "Seagate Technology" },
@@ -837,7 +747,6 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "CFG", name: "Citizens Financial" },
       { symbol: "HBAN", name: "Huntington Bancshares" },
       { symbol: "MTB", name: "M&T Bank" },
-      { symbol: "CMA", name: "Comerica" },
       { symbol: "FITB", name: "Fifth Third Bancorp" },
     ],
   },
@@ -852,13 +761,13 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "LEN", name: "Lennar" },
       { symbol: "NVR", name: "NVR" },
       { symbol: "PHM", name: "PulteGroup" },
-      { symbol: "MDC", name: "MDC Holdings" },
       { symbol: "TMHC", name: "Taylor Morrison" },
       { symbol: "MAS", name: "Masco" },
       { symbol: "BLDR", name: "Builders FirstSource" },
       { symbol: "ALLE", name: "Allegion" },
       { symbol: "AZEK", name: "AZEK Company" },
       { symbol: "FND", name: "Floor & Decor" },
+      { symbol: "MOD", name: "Modine Manufacturing" },
     ],
   },
   {
@@ -875,7 +784,6 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "DLTR", name: "Dollar Tree" },
       { symbol: "BBY", name: "Best Buy" },
       { symbol: "ULTA", name: "Ulta Beauty" },
-      { symbol: "GPS", name: "Gap" },
       { symbol: "DKS", name: "Dick's Sporting Goods" },
       { symbol: "FL", name: "Foot Locker" },
       { symbol: "LULU", name: "Lululemon" },
@@ -934,6 +842,8 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "HEI", name: "HEICO" },
       { symbol: "LDOS", name: "Leidos Holdings" },
       { symbol: "RKLB", name: "Rocket Lab USA" },
+      { symbol: "ONDS", name: "Ondas Holdings" },
+      { symbol: "RCAT", name: "Red Cat Holdings" },
     ],
   },
   {
@@ -943,6 +853,8 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     description: "Space exploration, satellite tech, aerospace innovation",
     category: "sub_sector",
     // Trimmed 2026-08-08: removed 5 micro-cap space stocks (LUNR, RDW, MNTS, SPCE, GILT)
+    // Added 2026-08-17: SPCX (NDX100 since 2026-07-07) and SATS (SP500) — large-cap
+    // space names that postdate the trim, not a reversal of it.
     stocks: [
       { symbol: "RKLB", name: "Rocket Lab USA" },
       { symbol: "LHX", name: "L3Harris Technologies" },
@@ -950,6 +862,8 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "LMT", name: "Lockheed Martin" },
       { symbol: "RTX", name: "RTX Corporation" },
       { symbol: "ASTS", name: "AST SpaceMobile" },
+      { symbol: "SPCX", name: "Space Exploration Technologies" },
+      { symbol: "SATS", name: "EchoStar Corporation" },
     ],
   },
   {
@@ -959,9 +873,15 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
     description: "Pure-play space industry, satellites, orbital operations",
     category: "sub_sector",
     // Trimmed 2026-08-08: removed 9 micro-cap space stocks (BKSY, GSAT, LUNR, RDW, MNTS, SPCE, GILT, SPIR, PL)
+    // Added 2026-08-17: SPCX and SATS — see ARKX note. Still 4 members, below the
+    // Tier-1 breadth minimum, so this basket reports breadthPct: null and the
+    // composite reweights across its remaining components. That is intentional:
+    // reaching the minimum would require re-adding the micro-caps trimmed above.
     stocks: [
       { symbol: "RKLB", name: "Rocket Lab USA" },
       { symbol: "ASTS", name: "AST SpaceMobile" },
+      { symbol: "SPCX", name: "Space Exploration Technologies" },
+      { symbol: "SATS", name: "EchoStar Corporation" },
     ],
   },
 
@@ -996,17 +916,22 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "COHR", name: "Coherent" },
       { symbol: "LITE", name: "Lumentum Holdings" },
       { symbol: "CIEN", name: "Ciena" },
+      { symbol: "ALAB", name: "Astera Labs" },
       // AI Power & Infrastructure
       { symbol: "VST", name: "Vistra" },
       { symbol: "CEG", name: "Constellation Energy" },
       { symbol: "NRG", name: "NRG Energy" },
       { symbol: "GEV", name: "GE Vernova" },
+      { symbol: "RIOT", name: "Riot Platforms" },
+      { symbol: "NUAI", name: "New Era Energy & Digital" },
       // AI Cloud / Hyperscalers
       { symbol: "MSFT", name: "Microsoft" },
       { symbol: "GOOGL", name: "Alphabet" },
       { symbol: "META", name: "Meta Platforms" },
       { symbol: "AMZN", name: "Amazon" },
       { symbol: "ORCL", name: "Oracle" },
+      { symbol: "NBIS", name: "Nebius Group" },
+      { symbol: "CRWV", name: "CoreWeave" },
       // AI Software & Platforms
       { symbol: "PLTR", name: "Palantir Technologies" },
       { symbol: "CRM", name: "Salesforce" },
@@ -1014,6 +939,7 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "SNOW", name: "Snowflake" },
       { symbol: "DDOG", name: "Datadog" },
       { symbol: "S", name: "SentinelOne" },
+      { symbol: "GRRR", name: "Gorilla Technology" },
       // Semi Equipment
       { symbol: "ASML", name: "ASML Holding" },
       { symbol: "AMAT", name: "Applied Materials" },
@@ -1030,10 +956,81 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
       { symbol: "ISRG", name: "Intuitive Surgical" },
       { symbol: "TER", name: "Teradyne" },
       { symbol: "ROK", name: "Rockwell Automation" },
+      { symbol: "OUST", name: "Ouster" },
       // AI-Exposed Commodities (copper, uranium)
       { symbol: "FCX", name: "Freeport-McMoRan" },
       { symbol: "CCJ", name: "Cameco" },
     ],
+  },
+
+  // ── Money-Flow Theme ETFs (added 2026-08-15) ──
+  // ETF-only: no `stocks` list, so these are scored for RS / RRG quadrant /
+  // composite / acceleration but contribute nothing to sector picks or the
+  // rotation × scanner confluence. Add constituents later if a theme earns it.
+
+  {
+    id: "memory",
+    displayName: "Memory",
+    etf: "DRAM",
+    description: "DRAM/NAND memory makers — AI capex and pricing cycle",
+    category: "sub_sector",
+    stocks: [],
+  },
+  {
+    id: "lithography-photonics",
+    displayName: "Lithography & Photonics",
+    etf: "EUV",
+    description: "EUV lithography, optics, photonics — semi capex leading indicator",
+    category: "sub_sector",
+    stocks: [],
+  },
+  {
+    id: "cybersecurity",
+    displayName: "Cybersecurity",
+    etf: "CIBR",
+    description: "Network, endpoint, and identity security",
+    category: "sub_sector",
+    stocks: [],
+  },
+  {
+    id: "hpc-miners",
+    displayName: "HPC & Bitcoin Miners",
+    etf: "WGMI",
+    description: "Bitcoin miners repurposing power and racks for HPC/AI compute",
+    category: "sub_sector",
+    stocks: [],
+  },
+  {
+    id: "data-centers",
+    displayName: "Data Centers",
+    etf: "DTCR",
+    description: "Data center REITs and digital infrastructure — AI buildout",
+    category: "sub_sector",
+    stocks: [],
+  },
+  {
+    id: "robotics",
+    displayName: "Robotics",
+    etf: "BOTZ",
+    description: "Industrial robotics and automation — overlaps AI & Robotics (AIQ)",
+    category: "sub_sector",
+    stocks: [],
+  },
+  {
+    id: "nuclear",
+    displayName: "Nuclear",
+    etf: "NLR",
+    description: "Uranium miners and nuclear power — AI power demand",
+    category: "sub_sector",
+    stocks: [],
+  },
+  {
+    id: "quantum",
+    displayName: "Quantum",
+    etf: "QTUM",
+    description: "Quantum computing and adjacent compute research",
+    category: "sub_sector",
+    stocks: [],
   },
 
   // ── Cross-Asset Money Flow ETFs ──
@@ -1115,14 +1112,93 @@ export const SECTOR_UNIVERSE: SectorDefinition[] = [
   },
 ];
 
-// ── Helper functions ──
+// ── Canonical sector assignment ──
 
-// First-wins: stocks appearing in multiple sectors (e.g. NVDA in Semiconductors AND
-// Technology) map to their first (most specific) sector for classification purposes.
+/**
+ * Canonical sector for every symbol listed in more than one basket.
+ *
+ * A symbol's canonical sector decides what `getSectorForSymbol()` returns, which
+ * drives the `sector` column on every scanner row, the PreRun/STRAT universe
+ * buckets, and the per-sector pool feeding Tier-2 breadth in sector-rotation.ts.
+ * That is load-bearing, so it is declared here rather than left to fall out of
+ * declaration order in SECTOR_UNIVERSE.
+ *
+ * Every symbol appearing in 2+ baskets MUST have an entry here.
+ * `findUnpinnedContested()` returns any that do not, so a newly overlapping
+ * symbol surfaces there instead of silently resolving to whichever basket
+ * happens to be declared first.
+ *
+ * Uncontested symbols are omitted — they resolve to their only basket.
+ */
+export const PRIMARY_SECTOR: Record<string, string> = {
+  // → semiconductors
+  "ALAB": "semiconductors", "AMAT": "semiconductors", "AMD": "semiconductors", "ARM": "semiconductors",
+  "ASML": "semiconductors", "AVGO": "semiconductors", "COHR": "semiconductors", "CRDO": "semiconductors",
+  "ENTG": "semiconductors", "INTC": "semiconductors", "KLAC": "semiconductors", "LRCX": "semiconductors",
+  "MRVL": "semiconductors", "MU": "semiconductors", "NVDA": "semiconductors", "QCOM": "semiconductors",
+  "TER": "semiconductors", "TSM": "semiconductors", "TXN": "semiconductors",
+
+  // → software-cloud
+  "ACN": "software-cloud", "ADBE": "software-cloud", "CRM": "software-cloud", "CSCO": "software-cloud",
+  "DDOG": "software-cloud", "FTNT": "software-cloud", "IBM": "software-cloud", "INTU": "software-cloud",
+  "MSFT": "software-cloud", "NOW": "software-cloud", "ORCL": "software-cloud", "PANW": "software-cloud",
+  "PLTR": "software-cloud", "S": "software-cloud", "SNOW": "software-cloud",
+
+  // → health-care
+  "ISRG": "health-care",
+
+  // → financials
+  "CFG": "financials", "FITB": "financials", "HBAN": "financials", "MTB": "financials",
+
+  // → consumer-discretionary
+  "AMZN": "consumer-discretionary", "AZO": "consumer-discretionary", "BBY": "consumer-discretionary", "DECK": "consumer-discretionary",
+  "DHI": "consumer-discretionary", "DKS": "consumer-discretionary", "ETSY": "consumer-discretionary", "FL": "consumer-discretionary",
+  "FND": "consumer-discretionary", "LEN": "consumer-discretionary", "LULU": "consumer-discretionary", "NVR": "consumer-discretionary",
+  "ORLY": "consumer-discretionary", "ROST": "consumer-discretionary", "TJX": "consumer-discretionary", "TMHC": "consumer-discretionary",
+  "TSCO": "consumer-discretionary", "ULTA": "consumer-discretionary", "WSM": "consumer-discretionary",
+
+  // → communication-services
+  "GOOGL": "communication-services", "META": "communication-services",
+
+  // → industrials
+  "AXON": "industrials", "AZEK": "industrials", "BA": "industrials", "BAH": "industrials",
+  "BLDR": "industrials", "CSX": "industrials", "DAL": "industrials", "FDX": "industrials",
+  "GD": "industrials", "GEV": "industrials", "HEI": "industrials", "HII": "industrials",
+  "HWM": "industrials", "LDOS": "industrials", "LHX": "industrials", "LMT": "industrials",
+  "LUV": "industrials", "NOC": "industrials", "NSC": "industrials", "ODFL": "industrials",
+  "RKLB": "industrials", "RTX": "industrials", "TDG": "industrials", "UAL": "industrials",
+  "UNP": "industrials", "UPS": "industrials", "VRT": "industrials",
+
+  // → consumer-staples
+  "DG": "consumer-staples", "DLTR": "consumer-staples",
+
+  // → energy
+  "CCJ": "energy",
+
+  // → utilities
+  "CEG": "utilities", "NRG": "utilities", "VST": "utilities",
+
+  // → materials
+  "FCX": "materials",
+
+  // → technology
+  "AAPL": "technology", "ANET": "technology", "CRWV": "technology", "DELL": "technology",
+  "HPE": "technology", "LITE": "technology", "NBIS": "technology", "SMCI": "technology",
+
+  // → space
+  "ASTS": "space", "SATS": "space", "SPCX": "space",
+
+};
+
+// Pinned symbols take their declared sector; everything else resolves to its only
+// basket (or, defensively, the first basket that lists it).
 const _symbolToSector = new Map<string, SectorDefinition>();
 for (const sector of SECTOR_UNIVERSE) {
   for (const stock of sector.stocks) {
-    if (!_symbolToSector.has(stock.symbol)) {
+    const pinned = PRIMARY_SECTOR[stock.symbol];
+    if (pinned !== undefined) {
+      if (pinned === sector.id) _symbolToSector.set(stock.symbol, sector);
+    } else if (!_symbolToSector.has(stock.symbol)) {
       _symbolToSector.set(stock.symbol, sector);
     }
   }
@@ -1167,4 +1243,29 @@ export function getLeadershipBaskets(): SectorDefinition[] {
 /** Get all sectors that have stocks for enrichment (excludes cross-asset ETFs). */
 export function getSectorsWithStocks(): SectorDefinition[] {
   return SECTOR_UNIVERSE.filter((s) => s.stocks.length > 0);
+}
+
+/**
+ * Symbols listed in 2+ baskets that have no PRIMARY_SECTOR entry.
+ *
+ * Non-empty means at least one symbol's canonical sector is being decided by
+ * declaration order — add it to PRIMARY_SECTOR. Covered by a unit test so the
+ * condition fails the build rather than drifting silently.
+ */
+export function findUnpinnedContested(): { symbol: string; sectors: string[] }[] {
+  const seen = new Map<string, string[]>();
+  for (const sector of SECTOR_UNIVERSE) {
+    for (const stock of sector.stocks) {
+      const list = seen.get(stock.symbol);
+      if (list) list.push(sector.id);
+      else seen.set(stock.symbol, [sector.id]);
+    }
+  }
+  const unpinned: { symbol: string; sectors: string[] }[] = [];
+  for (const [symbol, sectors] of seen) {
+    if (sectors.length > 1 && PRIMARY_SECTOR[symbol] === undefined) {
+      unpinned.push({ symbol, sectors });
+    }
+  }
+  return unpinned.sort((a, b) => a.symbol.localeCompare(b.symbol));
 }

@@ -1,0 +1,467 @@
+# ============================================================
+# QFE ICT PRICE ACTION PRE-EXPANSION SCANNER v2.0
+# SEQUENTIAL STATE MACHINE - THINKORSWIM STOCK HACKER
+# ============================================================
+#
+# Faithful thinkScript projection of src/lib/ict/engine.ts
+# (12-state ICT machine, causal, no look-ahead).
+#
+# PURE PRICE ACTION.
+# No EMA / SMA / VWAP / ATR / RSI / MACD / ADX / TSI /
+# Bollinger / Stochastic / volume.
+#
+# ------------------------------------------------------------
+# STATE LADDER (mirrors ICTState in src/lib/ict/types.ts)
+# ------------------------------------------------------------
+#   0  NONE
+#   1  SSL_RAID              sweep below prior low pool + reclaim
+#   2  STRUCTURE_HIGH        structure high FROZEN at raid bar
+#   3  BULLISH_DISPLACEMENT  impulse candle
+#   4  BULLISH_MSS           close above the frozen structure high
+#   5  FVG_CONFIRMED         3-candle bullish gap recorded as a zone
+#   6  FVG_RETRACEMENT       price trades back into that zone
+#   7  HIGHER_LOW            reaccumulation above the protected low
+#   8  BSL_BUILT             buy-side liquidity cluster identified
+#   9  ARMED                 compressing into BSL            <-- objective
+#  10  TRIGGER               CISD (close over last bearish open)
+#  11  IGNITION              close breaks BSL with displacement
+#
+# INVALIDATION (any state >= 1):
+#   close <= protectedLow  ->  full reset to NONE.
+#   No re-entry on the invalidation bar itself.
+#
+# ------------------------------------------------------------
+# WHY A STATE MACHINE AND NOT AGE COMPARISONS
+# ------------------------------------------------------------
+# v1.3 located each ICT event with GetMaxValueOffset, which
+# returns the MOST RECENT occurrence. MSS, FVG and pullback
+# re-fire constantly inside a base, which reset those ages and
+# silently killed mature setups. A rec-carried state machine
+# has no such failure mode: each event is consumed once, in
+# order, and levels are frozen at the bar that created them.
+#
+# ------------------------------------------------------------
+# AGGREGATION
+# ------------------------------------------------------------
+# Set via the Stock Hacker study aggregation selector.
+# thinkorswim offers 1H / 2H / 4H / DAY / WEEK.
+# There is no 8H or 12H aggregation in thinkorswim - the 8h
+# and 12h entries in src/lib/ict/config.ts TIMEFRAMES are
+# reachable from the backend only.
+# ============================================================
+
+
+# ============================================================
+# INPUTS  (defaults mirror src/lib/ict/config.ts)
+# ============================================================
+
+# SSL.LOOKBACK
+input sslLookback = 10;
+
+# MSS.LOOKBACK
+input mssLookback = 8;
+
+# DISPLACEMENT.COMPARISON_BARS
+input dispCompareBars = 3;
+
+# DISPLACEMENT.MIN_BODY_RATIO
+input minBodyPct = 0.60;
+
+# Close-location filter carried over from TOS v1.3.
+# NOT present in engine.ts checkDisplacement() - see README.
+# Set to 0.0 for exact backend parity.
+input minCloseLocation = 0.70;
+
+input requireSweepReclaim = yes;
+
+# BSL.LOOKBACK
+input bslLookback = 8;
+
+# BSL.CLUSTER_TOLERANCE
+input bslClusterTolerance = 0.004;
+
+# BSL.MIN_CLUSTER_COUNT
+input bslMinCluster = 2;
+
+# ARMED.MAX_DISTANCE_PCT
+input maxDistanceToBslPct = 3.0;
+
+input scanMode =
+    {DEVELOPING,
+     default ARMED,
+     TRIGGER,
+     IGNITION,
+     LATE,
+     ANY_SETUP};
+
+
+# ============================================================
+# PRICE PRIMITIVES
+# ============================================================
+
+def rng  = high - low;
+def body = AbsValue(close - open);
+def bull = close > open;
+
+
+# ============================================================
+# DISPLACEMENT CANDLE
+# ============================================================
+#
+# engine.ts checkDisplacement():
+#   bullish, body/range >= minBodyRatio, close > high[1],
+#   body and range strictly exceed EACH of the prior N bars.
+#
+# Highest(body[1], N) is the max of the prior N bodies, so
+# body > Highest(body[1], N) is exactly "beats each of them".
+#
+# ============================================================
+
+def bodyExpansion =
+    body > Highest(body[1], dispCompareBars);
+
+def rangeExpansion =
+    rng > Highest(rng[1], dispCompareBars);
+
+def dominantBody =
+    bull and
+    rng > 0 and
+    body / rng >= minBodyPct;
+
+def closeLocationOk =
+    rng > 0 and
+    (close - low) / rng >= minCloseLocation;
+
+def displacement =
+    dominantBody and
+    bodyExpansion and
+    rangeExpansion and
+    close > high[1] and
+    closeLocationOk;
+
+
+# ============================================================
+# EVENT PRIMITIVES
+# ============================================================
+
+# --- SSL raid: sweep the prior low pool and reclaim it ---
+def priorSSL =
+    Lowest(low[1], sslLookback);
+
+def sslRaidBar =
+    low < priorSSL and
+    (!requireSweepReclaim or close > priorSSL);
+
+
+# --- Structure high, evaluated on the raid bar and frozen ---
+def structHighNow =
+    Highest(high[1], mssLookback);
+
+
+# --- 3-candle bullish FVG: gap between high[2] and low ---
+def fvgFormed =
+    low > high[2];
+
+
+# --- BSL: highest prior high plus equal-high cluster count ---
+def bslLvlNow =
+    Highest(high[1], bslLookback);
+
+def bslCluster =
+    fold j = 1 to bslLookback + 1
+    with c = 0
+    do c + (
+        if bslLvlNow > 0 and
+           AbsValue(GetValue(high, j) - bslLvlNow) / bslLvlNow
+               <= bslClusterTolerance
+        then 1
+        else 0
+    );
+
+def bslOkNow =
+    bslLvlNow > 0 and
+    bslCluster >= bslMinCluster;
+
+
+# --- CISD: close above the most recent bearish candle's open ---
+rec lastBearOpen =
+    CompoundValue(1,
+        if close[1] < open[1]
+        then open[1]
+        else lastBearOpen[1],
+        Double.NaN);
+
+def cisdNow =
+    bull and
+    !IsNaN(lastBearOpen) and
+    close > lastBearOpen;
+
+
+# ============================================================
+# PROTECTED LOW  -  the spine of the machine
+# ============================================================
+#
+# NaN            = flat (state NONE)
+# non-NaN        = a setup is live, anchored at the raid low
+# close <= it    = invalidation, hard reset, no re-arm this bar
+#
+# Every downstream stage keys off this, which is what keeps
+# the whole chain acyclic and declarable in one pass.
+#
+# ============================================================
+
+rec protectedLow =
+    CompoundValue(1,
+        if !IsNaN(protectedLow[1]) and close <= protectedLow[1]
+        then Double.NaN
+        else if IsNaN(protectedLow[1]) and sslRaidBar
+        then low
+        else protectedLow[1],
+        Double.NaN);
+
+def alive     = !IsNaN(protectedLow);
+def alivePrev = !IsNaN(protectedLow[1]);
+
+
+# ============================================================
+# FROZEN STRUCTURE HIGH  (state 2)
+# ============================================================
+
+rec mssLevel =
+    CompoundValue(1,
+        if !alive then Double.NaN
+        else if !alivePrev then structHighNow
+        else mssLevel[1],
+        Double.NaN);
+
+
+# ============================================================
+# STAGE 3 - DISPLACEMENT
+# ============================================================
+#
+# engine.ts checks displacement only from STRUCTURE_HIGH, i.e.
+# on bars AFTER the raid bar - hence the alivePrev guard.
+#
+# ============================================================
+
+rec dispDone =
+    CompoundValue(1,
+        if !alive then 0
+        else if dispDone[1] == 1 then 1
+        else if alivePrev and displacement then 1
+        else 0,
+        0);
+
+
+# ============================================================
+# STAGE 4 - MSS
+# ============================================================
+#
+# engine.ts permits the displacement candle itself to confirm
+# MSS on the same bar, so this reads dispDone at current bar.
+#
+# ============================================================
+
+rec mssDone =
+    CompoundValue(1,
+        if !alive then 0
+        else if mssDone[1] == 1 then 1
+        else if dispDone == 1 and
+                !IsNaN(mssLevel) and
+                close > mssLevel then 1
+        else 0,
+        0);
+
+
+# ============================================================
+# STAGE 5 - FVG ZONE (first gap after MSS, then frozen)
+# ============================================================
+
+rec fvgLower =
+    CompoundValue(1,
+        if !alive then Double.NaN
+        else if IsNaN(fvgLower[1]) and mssDone[1] == 1 and fvgFormed
+        then high[2]
+        else fvgLower[1],
+        Double.NaN);
+
+rec fvgUpper =
+    CompoundValue(1,
+        if !alive then Double.NaN
+        else if IsNaN(fvgUpper[1]) and mssDone[1] == 1 and fvgFormed
+        then low
+        else fvgUpper[1],
+        Double.NaN);
+
+
+# ============================================================
+# STAGE 6 - RETRACEMENT INTO THE ZONE
+# ============================================================
+
+rec retDone =
+    CompoundValue(1,
+        if !alive then 0
+        else if retDone[1] == 1 then 1
+        else if !IsNaN(fvgLower[1]) and
+                low  <= fvgUpper[1] and
+                high >= fvgLower[1] then 1
+        else 0,
+        0);
+
+
+# ============================================================
+# STAGE 7 - HIGHER LOW / REACCUMULATION
+# ============================================================
+
+def higherLowCond =
+    alive and
+    low[1] > protectedLow and
+    low[1] < low[2] and
+    low > low[1] and
+    close > high[1];
+
+rec hlDone =
+    CompoundValue(1,
+        if !alive then 0
+        else if hlDone[1] == 1 then 1
+        else if retDone[1] == 1 and higherLowCond then 1
+        else 0,
+        0);
+
+
+# ============================================================
+# STAGE 8 - BSL BUILT
+# ============================================================
+
+rec bslLevel =
+    CompoundValue(1,
+        if !alive then Double.NaN
+        else if IsNaN(bslLevel[1]) and hlDone[1] == 1 and bslOkNow
+        then bslLvlNow
+        else bslLevel[1],
+        Double.NaN);
+
+rec bslCount =
+    CompoundValue(1,
+        if !alive then 0
+        else if bslCount[1] == 0 and hlDone[1] == 1 and bslOkNow
+        then bslCluster
+        else bslCount[1],
+        0);
+
+
+# ============================================================
+# STAGE 9 - ARMED
+# ============================================================
+
+def distToBslPct =
+    if !IsNaN(bslLevel) and bslLevel > 0
+    then (bslLevel - close) / bslLevel * 100
+    else Double.NaN;
+
+def armedCond =
+    !IsNaN(bslLevel[1]) and
+    bslLevel[1] > 0 and
+    low > low[1] and
+    low[1] >= low[2] and
+    high < bslLevel[1] and
+    (bslLevel[1] - close) / bslLevel[1] * 100 >= 0 and
+    (bslLevel[1] - close) / bslLevel[1] * 100 <= maxDistanceToBslPct;
+
+rec armDone =
+    CompoundValue(1,
+        if !alive then 0
+        else if armDone[1] == 1 then 1
+        else if armedCond then 1
+        else 0,
+        0);
+
+
+# ============================================================
+# STAGE 10 - TRIGGER (CISD)
+# ============================================================
+
+rec trigDone =
+    CompoundValue(1,
+        if !alive then 0
+        else if trigDone[1] == 1 then 1
+        else if armDone[1] == 1 and cisdNow then 1
+        else 0,
+        0);
+
+
+# ============================================================
+# STAGE 11 - IGNITION
+# ============================================================
+
+def ignitionCond =
+    !IsNaN(bslLevel) and
+    close > bslLevel and
+    displacement;
+
+rec ignDone =
+    CompoundValue(1,
+        if !alive then 0
+        else if ignDone[1] == 1 then 1
+        else if trigDone[1] == 1 and ignitionCond then 1
+        else 0,
+        0);
+
+
+# ============================================================
+# RESOLVED STATE
+# ============================================================
+
+def state =
+    if !alive then 0
+    else if ignDone == 1 then 11
+    else if trigDone == 1 then 10
+    else if armDone == 1 then 9
+    else if !IsNaN(bslLevel) then 8
+    else if hlDone == 1 then 7
+    else if retDone == 1 then 6
+    else if !IsNaN(fvgLower) then 5
+    else if mssDone == 1 then 4
+    else if dispDone == 1 then 3
+    else if !IsNaN(mssLevel) then 2
+    else 1;
+
+# The bar ignition actually fires, versus bars that merely
+# remain in the terminal ignition state afterwards.
+def ignitionBar =
+    ignDone == 1 and ignDone[1] == 0;
+
+
+# ============================================================
+# SCAN MODES
+# ============================================================
+#
+# DEVELOPING  states 3-8   structure forming, not yet armed
+# ARMED       state 9      compressing into BSL   <-- objective
+# TRIGGER     state 10     CISD fired, expansion imminent
+# IGNITION    state 11     first bar only - breaking BSL now
+# LATE        state 11     already expanded, avoid chasing
+# ANY_SETUP   state >= 3   matches CRON.MIN_STATE_ORDER
+#
+# ============================================================
+
+def developing = state >= 3 and state <= 8;
+def armed      = state == 9;
+def trigger    = state == 10;
+def ignition   = ignitionBar;
+def late       = state == 11 and !ignitionBar;
+def anySetup   = state >= 3;
+
+
+# ============================================================
+# FINAL SCAN
+# ============================================================
+
+plot scan =
+    if scanMode == scanMode.DEVELOPING then developing
+    else if scanMode == scanMode.ARMED then armed
+    else if scanMode == scanMode.TRIGGER then trigger
+    else if scanMode == scanMode.IGNITION then ignition
+    else if scanMode == scanMode.LATE then late
+    else if scanMode == scanMode.ANY_SETUP then anySetup
+    else no;

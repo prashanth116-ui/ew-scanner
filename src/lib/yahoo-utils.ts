@@ -110,6 +110,22 @@ export function deduplicatedChartFetch(
   return promise;
 }
 
+/**
+ * Translate an internal ticker to Yahoo's wire format.
+ *
+ * Index membership lists use a dot for share-class tickers (BRK.B, BF.B, MOG.A),
+ * but Yahoo's chart and quote endpoints only recognise the dashed form (BRK-B).
+ * Requesting the dotted symbol returns a result object with an undefined price
+ * rather than an error, so these tickers fail silently — they are dropped from
+ * sector breadth and skipped by every scanner without surfacing anywhere.
+ *
+ * Internal symbols stay dotted (they are persisted row keys); only the outbound
+ * request is rewritten. Callers must map the response back — see `fetchBatchQuotes`.
+ */
+export function toYahooSymbol(symbol: string): string {
+  return symbol.includes(".") ? symbol.replace(/\./g, "-") : symbol;
+}
+
 /** Extract raw numeric value from Yahoo Finance API responses (handles {raw: N} wrapper). */
 export function extractRaw(val: unknown): number | null {
   if (val == null) return null;

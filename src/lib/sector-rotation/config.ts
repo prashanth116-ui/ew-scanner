@@ -340,6 +340,14 @@ export const SCORING_SIGNALS = {
   FLOW_DIVERGENCE_ROC_THRESHOLD: -1,
   /** Breadth % > this + declining ETF = breadth divergence */
   BREADTH_DIVERGENCE_PCT: 50,
+  /**
+   * Minimum constituents with a resolvable price + SMA before a breadth
+   * percentage is meaningful. Below this a stock-bearing basket reports
+   * breadthPct: null and the composite reweights, rather than falling back to
+   * the ETF sigmoid — that proxy is derived from the ETF's own price and would
+   * double-count momentum, which already carries 25% of the composite.
+   */
+  BREADTH_MIN_CONSTITUENTS: 5,
   /** ROC20d < this + positive accel = acceleration inflection (flat-to-negative) */
   ACCEL_INFLECTION_ROC_MAX: 0,
   /** Minimum leading indicators for stealth accumulation */

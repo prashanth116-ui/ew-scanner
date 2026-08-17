@@ -13,7 +13,7 @@ export const SP500_MEMBERS: Set<string> = new Set([
   "A", "AAPL", "ABBV", "ABNB", "ABT", "ACGL", "ACN", "ADBE", "ADI", "ADM",
   "ADP", "ADSK", "AEE", "AEP", "AES", "AFL", "AIG", "AIZ", "AJG", "AKAM",
   "ALB", "ALGN", "ALL", "ALLE", "AMAT", "AMCR", "AMD", "AME", "AMGN", "AMP",
-  "AMT", "AMZN", "ANET", "ANSS", "AON", "AOS", "APA", "APD", "APH", "APO",
+  "AMT", "AMZN", "ANET", "AON", "AOS", "APA", "APD", "APH", "APO",
   "APP", "APTV", "ARE", "ARES", "ATO", "AVB", "AVGO", "AVY", "AWK", "AXON",
   "AXP", "AZO",
   "BA", "BAC", "BALL", "BAX", "BBY", "BDX", "BEN", "BF.B", "BG", "BIIB",
@@ -29,10 +29,10 @@ export const SP500_MEMBERS: Set<string> = new Set([
   "DHI", "DHR", "DIS", "DLR", "DLTR", "DOC", "DOV", "DOW", "DPZ", "DRI",
   "DTE", "DUK", "DVA", "DVN", "DXCM",
   "EA", "EBAY", "ECL", "ED", "EFX", "EIX", "EL", "ELV", "EME", "EMR",
-  "EOG", "EQIX", "EQR", "EQT", "ERIE", "ES", "ESS", "ETN", "ETR", "EVRG",
+  "EOG", "EQIX", "EQR", "EQT", "ES", "ESS", "ETN", "ETR", "EVRG",
   "EW", "EXC", "EXPD", "EXPE", "EXR",
   "F", "FANG", "FAST", "FCX", "FDS", "FDX", "FE", "FFIV", "FICO", "FIS",
-  "FISV", "FITB", "FIX", "FLEX", "FOX", "FOXA", "FRT", "FSLR", "FTNT", "FTV",
+  "FISV", "FITB", "FIX", "FLEX", "FOXA", "FRT", "FSLR", "FTNT", "FTV",
   "GD", "GDDY", "GE", "GEHC", "GEN", "GEV", "GILD", "GIS", "GL", "GLW",
   "GM", "GNRC", "GOOG", "GOOGL", "GPC", "GPN", "GRMN", "GS", "GWW",
   "HAL", "HAS", "HBAN", "HCA", "HD", "HIG", "HII", "HLT", "HON", "HOOD",
@@ -40,13 +40,13 @@ export const SP500_MEMBERS: Set<string> = new Set([
   "IBKR", "IBM", "ICE", "IDXX", "IEX", "IFF", "INCY", "INTC", "INTU", "INVH",
   "IP", "IQV", "IR", "IRM", "ISRG", "IT", "ITW", "IVZ",
   "J", "JBHT", "JBL", "JCI", "JKHY", "JNJ", "JPM",
-  "K", "KDP", "KEY", "KEYS", "KHC", "KIM", "KKR", "KLAC", "KMB", "KMI",
+  "KDP", "KEY", "KEYS", "KHC", "KIM", "KKR", "KLAC", "KMB", "KMI",
   "KO", "KR", "KVUE",
   "L", "LDOS", "LEN", "LH", "LHX", "LII", "LIN", "LITE", "LLY", "LMT", "LNT",
   "LOW", "LRCX", "LULU", "LUV", "LVS", "LYB", "LYV",
   "MA", "MAA", "MAR", "MAS", "MCD", "MCHP", "MCK", "MCO", "MDLZ", "MDT",
   "MET", "META", "MGM", "MKC", "MLM", "MMM", "MNST", "MO", "MOS", "MPC",
-  "MPWR", "MRK", "MRNA", "MRO", "MS", "MSCI", "MSFT", "MSI", "MTB", "MTD",
+  "MPWR", "MRK", "MRNA", "MS", "MSCI", "MSFT", "MSI", "MTB", "MTD",
   "MU",
   "NCLH", "NDAQ", "NDSN", "NEE", "NEM", "NFLX", "NI", "NKE", "NOC", "NOW",
   "NRG", "NSC", "NTAP", "NTRS", "NUE", "NVDA", "NVR", "NWS", "NWSA", "NXPI",
@@ -77,7 +77,7 @@ export const SP500_MEMBERS: Set<string> = new Set([
 // Updated for June 22, 2026 quarterly rebalance + July 7, 2026 SPCX addition + May 18, 2026 LITE/CSGP swap
 export const NDX100_MEMBERS: Set<string> = new Set([
   "AAPL", "ABNB", "ADBE", "ADI", "ADP", "ADSK", "AEP", "ALAB", "ALNY", "AMAT",
-  "AMD", "AMGN", "AMZN", "ANSS", "APP", "ARM", "ASML", "AVGO", "AZN",
+  "AMD", "AMGN", "AMZN", "APP", "ARM", "ASML", "AVGO", "AZN",
   "BIIB", "BKNG", "BKR",
   "CCEP", "CDNS", "CDW", "CEG", "CMCSA", "COIN", "COST", "CPRT", "CRWD", "CRWV",
   "CSCO",
@@ -159,7 +159,7 @@ export const SP400_MEMBERS: Set<string> = new Set([
 // prettier-ignore
 export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   // Tech / Software / Cloud
-  "TSM", "SNOW", "NET", "MDB", "HUBS", "IOT", "CYBR", "MNDY", "PSTG",
+  "TSM", "SNOW", "NET", "MDB", "HUBS", "IOT", "MNDY", 
   "TWLO", "OKTA", "NTNX", "GTLB", "S", "ESTC", "TOST", "ZS", "TTAN",
   // Consumer / E-commerce / Platforms
   "SHOP", "SPOT", "RBLX", "DKNG", "ONON", "CAVA",
@@ -167,22 +167,22 @@ export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   // Fintech / Payments / Crypto
   "NU", "XYZ", "SOFI", "AFRM", "CRCL",
   // Social / Media
-  "PINS", "SNAP", "RDDT", "ZG", "ROKU", "ZM",
+  "PINS", "RDDT", "ROKU", "ZM",
   // Healthcare / Biotech / AI Medicine
   "NVO", "NTRA", "HALO", "INSM",
-  "BMRN", "VKTX", "SRPT", "TEM",
+  "BMRN", "TEM",
   // Industrials / Defense / Aerospace
   "HEI", "BAH", "ASTS",
   // Energy / Materials
   "CCJ", "SCCO", "ENPH", "AA",
   // Large ADRs
-  "SAP", "GSK", "BHP", "RIO", "BABA", "JD", "LI", "BIDU",
+  "SAP", "GSK", "BHP", "RIO", "BABA", "JD", "BIDU",
   // Recent IPOs / High Momentum
   "MDLN", "VIK", "QNT", "IONQ",
   // Notable ex-SP400 (dropped SP400 from scan universe, rescued the best)
   "MANH", "DUOL", "RBRK", "MDGL", "WING", "CROX", "DKS", "ETSY",
   "MOD", "POWL", "IESC", "FND", "NBIX", "UTHR", "CYTK", "LNTH",
-  "ITCI", "THC", "SFM", "GLOB", "CART",
+  "THC", "SFM", "CART",
   // Other
   "MTCH",
   // 2026-08 high-momentum / speculative additions
@@ -190,15 +190,35 @@ export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   "UPST",   // Upstart — AI lending
   "MARA",   // Marathon Digital — crypto mining
   "CLSK",   // CleanSpark — crypto mining
-  "PLNT",   // Planet Fitness — consumer growth
-  "QS",     // QuantumScape — solid-state battery
+     // Planet Fitness — consumer growth
+       // QuantumScape — solid-state battery
   "RH",     // RH — luxury home
-  "LCID",   // Lucid Motors — EV
-  "LMND",   // Lemonade — insurtech
+     // Lucid Motors — EV
+     // Lemonade — insurtech
   "WOLF",   // Wolfspeed — SiC semiconductor
   "LUNR",   // Intuitive Machines — space
-  "SEDG",   // SolarEdge — solar/inverters
-  "PLUG",   // Plug Power — hydrogen/fuel cells
+     // SolarEdge — solar/inverters
+     // Plug Power — hydrogen/fuel cells
+  // 2026-08-15 watchlist additions. mcap gate is waived for ADDITIONAL_MEMBERS,
+  // but passesUniverseQualityGates() still requires price >= $10 and
+  // avg dollar volume >= $150M. Annotated with values at time of addition —
+  // names marked (below gate) are skipped at runtime until they clear it.
+  "ZETA",   // Zeta Global — AI marketing software
+  "OUST",   // Ouster — lidar / autonomy
+  "RIOT",   // Riot Platforms — bitcoin mining, HPC pivot
+  "CELH",   // Celsius Holdings — energy drinks
+  "ONDS",   // Ondas — drones/counter-UAS (below gate: $9.24 px, clears on a move over $10)
+  "RCAT",   // Red Cat — drones (below gate: $141M/day vs $150M min)
+  "NIO",    // NIO — China EV (below gate: $4.52 px, $142M/day)
+  "XPEV",   // XPeng — China EV (below gate: $84M/day)
+  "AMPX",   // Amprius — silicon-anode batteries (below gate: $94M/day)
+  "GMAB",   // Genmab — biotech ADR (below gate: $67M/day)
+  "EXLS",   // ExlService — data analytics (below gate: $92M/day)
+  "NUAI",   // New Era Energy & Digital — data centers (below gate: $5.07 px, $40M/day)
+  "GRRR",   // Gorilla Technology — AI video analytics (below gate: $25M/day)
+  // 2026-08-17 additions
+  "SNDK",   // Sandisk — NAND/storage, spun out of Western Digital. Memory cycle
+            // peer to MU; clears price and dollar-volume gates comfortably.
 ]);
 
 // prettier-ignore
