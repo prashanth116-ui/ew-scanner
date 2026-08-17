@@ -43,6 +43,8 @@ function resultToRecord(r: TransitionResult, scanDate: string): TransitionDailyR
     invalidation: r.invalidationLevel,
     is_primary: r.isPrimarySignal,
     is_stronger: r.isStrongerSignal,
+    extension_risk: r.extensionRisk,
+    structure_available: r.structureAvailable,
     bullish_evidence: r.bullishEvidence,
     caution_evidence: r.cautionEvidence,
   };
@@ -102,9 +104,9 @@ export async function GET(request: NextRequest) {
           // Fetch 3mo daily chart for market structure analysis
           // This is the same chart already cached by fetchPreRunData
           const chart = await fetchYahooChart(ticker, "3mo", "1d");
-          if (!chart || chart.closes.length < 30) {
-            // Fall back to scoring without OHLC structure
-            return scoreTransitionWithOHLC(data, [], [], [], 3);
+          if (!chart) {
+            // Scores without structure and flags the row via structureAvailable
+            return scoreTransitionWithOHLC(data, [], [], [], []);
           }
 
           return scoreTransitionWithOHLC(
@@ -112,6 +114,7 @@ export async function GET(request: NextRequest) {
             chart.highs,
             chart.lows,
             chart.closes,
+            chart.volumes,
             3, // 3-bar pivot confirmation
           );
         })

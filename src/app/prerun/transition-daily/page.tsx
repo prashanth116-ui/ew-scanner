@@ -45,6 +45,10 @@ interface TransitionDailyRow {
   invalidation: number | null;
   is_primary: boolean;
   is_stronger: boolean;
+  /** Near ATH or stretched from EMA20 — late entry risk. Optional: absent on pre-migration rows. */
+  extension_risk?: boolean;
+  /** False when the chart was too short to evaluate ChoCH/BOS. Optional: absent on pre-migration rows. */
+  structure_available?: boolean;
   bullish_evidence: string[];
   caution_evidence: string[];
 }
@@ -591,6 +595,8 @@ export default function TransitionDailyPage() {
   // Top picks: TRIGGERED + READY sorted by score, capped at 10
   const topPicks = useMemo(() => {
     return results
+      // Rows scored without usable OHLC have no structural evidence behind the state
+      .filter((r) => r.structure_available !== false)
       .filter((r) => r.alert_state === "TRIGGERED" || r.alert_state === "READY")
       .sort((a, b) => {
         // TRIGGERED first, then READY; within same alert, by score desc
@@ -713,7 +719,17 @@ export default function TransitionDailyPage() {
                   className="rounded-lg border border-[#2a2a2a] bg-[#111] p-2.5 text-left hover:border-emerald-500/30 hover:bg-[#161616] transition-colors"
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-bold text-white">{r.ticker}</span>
+                    <span className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-white">{r.ticker}</span>
+                      {r.extension_risk && (
+                        <span
+                          title="Extended — near ATH or stretched from EMA20"
+                          className="rounded border border-amber-500/40 px-1 py-0.5 text-[8px] font-semibold text-amber-400"
+                        >
+                          EXT
+                        </span>
+                      )}
+                    </span>
                     <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-semibold ${aBadge.color}`}>
                       {aBadge.label}
                     </span>

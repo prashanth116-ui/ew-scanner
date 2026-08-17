@@ -22,6 +22,7 @@ import {
   loadQFEDaily,
   loadPreRunDailyDates,
   loadTransitionDaily,
+  loadICTDaily,
 } from "@/lib/supabase/persistence";
 import type {
   PreRunDailyRecord,
@@ -31,6 +32,7 @@ import type {
   PreRunnerDailyRecord,
   QFEDailyRecord,
   TransitionDailyRecord,
+  ICTDailyRecord,
 } from "@/lib/supabase/persistence";
 import { loadDiscoveredTickers } from "@/lib/discovery/storage";
 
@@ -177,10 +179,15 @@ function buildRsAccelMap(
 
 // ── Consolidation ──
 
+/** Inflection + Transition share roughly half their scoring inputs, so a hit from both
+ *  is discounted by this much rather than counted as two independent confirmations. */
+const CORRELATED_PAIR_DISCOUNT = 0.5;
+
 /**
  * 5 confluence scanners: PreRun, Inflection, Transition, Institutional, PreRunner.
  * VCP + QFE + Setup4h are badge-only (not counted for confluence).
- * INF_WATCH counts as 0.5 weight. Tickers within each tier sorted by RS acceleration DESC.
+ * INF_WATCH counts as 0.5 weight; an Inflection+Transition pair is discounted by 0.5.
+ * Tickers within each tier sorted by RS acceleration DESC.
  */
 function consolidateResults(
   prerun: PreRunDailyRecord[],
@@ -193,6 +200,7 @@ function consolidateResults(
   catalyst: CatalystSignalRow[],
   newTickerSet: Set<string>,
   transition: TransitionDailyRecord[],
+  ict: ICTDailyRecord[],
 ): { tiers: Map<number, ConsolidatedTicker[]>; catalysts: ConsolidatedTicker[]; fourHourOnly: string[] } {
   // Independent scanner hits (count toward confluence)
   const map = new Map<string, ScannerHit[]>();
@@ -215,8 +223,11 @@ function consolidateResults(
   for (const r of vcp) add(r.ticker, { scanner: "VCP", label: vcpLabel(r), score: r.total_score });
   for (const r of institutional) add(r.ticker, { scanner: "Institutional", label: institutionalLabel(r), score: r.composite_score });
   for (const r of prerunner) add(r.ticker, { scanner: "PreRunner", label: prerunnerLabel(r), score: r.prerunner_score });
-  // Transition: only TRIGGERED and READY count (ARMED/WATCH too low-conviction)
+  // Transition: only TRIGGERED and READY count (ARMED/WATCH too low-conviction).
+  // Rows scored without usable OHLC have no ChoCH/BOS evidence behind the state, so
+  // they cannot stand as a structural confirmation.
   for (const r of transition) {
+    if (r.structure_available === false) continue;
     if (r.alert_state === "TRIGGERED" || r.alert_state === "READY") {
       add(r.ticker, { scanner: "Transition", label: transLabel(r), score: r.overall_score });
     }
@@ -237,6 +248,12 @@ function consolidateResults(
   // QFE lookup (badge only, not counted for confluence)
   const qfeMap = new Map<string, string>();
   for (const r of qfe) qfeMap.set(r.ticker, r.rating);
+
+  // ICT lookup (badge only, not counted for confluence)
+  const ictMap = new Map<string, ICTDailyRecord>();
+  for (const r of ict) {
+    if (r.best_state_order >= 8) ictMap.set(r.ticker, r); // BSL_BUILT+ only (states 8-11)
+  }
 
   // RS acceleration lookup
   const rsAccelMap = buildRsAccelMap(qfe, prerunner, institutional);
@@ -268,13 +285,30 @@ function consolidateResults(
       hits.push({ scanner: "Setup4h", label: `4h ${setup4hRec.final_score}`, score: 0 });
     }
 
-    const NON_CONFLUENCE = new Set(["QFE", "VCP", "Setup4h"]);
+    // ICT badge (not counted for confluence — separate price-action engine)
+    const ictRec = ictMap.get(ticker);
+    if (ictRec) {
+      hits.push({ scanner: "ICT", label: `ICT ${ictRec.best_state} ${ictRec.best_score}`, score: 0 });
+    }
+
+    const NON_CONFLUENCE = new Set(["QFE", "VCP", "Setup4h", "ICT"]);
     const HALF_WEIGHT = new Set(["INF_WATCH"]);
-    const independentCount = hits.reduce((sum, h) => {
+    const rawCount = hits.reduce((sum, h) => {
       if (NON_CONFLUENCE.has(h.scanner)) return sum;
       if (HALF_WEIGHT.has(h.scanner)) return sum + 0.5;
       return sum + 1;
     }, 0);
+
+    // Inflection and Transition are not independent confirmations: Transition's
+    // seller-exhaustion component reads the same four inputs as Inflection's, and its
+    // volume profile overlaps Inflection's buyer emergence on three more. A hit from
+    // both is closer to one and a half signals than to two, so the pair is discounted
+    // by half a scanner — the same mechanism already used for INF_WATCH.
+    const hasInflection = hits.some((h) => h.scanner === "Inflection");
+    const hasTransition = hits.some((h) => h.scanner === "Transition");
+    const independentCount = hasInflection && hasTransition
+      ? rawCount - CORRELATED_PAIR_DISCOUNT
+      : rawCount;
     const maxScore = Math.max(...hits.filter((h) => !NON_CONFLUENCE.has(h.scanner) && !HALF_WEIGHT.has(h.scanner)).map((h) => h.score), 0);
     const rsAccel = rsAccelMap.get(ticker) ?? null;
     const sector = sectorMap.get(ticker) ?? null;
@@ -782,7 +816,7 @@ export async function GET(request: NextRequest) {
     const today = new Date().toISOString().slice(0, 10);
 
     // Load all scanner results for today in parallel
-    const [prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, discovered, transition] = await Promise.all([
+    const [prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, discovered, transition, ict] = await Promise.all([
       loadPreRunDaily(today),
       loadPreRun4hDaily(today),
       loadInflectionDaily(today),
@@ -793,6 +827,7 @@ export async function GET(request: NextRequest) {
       loadCatalystSignals(today),
       loadDiscoveredTickers(),
       loadTransitionDaily(today),
+      loadICTDaily(today),
     ]);
 
     // Build today's ticker set for new/dropped
@@ -810,7 +845,7 @@ export async function GET(request: NextRequest) {
 
     // Consolidate (QFE + VCP + Setup4h excluded from confluence count)
     const { tiers, catalysts, fourHourOnly } = consolidateResults(
-      prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, newTickerSet, transition,
+      prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, newTickerSet, transition, ict,
     );
 
     // Discovery counts
@@ -828,6 +863,7 @@ export async function GET(request: NextRequest) {
       QFE: qfe.length,
       Cat: catalyst.length,
       Trans: transition.length,
+      ICT: ict.length,
     };
 
     // Tier counts for JSON response

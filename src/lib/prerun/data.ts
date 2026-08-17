@@ -8,7 +8,7 @@ import "server-only";
 import type { PreRunStockData, EmaTimeframe, M2TimeframeResult } from "./types";
 import { getYahooCrumb, invalidateCrumbCache } from "../squeeze/fetch";
 import { getSectorForTicker, getSectorETF } from "@/data/prerun-universe";
-import { fetchWithRetry, extractRaw, deduplicatedChartFetch } from "@/lib/yahoo-utils";
+import { fetchWithRetry, extractRaw, deduplicatedChartFetch, toYahooSymbol } from "@/lib/yahoo-utils";
 import { logError } from "@/lib/error-logger";
 
 const UA =
@@ -126,7 +126,7 @@ export async function fetchYahooChart(
       const auth = await getYahooCrumb();
       if (!auth) return null;
 
-      let url = `${YAHOO_CHART}/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&crumb=${encodeURIComponent(auth.crumb)}`;
+      let url = `${YAHOO_CHART}/${encodeURIComponent(toYahooSymbol(ticker))}?range=${range}&interval=${interval}&crumb=${encodeURIComponent(auth.crumb)}`;
       if (includePrePost) {
         url += "&includePrePost=true";
       }
@@ -566,7 +566,15 @@ function findSwingLows(lows: number[]): { index: number; value: number }[] {
   return swings;
 }
 
-/** Count how many of the last 3 swing lows are higher than the prior. */
+/** Most recent confirmed swing low — the natural structural stop for a long. */
+function calcRecentSwingLow(lows: number[]): number | null {
+  const swings = findSwingLows(lows);
+  if (swings.length === 0) return null;
+  return swings[swings.length - 1].value;
+}
+
+/** Count how many of the last 3 swing lows are higher than the prior.
+ *  Compares the last 3 swing lows pairwise, so the returned range is 0-2. */
 function calcHigherLowsCount(lows: number[]): number {
   const swings = findSwingLows(lows);
   if (swings.length < 2) return 0;
@@ -581,14 +589,15 @@ function calcHigherLowsCount(lows: number[]): number {
 
 /** Compute EMA reclaim data from closes. */
 function calcEmaReclaimData(closes: number[], barMultiplier = 1): {
-  aboveEma21: boolean;
-  aboveEma50: boolean;
-  crossoverWithin20d: boolean;
+  aboveEma21: boolean | null;
+  aboveEma50: boolean | null;
+  crossoverWithin20d: boolean | null;
 } {
   const ema21Period = 21 * barMultiplier;
   const ema50Period = 50 * barMultiplier;
+  // Too little history to place price against an EMA50 — unknown, not "below both"
   if (closes.length < ema50Period) {
-    return { aboveEma21: false, aboveEma50: false, crossoverWithin20d: false };
+    return { aboveEma21: null, aboveEma50: null, crossoverWithin20d: null };
   }
 
   const ema21 = calcEMA(closes, ema21Period);
@@ -784,10 +793,16 @@ function calcRangeCoilData(closes: number[], highs: number[], lows: number[], ba
   return { closesNearTop, atrContracting: squeezed === true };
 }
 
-/** Compute failed breakdown recovery score from chart data. */
-function calcFailedBreakdownRecovery(closes: number[], lows: number[], highs: number[], barMultiplier = 1): number {
+/** Compute failed breakdown recovery score from chart data.
+ *
+ *  Returns null when the pattern cannot apply — too little history for an SMA50, or price
+ *  currently below the SMA50, where "broke down and recovered" is undefined by construction.
+ *  That is the normal state for the deep-pullback names the Inflection scanner targets, so
+ *  scoring it as a zero systematically depressed exactly the population being screened.
+ *  A 0 return now means "above the SMA50 and no breakdown event found" — real evidence. */
+function calcFailedBreakdownRecovery(closes: number[], lows: number[], highs: number[], barMultiplier = 1): number | null {
   const sma50Period = 50 * barMultiplier;
-  if (closes.length < sma50Period) return 0;
+  if (closes.length < sma50Period) return null;
 
   const sma50Arr: number[] = [];
   for (let i = 0; i < closes.length; i++) {
@@ -804,8 +819,8 @@ function calcFailedBreakdownRecovery(closes: number[], lows: number[], highs: nu
   const currentPrice = closes[lastIdx];
   const currentSma50 = sma50Arr[lastIdx];
 
-  // Only relevant if currently above SMA50
-  if (currentPrice <= currentSma50) return 0;
+  // Only relevant if currently above SMA50 — below it the pattern is undefined, not absent
+  if (currentPrice <= currentSma50) return null;
 
   // Scan last 20 days for breakdown events
   for (let i = lastIdx - lookback; i <= lastIdx - 1; i++) {
@@ -896,8 +911,21 @@ function calcOBV(closes: number[], volumes: number[]): number[] {
   return obv;
 }
 
-/** OBV-Price Divergence: OBV at/near its 20-bar high while price is NOT near its 20-bar high.
- *  This detects stealth accumulation — institutions buying while price stays flat. */
+/** OBV must sit within this % of its 20-bar RANGE below its 20-bar high to count as "near the high". */
+const OBV_NEAR_HIGH_PCT = 15;
+/** Price must sit at least this % below its 20-bar high for the divergence to be meaningful. */
+const PRICE_BELOW_HIGH_PCT = 10;
+
+/** OBV-Price Divergence: OBV near the top of its 20-bar range while price is NOT near its
+ *  20-bar high. This detects stealth accumulation — institutions buying while price stays flat.
+ *
+ *  OBV's distance from its high is normalized by the 20-bar OBV *range*, not by the
+ *  cumulative OBV *level*. The cumulative level is an artifact of where the chart series
+ *  happens to start and varies by orders of magnitude between tickers, so normalizing
+ *  against it produced a ratio that was not comparable across the universe — near-zero for
+ *  names with a large cumulative balance (making the flag fire on price weakness alone) and
+ *  enormous for names whose OBV oscillates near zero (making it unreachable). The range is
+ *  the natural scale for "how near its own high is it". */
 function calcOBVPriceDivergence(closes: number[], volumes: number[], barMultiplier = 1): { divergent: boolean; obvPctFromHigh: number; pricePctFromHigh: number } {
   const obv = calcOBV(closes, volumes);
   const window = 20 * barMultiplier;
@@ -906,26 +934,32 @@ function calcOBVPriceDivergence(closes: number[], volumes: number[], barMultipli
   const recentCloses = closes.slice(-n);
 
   const obvHigh = Math.max(...recentOBV);
+  const obvLow = Math.min(...recentOBV);
   const priceHigh = Math.max(...recentCloses);
   const obvNow = recentOBV[recentOBV.length - 1];
   const priceNow = recentCloses[recentCloses.length - 1];
 
-  const obvPctFromHigh = obvHigh !== 0 ? ((obvHigh - obvNow) / Math.abs(obvHigh)) * 100 : 0;
+  const obvRange = obvHigh - obvLow;
+  const obvPctFromHigh = obvRange > 0 ? ((obvHigh - obvNow) / obvRange) * 100 : 0;
   const pricePctFromHigh = priceHigh !== 0 ? ((priceHigh - priceNow) / priceHigh) * 100 : 0;
 
-  // Divergent = OBV within 5% of its 20-bar high AND price > 10% below its 20-bar high
-  // The 10% price gap avoids false positives where price is barely below OBV
-  const divergent = obvPctFromHigh <= 5 && pricePctFromHigh > 10;
+  const divergent = obvPctFromHigh <= OBV_NEAR_HIGH_PCT && pricePctFromHigh > PRICE_BELOW_HIGH_PCT;
   return { divergent, obvPctFromHigh, pricePctFromHigh };
 }
 
-/** Volume-Price Divergence: price makes lower low but volume on down-moves decreases (seller exhaustion). */
-function calcVPDivergence(closes: number[], opens: number[], volumes: number[], lows: number[], barMultiplier = 1): boolean {
+/** Volume-Price Divergence: price makes lower low but volume on down-moves decreases (seller exhaustion).
+ *
+ *  Returns null — not false — when the pattern is not applicable: no pair of swing lows,
+ *  no recent lower low to compare, or no down-day volume to measure. `false` is reserved
+ *  for the case where a recent lower low DID form and down-volume failed to decline, which
+ *  is genuine negative evidence. Null-neutral scorers exclude the null case from their
+ *  denominator instead of charging a zero against stocks the pattern cannot describe. */
+function calcVPDivergence(closes: number[], opens: number[], volumes: number[], lows: number[], barMultiplier = 1): boolean | null {
   const swings = findSwingLows(lows);
-  if (swings.length < 2) return false;
+  if (swings.length < 2) return null; // Not enough structure to compare
   const [prev, curr] = swings.slice(-2);
-  if (curr.value >= prev.value) return false; // No lower low
-  if (curr.index < closes.length - 25 * barMultiplier) return false; // Too old — second swing low must be within last 5 weeks
+  if (curr.value >= prev.value) return null; // No lower low — pattern undefined, not absent
+  if (curr.index < closes.length - 25 * barMultiplier) return null; // Too old — second swing low must be within last 5 weeks
   // Avg down-day volume around each swing low (±2 bars)
   const avgDownVol = (center: number) => {
     let sum = 0, count = 0;
@@ -936,7 +970,8 @@ function calcVPDivergence(closes: number[], opens: number[], volumes: number[], 
   };
   const prevDownVol = avgDownVol(prev.index);
   const currDownVol = avgDownVol(curr.index);
-  return prevDownVol > 0 && currDownVol < prevDownVol * 0.70; // Volume decreased 30%+
+  if (prevDownVol <= 0) return null; // No baseline down-volume to compare against
+  return currDownVol < prevDownVol * 0.70; // Volume decreased 30%+
 }
 
 /** Calculate Wilder RSI(14) from closes array. */
@@ -1093,6 +1128,10 @@ export async function fetchBatchQuotes(
   }
 
   const results = new Map<string, BatchQuote>();
+  // Yahoo returns the dashed form it was asked for; map it back so results stay
+  // keyed by the internal (dotted) symbol callers and persisted rows use.
+  const yahooToInternal = new Map<string, string>();
+  for (const s of symbols) yahooToInternal.set(toYahooSymbol(s), s);
   const batches: string[][] = [];
   for (let i = 0; i < symbols.length; i += batchSize) {
     batches.push(symbols.slice(i, i + batchSize));
@@ -1105,7 +1144,7 @@ export async function fetchBatchQuotes(
     crumb: string,
     cookie: string
   ): Promise<Record<string, unknown>[]> {
-    const symbolStr = batch.map((s) => encodeURIComponent(s)).join(",");
+    const symbolStr = batch.map((s) => encodeURIComponent(toYahooSymbol(s))).join(",");
     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolStr}&crumb=${encodeURIComponent(crumb)}`;
     let res: Response;
     try {
@@ -1141,8 +1180,9 @@ export async function fetchBatchQuotes(
   for (const r of batchResults) {
     if (r.status !== "fulfilled") continue;
     for (const quote of r.value) {
-      const symbol = quote.symbol as string;
-      if (!symbol) continue;
+      const returned = quote.symbol as string;
+      if (!returned) continue;
+      const symbol = yahooToInternal.get(returned) ?? returned;
       results.set(symbol, {
         symbol,
         price: toNum(quote.regularMarketPrice, 0),
@@ -1713,6 +1753,7 @@ export async function fetchPreRunData(
 
   // Phase 3: Stage 1→2 criteria computed from 3mo chart
   let higherLowsCount: number | null = null;
+  let recentSwingLow: number | null = null;
   let aboveEma21: boolean | null = null;
   let aboveEma50: boolean | null = null;
   let emaCrossoverWithin20d: boolean | null = null;
@@ -1809,6 +1850,7 @@ export async function fetchPreRunData(
   if (chart3mo && chart3mo.closes.length >= 20 * bm) {
     // L: Higher Lows
     higherLowsCount = calcHigherLowsCount(chart3mo.lows);
+    recentSwingLow = calcRecentSwingLow(chart3mo.lows);
 
     // M: EMA Reclaim
     const emaData = calcEmaReclaimData(chart3mo.closes, bm);
@@ -1972,7 +2014,10 @@ export async function fetchPreRunData(
 
   if (chart3mo && chart3mo.closes.length >= 20 * bm) {
     const { closes, opens, highs, lows, volumes } = chart3mo;
-    rsi14 = calcRSI(closes, Math.round(14 * bm / 1.5));
+    // Daily uses a true Wilder RSI(14) — every RSI threshold in the Inflection and
+    // Transition seller-exhaustion components is calibrated for a 14-period reading.
+    // Intraday keeps the rescaled period so the 4h lookback spans a comparable window.
+    rsi14 = calcRSI(closes, scanner4h ? Math.round(14 * bm / 1.5) : 14);
     const bodies = calcDownDayBodies(closes, opens, currentPrice ?? closes[closes.length - 1], bm);
     avgDownDayBody = bodies.recent;
     avgDownDayBodyPrev = bodies.prev;
@@ -2184,6 +2229,7 @@ export async function fetchPreRunData(
     earningsBeatStreak,
     // Phase 3: Stage 1→2 criteria
     higherLowsCount,
+    recentSwingLow,
     aboveEma21,
     aboveEma50,
     emaCrossoverWithin20d,

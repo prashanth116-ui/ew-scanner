@@ -1,3 +1,11 @@
+/**
+ * Inflection backtest by re-scoring history from live data.
+ *
+ * Reaches further back than table retention allows, at the cost of lookahead in the
+ * fundamental fields (see lookaheadWarning in the response). For an unbiased study
+ * use /api/backtest/scanner, which evaluates the rows the scanner actually persisted.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { fetchPreRunData } from "@/lib/prerun/data";
 import { scoreInflection } from "@/lib/prerun/inflection-scoring";
@@ -56,9 +64,9 @@ interface CachedChart {
   lows: number[];
 }
 
-const chartCache = new Map<string, CachedChart | null>();
+type ChartCache = Map<string, CachedChart | null>;
 
-async function getChart(ticker: string): Promise<CachedChart | null> {
+async function getChart(ticker: string, chartCache: ChartCache): Promise<CachedChart | null> {
   if (chartCache.has(ticker)) return chartCache.get(ticker)!;
 
   try {
@@ -189,12 +197,16 @@ export async function POST(req: NextRequest) {
     const tradingDays = getTradingDays(startDate, endDate);
     const signals: BacktestSignal[] = [];
 
+    // Request-scoped: a module-level cache is shared across concurrent backtests on a
+    // warm lambda, where one request's clear() silently shrank another request's sample.
+    const chartCache: ChartCache = new Map();
+
     // Pre-fetch all charts for forward returns
-    await Promise.all(tickers.map((t) => getChart(t)));
+    await Promise.all(tickers.map((t) => getChart(t, chartCache)));
 
     // For each ticker, fetch data for each trading day
     for (const ticker of tickers) {
-      const chart = chartCache.get(ticker.toUpperCase()) ?? await getChart(ticker);
+      const chart = chartCache.get(ticker.toUpperCase()) ?? await getChart(ticker, chartCache);
 
       for (const date of tradingDays) {
         try {
@@ -277,10 +289,16 @@ export async function POST(req: NextRequest) {
       strongerSignals: signals.filter((s) => s.isStrongerSignal).length,
     };
 
-    // Clear chart cache after backtest
-    chartCache.clear();
-
-    return NextResponse.json({ signals, summary });
+    return NextResponse.json({
+      signals,
+      summary,
+      lookaheadWarning:
+        "Scores are recomputed from live data. Chart-derived fields are truncated to the " +
+        "signal date, but quote and fundamental fields (institutional ownership, insider " +
+        "buys, float, market cap) are as-of-now, so Institutional Participation — 15% of " +
+        "the composite — carries lookahead. Use /api/backtest/scanner for a clean study; " +
+        "this route trades correctness for reach beyond the 14-day table retention.",
+    });
   } catch (error) {
     console.error("Backtest error:", error);
     return NextResponse.json(

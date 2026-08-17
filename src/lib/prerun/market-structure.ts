@@ -24,6 +24,8 @@ export interface ChoCHResult {
   brokenLevel: number | null;
   /** How many bars ago the break occurred (from end of array) */
   barsAgo: number | null;
+  /** True when the latest close is still above the broken level — the break is live, not failed. */
+  holding: boolean;
 }
 
 export interface BOSResult {
@@ -34,6 +36,18 @@ export interface BOSResult {
   brokenLevel: number | null;
   /** How many bars ago the break occurred */
   barsAgo: number | null;
+  /** True when the latest close is still above the broken level — the break is live, not failed. */
+  holding: boolean;
+}
+
+/** Quality of the bar that produced a structural break. */
+export interface BreakConfirmation {
+  /** True when the break bar showed expansion volume or closed strong in its range. */
+  confirmed: boolean;
+  /** Break-bar volume / average volume, when both are available. */
+  volumeRatio: number | null;
+  /** (close - low) / (high - low) on the break bar: 1 = closed on the high. */
+  closeLocation: number | null;
 }
 
 export interface MarketStructure {
@@ -167,7 +181,7 @@ export function detectChoCH(
   closes: number[],
   n = 3,
 ): ChoCHResult {
-  const noDetection: ChoCHResult = { detected: false, breakIndex: null, brokenLevel: null, barsAgo: null };
+  const noDetection: ChoCHResult = { detected: false, breakIndex: null, brokenLevel: null, barsAgo: null, holding: false };
 
   const swingHighs = findSwingHighs(highs, n);
   if (swingHighs.length < 2) return noDetection;
@@ -196,6 +210,7 @@ export function detectChoCH(
         breakIndex: i,
         brokenLevel: lastSH.value,
         barsAgo: closes.length - 1 - i,
+        holding: closes[closes.length - 1] > lastSH.value,
       };
     }
   }
@@ -225,7 +240,7 @@ export function detectBOS(
   closes: number[],
   n = 3,
 ): BOSResult {
-  const noDetection: BOSResult = { detected: false, breakIndex: null, brokenLevel: null, barsAgo: null };
+  const noDetection: BOSResult = { detected: false, breakIndex: null, brokenLevel: null, barsAgo: null, holding: false };
 
   const swingHighs = findSwingHighs(highs, n);
   const swingLows = findSwingLows(lows, n);
@@ -256,6 +271,7 @@ export function detectBOS(
         breakIndex: i,
         brokenLevel: precedingSH.value,
         barsAgo: closes.length - 1 - i,
+        holding: closes[closes.length - 1] > precedingSH.value,
       };
     }
   }
@@ -317,11 +333,83 @@ export function analyzeMarketStructure(
 
 /**
  * Compute trigger level: the price above which a bullish transition is confirmed.
- * Uses the most recent swing high as the trigger.
+ *
+ * The trigger must be a level price still has to clear, otherwise every detected
+ * ChoCH reports as already-triggered — ChoCH is *defined* as a close above the most
+ * recent swing high, so using that pivot makes the trigger self-satisfying.
+ *
+ * Resolution order:
+ *   1. Nearest unbroken swing high above current price (the next overhead level).
+ *   2. If price has cleared every recent pivot, the highest of those cleared pivots
+ *      — the level whose break defines the move, used to confirm rather than to arm.
+ *   3. Most recent swing high, when price is unavailable.
+ *
+ * `barCount` is the length of the source series; pivots older than `lookback` bars
+ * are ignored so stale structure does not set the level.
  */
-export function computeTriggerLevel(swingHighs: SwingPivot[]): number | null {
+export function computeTriggerLevel(
+  swingHighs: SwingPivot[],
+  currentPrice: number | null = null,
+  barCount = 0,
+  lookback = 40,
+): number | null {
   if (swingHighs.length === 0) return null;
-  return swingHighs[swingHighs.length - 1].value;
+
+  const fallback = swingHighs[swingHighs.length - 1].value;
+  if (currentPrice === null || currentPrice <= 0) return fallback;
+
+  const minIndex = barCount > 0 ? Math.max(0, barCount - lookback) : 0;
+  const recent = swingHighs.filter((s) => s.index >= minIndex);
+  if (recent.length === 0) return fallback;
+
+  const overhead = recent.filter((s) => s.value > currentPrice);
+  if (overhead.length > 0) {
+    return Math.min(...overhead.map((s) => s.value));
+  }
+
+  return Math.max(...recent.map((s) => s.value));
+}
+
+/**
+ * Evaluate the quality of the bar that produced a structural break.
+ *
+ * A break on expansion volume or with a close in the upper part of the bar's range
+ * is a participation signal; a break on quiet volume that closes mid-bar is not.
+ * Used to separate TRIGGERED from READY.
+ */
+export function evaluateBreakConfirmation(
+  breakIndex: number | null,
+  highs: number[],
+  lows: number[],
+  closes: number[],
+  volumes: number[],
+  avgVolume: number | null,
+  volumeMultiple = 1.3,
+  closeLocationMin = 0.6,
+): BreakConfirmation {
+  const none: BreakConfirmation = { confirmed: false, volumeRatio: null, closeLocation: null };
+  if (breakIndex === null || breakIndex < 0 || breakIndex >= closes.length) return none;
+
+  let volumeRatio: number | null = null;
+  if (avgVolume !== null && avgVolume > 0 && breakIndex < volumes.length) {
+    const vol = volumes[breakIndex];
+    if (typeof vol === "number" && vol > 0) volumeRatio = vol / avgVolume;
+  }
+
+  let closeLocation: number | null = null;
+  if (breakIndex < highs.length && breakIndex < lows.length) {
+    const hi = highs[breakIndex];
+    const lo = lows[breakIndex];
+    if (typeof hi === "number" && typeof lo === "number" && hi > lo) {
+      closeLocation = (closes[breakIndex] - lo) / (hi - lo);
+    }
+  }
+
+  const confirmed =
+    (volumeRatio !== null && volumeRatio >= volumeMultiple) ||
+    (closeLocation !== null && closeLocation >= closeLocationMin);
+
+  return { confirmed, volumeRatio, closeLocation };
 }
 
 /**

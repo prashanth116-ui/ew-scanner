@@ -9,6 +9,7 @@ import { getSectorForTicker } from "@/data/prerun-universe";
 import {
   upsertInflectionDaily,
   purgeOldInflectionDaily,
+  clearInflectionDaily,
   loadAllScoredTickers,
 } from "@/lib/supabase/persistence";
 import type { InflectionDailyRecord } from "@/lib/supabase/persistence";
@@ -19,6 +20,9 @@ export const maxDuration = 300; // 5 minutes
 const BATCH_SIZE = 10;
 const BATCH_DELAY = 1100; // Respect Finnhub 60/min rate limit
 const PERSIST_INTERVAL = 50;
+/** Rows below this score carry no signal and would still count as a confluence vote.
+ *  Matches the Transition cron's floor. */
+const MIN_OVERALL_SCORE = 25;
 
 function resultToRecord(r: InflectionResult, scanDate: string): InflectionDailyRecord {
   return {
@@ -58,10 +62,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const startTime = Date.now();
+    const searchParams = request.nextUrl.searchParams;
 
     // Build universe: SP500 union NDX100 (deduplicated)
     const universe = buildScanUniverse();
     const today = new Date().toISOString().slice(0, 10);
+
+    // Clear today's data if requested (for full re-scan)
+    let cleared = 0;
+    if (searchParams.get("clear") === "true") {
+      cleared = await clearInflectionDaily(today);
+    }
 
     // Pre-warm sector ETF cache + load historically-scored tickers
     const [, scoredTickers] = await Promise.all([
@@ -96,8 +107,9 @@ export async function GET(request: NextRequest) {
           fetchedCount++;
           const result = r.value;
 
-          // Skip if gates fail or stage is DISTRIBUTION
+          // Skip gate failures, DISTRIBUTION (negative signal), and low scores
           if (!result.gates.allPass || result.stage === "DISTRIBUTION") continue;
+          if (result.scores.overallScore < MIN_OVERALL_SCORE) continue;
 
           qualifying.push(result);
           pendingRecords.push(resultToRecord(result, today));
@@ -155,17 +167,16 @@ export async function GET(request: NextRequest) {
       // Non-critical
     }
 
-    let telegramSent = false;
     const timedOut = (Date.now() - startTime) > 240_000;
 
     return NextResponse.json({
       scannedCount: universe.length,
+      clearedCount: cleared,
       fetchedCount,
       qualifyingCount: qualifying.length,
       persistedCount: totalPersisted,
       purgedCount: purged,
       newTodayCount: newTickers.length,
-      telegramSent,
       timedOut,
       elapsedMs: Date.now() - startTime,
       starters: qualifying.filter((r) => r.tradeRead === "STARTER_POSITION_CANDIDATE").length,

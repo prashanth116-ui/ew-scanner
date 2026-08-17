@@ -60,10 +60,10 @@ export interface PreRunStockData {
   floatShares: number | null;              // F: Float shares for turnover calc
   floatTurnover20d: number | null;         // F: Cumulative 20d volume / float
   // F (leading): OBV-price divergence + volume-price divergence
-  obvDivergent: boolean | null;              // OBV near 20-bar high while price is not (stealth accumulation)
-  obvPctFromHigh: number | null;             // How far OBV is from its 20-bar high (%)
+  obvDivergent: boolean | null;              // OBV near top of its 20-bar range while price is not (stealth accumulation)
+  obvPctFromHigh: number | null;             // How far OBV is below its 20-bar high, as % of its 20-bar RANGE
   pricePctFromHigh20d: number | null;        // How far price is from its 20-bar high (%)
-  vpDivergenceBullish: boolean | null;      // Price lower-low + volume-on-downs decreasing
+  vpDivergenceBullish: boolean | null;      // Price lower-low + volume-on-downs decreasing. null = no recent lower low (pattern N/A)
   // F (leading): Distribution day count
   distributionDays20d: number | null;        // Count of down-price + high-volume days in last 20 bars
   // H: Insider buying short window
@@ -74,9 +74,10 @@ export interface PreRunStockData {
   quarterlyRevenue: { period: string; value: number }[] | null; // Last 4-8 quarters from SEC EDGAR
   earningsBeatStreak: number | null;       // Consecutive earnings beats (actual > estimate)
   // Phase 3: Stage 1→2 criteria (L, M, N, O)
-  higherLowsCount: number | null;          // L: How many of last 3 swing lows are higher (0-3)
-  aboveEma21: boolean | null;              // M: Is price currently above 21 EMA
-  aboveEma50: boolean | null;              // M: Is price currently above 50 EMA
+  higherLowsCount: number | null;          // L: How many of last 3 swing lows are higher. Range is 0-2 (3 swings = 2 pairs)
+  recentSwingLow: number | null;           // Most recent confirmed 2-bar swing low from the 3mo chart (structural stop)
+  aboveEma21: boolean | null;              // M: Is price currently above 21 EMA. null = chart shorter than EMA50 period
+  aboveEma50: boolean | null;              // M: Is price currently above 50 EMA. null = chart shorter than EMA50 period
   emaCrossoverWithin20d: boolean | null;   // M: Did price cross above both EMAs within last 20 trading days
   // M2: EMA 10/20 timing signal (multi-timeframe)
   emaM2Ema10: number | null;               // M2: Current EMA-10 value
@@ -93,7 +94,7 @@ export interface PreRunStockData {
   emaM2Timeframe: EmaTimeframe | null;     // M2: which timeframe was used
   closesNearRangeTop: boolean | null;      // N: Are last 5 closes in upper 25% of 13-week range
   atrContracting: boolean | null;          // N: Is 5-day ATR < 20-day ATR
-  failedBreakdownRecovery: number | null;  // O: 0=none, 1=wick test only, 2=broke below + recovered in 3 bars
+  failedBreakdownRecovery: number | null;  // O: 0=none, 1=wick test only, 2=broke below + recovered in 3 bars. null = price below SMA50 (pattern N/A)
   analystRevisionTrend: number | null;     // P: Analyst estimate revision direction (-1/0/+1)
   // VCP Breakout Scanner fields
   vcpSma50: number | null;
@@ -125,7 +126,7 @@ export interface PreRunStockData {
   instDistFromEma20Atr: number | null;    // (price - EMA20) / ATR(14)
   instAtrDollar: number | null;           // ATR(14) in dollar terms
   // Inflection Engine fields
-  rsi14: number | null;                   // Standard Wilder RSI(14)
+  rsi14: number | null;                   // Wilder RSI(14) on daily; rescaled period on intraday timeframes
   avgDownDayBody: number | null;          // Avg body % on down days (last 10 bars)
   avgDownDayBodyPrev: number | null;      // Avg body % on down days (bars 11-20, comparison)
   accumulationDayCount: number | null;    // Up days with above-avg volume (last 20)
@@ -406,13 +407,17 @@ export interface TransitionResult {
   scores: TransitionScores;
   state: TransitionState;
   alertState: TransitionAlertState;
-  triggerLevel: number | null;       // Price above which transition is confirmed
+  triggerLevel: number | null;       // Nearest overhead level price must clear (null when no structure)
   invalidationLevel: number | null;  // Price below which thesis fails
+  /** Near ATH or stretched from EMA20 — the move is already extended. Blocks TRIGGERED. */
+  extensionRisk: boolean;
+  /** False when the OHLC series was too short to run ChoCH/BOS detection at all. */
+  structureAvailable: boolean;
   bullishEvidence: string[];
   cautionEvidence: string[];
-  /** True if state >= BULLISH_CHOCH and score >= 45 */
+  /** True if state >= BULLISH_CHOCH, score >= 45, not extended, and structure was available */
   isPrimarySignal: boolean;
-  /** True if state >= BULLISH_BOS and score >= 55 */
+  /** True if isPrimarySignal AND state >= BULLISH_BOS AND score >= 55 */
   isStrongerSignal: boolean;
 }
 

@@ -55,6 +55,7 @@ function makeVCPData(overrides: Partial<PreRunStockData> = {}): PreRunStockData 
     quarterlyRevenue: null,
     earningsBeatStreak: null,
     higherLowsCount: null,
+    recentSwingLow: null,
     aboveEma21: null,
     aboveEma50: null,
     emaCrossoverWithin20d: null,

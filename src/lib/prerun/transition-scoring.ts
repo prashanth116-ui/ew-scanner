@@ -31,13 +31,10 @@ import {
   analyzeMarketStructure,
   computeTriggerLevel,
   computeInvalidationLevel,
+  evaluateBreakConfirmation,
 } from "./market-structure";
 
 // ── Utility ──
-
-function clamp(val: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, val));
-}
 
 interface ScoreSlot {
   earned: number;
@@ -200,19 +197,23 @@ function scoreChochConfirmation(
   data: PreRunStockData,
   chochDetected: boolean,
   chochBarsAgo: number | null,
+  chochHolding: boolean,
 ): { score: number; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
 
-  // 3a. ChoCH detected (0-40) — binary but weighted heavily
+  // 3a. ChoCH detected (0-40) — heavily discounted when the break has since failed.
+  // A break that price fell back through is weak evidence, not equal evidence.
   slots.push({
-    earned: chochDetected ? 40 : 0,
+    earned: chochDetected ? (chochHolding ? 40 : 12) : 0,
     possible: 40,
     hasData: true,
   });
-  if (chochDetected) {
-    evidence.push("Bullish ChoCH — price broke above recent swing high");
+  if (chochDetected && chochHolding) {
+    evidence.push("Bullish ChoCH — price broke above recent swing high and is holding it");
+  } else if (chochDetected) {
+    caution.push("ChoCH failed — price has fallen back below the level it broke");
   } else {
     caution.push("No Change of Character detected");
   }
@@ -254,19 +255,23 @@ function scoreBosConfirmation(
   bosDetected: boolean,
   bosBarsAgo: number | null,
   chochDetected: boolean,
+  bosHolding: boolean,
+  higherHighCount: number,
 ): { score: number; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
 
-  // 4a. BOS detected (0-40)
+  // 4a. BOS detected (0-40) — discounted when the break has since failed
   slots.push({
-    earned: bosDetected ? 40 : 0,
+    earned: bosDetected ? (bosHolding ? 40 : 12) : 0,
     possible: 40,
     hasData: true,
   });
-  if (bosDetected) {
-    evidence.push("Bullish BOS — higher low confirmed + broke prior swing high");
+  if (bosDetected && bosHolding) {
+    evidence.push("Bullish BOS — higher low confirmed + broke prior swing high, still holding");
+  } else if (bosDetected) {
+    caution.push("BOS failed — price has fallen back below the level it broke");
   } else if (chochDetected) {
     caution.push("ChoCH detected but BOS not yet confirmed");
   }
@@ -283,14 +288,18 @@ function scoreBosConfirmation(
     slots.push({ earned: 0, possible: 0, hasData: !bosDetected });
   }
 
-  // 4c. EMA crossover within window (0-30) — trend confirmation
-  if (data.emaCrossoverWithin20d !== null) {
-    slots.push({
-      earned: data.emaCrossoverWithin20d ? 30 : 0,
-      possible: 30,
-      hasData: true,
-    });
-    if (data.emaCrossoverWithin20d) evidence.push("EMA crossover within 20 bars — trend shift");
+  // 4c. Higher high follow-through (0-30) — did the break produce new structure?
+  //
+  // Replaces emaCrossoverWithin20d, which is set true whenever price is above both EMAs
+  // and dipped below *either* one in the last 20 bars — a routine pullback, not the
+  // "trend shift" it was scored as. Higher-high count comes from the same swing analysis
+  // that produced the BOS and was computed but never scored anywhere.
+  if (bosDetected) {
+    let earned = 0;
+    if (higherHighCount >= 2) { earned = 30; evidence.push(`${higherHighCount} higher highs since the break — trend extending`); }
+    else if (higherHighCount >= 1) { earned = 18; evidence.push("Higher high after the break"); }
+    else { caution.push("BOS has not produced a higher high yet"); }
+    slots.push({ earned, possible: 30, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -364,12 +373,18 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number; eviden
 function scoreHigherLowQuality(
   data: PreRunStockData,
   structureHLCount: number,
+  invalidationLevel: number | null,
 ): { score: number; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
 
   // 6a. Higher low count from market structure analysis (0-40)
+  //
+  // This is the component's only count of higher lows. It previously also scored
+  // data.higherLowsCount — the same structural feature measured with 2-bar pivots
+  // instead of 3-bar — and an EMA reclaim test identical to ChoCH 3c, so a single
+  // bullish structure was paid for up to four times across two components.
   {
     let earned = 0;
     if (structureHLCount >= 3) { earned = 40; evidence.push(`${structureHLCount} higher lows — strong bullish structure`); }
@@ -379,25 +394,24 @@ function scoreHigherLowQuality(
     slots.push({ earned, possible: 40, hasData: true });
   }
 
-  // 6b. Original higher lows from data.ts (0-30) — cross-validation
-  if (data.higherLowsCount !== null) {
-    const hl = data.higherLowsCount;
+  // 6b. Structural risk distance (0-40) — how tight is the structure the higher low defines?
+  //
+  // Replaces the two duplicate slots with something the model did not measure anywhere:
+  // the distance from price down to the invalidation level, in ATR units. A higher low
+  // 2 ATR below price is a tradeable structure; the same higher low 15 ATR below price
+  // is a statistic. This is what separates a good HL from a merely present one.
+  const atrPct = data.vcpAtrPct;
+  const price = data.currentPrice;
+  if (invalidationLevel !== null && atrPct !== null && atrPct > 0 && price !== null && price > 0) {
+    const riskPct = ((price - invalidationLevel) / price) * 100;
+    const riskAtr = riskPct / atrPct;
     let earned = 0;
-    if (hl >= 3) { earned = 30; }
-    else if (hl >= 2) { earned = 20; }
-    else if (hl >= 1) { earned = 10; }
-    slots.push({ earned, possible: 30, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 6c. EMA reclaim (0-30) — confirms HL is above key levels
-  if (data.aboveEma21 !== null && data.aboveEma50 !== null) {
-    let earned = 0;
-    if (data.aboveEma21 && data.aboveEma50) { earned = 30; }
-    else if (data.aboveEma21) { earned = 18; }
-    else if (data.aboveEma50) { earned = 10; }
-    slots.push({ earned, possible: 30, hasData: true });
+    if (riskAtr <= 0) { earned = 0; caution.push("Price is at or below the invalidation level"); }
+    else if (riskAtr <= 4) { earned = 40; evidence.push(`Tight structure — invalidation ${riskAtr.toFixed(1)} ATR below price`); }
+    else if (riskAtr <= 7) { earned = 25; evidence.push(`Invalidation ${riskAtr.toFixed(1)} ATR below price`); }
+    else if (riskAtr <= 12) { earned = 12; }
+    else { earned = 4; caution.push("Invalidation level far below price — loose structure"); }
+    slots.push({ earned, possible: 40, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -432,21 +446,27 @@ function scoreRSTrajectory(data: PreRunStockData): { score: number; evidence: st
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 7b. RS vs SPY absolute (0-20)
-  const rs20d = data.relativeStrength20d;
-  if (rs20d !== null) {
+  // 7b. RS vs SPY absolute (0-20) — benchmark-relative.
+  // Reads vcpRelStrengthVsSPY, the actual SPY-relative field. This slot previously read
+  // relativeStrength20d, which is sector-relative, so the component measured peer strength
+  // twice and never looked at the benchmark at all.
+  const rsSpy = data.vcpRelStrengthVsSPY;
+  if (rsSpy !== null) {
     let earned = 0;
-    if (rs20d >= 10) { earned = 20; }
-    else if (rs20d >= 5) { earned = 15; }
-    else if (rs20d >= 0) { earned = 10; }
-    else if (rs20d >= -5) { earned = 5; }
+    if (rsSpy >= 10) { earned = 20; evidence.push(`Outperforming SPY by ${rsSpy.toFixed(1)}pp`); }
+    else if (rsSpy >= 5) { earned = 15; }
+    else if (rsSpy >= 0) { earned = 10; }
+    else if (rsSpy >= -5) { earned = 5; }
+    else { caution.push(`Underperforming SPY by ${Math.abs(rsSpy).toFixed(1)}pp`); }
     slots.push({ earned, possible: 20, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 7c. RS vs sector (0-20)
-  const rsSector = data.rs5dVsSector ?? data.relativeStrength20d;
+  // 7c. RS vs sector (0-20) — peer-relative.
+  // No fallback to relativeStrength20d: falling back to another field in the component
+  // is what let one number fill two slots. Absent data excludes the slot instead.
+  const rsSector = data.rs5dVsSector;
   if (rsSector !== null) {
     let earned = 0;
     if (rsSector >= 8) { earned = 20; evidence.push("Outperforming sector significantly"); }
@@ -625,27 +645,50 @@ function classifyState(
 
 // ── Alert State ──
 
-function classifyAlertState(
+/**
+ * Map a state + score + price context onto the 5 alert states.
+ *
+ * TRIGGERED requires three things that used to be missing: a trigger level price has
+ * genuinely cleared (see computeTriggerLevel), participation on the break bar
+ * (volume expansion or a strong close), and no extension risk. A break without
+ * participation lands in READY, which is what READY is for.
+ *
+ * INVALIDATED is a real price test against the structural invalidation level, not
+ * just a synonym for MARKDOWN.
+ */
+export function classifyAlertState(
   state: TransitionState,
   overallScore: number,
   triggerLevel: number | null,
   currentPrice: number | null,
   atrPct: number | null,
+  invalidationLevel: number | null,
+  breakConfirmed: boolean,
+  extensionRisk: boolean,
 ): TransitionAlertState {
   const stateNum = TRANSITION_STATE_ORDER[state];
 
-  // INVALIDATED: markdown with no recovery signals
+  // INVALIDATED: price has broken the structural invalidation level — checked first,
+  // because a broken thesis outranks whatever state the components still report.
+  if (currentPrice !== null && invalidationLevel !== null && currentPrice < invalidationLevel) {
+    return "INVALIDATED";
+  }
+  // MARKDOWN carries no bullish thesis to invalidate
   if (stateNum === 0) return "INVALIDATED";
 
-  // TRIGGERED: in expansion states with strong score
-  if (stateNum >= 8 && overallScore >= 50) return "TRIGGERED";
+  // Extended names never read as TRIGGERED — the move being flagged is already gone
+  const canTrigger = !extensionRisk && state !== "EXTENDED";
 
-  // READY: approaching trigger level with conviction
+  // TRIGGERED: expansion states, strong score, confirmed break
+  if (canTrigger && stateNum >= 8 && overallScore >= 50 && breakConfirmed) return "TRIGGERED";
+
   if (stateNum >= 4 && triggerLevel !== null && currentPrice !== null && atrPct !== null) {
     const distToTrigger = ((triggerLevel - currentPrice) / currentPrice) * 100;
-    // Already above trigger with strong score = TRIGGERED
-    if (distToTrigger <= 0 && overallScore >= 40) return "TRIGGERED";
-    // Within 2% or 2 ATR of trigger = READY
+    // Price has cleared the trigger: TRIGGERED only with participation, else READY
+    if (distToTrigger <= 0 && overallScore >= 40) {
+      return canTrigger && breakConfirmed ? "TRIGGERED" : "READY";
+    }
+    // Within 2% or 2 ATR of an overhead trigger = READY
     if (distToTrigger > 0 && distToTrigger <= Math.max(2.0, atrPct * 2) && overallScore >= 35) {
       return "READY";
     }
@@ -670,41 +713,15 @@ function checkExtensionRisk(data: PreRunStockData): boolean {
 
 // ── Main Scoring Function ──
 
-export function scoreTransition(data: PreRunStockData): TransitionResult {
-  const gates = evaluateGates(data);
-
-  // Run market structure analysis using available OHLC data
-  // We need highs, lows, closes arrays — these come from the chart data
-  // stored in PreRunStockData's computed fields. Since we don't have raw
-  // OHLC arrays in PreRunStockData, we use the precomputed indicators
-  // and supplement with market-structure analysis when raw data is available.
-  //
-  // For the chart-based structure analysis, the cron route passes raw OHLC
-  // via a separate call. Here we use the precomputed fields from fetchPreRunData().
-  // Market structure (ChoCH/BOS) detection requires raw OHLC — see scoreTransitionWithOHLC.
-
-  // Placeholder: no raw OHLC available via PreRunStockData
-  // The cron route will call scoreTransitionWithOHLC() which has chart data.
-  return scoreTransitionWithStructure(data, {
-    chochDetected: false,
-    chochBarsAgo: null,
-    bosDetected: false,
-    bosBarsAgo: null,
-    higherLowCount: 0,
-    higherHighCount: 0,
-    lowerHighCount: 0,
-    lowerLowCount: 0,
-    structureBias: "neutral",
-    triggerLevel: null,
-    invalidationLevel: null,
-  });
-}
-
-interface StructureInput {
+export interface StructureInput {
   chochDetected: boolean;
   chochBarsAgo: number | null;
+  /** Latest close still above the level ChoCH broke */
+  chochHolding: boolean;
   bosDetected: boolean;
   bosBarsAgo: number | null;
+  /** Latest close still above the level BOS broke */
+  bosHolding: boolean;
   higherLowCount: number;
   higherHighCount: number;
   lowerHighCount: number;
@@ -712,7 +729,31 @@ interface StructureInput {
   structureBias: "bullish" | "bearish" | "neutral";
   triggerLevel: number | null;
   invalidationLevel: number | null;
+  /** Break bar showed volume expansion or closed strong in its range */
+  breakConfirmed: boolean;
+  /** False when the OHLC series was too short to run structure detection at all */
+  structureAvailable: boolean;
 }
+
+/** Structure input for tickers whose OHLC series was unusable. Scores without
+ *  structural evidence and flags the row so downstream consumers can exclude it. */
+export const NO_STRUCTURE: StructureInput = {
+  chochDetected: false,
+  chochBarsAgo: null,
+  chochHolding: false,
+  bosDetected: false,
+  bosBarsAgo: null,
+  bosHolding: false,
+  higherLowCount: 0,
+  higherHighCount: 0,
+  lowerHighCount: 0,
+  lowerLowCount: 0,
+  structureBias: "neutral",
+  triggerLevel: null,
+  invalidationLevel: null,
+  breakConfirmed: false,
+  structureAvailable: false,
+};
 
 /**
  * Score transition with pre-computed market structure data.
@@ -727,10 +768,13 @@ export function scoreTransitionWithStructure(
   // Score all 8 components
   const seResult = scoreSellerExhaustion(data);
   const accumResult = scoreAccumulationQuality(data);
-  const chochResult = scoreChochConfirmation(data, structure.chochDetected, structure.chochBarsAgo);
-  const bosResult = scoreBosConfirmation(data, structure.bosDetected, structure.bosBarsAgo, structure.chochDetected);
+  const chochResult = scoreChochConfirmation(data, structure.chochDetected, structure.chochBarsAgo, structure.chochHolding);
+  const bosResult = scoreBosConfirmation(
+    data, structure.bosDetected, structure.bosBarsAgo, structure.chochDetected,
+    structure.bosHolding, structure.higherHighCount,
+  );
   const compressionResult = scoreCompressionQuality(data);
-  const hlResult = scoreHigherLowQuality(data, structure.higherLowCount);
+  const hlResult = scoreHigherLowQuality(data, structure.higherLowCount, structure.invalidationLevel);
   const rsResult = scoreRSTrajectory(data);
   const volResult = scoreVolumeProfile(data);
 
@@ -773,10 +817,12 @@ export function scoreTransitionWithStructure(
   // Trigger / invalidation
   const triggerLevel = structure.triggerLevel;
   const invalidationLevel = structure.invalidationLevel;
+  const extensionRisk = checkExtensionRisk(data);
 
   // Alert state
   const alertState = classifyAlertState(
     state, overallScore, triggerLevel, data.currentPrice, data.vcpAtrPct ?? null,
+    invalidationLevel, structure.breakConfirmed, extensionRisk,
   );
 
   // Merge evidence
@@ -803,15 +849,25 @@ export function scoreTransitionWithStructure(
 
   const stateNum = TRANSITION_STATE_ORDER[state];
 
+  if (extensionRisk) {
+    cautionEvidence.push("Extended — near ATH or stretched from EMA20; entry risk is elevated");
+  }
+  if (!structure.structureAvailable) {
+    cautionEvidence.push("Chart too short for structure analysis — ChoCH/BOS not evaluated");
+  }
+
   const isPrimarySignal =
     overallScore >= 45 &&
     stateNum >= 4 && // BULLISH_CHOCH or higher
-    alertState !== "INVALIDATED";
+    alertState !== "INVALIDATED" &&
+    !extensionRisk &&
+    structure.structureAvailable;
 
+  // Nested inside primary: "stronger" is always a subset of "primary"
   const isStrongerSignal =
+    isPrimarySignal &&
     overallScore >= 55 &&
-    stateNum >= 6 && // BULLISH_BOS or higher
-    alertState !== "INVALIDATED";
+    stateNum >= 6; // BULLISH_BOS or higher
 
   return {
     data,
@@ -821,6 +877,8 @@ export function scoreTransitionWithStructure(
     alertState,
     triggerLevel,
     invalidationLevel,
+    extensionRisk,
+    structureAvailable: structure.structureAvailable,
     bullishEvidence,
     cautionEvidence,
     isPrimarySignal,
@@ -828,30 +886,52 @@ export function scoreTransitionWithStructure(
   };
 }
 
+/** Minimum bars required for 3-bar pivot structure analysis to be meaningful. */
+export const MIN_STRUCTURE_BARS = 30;
+
 /**
  * Score transition with raw OHLC arrays (used by cron route).
  * Runs market structure analysis from chart data, then delegates to scoring.
+ *
+ * `volumes` and the ticker's 50d average volume drive break confirmation; when
+ * volume is unavailable, confirmation falls back to close location within the bar.
  */
 export function scoreTransitionWithOHLC(
   data: PreRunStockData,
   highs: number[],
   lows: number[],
   closes: number[],
+  volumes: number[] = [],
   n = 3,
 ): TransitionResult {
+  if (closes.length < MIN_STRUCTURE_BARS) {
+    return scoreTransitionWithStructure(data, NO_STRUCTURE);
+  }
+
   const ms = analyzeMarketStructure(highs, lows, closes, n);
+
+  // The break that matters for confirmation is the most recent structural one:
+  // BOS supersedes ChoCH when both are present.
+  const breakIndex = ms.bos.detected ? ms.bos.breakIndex : ms.choch.breakIndex;
+  const confirmation = evaluateBreakConfirmation(
+    breakIndex, highs, lows, closes, volumes, data.vcpAvgVolume50d ?? null,
+  );
 
   return scoreTransitionWithStructure(data, {
     chochDetected: ms.choch.detected,
     chochBarsAgo: ms.choch.barsAgo,
+    chochHolding: ms.choch.holding,
     bosDetected: ms.bos.detected,
     bosBarsAgo: ms.bos.barsAgo,
+    bosHolding: ms.bos.holding,
     higherLowCount: ms.higherLowCount,
     higherHighCount: ms.higherHighCount,
     lowerHighCount: ms.lowerHighCount,
     lowerLowCount: ms.lowerLowCount,
     structureBias: ms.structureBias,
-    triggerLevel: computeTriggerLevel(ms.swingHighs),
+    triggerLevel: computeTriggerLevel(ms.swingHighs, data.currentPrice ?? null, closes.length),
     invalidationLevel: computeInvalidationLevel(ms.swingLows),
+    breakConfirmed: confirmation.confirmed,
+    structureAvailable: true,
   });
 }
