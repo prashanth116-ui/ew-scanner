@@ -56,7 +56,7 @@ interface DroppedTicker {
 
 type TradeReadFilter = "ALL" | "COILED" | "STARTER_POSITION_CANDIDATE" | "ADD_ON_CONFIRMATION" | "WATCH";
 type StageFilter = "ALL" | "INFLECTION" | "EARLY_ACCUMULATION" | "EXPANSION" | "SELLER_EXHAUSTION";
-type SortField = "overall_score" | "se_score" | "demand_score" | "vc_score" | "runner_score" | "rs_score" | "stage" | "ticker" | "price" | "trade_read" | "sector" | "streak" | "delta";
+type SortField = "overall_score" | "se_score" | "demand_score" | "vc_score" | "runner_score" | "rs_score" | "stage" | "ticker" | "price" | "trade_read" | "sector" | "streak" | "delta" | "flags";
 
 const COMPONENT_FIELDS: ComponentField[] = [
   { key: "se_score",     label: "SE",  title: "Supply Exhaustion — absorption, spring, range asymmetry, distribution days" },
@@ -65,6 +65,38 @@ const COMPONENT_FIELDS: ComponentField[] = [
   { key: "runner_score", label: "Run", title: "Runner Potential — overhead supply, ATR%, base energy, float rotation, risk distance" },
   { key: "rs_score",     label: "RS",  title: "RS Trajectory — acceleration vs SPY and its trend" },
 ];
+
+type FlagFilter = "ALL" | "COILED" | "PRIMARY" | "STRONGER" | "NEW" | "EXT" | "CROSS";
+
+const FLAG_FILTERS: FlagFilter[] = ["ALL", "COILED", "PRIMARY", "STRONGER", "NEW", "EXT", "CROSS"];
+
+function flagFilterLabel(f: FlagFilter): string {
+  switch (f) {
+    case "ALL": return "Any flag";
+    case "COILED": return "Coiled";
+    case "PRIMARY": return "Primary";
+    case "STRONGER": return "Stronger";
+    case "NEW": return "New today";
+    case "EXT": return "Extension risk";
+    case "CROSS": return "On both scanners";
+  }
+}
+
+/** Composite rank so the Flags column can be sorted. Conviction flags add, extension
+ *  risk subtracts — a row carrying Stronger outranks one carrying only NEW, and an
+ *  extended row sinks below an unflagged one. */
+function flagRank(
+  r: { is_primary: boolean; is_stronger: boolean; is_coiled?: boolean; extension_risk?: boolean },
+  isNew: boolean,
+  isCross: boolean,
+): number {
+  return (r.is_stronger ? 8 : 0)
+    + (r.is_primary ? 4 : 0)
+    + (r.is_coiled ? 2 : 0)
+    + (isNew ? 1 : 0)
+    + (isCross ? 1 : 0)
+    - (r.extension_risk ? 6 : 0);
+}
 
 // ── Helpers ──
 
@@ -329,6 +361,7 @@ export default function InflectionDailyPage() {
   const [loadingResults, setLoadingResults] = useState(false);
   const [tradeReadFilter, setTradeReadFilter] = useState<TradeReadFilter>("ALL");
   const [componentFilters, setComponentFilters] = useState<ComponentFilters>({});
+  const [flagFilter, setFlagFilter] = useState<FlagFilter>("ALL");
 
   // Default view: Runner Potential in the top half of the day.
   //
@@ -529,6 +562,19 @@ export default function InflectionDailyPage() {
       const min = componentFilters[f.key] ?? 0;
       if (min > 0) rows = rows.filter((r) => Number((r as unknown as Record<string, unknown>)[f.key]) >= min);
     }
+    if (flagFilter !== "ALL") {
+      rows = rows.filter((r) => {
+        switch (flagFilter) {
+          case "COILED":   return r.is_coiled === true;
+          case "PRIMARY":  return r.is_primary;
+          case "STRONGER": return r.is_stronger;
+          case "NEW":      return (streaks[r.ticker] ?? 1) === 1;
+          case "EXT":      return r.extension_risk === true;
+          case "CROSS":    return transitionTickers.has(r.ticker);
+          default:         return true;
+        }
+      });
+    }
     if (tickerSearch.trim()) {
       const q = tickerSearch.trim().toUpperCase();
       rows = rows.filter(
@@ -584,6 +630,9 @@ export default function InflectionDailyPage() {
         cmp = (streaks[b.ticker] ?? 1) - (streaks[a.ticker] ?? 1);
       } else if (sortField === "delta") {
         cmp = (deltas[b.ticker] ?? 0) - (deltas[a.ticker] ?? 0);
+      } else if (sortField === "flags") {
+        cmp = flagRank(b, (streaks[b.ticker] ?? 1) === 1, transitionTickers.has(b.ticker))
+            - flagRank(a, (streaks[a.ticker] ?? 1) === 1, transitionTickers.has(a.ticker));
       } else {
         cmp = (b[sortField] ?? 0) - (a[sortField] ?? 0);
       }
@@ -591,7 +640,7 @@ export default function InflectionDailyPage() {
     });
 
     return sorted;
-  }, [results, highConvictionOnly, highConvictionTickers, tradeReadFilter, stageFilter, minScore, componentFilters, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
+  }, [results, highConvictionOnly, highConvictionTickers, tradeReadFilter, stageFilter, minScore, componentFilters, flagFilter, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
@@ -802,6 +851,20 @@ export default function InflectionDailyPage() {
           onChange={setComponentFilters}
         />
 
+        <select
+          aria-label="Filter by flag"
+          value={flagFilter}
+          onChange={(e) => setFlagFilter(e.target.value as FlagFilter)}
+          title="Show only rows carrying a given flag"
+          className={`rounded border bg-[#111] px-1.5 py-1 text-[10px] focus:outline-none focus:ring-1 focus:ring-white/30 ${
+            flagFilter === "ALL" ? "border-[#2a2a2a] text-[#666] hover:text-white" : "border-white/20 text-white"
+          }`}
+        >
+          {FLAG_FILTERS.map((f) => (
+            <option key={f} value={f}>{flagFilterLabel(f)}</option>
+          ))}
+        </select>
+
         <span className="text-[#333]">|</span>
 
         {/* Trade Read filter */}
@@ -961,7 +1024,7 @@ export default function InflectionDailyPage() {
                   <SortHeader field="rs_score" label="RS" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="stage" label="Stage" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="trade_read" label="Read" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666]">Flags</th>
+                  <SortHeader field="flags" label="Flags" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                 </tr>
               </thead>
               <tbody>
