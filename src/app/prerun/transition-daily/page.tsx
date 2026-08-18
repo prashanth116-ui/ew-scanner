@@ -214,7 +214,7 @@ function exportCSV(results: TransitionDailyRow[], date: string, streaks: Record<
   const headers = [
     "Ticker", "Company", "Sector", "Price", "Score", "Delta", "Streak",
     "Structure", "SE", "Demand", "Compress", "Runner", "RS",
-    "State", "Alert", "Trigger", "Invalidation",
+    "State", "Alert", "Coiled", "Trigger", "Invalidation",
     "Primary Signal", "Stronger Signal",
     "Bullish Evidence", "Caution Evidence",
   ];
@@ -234,6 +234,7 @@ function exportCSV(results: TransitionDailyRow[], date: string, streaks: Record<
     r.rs_score,
     r.state,
     r.alert_state,
+    r.is_coiled === true,
     r.trigger_level ?? "",
     r.invalidation ?? "",
     r.is_primary,
@@ -1225,6 +1226,11 @@ export default function TransitionDailyPage() {
                         {/* Flags */}
                         <td className="px-2 py-2">
                           <div className="flex items-center gap-1">
+                            {row.is_coiled && (
+                              <span title="Coiled — full setup in place, no structural break has printed yet" className="inline-flex items-center rounded border border-amber-500/40 bg-amber-500/10 px-1 py-0.5 text-[8px] font-bold text-amber-400">
+                                COILED
+                              </span>
+                            )}
                             {row.is_primary && (
                               <span title="Primary Signal" className="inline-flex items-center rounded border border-purple-500/30 bg-purple-500/10 px-1 py-0.5 text-[8px] font-semibold text-purple-400">
                                 <Zap className="h-2.5 w-2.5" />
