@@ -106,6 +106,35 @@ describe("shared components report identically on both engines", () => {
     expect(scoreInflection(stock({ hasBrokenStructure: null } as Partial<PreRunStockData>)).isCoiledSignal).toBe(false);
   });
 
+  it("RS Trajectory matches on both engines", () => {
+    // Near-duplicate copies had drifted by one bucket (26 vs 24) before extraction.
+    for (const [, over] of cases) {
+      const d = stock(over);
+      expect(scoreInflection(d).scores.rsTrajectory).toBe(scoreTransitionWithStructure(d, NO_STRUCTURE).scores.rsTrajectory);
+    }
+  });
+
+  it("reports how much of the composite was measurable", () => {
+    // Full data -> everything measured
+    expect(scoreInflection(stock()).measuredPct).toBe(100);
+    // Strip the inputs behind two whole components; coverage must drop, not silently
+    // renormalize away
+    const thin = stock({
+      absorption: null, structuralSpring: null, rangeAsymmetry: null,
+      vpDivergenceBullish: null, avgDownDayBody: null, distributionDays20d: null,
+      instRsAccelVsSPY: null, instRsAccelTrend: null,
+    } as Partial<PreRunStockData>);
+    const r = scoreInflection(thin);
+    expect(r.measuredPct).toBeLessThan(100);
+    expect(r.cautionEvidence.join(" ")).toContain("could be measured");
+  });
+
+  it("does not count Structure as missing before a break has printed", () => {
+    // Pre-break rows legitimately have no structure — that is not thin data
+    const r = scoreTransitionWithStructure(stock(), NO_STRUCTURE);
+    expect(r.measuredPct).toBe(100);
+  });
+
   it("both components stay within 0-100", () => {
     for (const [, over] of cases) {
       const d = stock(over);

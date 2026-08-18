@@ -349,6 +349,9 @@ export interface InflectionResult {
   stage: InflectionStage;
   tradeRead: InflectionTradeRead;
   extensionRisk: boolean;
+  /** Share of the composite weight that was actually measurable, 0-100. Below ~70 the
+   *  score rests on thin data and is not comparable to a fully-measured row. */
+  measuredPct: number;
   /** Pre-move tier: supply exhausted, compressed, real Runner Potential, not yet moving. */
   isCoiledSignal: boolean;
   bullishEvidence: string[];
@@ -419,6 +422,9 @@ export interface TransitionResult {
   invalidationLevel: number | null;  // Price below which thesis fails
   /** Near ATH or stretched from EMA20 — the move is already extended. Blocks TRIGGERED. */
   extensionRisk: boolean;
+  /** Share of the composite weight that was actually measurable, 0-100. Structure is not
+   *  counted as missing before a break has printed. */
+  measuredPct: number;
   /** False when the OHLC series was too short to run ChoCH/BOS detection at all. */
   structureAvailable: boolean;
   bullishEvidence: string[];

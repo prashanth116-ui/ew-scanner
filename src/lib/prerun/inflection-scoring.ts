@@ -35,10 +35,11 @@ import type {
   InflectionTradeRead,
   InflectionResult,
 } from "./types";
-import { nullNeutralScore, weightedComposite, displayScore, type ScoreSlot } from "./score-slot";
+import { weightedComposite, displayScore, measuredWeightPct, nullNeutralScore, type ScoreSlot } from "./score-slot";
 import { scoreRunnerPotential } from "./runner-potential";
 import { scoreSupplyExhaustion } from "./supply-exhaustion";
 import { scoreDemandEmergence } from "./demand-emergence";
+import { scoreRSTrajectory } from "./rs-trajectory";
 import { NEUTRAL_GATE, type RegimeGate } from "./regime-gate";
 
 // ── Gates (lighter than institutional — targets inflection points, not leaders) ──
@@ -139,51 +140,6 @@ function scoreCompression(data: PreRunStockData): { score: number | null; eviden
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
-// ── RS Trajectory (0-100, null-neutral) — weight 10% ──
-//
-// Acceleration only. The absolute RS levels that used to carry 30 of this component's 100
-// points described the last 20 days; at an inflection point RS is negative by definition and
-// the signal is the second derivative, not the level.
-
-function scoreRSTrajectory(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
-  const evidence: string[] = [];
-  const caution: string[] = [];
-  const slots: ScoreSlot[] = [];
-
-  const rsAccel = data.instRsAccelVsSPY;
-  const rsAccelTrend = data.instRsAccelTrend;
-
-  // RS acceleration vs SPY (0-60)
-  if (rsAccel !== null) {
-    let earned = 0;
-    if (rsAccel >= 5) { earned = 60; evidence.push("RS accelerating sharply vs SPY"); }
-    else if (rsAccel >= 3) { earned = 48; evidence.push("RS acceleration positive"); }
-    else if (rsAccel >= 1) { earned = 38; evidence.push("RS improving vs SPY"); }
-    else if (rsAccel >= 0) { earned = 26; }
-    else if (rsAccel >= -2 && (rsAccelTrend ?? 0) > 0) {
-      earned = 30; evidence.push("RS trajectory turning while still negative — early inflection");
-    } else if (rsAccel >= -3) { earned = 10; }
-    else { caution.push("RS deteriorating vs SPY"); }
-    slots.push({ earned, possible: 60, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // Acceleration trend (0-40) — is the acceleration itself increasing?
-  if (rsAccelTrend !== null) {
-    let earned = 0;
-    if (rsAccelTrend >= 2) { earned = 40; evidence.push("RS acceleration increasing day over day"); }
-    else if (rsAccelTrend > 0.5) { earned = 30; }
-    else if (rsAccelTrend > 0) { earned = 20; }
-    else if (rsAccelTrend > -1) { earned = 8; }
-    else { caution.push("RS momentum fading"); }
-    slots.push({ earned, possible: 40, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  return { score: nullNeutralScore(slots), evidence, caution };
-}
 // ── Stage Classification ──
 // Fix 5: Thresholds lowered to match achievable score ranges.
 // With null-neutral scoring, typical quality inflection stocks score 50-70.
@@ -300,13 +256,15 @@ export function scoreInflection(
 
   // Weighted average over the components that could actually be measured. A component with
   // no data is skipped and its weight redistributed, rather than entering the sum as a zero.
-  const overallScore = weightedComposite([
+  const components = [
     { score: seResult.score, weight: 0.25 },          // Is supply finished?
     { score: demandResult.score, weight: 0.25 },      // Is demand appearing?
     { score: compressionResult.score, weight: 0.15 }, // Is the spring wound?
     { score: runnerResult.score, weight: 0.25 },      // Can it actually move?
     { score: rsResult.score, weight: 0.10 },          // Is relative strength turning?
-  ]);
+  ];
+  const overallScore = weightedComposite(components);
+  const measuredPct = measuredWeightPct(components);
 
   const seScore = displayScore(seResult.score);
   const demandScore = displayScore(demandResult.score);
@@ -341,6 +299,10 @@ export function scoreInflection(
     ...runnerResult.caution,
     ...rsResult.caution,
   ];
+
+  if (measuredPct < 70) {
+    cautionEvidence.push(`Only ${measuredPct}% of the composite could be measured — thin data`);
+  }
 
   // Regime gate raises the bar for the signal tiers without touching the score, so the
   // same setup needs more evidence to earn an alert in a hostile tape.
@@ -389,6 +351,7 @@ export function scoreInflection(
     stage,
     tradeRead,
     extensionRisk,
+    measuredPct,
     isCoiledSignal,
     bullishEvidence,
     cautionEvidence,

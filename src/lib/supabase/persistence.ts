@@ -481,6 +481,9 @@ export interface InflectionDailyRecord {
   scanner_version?: number;
   /** Pre-move tier: supply exhausted, compressed, real Runner Potential, not yet moving. */
   is_coiled?: boolean;
+  /** Share of the composite weight that was measurable, 0-100. Below ~70 the score rests
+   *  on thin data and is not comparable to a fully-measured row. */
+  measured_pct?: number;
   /** Legacy V2 columns, no longer written (DB default 0): be_score, la_score, ip_score */
   be_score?: number;
   la_score?: number;
@@ -1884,6 +1887,9 @@ export interface TransitionDailyRecord {
   structure_available?: boolean;
   /** Pre-break high-conviction setup — the tier that catches a move before it starts. */
   is_coiled?: boolean;
+  /** Share of the composite weight that was measurable, 0-100. Below ~70 the score rests
+   *  on thin data and is not comparable to a fully-measured row. */
+  measured_pct?: number;
   /** Scoring engine version; delta/comparison logic must not mix versions. */
   scanner_version?: number;
   bullish_evidence: string[];

@@ -50,6 +50,7 @@ function resultToRecord(r: InflectionResult, scanDate: string): InflectionDailyR
     trade_read: r.tradeRead,
     extension_risk: r.extensionRisk,
     is_coiled: r.isCoiledSignal,
+    measured_pct: r.measuredPct,
     is_primary: r.isPrimarySignal,
     is_stronger: r.isStrongerSignal,
     bullish_evidence: r.bullishEvidence,

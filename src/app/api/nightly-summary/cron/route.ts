@@ -179,14 +179,28 @@ function buildRsAccelMap(
 
 // ── Consolidation ──
 
-/** Inflection + Transition share roughly half their scoring inputs, so a hit from both
- *  is discounted by this much rather than counted as two independent confirmations. */
-const CORRELATED_PAIR_DISCOUNT = 0.5;
+/**
+ * Inflection + Transition are largely the same measurement, so a hit from both is
+ * discounted rather than counted as two independent confirmations.
+ *
+ * Sized from the actual composite weights. Supply Exhaustion, Demand Emergence, Runner
+ * Potential and RS Trajectory are shared modules — literally the same code on both engines:
+ *
+ *   Inflection   SE 25 + Demand 25 + Runner 25 + RS 10 = 85% shared, 15% own (Compression)
+ *   Transition   SE 15 + Demand 20 + Runner 20 + RS 10 = 65% shared, 35% own
+ *                                                        (Structure 25, Compression 10)
+ *
+ * At 0.5 this was set when the two shared roughly half their inputs. After unifying the
+ * shared components, Inflection draws 85% of its composite from code identical to
+ * Transition's, so a hit from both is closer to ONE signal than to the 1.5 it was crediting.
+ * The only genuinely independent evidence Transition adds is its Structure component.
+ */
+const CORRELATED_PAIR_DISCOUNT = 1.0;
 
 /**
  * 5 confluence scanners: PreRun, Inflection, Transition, Institutional, PreRunner.
  * VCP + QFE + Setup4h are badge-only (not counted for confluence).
- * INF_WATCH counts as 0.5 weight; an Inflection+Transition pair is discounted by 0.5.
+ * INF_WATCH counts as 0.5 weight; an Inflection+Transition pair is discounted by 1.0.
  * Tickers within each tier sorted by RS acceleration DESC.
  */
 function consolidateResults(

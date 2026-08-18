@@ -66,3 +66,22 @@ export function weightedComposite(components: WeightedComponent[]): number {
 export function displayScore(score: number | null): number {
   return score ?? 0;
 }
+
+/**
+ * How much of the composite was actually measurable, 0-100.
+ *
+ * `weightedComposite` renormalizes over the components that had data, which is correct but
+ * silent: a score built from two of six components looks identical to one built from all
+ * six. Upstream fetch failures do happen — the same ticker has scored 18 points apart
+ * between two crons minutes apart, with the same price — and nothing on the row recorded it.
+ * Persisting this makes a thinly-measured score visible, and lets the backtest exclude or
+ * segment them rather than treating them as equal evidence.
+ */
+export function measuredWeightPct(components: WeightedComponent[]): number {
+  const total = components.reduce((sum, c) => sum + c.weight, 0);
+  if (total <= 0) return 0;
+  const have = components
+    .filter((c) => c.score !== null)
+    .reduce((sum, c) => sum + c.weight, 0);
+  return Math.round((have / total) * 100);
+}

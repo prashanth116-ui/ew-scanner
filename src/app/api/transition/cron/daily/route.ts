@@ -50,6 +50,7 @@ function resultToRecord(r: TransitionResult, scanDate: string): TransitionDailyR
     extension_risk: r.extensionRisk,
     structure_available: r.structureAvailable,
     is_coiled: r.isCoiledSignal,
+    measured_pct: r.measuredPct,
     scanner_version: 3,
     bullish_evidence: r.bullishEvidence,
     caution_evidence: r.cautionEvidence,

@@ -51,10 +51,11 @@ import {
   computeInvalidationLevel,
   evaluateBreakConfirmation,
 } from "./market-structure";
-import { nullNeutralScore, weightedComposite, displayScore, type ScoreSlot } from "./score-slot";
+import { weightedComposite, displayScore, measuredWeightPct, nullNeutralScore, type ScoreSlot } from "./score-slot";
 import { scoreRunnerPotential } from "./runner-potential";
 import { scoreSupplyExhaustion } from "./supply-exhaustion";
 import { scoreDemandEmergence } from "./demand-emergence";
+import { scoreRSTrajectory } from "./rs-trajectory";
 import { NEUTRAL_GATE, type RegimeGate } from "./regime-gate";
 
 // ── Gates (same as Inflection — reuse type) ──
@@ -223,49 +224,6 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number | null;
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
-// ── RS Trajectory (0-100, weight 10%) ──
-//
-// Acceleration only. The absolute RS slots are gone: one of them read a sector-relative
-// field while claiming to be benchmark-relative, and both described the past 20 days.
-
-function scoreRSTrajectory(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
-  const evidence: string[] = [];
-  const caution: string[] = [];
-  const slots: ScoreSlot[] = [];
-
-  const rsAccel = data.instRsAccelVsSPY;
-  const rsAccelTrend = data.instRsAccelTrend;
-
-  // RS acceleration vs SPY (0-60)
-  if (rsAccel !== null) {
-    let earned = 0;
-    if (rsAccel >= 5) { earned = 60; evidence.push(`RS accelerating strongly vs SPY (+${rsAccel.toFixed(1)})`); }
-    else if (rsAccel >= 3) { earned = 48; evidence.push(`RS improving vs SPY (+${rsAccel.toFixed(1)})`); }
-    else if (rsAccel >= 1) { earned = 38; }
-    else if (rsAccel >= -1) { earned = 24; }
-    else if (rsAccel >= -3 && (rsAccelTrend ?? 0) > 0) {
-      earned = 30; evidence.push("RS trajectory improving despite a negative absolute reading");
-    } else { caution.push("RS weakening vs SPY"); }
-    slots.push({ earned, possible: 60, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // Acceleration trend (0-40)
-  if (rsAccelTrend !== null) {
-    let earned = 0;
-    if (rsAccelTrend > 2) { earned = 40; evidence.push("RS acceleration increasing — momentum building"); }
-    else if (rsAccelTrend > 0.5) { earned = 30; }
-    else if (rsAccelTrend > 0) { earned = 20; }
-    else if (rsAccelTrend > -1) { earned = 8; }
-    else { caution.push("RS momentum fading"); }
-    slots.push({ earned, possible: 40, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  return { score: nullNeutralScore(slots), evidence, caution };
-}
 // ── State Classification ──
 
 /**
@@ -501,14 +459,17 @@ export function scoreTransitionWithStructure(
   // Weighted composite. Any component that could not be measured — including Structure
   // before a break has printed — is skipped and its weight redistributed, rather than
   // entering the sum as a zero.
-  const overallScore = weightedComposite([
+  const components = [
     { score: structureHasPrinted ? structureResult.score : null, weight: 0.25 },
     { score: seResult.score, weight: 0.15 },
     { score: demandResult.score, weight: 0.20 },
     { score: compressionResult.score, weight: 0.10 },
     { score: runnerResult.score, weight: 0.20 },
     { score: rsResult.score, weight: 0.10 },
-  ]);
+  ];
+  const overallScore = weightedComposite(components);
+  // Structure is legitimately absent pre-break, so it does not count as missing data here.
+  const measuredPct = measuredWeightPct(components.filter((_, idx) => idx > 0 || structureHasPrinted));
 
   const seScore = displayScore(seResult.score);
   const demandScore = displayScore(demandResult.score);
@@ -570,6 +531,9 @@ export function scoreTransitionWithStructure(
   if (!structure.structureAvailable) {
     cautionEvidence.push("Chart too short for structure analysis — ChoCH/BOS not evaluated");
   }
+  if (measuredPct < 70) {
+    cautionEvidence.push(`Only ${measuredPct}% of the composite could be measured — thin data`);
+  }
 
   // Regime gate raises the tier thresholds without touching the score itself.
   if (regimeGate.scorePenalty > 0) cautionEvidence.push(regimeGate.label);
@@ -616,6 +580,7 @@ export function scoreTransitionWithStructure(
     triggerLevel,
     invalidationLevel,
     extensionRisk,
+    measuredPct,
     structureAvailable: structure.structureAvailable,
     isCoiledSignal,
     bullishEvidence,
