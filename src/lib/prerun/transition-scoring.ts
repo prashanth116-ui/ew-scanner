@@ -48,6 +48,8 @@ import {
 } from "./market-structure";
 import { nullNeutralScore, weightedComposite, displayScore, type ScoreSlot } from "./score-slot";
 import { scoreRunnerPotential } from "./runner-potential";
+import { scoreSupplyExhaustion } from "./supply-exhaustion";
+import { scoreDemandEmergence } from "./demand-emergence";
 import { NEUTRAL_GATE, type RegimeGate } from "./regime-gate";
 
 // ── Gates (same as Inflection — reuse type) ──
@@ -148,172 +150,6 @@ function scoreStructure(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), evidence, caution };
-}
-
-// ── 2. Supply Exhaustion (0-100, weight 15%) ──
-//
-// Identical primitives to the Inflection engine, so "supply is finished" means one thing
-// across the system. RSI is gone.
-
-function scoreSupplyExhaustion(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
-  const evidence: string[] = [];
-  const caution: string[] = [];
-  const slots: ScoreSlot[] = [];
-
-  // 2a. Absorption (0-30)
-  if (data.absorption !== null) {
-    const a = data.absorption;
-    let earned = 0;
-    if (a >= 0.4) { earned = 25; evidence.push(`${(a * 100).toFixed(0)}% of down bars absorbed — supply is being taken`); }
-    else if (a >= 0.25) { earned = 19; evidence.push(`${(a * 100).toFixed(0)}% of down bars absorbed`); }
-    else if (a >= 0.12) { earned = 11; }
-    else { caution.push("Selling is meeting no absorption"); }
-    slots.push({ earned, possible: 25, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 2b. Structural spring (0-25)
-  if (data.structuralSpring !== null) {
-    const s = data.structuralSpring;
-    let earned = 0;
-    if (s >= 2) { earned = 21; evidence.push("Spring — undercut of structure on volume, reclaimed and held"); }
-    else if (s >= 1) { earned = 13; evidence.push("Shakeout below structure, reclaimed"); }
-    slots.push({ earned, possible: 21, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 2c. Range asymmetry (0-25)
-  if (data.rangeAsymmetry !== null) {
-    const r = data.rangeAsymmetry;
-    let earned = 0;
-    if (r >= 1.5) { earned = 21; evidence.push("Up bars far wider than down bars — supply drying up"); }
-    else if (r >= 1.15) { earned = 15; evidence.push("Up bars wider than down bars"); }
-    else if (r >= 0.95) { earned = 8; }
-    else { caution.push("Down bars still producing more range than up bars"); }
-    slots.push({ earned, possible: 21, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 2d. Volume-price divergence (0-20) — null when no recent lower low exists
-  if (data.vpDivergenceBullish !== null) {
-    slots.push({ earned: data.vpDivergenceBullish ? 16 : 0, possible: 16, hasData: true });
-    if (data.vpDivergenceBullish) evidence.push("Volume-price divergence: selling into lows is drying up");
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-
-  // 2e. Distribution days (0-17) — restored from V2's Accumulation Quality component.
-  // Nothing else in V3 measures institutional SELLING; without it a stock can score highly
-  // on demand while it is being quietly distributed.
-  if (data.distributionDays20d !== null) {
-    const dist = data.distributionDays20d;
-    let earned = 0;
-    if (dist <= 1) { earned = 17; evidence.push("Zero or minimal distribution days — no institutional selling"); }
-    else if (dist <= 3) { earned = 11; }
-    else if (dist <= 5) { earned = 5; }
-    else { caution.push(`${dist} distribution days — institutions are selling into this`); }
-    slots.push({ earned, possible: 17, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-  return { score: nullNeutralScore(slots), evidence, caution };
-}
-
-// ── 3. Demand Emergence (0-100, weight 20%) ──
-//
-// Replaces the V2 Accumulation Quality and Volume Profile components, which between them
-// scored OBV divergence twice and mixed two incompatible definitions of an "up day".
-
-function scoreDemandEmergence(data: PreRunStockData, triggerLevel: number | null): { score: number | null; evidence: string[]; caution: string[] } {
-  const evidence: string[] = [];
-  const caution: string[] = [];
-  const slots: ScoreSlot[] = [];
-
-  // 3a. Close-location persistence (0-25)
-  const clv = data.closeLocationMean;
-  if (clv !== null) {
-    const flat = data.closeLocationFlat === true;
-    let earned = 0;
-    if (clv >= 0.65 && flat) { earned = 22; evidence.push("Closing near the highs while price goes nowhere — accumulation footprint"); }
-    else if (clv >= 0.65) { earned = 16; evidence.push("Consistently closing in the upper part of the range"); }
-    else if (clv >= 0.55) { earned = 11; }
-    else if (clv >= 0.45) { earned = 5; }
-    else { caution.push("Closing in the lower half of the daily range"); }
-    slots.push({ earned, possible: 22, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 3b. Pocket pivots (0-25)
-  if (data.pocketPivots !== null) {
-    const p = data.pocketPivots;
-    let earned = 0;
-    if (p >= 3) { earned = 22; evidence.push(`${p} pocket pivots — repeated institutional footprints`); }
-    else if (p >= 2) { earned = 17; evidence.push(`${p} pocket pivots`); }
-    else if (p >= 1) { earned = 10; evidence.push("Pocket pivot — up volume exceeded every recent down day"); }
-    else { caution.push("No pocket pivots — demand has not outweighed supply"); }
-    slots.push({ earned, possible: 22, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 3c. RVOL trajectory (0-20)
-  if (data.rvolTrajectory !== null) {
-    const t = data.rvolTrajectory;
-    let earned = 0;
-    if (t >= 0.15) { earned = 17; evidence.push("Relative volume building sharply"); }
-    else if (t >= 0.05) { earned = 13; evidence.push("Relative volume building"); }
-    else if (t >= 0) { earned = 7; }
-    else { caution.push("Participation fading"); }
-    slots.push({ earned, possible: 17, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 3d. OBV divergence (0-15) — scored once, here only
-  if (data.obvDivergent !== null) {
-    slots.push({ earned: data.obvDivergent ? 13 : 0, possible: 13, hasData: true });
-    if (data.obvDivergent) evidence.push("OBV near the top of its range while price is not — stealth buying");
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 3e. Money-flow persistence (0-15)
-  if (data.moneyFlowPersistence !== null) {
-    const mfp = data.moneyFlowPersistence;
-    let earned = 0;
-    if (mfp >= 12) { earned = 11; evidence.push("Sustained money flow"); }
-    else if (mfp >= 8) { earned = 8; }
-    else if (mfp >= 5) { earned = 4; }
-    slots.push({ earned, possible: 11, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-
-  // 3f. Distance to the trigger (0-15) — the "when" axis.
-  // Transition computed a forward trigger level and scored nothing against it, so a stock
-  // 1 ATR from breaking out and one 12 ATR away were indistinguishable. Negative distance
-  // (already through the level) scores the striking-distance band too: the alert state
-  // handles what happens after a break, this slot only measures reachability.
-  const atrPct = data.vcpAtrPct;
-  const price = data.currentPrice;
-  if (triggerLevel !== null && price !== null && price > 0 && atrPct !== null && atrPct > 0) {
-    const atrUnits = Math.abs(((triggerLevel - price) / price) * 100) / atrPct;
-    let earned = 0;
-    if (atrUnits <= 3) { earned = 15; evidence.push(`Trigger ${atrUnits.toFixed(1)} ATR away — within striking distance`); }
-    else if (atrUnits <= 6) { earned = 9; evidence.push(`Trigger ${atrUnits.toFixed(1)} ATR away`); }
-    else if (atrUnits <= 10) { earned = 4; }
-    else { caution.push("Trigger more than 10 ATR away — no move within reach"); }
-    slots.push({ earned, possible: 15, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
@@ -638,7 +474,7 @@ export function scoreTransitionWithStructure(
   const gates = evaluateGates(data);
 
   const seResult = scoreSupplyExhaustion(data);
-  const demandResult = scoreDemandEmergence(data, structure.triggerLevel);
+  const demandResult = scoreDemandEmergence(data);
   const compressionResult = scoreCompressionQuality(data);
   const runnerResult = scoreRunnerPotential(data, structure.invalidationLevel);
   const rsResult = scoreRSTrajectory(data);
