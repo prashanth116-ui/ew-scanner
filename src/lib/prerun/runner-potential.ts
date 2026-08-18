@@ -46,7 +46,7 @@ export function scoreRunnerPotential(
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
 
-  // 1. Overhead supply (0-30) — the resistance the move has to chew through.
+  // 1. Overhead supply (0-27) — the resistance the move has to chew through.
   // The single best predictor of whether a breakout runs or stalls.
   const overhead = data.overheadSupply;
   if (overhead !== null) {
@@ -61,7 +61,7 @@ export function scoreRunnerPotential(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 2. ADR / daily range (0-25) — the raw capacity to move.
+  // 2. ADR / daily range (0-22) — the raw capacity to move.
   // A 1.2% ADR name does not produce a 30% run in a month regardless of how good the base is.
   const atrPct = data.vcpAtrPct;
   if (atrPct !== null) {
@@ -76,7 +76,7 @@ export function scoreRunnerPotential(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 3. Base energy (0-20) — depth multiplied by duration.
+  // 3. Base energy (0-18) — depth multiplied by duration.
   // A deep base held a long time has stored more energy than a three-week shelf.
   const depth = data.pctFromAth;
   const weeks = data.weeksInBase;
@@ -97,7 +97,7 @@ export function scoreRunnerPotential(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 4. Float rotation (0-15) — how quickly the tradeable supply is changing hands.
+  // 4. Float rotation (0-13) — how quickly the tradeable supply is changing hands.
   // Fast rotation on a small float is what turns demand into gap-ups.
   const turnover = data.floatTurnover20d;
   if (turnover !== null) {
@@ -111,7 +111,7 @@ export function scoreRunnerPotential(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 5. Insider conviction (0-10) — moved here from Institutional Participation.
+  // 5. Insider conviction (0-8) — moved here from Institutional Participation.
   // Insider buying is forward-looking fuel, not a description of current ownership.
   const buys45 = data.insiderBuys45d;
   const buys90 = data.insiderBuys90d;

@@ -6,6 +6,11 @@
  *   Supply Exhaustion 25% · Demand Emergence 25% · Compression 15%
  *   Runner Potential 25% · RS Trajectory 10%
  *
+ * Four of the five live HERE only as weights — Supply Exhaustion, Demand Emergence and
+ * Runner Potential are shared modules, so they report identical numbers on both engines.
+ * See supply-exhaustion.ts, demand-emergence.ts, runner-potential.ts. What this file owns
+ * is Compression, RS Trajectory, the stage taxonomy and the trade reads.
+ *
  * V3 removes every lagging input and adds the magnitude dimension:
  *   - RSI, EMA reclaim, higher-low counts, absolute RS levels and institutional
  *     ownership are gone. Each described the past rather than anticipating the move.
@@ -47,7 +52,7 @@ function evaluateGates(data: PreRunStockData): InflectionGates {
   return { priceAbove5, avgDollarVolAbove10m, mktCapAbove500m, allPass };
 }
 
-// ── 3. Compression (0-100, null-neutral) — weight 15% ──
+// ── Compression (0-100, null-neutral) — weight 15% ──
 //
 // Volatility contraction genuinely precedes expansion, so this component survives V2
 // unchanged apart from the removal of the dry-volume slot, which now sits in nothing —
@@ -58,7 +63,7 @@ function scoreCompression(data: PreRunStockData): { score: number | null; eviden
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
 
-  // 3a. ATR ratio 5/20 (0-30)
+  // ATR ratio 5/20 (0-26)
   if (data.atrRatio5v20 !== null) {
     const atrRatio = data.atrRatio5v20;
     let earned = 0;
@@ -73,7 +78,7 @@ function scoreCompression(data: PreRunStockData): { score: number | null; eviden
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 3b. Nested range contraction (0-30)
+  // Nested range contraction (0-26)
   const r5 = data.vcpRange5d;
   const r10 = data.vcpRange10d;
   const r20 = data.vcpRange20d;
@@ -96,7 +101,7 @@ function scoreCompression(data: PreRunStockData): { score: number | null; eviden
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 3c. Inside bars (0-20)
+  // Inside bars (0-16)
   if (data.vcpInsideBarCount !== null) {
     const bars = data.vcpInsideBarCount;
     let earned = 0;
@@ -108,7 +113,7 @@ function scoreCompression(data: PreRunStockData): { score: number | null; eviden
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 3d. Tight closes (0-20)
+  // Tight closes (0-16)
   if (data.vcpTightCloses !== null) {
     slots.push({ earned: data.vcpTightCloses ? 16 : 0, possible: 16, hasData: true });
     if (data.vcpTightCloses) evidence.push("Tight cluster of closes — coiling");
@@ -134,7 +139,7 @@ function scoreCompression(data: PreRunStockData): { score: number | null; eviden
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
-// ── 4. RS Trajectory (0-100, null-neutral) — weight 10% ──
+// ── RS Trajectory (0-100, null-neutral) — weight 10% ──
 //
 // Acceleration only. The absolute RS levels that used to carry 30 of this component's 100
 // points described the last 20 days; at an inflection point RS is negative by definition and
@@ -148,7 +153,7 @@ function scoreRSTrajectory(data: PreRunStockData): { score: number | null; evide
   const rsAccel = data.instRsAccelVsSPY;
   const rsAccelTrend = data.instRsAccelTrend;
 
-  // 4a. RS acceleration vs SPY (0-60)
+  // RS acceleration vs SPY (0-60)
   if (rsAccel !== null) {
     let earned = 0;
     if (rsAccel >= 5) { earned = 60; evidence.push("RS accelerating sharply vs SPY"); }
@@ -164,7 +169,7 @@ function scoreRSTrajectory(data: PreRunStockData): { score: number | null; evide
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 4b. Acceleration trend (0-40) — is the acceleration itself increasing?
+  // Acceleration trend (0-40) — is the acceleration itself increasing?
   if (rsAccelTrend !== null) {
     let earned = 0;
     if (rsAccelTrend >= 2) { earned = 40; evidence.push("RS acceleration increasing day over day"); }

@@ -10,6 +10,11 @@
  *   Structure 25% · Supply Exhaustion 15% · Demand Emergence 20%
  *   Compression 10% · Runner Potential 20% · RS Trajectory 10%
  *
+ * Three of the six live HERE only as weights — Supply Exhaustion, Demand Emergence and
+ * Runner Potential are shared modules, so they report identical numbers on both engines.
+ * See supply-exhaustion.ts, demand-emergence.ts, runner-potential.ts. What this file owns
+ * is Structure, Compression, RS Trajectory, the 11-state ladder and the alert states.
+ *
  * V3 changes:
  *   - ChoCH and BOS merged into one Structure component. They are sequential states of a
  *     single axis, not two independent measures, and scoring them separately let one
@@ -63,7 +68,7 @@ function evaluateGates(data: PreRunStockData): InflectionGates {
   return { priceAbove5, avgDollarVolAbove10m, mktCapAbove500m, allPass };
 }
 
-// ── 1. Structure (0-100, weight 25%) ──
+// ── Structure (0-100, weight 25%) ──
 //
 // ChoCH and BOS merged. Slots drop out entirely when no break has printed and the stock is
 // still in an early state — the pre-structure fix. Present-but-failed breaks stay scored.
@@ -83,7 +88,7 @@ function scoreStructure(
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
 
-  // 1a. Change of character (0-40)
+  // Change of character (0-30)
   if (structureHasPrinted) {
     slots.push({
       earned: chochDetected ? (chochHolding ? 30 : 9) : 0,
@@ -97,7 +102,7 @@ function scoreStructure(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 1b. Break of structure (0-35)
+  // Break of structure (0-25)
   if (structureHasPrinted) {
     slots.push({
       earned: bosDetected ? (bosHolding ? 25 : 7) : 0,
@@ -111,7 +116,7 @@ function scoreStructure(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 1c. Recency of the most recent break (0-25) — a fresh flip beats an aging one
+  // Recency of the most recent break (0-18) — a fresh flip beats an aging one
   const barsAgo = bosDetected ? bosBarsAgo : chochBarsAgo;
   if ((bosDetected || chochDetected) && barsAgo !== null) {
     let earned = 0;
@@ -124,7 +129,7 @@ function scoreStructure(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 1d. Higher-high follow-through (0-20) — only meaningful once a BOS exists.
+  // Higher-high follow-through (0-14) — only meaningful once a BOS exists.
   // countHigherHighs reads the last 4 swing highs rather than only those after the break,
   // so this reads as "recent structure is making higher highs", gated on a BOS existing.
   if (bosDetected) {
@@ -137,7 +142,7 @@ function scoreStructure(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 1e. Bearish structure penalty (0-15) — lower highs still forming alongside the break.
+  // Bearish structure penalty (0-13) — lower highs still forming alongside the break.
   // analyzeMarketStructure computes lowerHighCount for structureBias and nothing scored it.
   // A ChoCH printed while the swing structure is still making lower highs is weaker evidence
   // than the same ChoCH inside clean structure.
@@ -153,14 +158,14 @@ function scoreStructure(
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
-// ── 4. Compression (0-100, weight 10%) ──
+// ── Compression (0-100, weight 10%) ──
 
 function scoreCompressionQuality(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
 
-  // 4a. ATR ratio 5/20 (0-30)
+  // ATR ratio 5/20 (0-25)
   const atrRatio = data.atrRatio5v20;
   if (atrRatio !== null) {
     let earned = 0;
@@ -173,7 +178,7 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number | null;
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 4b. Tight closes (0-20)
+  // Tight closes (0-16)
   if (data.vcpTightCloses !== null) {
     slots.push({ earned: data.vcpTightCloses ? 16 : 0, possible: 16, hasData: true });
     if (data.vcpTightCloses) evidence.push("Tight daily closes — low volatility");
@@ -181,7 +186,7 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number | null;
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 4c. Inside bars (0-25)
+  // Inside bars (0-21)
   if (data.vcpInsideBarCount !== null) {
     const ibc = data.vcpInsideBarCount;
     let earned = 0;
@@ -193,7 +198,7 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number | null;
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 4d. Closes near range top (0-25)
+  // Closes near range top (0-21)
   if (data.closesNearRangeTop !== null) {
     slots.push({ earned: data.closesNearRangeTop ? 21 : 0, possible: 21, hasData: true });
     if (data.closesNearRangeTop) evidence.push("Closes near range top — buyers in control");
@@ -202,7 +207,7 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number | null;
   }
 
 
-  // 4e. Dry volume days (0-17) — restored from V2. Volume drying up inside a base means
+  // Dry volume days (0-17) — restored from V2. Volume drying up inside a base means
   // supply has been absorbed and there is nothing left to sell at these prices.
   if (data.vcpDryVolumeDays !== null) {
     const dry = data.vcpDryVolumeDays;
@@ -218,7 +223,7 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number | null;
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
-// ── 5. RS Trajectory (0-100, weight 10%) ──
+// ── RS Trajectory (0-100, weight 10%) ──
 //
 // Acceleration only. The absolute RS slots are gone: one of them read a sector-relative
 // field while claiming to be benchmark-relative, and both described the past 20 days.
@@ -231,7 +236,7 @@ function scoreRSTrajectory(data: PreRunStockData): { score: number | null; evide
   const rsAccel = data.instRsAccelVsSPY;
   const rsAccelTrend = data.instRsAccelTrend;
 
-  // 5a. RS acceleration vs SPY (0-60)
+  // RS acceleration vs SPY (0-60)
   if (rsAccel !== null) {
     let earned = 0;
     if (rsAccel >= 5) { earned = 60; evidence.push(`RS accelerating strongly vs SPY (+${rsAccel.toFixed(1)})`); }
@@ -246,7 +251,7 @@ function scoreRSTrajectory(data: PreRunStockData): { score: number | null; evide
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 5b. Acceleration trend (0-40)
+  // Acceleration trend (0-40)
   if (rsAccelTrend !== null) {
     let earned = 0;
     if (rsAccelTrend > 2) { earned = 40; evidence.push("RS acceleration increasing — momentum building"); }
