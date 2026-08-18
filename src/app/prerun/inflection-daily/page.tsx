@@ -33,13 +33,14 @@ interface InflectionDailyRow {
   overall_score: number;
   se_score: number;
   vc_score: number;
-  be_score: number;
   rs_score: number;
-  la_score: number;
-  ip_score: number;
+  demand_score: number;
+  runner_score: number;
   stage: string;
   trade_read: string;
   extension_risk: boolean;
+  /** Pre-move tier: supply exhausted, compressed, real Runner Potential, not yet moving. */
+  is_coiled?: boolean;
   is_primary: boolean;
   is_stronger: boolean;
   bullish_evidence: string[];
@@ -52,9 +53,9 @@ interface DroppedTicker {
   prev_score: number;
 }
 
-type TradeReadFilter = "ALL" | "STARTER_POSITION_CANDIDATE" | "ADD_ON_CONFIRMATION" | "WATCH";
+type TradeReadFilter = "ALL" | "COILED" | "STARTER_POSITION_CANDIDATE" | "ADD_ON_CONFIRMATION" | "WATCH";
 type StageFilter = "ALL" | "INFLECTION" | "EARLY_ACCUMULATION" | "EXPANSION" | "SELLER_EXHAUSTION";
-type SortField = "overall_score" | "se_score" | "vc_score" | "be_score" | "rs_score" | "la_score" | "ip_score" | "stage" | "ticker" | "price" | "trade_read" | "sector" | "streak" | "delta";
+type SortField = "overall_score" | "se_score" | "demand_score" | "vc_score" | "runner_score" | "rs_score" | "stage" | "ticker" | "price" | "trade_read" | "sector" | "streak" | "delta";
 
 // ── Helpers ──
 
@@ -89,6 +90,7 @@ function tradeReadBadge(tr: string): { label: string; color: string } {
 function tradeReadLabel(tr: TradeReadFilter): string {
   switch (tr) {
     case "ALL": return "All";
+    case "COILED": return "Coiled";
     case "STARTER_POSITION_CANDIDATE": return "Starter";
     case "ADD_ON_CONFIRMATION": return "Add On";
     case "WATCH": return "Watch";
@@ -184,8 +186,8 @@ function MiniScoreBar({ score }: { score: number }) {
 function exportCSV(results: InflectionDailyRow[], date: string, streaks: Record<string, number>, deltas: Record<string, number>) {
   const headers = [
     "Ticker", "Company", "Sector", "Price", "Score", "Delta", "Streak",
-    "SE", "VC", "BE", "RS", "LA", "IP",
-    "Stage", "Trade Read", "Extension Risk", "Primary Signal", "Stronger Signal",
+    "SE", "Demand", "Compress", "Runner", "RS",
+    "Stage", "Trade Read", "Coiled", "Extension Risk", "Primary Signal", "Stronger Signal",
     "Invalidation", "Bullish Evidence", "Caution Evidence",
   ];
   const rows = results.map((r) => [
@@ -197,13 +199,13 @@ function exportCSV(results: InflectionDailyRow[], date: string, streaks: Record<
     deltas[r.ticker] ?? "",
     streaks[r.ticker] ?? 1,
     r.se_score,
+    r.demand_score,
     r.vc_score,
-    r.be_score,
+    r.runner_score,
     r.rs_score,
-    r.la_score,
-    r.ip_score,
     r.stage,
     r.trade_read,
+    r.is_coiled === true,
     r.extension_risk,
     r.is_primary,
     r.is_stronger,
@@ -478,7 +480,9 @@ export default function InflectionDailyPage() {
       rows = rows.filter((r) => highConvictionTickers.has(r.ticker));
     }
     if (tradeReadFilter !== "ALL") {
-      rows = rows.filter((r) => r.trade_read === tradeReadFilter);
+      rows = tradeReadFilter === "COILED"
+        ? rows.filter((r) => r.is_coiled === true)
+        : rows.filter((r) => r.trade_read === tradeReadFilter);
     }
     if (stageFilter !== "ALL") {
       rows = rows.filter((r) => r.stage === stageFilter);
@@ -754,7 +758,7 @@ export default function InflectionDailyPage() {
         {/* Trade Read filter */}
         <div className="flex items-center gap-1">
           <Filter className="h-3 w-3 text-[#555]" />
-          {(["ALL", "STARTER_POSITION_CANDIDATE", "ADD_ON_CONFIRMATION", "WATCH"] as TradeReadFilter[]).map((f) => (
+          {(["ALL", "COILED", "STARTER_POSITION_CANDIDATE", "ADD_ON_CONFIRMATION", "WATCH"] as TradeReadFilter[]).map((f) => (
             <button
               key={f}
               onClick={() => setTradeReadFilter(f)}
@@ -902,11 +906,10 @@ export default function InflectionDailyPage() {
                   <SortHeader field="delta" label="+/-" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="streak" label="Days" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="se_score" label="SE" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortHeader field="vc_score" label="VC" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortHeader field="be_score" label="BE" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="demand_score" label="Dmd" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="vc_score" label="Cmp" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="runner_score" label="Run" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="rs_score" label="RS" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortHeader field="la_score" label="LA" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortHeader field="ip_score" label="IP" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="stage" label="Stage" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="trade_read" label="Read" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666]">Flags</th>
@@ -1003,11 +1006,10 @@ export default function InflectionDailyPage() {
 
                         {/* Sub-scores */}
                         <td className="px-2 py-2"><MiniScoreBar score={row.se_score} /></td>
+                        <td className="px-2 py-2"><MiniScoreBar score={row.demand_score} /></td>
                         <td className="px-2 py-2"><MiniScoreBar score={row.vc_score} /></td>
-                        <td className="px-2 py-2"><MiniScoreBar score={row.be_score} /></td>
+                        <td className="px-2 py-2"><MiniScoreBar score={row.runner_score} /></td>
                         <td className="px-2 py-2"><MiniScoreBar score={row.rs_score} /></td>
-                        <td className="px-2 py-2"><MiniScoreBar score={row.la_score} /></td>
-                        <td className="px-2 py-2"><MiniScoreBar score={row.ip_score} /></td>
 
                         {/* Stage */}
                         <td className="px-2 py-2">
