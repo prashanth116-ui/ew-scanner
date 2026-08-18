@@ -362,8 +362,9 @@ function classifyStage(
 ): InflectionStage {
   const pctFromAth = data.pctFromAth ?? 100;
 
-  // Demand gates are anchored to the OBSERVED distribution of the V3 Demand Emergence
-  // component (median 22, p75 37), not to V2's Buyer Emergence, which ran ~20 points higher
+  // Demand gates are anchored to the OBSERVED distribution of the Demand Emergence
+  // component (median 34, p75 46 after the distance-to-trigger slot was added), not to
+  // V2's Buyer Emergence, which ran ~20 points higher
   // because it scored EMA reclaim and higher-low counts that most stocks satisfy. Carrying
   // the old gates forward made EARLY_ACCUMULATION reachable by 4% of the universe.
 
@@ -372,16 +373,16 @@ function classifyStage(
   if (pctFromAth < 6 && rs >= 55) return "EXPANSION";
 
   // EARLY_ACCUMULATION: demand clearly present
-  if (demand >= 32 && rs >= 35 && se >= 30) return "EARLY_ACCUMULATION";
+  if (demand >= 42 && rs >= 35 && se >= 30) return "EARLY_ACCUMULATION";
   // Alt path: strong demand compensates for weaker RS
-  if (demand >= 37 && se >= 35 && compression >= 25) return "EARLY_ACCUMULATION";
+  if (demand >= 47 && se >= 35 && compression >= 25) return "EARLY_ACCUMULATION";
 
   // INFLECTION: supply exhausted + compressed + demand starting
-  if (se >= 40 && compression >= 30 && demand >= 18) return "INFLECTION";
+  if (se >= 40 && compression >= 30 && demand >= 26) return "INFLECTION";
   // Alt path: strong exhaustion + emerging demand without full compression
-  if (se >= 50 && demand >= 23 && compression >= 15) return "INFLECTION";
+  if (se >= 50 && demand >= 31 && compression >= 15) return "INFLECTION";
   // Alt path: strong compression + decent exhaustion
-  if (compression >= 50 && se >= 35 && demand >= 13) return "INFLECTION";
+  if (compression >= 50 && se >= 35 && demand >= 21) return "INFLECTION";
 
   // SELLER_EXHAUSTION: selling pressure declining, demand not yet present
   if (se >= 35 && compression >= 15) return "SELLER_EXHAUSTION";

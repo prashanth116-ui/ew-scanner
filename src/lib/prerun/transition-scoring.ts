@@ -441,7 +441,8 @@ function scoreRSTrajectory(data: PreRunStockData): { score: number | null; evide
 // about where in the cycle it currently sits.
 
 // Demand gates are anchored to the OBSERVED distribution of the V3 Demand Emergence
-// component (median 26, p75 37), not to V2's Accumulation/Volume pair, which ran higher
+// component (median 35, p75 43 after the distance-to-trigger slot was added), not to
+// V2's Accumulation/Volume pair, which ran higher
 // because it scored accumulation days and raw volume ratios that most stocks satisfy.
 function classifyState(
   se: number,
@@ -468,14 +469,14 @@ function classifyState(
     structureBias === "bullish" &&
     rs >= 40 &&
     pctFromAth < 15 &&
-    demand >= 28
+    demand >= 36
   ) return "SUSTAINED_MARKUP";
 
   // STATE 8: EARLY_EXPANSION — breakout from compression with participation
   if (
     bosDetected &&
     compression >= 30 &&
-    demand >= 32 &&
+    demand >= 40 &&
     (data.closesNearRangeTop === true) &&
     rs >= 25
   ) return "EARLY_EXPANSION";
@@ -486,23 +487,23 @@ function classifyState(
   if (chochDetected && compression >= 40 && higherLowCount >= 2) return "COMPRESSION";
 
   // STATE 6: BULLISH_BOS — break of structure with demand behind it
-  if (bosDetected && higherLowCount >= 2 && demand >= 24) return "BULLISH_BOS";
+  if (bosDetected && higherLowCount >= 2 && demand >= 32) return "BULLISH_BOS";
 
   // STATE 5: HIGHER_LOW_FORMATION — higher low after ChoCH
   if (chochDetected && higherLowCount >= 2) return "HIGHER_LOW_FORMATION";
   // Alt: clear higher-low structure with demand, without an explicit ChoCH
-  if (higherLowCount >= 3 && demand >= 30 && structureBias === "bullish") return "HIGHER_LOW_FORMATION";
+  if (higherLowCount >= 3 && demand >= 38 && structureBias === "bullish") return "HIGHER_LOW_FORMATION";
 
   // STATE 4: BULLISH_CHOCH — change of character with supporting evidence
-  if (chochDetected && (demand >= 20 || se >= 30)) return "BULLISH_CHOCH";
+  if (chochDetected && (demand >= 28 || se >= 30)) return "BULLISH_CHOCH";
 
   // STATE 3: DEMAND_INCREASING — buyers stepping in
-  if (demand >= 32 && se >= 35) return "DEMAND_INCREASING";
-  if (demand >= 42) return "DEMAND_INCREASING";
+  if (demand >= 40 && se >= 35) return "DEMAND_INCREASING";
+  if (demand >= 50) return "DEMAND_INCREASING";
 
   // STATE 2: ACCUMULATION — range-bound with stealth buying
-  if (demand >= 24 && se >= 28) return "ACCUMULATION";
-  if (data.obvDivergent === true && se >= 28 && demand >= 18) return "ACCUMULATION";
+  if (demand >= 32 && se >= 28) return "ACCUMULATION";
+  if (data.obvDivergent === true && se >= 28 && demand >= 26) return "ACCUMULATION";
 
   // STATE 1: SELLING_EXHAUSTION — selling pressure declining
   if (se >= 40) return "SELLING_EXHAUSTION";
@@ -741,7 +742,7 @@ export function scoreTransitionWithStructure(
     stateNum >= 1 &&
     overallScore >= 45 + regimeGate.scorePenalty &&
     runnerScore >= 50 &&
-    demandScore >= 30 &&
+    demandScore >= 38 &&
     seScore >= 35 &&
     !extensionRisk;
 
