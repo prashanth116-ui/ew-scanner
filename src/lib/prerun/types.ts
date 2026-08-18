@@ -326,13 +326,12 @@ export type InflectionStage = "DISTRIBUTION" | "SELLER_EXHAUSTION" | "INFLECTION
 export type InflectionTradeRead = "AVOID" | "WATCH" | "STARTER_POSITION_CANDIDATE" | "ADD_ON_CONFIRMATION";
 
 export interface InflectionScores {
-  sellerExhaustion: number;           // 0-100
-  volatilityCompression: number;      // 0-100
-  buyerEmergence: number;             // 0-100
-  relativeStrength: number;           // 0-100
-  liquidityAuction: number;           // 0-100
-  institutionalParticipation: number; // 0-100
-  overallScore: number;               // 0-100 weighted composite
+  supplyExhaustion: number;   // 0-100: absorption, spring, range asymmetry, VP divergence, body contraction
+  demandEmergence: number;    // 0-100: close location, pocket pivots, RVOL trajectory, OBV divergence
+  compression: number;        // 0-100: ATR ratio, nested ranges, inside bars, tight closes
+  runnerPotential: number;    // 0-100: overhead supply, ATR%, base energy, float rotation, insider buys
+  rsTrajectory: number;       // 0-100: RS acceleration + acceleration trend
+  overallScore: number;       // 0-100: 25/25/15/25/10 weighted composite
 }
 
 export interface InflectionGates {
@@ -398,15 +397,13 @@ export type TransitionAlertState =
   | "INVALIDATED"; // Price breaks below invalidation level
 
 export interface TransitionScores {
-  sellerExhaustion: number;      // 0-100: Down-volume decline, RSI recovery, candle shrinking
-  accumulationQuality: number;   // 0-100: OBV divergence, volume dry-up, range formation
-  chochConfirmation: number;     // 0-100: Swing high break quality, volume on break, follow-through
-  bosConfirmation: number;       // 0-100: Higher-low + swing high break, structural confirmation
-  compressionQuality: number;    // 0-100: ATR contraction, range nesting, tight closes
-  higherLowQuality: number;      // 0-100: HL count, depth quality, hold duration
-  rsTrajectory: number;          // 0-100: RS acceleration, improving vs absolute
-  volumeProfile: number;         // 0-100: Accum/distrib ratio, OBV slope, money flow
-  overallScore: number;          // 0-100: Weighted composite of above 8 components
+  structure: number;          // 0-100: ChoCH + BOS merged, holding flags, recency, higher-high follow-through
+  supplyExhaustion: number;   // 0-100: absorption, spring, range asymmetry, VP divergence
+  demandEmergence: number;    // 0-100: close location, pocket pivots, RVOL trajectory, OBV, money flow
+  compression: number;        // 0-100: ATR contraction, tight closes, inside bars, closes near range top
+  runnerPotential: number;    // 0-100: overhead supply, ATR%, base energy, float rotation, insider buys
+  rsTrajectory: number;       // 0-100: RS acceleration + acceleration trend
+  overallScore: number;       // 0-100: 25/15/20/10/20/10 weighted; structure weight redistributed pre-break
 }
 
 export interface TransitionResult {

@@ -467,12 +467,20 @@ export interface InflectionDailyRecord {
   sector: string;
   price: number;
   overall_score: number;
+  /** V3 Supply Exhaustion (was Seller Exhaustion) */
   se_score: number;
+  /** V3 Compression (column retained from Volatility Compression) */
   vc_score: number;
-  be_score: number;
+  /** V3 RS Trajectory */
   rs_score: number;
-  la_score: number;
-  ip_score: number;
+  /** V3 Demand Emergence — replaces be_score */
+  demand_score?: number;
+  /** V3 Runner Potential — new dimension, no V2 equivalent */
+  runner_score?: number;
+  /** Legacy V2 columns, no longer written (DB default 0): be_score, la_score, ip_score */
+  be_score?: number;
+  la_score?: number;
+  ip_score?: number;
   stage: string;
   trade_read: string;
   extension_risk: boolean;
@@ -1842,14 +1850,24 @@ export interface TransitionDailyRecord {
   sector: string;
   price: number;
   overall_score: number;
+  /** V3 Supply Exhaustion */
   se_score: number;
-  accum_score: number;
-  choch_score: number;
-  bos_score: number;
+  /** V3 Compression */
   compression_score: number;
-  hl_score: number;
+  /** V3 RS Trajectory */
   rs_score: number;
-  volume_score: number;
+  /** V3 Structure — ChoCH + BOS merged */
+  structure_score?: number;
+  /** V3 Demand Emergence — replaces accum_score + volume_score */
+  demand_score?: number;
+  /** V3 Runner Potential — new dimension, no V2 equivalent */
+  runner_score?: number;
+  /** Legacy V2 columns, no longer written (DB default 0) */
+  accum_score?: number;
+  choch_score?: number;
+  bos_score?: number;
+  hl_score?: number;
+  volume_score?: number;
   state: string;
   alert_state: string;
   trigger_level: number | null;

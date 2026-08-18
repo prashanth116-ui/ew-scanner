@@ -42,12 +42,11 @@ export interface BacktestSignal {
   date: string;
   price: number;
   overallScore: number;
-  sellerExhaustion: number;
-  volatilityCompression: number;
-  buyerEmergence: number;
-  relativeStrength: number;
-  liquidityAuction: number;
-  institutionalParticipation: number;
+  supplyExhaustion: number;
+  demandEmergence: number;
+  compression: number;
+  runnerPotential: number;
+  rsTrajectory: number;
   stage: string;
   tradeRead: string;
   isPrimarySignal: boolean;
@@ -235,12 +234,11 @@ export async function POST(req: NextRequest) {
             date,
             price: data.currentPrice ?? 0,
             overallScore: result.scores.overallScore,
-            sellerExhaustion: result.scores.sellerExhaustion,
-            volatilityCompression: result.scores.volatilityCompression,
-            buyerEmergence: result.scores.buyerEmergence,
-            relativeStrength: result.scores.relativeStrength,
-            liquidityAuction: result.scores.liquidityAuction,
-            institutionalParticipation: result.scores.institutionalParticipation,
+            supplyExhaustion: result.scores.supplyExhaustion,
+            demandEmergence: result.scores.demandEmergence,
+            compression: result.scores.compression,
+            runnerPotential: result.scores.runnerPotential,
+            rsTrajectory: result.scores.rsTrajectory,
             stage: result.stage,
             tradeRead: result.tradeRead,
             isPrimarySignal: result.isPrimarySignal,

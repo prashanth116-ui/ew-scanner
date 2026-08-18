@@ -1,17 +1,30 @@
 /**
- * Transition Scanner scoring module.
+ * Transition Scanner scoring module — V3.
  *
- * Detects market structure transitions from accumulation into early markup.
+ * Answers whether market structure has flipped from accumulation into early markup.
  * 11-state model: MARKDOWN → SELLING_EXHAUSTION → ACCUMULATION → DEMAND_INCREASING
  * → BULLISH_CHOCH → HIGHER_LOW_FORMATION → BULLISH_BOS → COMPRESSION
  * → EARLY_EXPANSION → SUSTAINED_MARKUP → EXTENDED.
  *
- * 8 scoring components (weighted to 100):
- *   SE (10%) + Accumulation (15%) + ChoCH (15%) + BOS (10%)
- *   + Compression (10%) + HL Quality (10%) + RS Trajectory (10%) + Volume Profile (20%)
+ * Six components (weighted to 100):
+ *   Structure 25% · Supply Exhaustion 15% · Demand Emergence 20%
+ *   Compression 10% · Runner Potential 20% · RS Trajectory 10%
  *
- * Reuses fetchPreRunData() and existing utilities from data.ts.
- * Zero changes to inflection-scoring.ts.
+ * V3 changes:
+ *   - ChoCH and BOS merged into one Structure component. They are sequential states of a
+ *     single axis, not two independent measures, and scoring them separately let one
+ *     structural event be paid for twice.
+ *   - Structure slots become hasData:false when no break has printed AND the state is
+ *     early. Previously a stock at the moment of maximum opportunity — exhaustion done,
+ *     demand emerging, structure about to flip — was charged a zero across 25% of the
+ *     composite for an event that had not happened yet, and could never rank highly.
+ *     A detected-but-failed break is still scored: that is real negative evidence.
+ *   - Lagging inputs removed: RSI, EMA reclaim, absolute RS levels, higher-low counts.
+ *     Replaced by order-flow primitives shared with the Inflection engine.
+ *   - Runner Potential added — how far the move can actually go.
+ *
+ * Unchanged: the 11-state ladder, the 5 alert states, the forward trigger level and
+ * break-confirmation logic.
  *
  * SERVER-ONLY: Used by /api/transition/* routes.
  */
@@ -33,23 +46,9 @@ import {
   computeInvalidationLevel,
   evaluateBreakConfirmation,
 } from "./market-structure";
-
-// ── Utility ──
-
-interface ScoreSlot {
-  earned: number;
-  possible: number;
-  hasData: boolean;
-}
-
-function nullNeutralScore(slots: ScoreSlot[]): number {
-  const withData = slots.filter((s) => s.hasData);
-  if (withData.length === 0) return 0;
-  const totalEarned = withData.reduce((sum, s) => sum + s.earned, 0);
-  const totalPossible = withData.reduce((sum, s) => sum + s.possible, 0);
-  if (totalPossible === 0) return 0;
-  return Math.round((totalEarned / totalPossible) * 100);
-}
+import { nullNeutralScore, type ScoreSlot } from "./score-slot";
+import { scoreRunnerPotential } from "./runner-potential";
+import { NEUTRAL_GATE, type RegimeGate } from "./regime-gate";
 
 // ── Gates (same as Inflection — reuse type) ──
 
@@ -62,248 +61,75 @@ function evaluateGates(data: PreRunStockData): InflectionGates {
   return { priceAbove5, avgDollarVolAbove10m, mktCapAbove500m, allPass };
 }
 
-// ── 1. Seller Exhaustion (0-100, weight 10%) ──
-// Detects declining selling pressure: down-volume shrinking, RSI recovery, candle body contraction.
+// ── 1. Structure (0-100, weight 25%) ──
+//
+// ChoCH and BOS merged. Slots drop out entirely when no break has printed and the stock is
+// still in an early state — the pre-structure fix. Present-but-failed breaks stay scored.
 
-function scoreSellerExhaustion(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
-  const evidence: string[] = [];
-  const caution: string[] = [];
-  const slots: ScoreSlot[] = [];
-
-  // 1a. Down-vol declining (0-25)
-  const avgUp = data.avgVolumeUpDays;
-  const avgDown = data.avgVolumeDownDays;
-  if (avgUp !== null && avgDown !== null) {
-    const volRatio = avgDown > 0 ? avgUp / avgDown : 1;
-    let earned = 0;
-    if (volRatio >= 1.5) { earned = 25; evidence.push("Down-volume declining sharply"); }
-    else if (volRatio >= 1.2) { earned = 18; evidence.push("Down-volume declining"); }
-    else if (volRatio >= 1.0) { earned = 10; }
-    else { caution.push("Selling volume still dominant"); }
-    slots.push({ earned, possible: 25, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 1b. RSI positioning (0-25)
-  const rsi = data.rsi14;
-  if (rsi !== null) {
-    let earned = 0;
-    if (rsi >= 30 && rsi <= 40) { earned = 25; evidence.push(`RSI recovering from oversold (${rsi.toFixed(0)})`); }
-    else if (rsi > 40 && rsi <= 50) { earned = 22; evidence.push(`RSI in pullback zone (${rsi.toFixed(0)})`); }
-    else if (rsi > 50 && rsi <= 55) { earned = 16; }
-    else if (rsi >= 25 && rsi < 30) { earned = 18; evidence.push("RSI deeply oversold — reversal zone"); }
-    else if (rsi > 55 && rsi <= 65) { earned = 8; }
-    else if (rsi > 65) { earned = 3; caution.push(`RSI elevated (${rsi.toFixed(0)})`); }
-    else { earned = 6; }
-    slots.push({ earned, possible: 25, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 1c. VP divergence (0-25)
-  if (data.vpDivergenceBullish !== null) {
-    slots.push({
-      earned: data.vpDivergenceBullish ? 25 : 0,
-      possible: 25,
-      hasData: true,
-    });
-    if (data.vpDivergenceBullish) evidence.push("Volume-price divergence: selling drying up");
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 1d. Down-day bodies shrinking (0-25)
-  if (data.avgDownDayBody !== null && data.avgDownDayBodyPrev !== null && data.avgDownDayBodyPrev > 0) {
-    const ratio = data.avgDownDayBody / data.avgDownDayBodyPrev;
-    let earned = 0;
-    if (ratio <= 0.5) { earned = 25; evidence.push("Down-day bodies shrinking significantly"); }
-    else if (ratio <= 0.7) { earned = 18; evidence.push("Down-day candles getting smaller"); }
-    else if (ratio <= 0.9) { earned = 8; }
-    else { caution.push("Down-day bodies not shrinking"); }
-    slots.push({ earned, possible: 25, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  return { score: nullNeutralScore(slots), evidence, caution };
-}
-
-// ── 2. Accumulation Quality (0-100, weight 15%) ──
-// Detects institutional accumulation: OBV divergence, volume drying up, range formation.
-
-function scoreAccumulationQuality(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
-  const evidence: string[] = [];
-  const caution: string[] = [];
-  const slots: ScoreSlot[] = [];
-
-  // 2a. OBV divergence (0-30) — OBV near highs while price is not
-  if (data.obvDivergent !== null) {
-    slots.push({
-      earned: data.obvDivergent ? 30 : 0,
-      possible: 30,
-      hasData: true,
-    });
-    if (data.obvDivergent) evidence.push("OBV near highs while price trails — stealth accumulation");
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 2b. Accumulation days vs distribution days (0-30)
-  const accumDays = data.accumulationDayCount;
-  const distDays = data.distributionDays20d;
-  if (accumDays !== null && distDays !== null) {
-    const netAccum = accumDays - distDays;
-    let earned = 0;
-    if (netAccum >= 5) { earned = 30; evidence.push(`Strong accumulation (${accumDays} accum vs ${distDays} distrib days)`); }
-    else if (netAccum >= 3) { earned = 22; evidence.push(`Net accumulation (${accumDays} accum vs ${distDays} distrib)`); }
-    else if (netAccum >= 1) { earned = 14; }
-    else if (netAccum <= -3) { caution.push(`Distribution dominant (${distDays} distrib days)`); }
-    slots.push({ earned, possible: 30, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 2c. Dry volume days (0-20) — VCP data reused
-  if (data.vcpDryVolumeDays !== null) {
-    const dryDays = data.vcpDryVolumeDays;
-    let earned = 0;
-    if (dryDays >= 5) { earned = 20; evidence.push(`${dryDays} dry volume days — supply absorbed`); }
-    else if (dryDays >= 3) { earned = 14; evidence.push(`${dryDays} dry volume days`); }
-    else if (dryDays >= 1) { earned = 6; }
-    slots.push({ earned, possible: 20, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 2d. Failed breakdown recovery (0-20)
-  if (data.failedBreakdownRecovery !== null) {
-    const fbd = data.failedBreakdownRecovery;
-    let earned = 0;
-    if (fbd >= 2) { earned = 20; evidence.push("Failed breakdown + recovery — bears trapped"); }
-    else if (fbd >= 1) { earned = 12; evidence.push("Wick test of support — holding"); }
-    slots.push({ earned, possible: 20, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  return { score: nullNeutralScore(slots), evidence, caution };
-}
-
-// ── 3. ChoCH Confirmation (0-100, weight 15%) ──
-// Scores the quality of a bullish Change of Character signal.
-
-function scoreChochConfirmation(
-  data: PreRunStockData,
+function scoreStructure(
   chochDetected: boolean,
-  chochBarsAgo: number | null,
   chochHolding: boolean,
+  chochBarsAgo: number | null,
+  bosDetected: boolean,
+  bosHolding: boolean,
+  bosBarsAgo: number | null,
+  higherHighCount: number,
+  structureHasPrinted: boolean,
 ): { score: number; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
 
-  // 3a. ChoCH detected (0-40) — heavily discounted when the break has since failed.
-  // A break that price fell back through is weak evidence, not equal evidence.
-  slots.push({
-    earned: chochDetected ? (chochHolding ? 40 : 12) : 0,
-    possible: 40,
-    hasData: true,
-  });
-  if (chochDetected && chochHolding) {
-    evidence.push("Bullish ChoCH — price broke above recent swing high and is holding it");
-  } else if (chochDetected) {
-    caution.push("ChoCH failed — price has fallen back below the level it broke");
-  } else {
-    caution.push("No Change of Character detected");
-  }
-
-  // 3b. Recency of ChoCH (0-30) — more recent = stronger signal
-  if (chochDetected && chochBarsAgo !== null) {
-    let earned = 0;
-    if (chochBarsAgo <= 5) { earned = 30; evidence.push(`ChoCH occurred ${chochBarsAgo} bars ago — very recent`); }
-    else if (chochBarsAgo <= 10) { earned = 22; }
-    else if (chochBarsAgo <= 20) { earned = 14; }
-    else { earned = 6; caution.push(`ChoCH occurred ${chochBarsAgo} bars ago — aging signal`); }
-    slots.push({ earned, possible: 30, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: !chochDetected });
-  }
-
-  // 3c. EMA reclaim around ChoCH (0-30) — structural confirmation
-  if (data.aboveEma21 !== null || data.aboveEma50 !== null) {
-    let earned = 0;
-    const above21 = data.aboveEma21 === true;
-    const above50 = data.aboveEma50 === true;
-    if (above21 && above50) { earned = 30; evidence.push("Price above EMA21 + EMA50 — trend confirmed"); }
-    else if (above21) { earned = 18; evidence.push("Price above EMA21"); }
-    else if (above50) { earned = 12; }
-    else { caution.push("Below both EMAs — ChoCH not yet confirmed by trend"); }
-    slots.push({ earned, possible: 30, hasData: true });
+  // 1a. Change of character (0-40)
+  if (structureHasPrinted) {
+    slots.push({
+      earned: chochDetected ? (chochHolding ? 40 : 12) : 0,
+      possible: 40,
+      hasData: true,
+    });
+    if (chochDetected && chochHolding) evidence.push("Bullish ChoCH — broke above the recent swing high and is holding it");
+    else if (chochDetected) caution.push("ChoCH failed — price has fallen back below the level it broke");
+    else caution.push("No change of character detected");
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), evidence, caution };
-}
-
-// ── 4. BOS Confirmation (0-100, weight 10%) ──
-// Scores the quality of a bullish Break of Structure signal.
-
-function scoreBosConfirmation(
-  data: PreRunStockData,
-  bosDetected: boolean,
-  bosBarsAgo: number | null,
-  chochDetected: boolean,
-  bosHolding: boolean,
-  higherHighCount: number,
-): { score: number; evidence: string[]; caution: string[] } {
-  const evidence: string[] = [];
-  const caution: string[] = [];
-  const slots: ScoreSlot[] = [];
-
-  // 4a. BOS detected (0-40) — discounted when the break has since failed
-  slots.push({
-    earned: bosDetected ? (bosHolding ? 40 : 12) : 0,
-    possible: 40,
-    hasData: true,
-  });
-  if (bosDetected && bosHolding) {
-    evidence.push("Bullish BOS — higher low confirmed + broke prior swing high, still holding");
-  } else if (bosDetected) {
-    caution.push("BOS failed — price has fallen back below the level it broke");
-  } else if (chochDetected) {
-    caution.push("ChoCH detected but BOS not yet confirmed");
-  }
-
-  // 4b. Recency of BOS (0-30)
-  if (bosDetected && bosBarsAgo !== null) {
-    let earned = 0;
-    if (bosBarsAgo <= 5) { earned = 30; evidence.push(`BOS confirmed ${bosBarsAgo} bars ago`); }
-    else if (bosBarsAgo <= 10) { earned = 22; }
-    else if (bosBarsAgo <= 20) { earned = 14; }
-    else { earned = 6; }
-    slots.push({ earned, possible: 30, hasData: true });
+  // 1b. Break of structure (0-35)
+  if (structureHasPrinted) {
+    slots.push({
+      earned: bosDetected ? (bosHolding ? 35 : 10) : 0,
+      possible: 35,
+      hasData: true,
+    });
+    if (bosDetected && bosHolding) evidence.push("Bullish BOS — higher low confirmed and prior swing high taken, still holding");
+    else if (bosDetected) caution.push("BOS failed — price has fallen back below the level it broke");
+    else if (chochDetected) caution.push("ChoCH detected but BOS not yet confirmed");
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: !bosDetected });
+    slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 4c. Higher high follow-through (0-30) — did the break produce new structure?
-  //
-  // Replaces emaCrossoverWithin20d, which is set true whenever price is above both EMAs
-  // and dipped below *either* one in the last 20 bars — a routine pullback, not the
-  // "trend shift" it was scored as. Higher-high count comes from the same swing analysis
-  // that produced the BOS and was computed but never scored anywhere.
-  // countHigherHighs looks at the last 4 swing highs, not specifically those after the
-  // break index, so this reads as "the swing structure is making higher highs" rather
-  // than strictly "since the BOS". Scored only when a BOS exists, which is what ties
-  // the two together.
+  // 1c. Recency of the most recent break (0-25) — a fresh flip beats an aging one
+  const barsAgo = bosDetected ? bosBarsAgo : chochBarsAgo;
+  if ((bosDetected || chochDetected) && barsAgo !== null) {
+    let earned = 0;
+    if (barsAgo <= 5) { earned = 25; evidence.push(`Structure flipped ${barsAgo} bars ago — fresh`); }
+    else if (barsAgo <= 10) { earned = 18; }
+    else if (barsAgo <= 20) { earned = 10; }
+    else { earned = 4; caution.push(`Structural break was ${barsAgo} bars ago — aging`); }
+    slots.push({ earned, possible: 25, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  // 1d. Higher-high follow-through (0-20) — only meaningful once a BOS exists.
+  // countHigherHighs reads the last 4 swing highs rather than only those after the break,
+  // so this reads as "recent structure is making higher highs", gated on a BOS existing.
   if (bosDetected) {
     let earned = 0;
-    if (higherHighCount >= 2) { earned = 30; evidence.push(`BOS with ${higherHighCount} higher highs in recent structure — trend extending`); }
-    else if (higherHighCount >= 1) { earned = 18; evidence.push("BOS with a higher high in recent structure"); }
+    if (higherHighCount >= 2) { earned = 20; evidence.push(`BOS with ${higherHighCount} higher highs in recent structure — trend extending`); }
+    else if (higherHighCount >= 1) { earned = 12; evidence.push("BOS with a higher high in recent structure"); }
     else { caution.push("BOS with no higher highs in recent structure"); }
-    slots.push({ earned, possible: 30, hasData: true });
+    slots.push({ earned, possible: 20, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -311,15 +137,146 @@ function scoreBosConfirmation(
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
-// ── 5. Compression Quality (0-100, weight 10%) ──
-// Detects volatility contraction before breakout.
+// ── 2. Supply Exhaustion (0-100, weight 15%) ──
+//
+// Identical primitives to the Inflection engine, so "supply is finished" means one thing
+// across the system. RSI is gone.
+
+function scoreSupplyExhaustion(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
+  const evidence: string[] = [];
+  const caution: string[] = [];
+  const slots: ScoreSlot[] = [];
+
+  // 2a. Absorption (0-30)
+  if (data.absorption !== null) {
+    const a = data.absorption;
+    let earned = 0;
+    if (a >= 0.4) { earned = 30; evidence.push(`${(a * 100).toFixed(0)}% of down bars absorbed — supply is being taken`); }
+    else if (a >= 0.25) { earned = 23; evidence.push(`${(a * 100).toFixed(0)}% of down bars absorbed`); }
+    else if (a >= 0.12) { earned = 13; }
+    else { caution.push("Selling is meeting no absorption"); }
+    slots.push({ earned, possible: 30, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  // 2b. Structural spring (0-25)
+  if (data.structuralSpring !== null) {
+    const s = data.structuralSpring;
+    let earned = 0;
+    if (s >= 2) { earned = 25; evidence.push("Spring — undercut of structure on volume, reclaimed and held"); }
+    else if (s >= 1) { earned = 15; evidence.push("Shakeout below structure, reclaimed"); }
+    slots.push({ earned, possible: 25, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  // 2c. Range asymmetry (0-25)
+  if (data.rangeAsymmetry !== null) {
+    const r = data.rangeAsymmetry;
+    let earned = 0;
+    if (r >= 1.5) { earned = 25; evidence.push("Up bars far wider than down bars — supply drying up"); }
+    else if (r >= 1.15) { earned = 18; evidence.push("Up bars wider than down bars"); }
+    else if (r >= 0.95) { earned = 9; }
+    else { caution.push("Down bars still producing more range than up bars"); }
+    slots.push({ earned, possible: 25, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  // 2d. Volume-price divergence (0-20) — null when no recent lower low exists
+  if (data.vpDivergenceBullish !== null) {
+    slots.push({ earned: data.vpDivergenceBullish ? 20 : 0, possible: 20, hasData: true });
+    if (data.vpDivergenceBullish) evidence.push("Volume-price divergence: selling into lows is drying up");
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  return { score: nullNeutralScore(slots), evidence, caution };
+}
+
+// ── 3. Demand Emergence (0-100, weight 20%) ──
+//
+// Replaces the V2 Accumulation Quality and Volume Profile components, which between them
+// scored OBV divergence twice and mixed two incompatible definitions of an "up day".
+
+function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
+  const evidence: string[] = [];
+  const caution: string[] = [];
+  const slots: ScoreSlot[] = [];
+
+  // 3a. Close-location persistence (0-25)
+  const clv = data.closeLocationMean;
+  if (clv !== null) {
+    const flat = data.closeLocationFlat === true;
+    let earned = 0;
+    if (clv >= 0.65 && flat) { earned = 25; evidence.push("Closing near the highs while price goes nowhere — accumulation footprint"); }
+    else if (clv >= 0.65) { earned = 19; evidence.push("Consistently closing in the upper part of the range"); }
+    else if (clv >= 0.55) { earned = 13; }
+    else if (clv >= 0.45) { earned = 6; }
+    else { caution.push("Closing in the lower half of the daily range"); }
+    slots.push({ earned, possible: 25, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  // 3b. Pocket pivots (0-25)
+  if (data.pocketPivots !== null) {
+    const p = data.pocketPivots;
+    let earned = 0;
+    if (p >= 3) { earned = 25; evidence.push(`${p} pocket pivots — repeated institutional footprints`); }
+    else if (p >= 2) { earned = 19; evidence.push(`${p} pocket pivots`); }
+    else if (p >= 1) { earned = 12; evidence.push("Pocket pivot — up volume exceeded every recent down day"); }
+    else { caution.push("No pocket pivots — demand has not outweighed supply"); }
+    slots.push({ earned, possible: 25, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  // 3c. RVOL trajectory (0-20)
+  if (data.rvolTrajectory !== null) {
+    const t = data.rvolTrajectory;
+    let earned = 0;
+    if (t >= 0.15) { earned = 20; evidence.push("Relative volume building sharply"); }
+    else if (t >= 0.05) { earned = 15; evidence.push("Relative volume building"); }
+    else if (t >= 0) { earned = 8; }
+    else { caution.push("Participation fading"); }
+    slots.push({ earned, possible: 20, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  // 3d. OBV divergence (0-15) — scored once, here only
+  if (data.obvDivergent !== null) {
+    slots.push({ earned: data.obvDivergent ? 15 : 0, possible: 15, hasData: true });
+    if (data.obvDivergent) evidence.push("OBV near the top of its range while price is not — stealth buying");
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  // 3e. Money-flow persistence (0-15)
+  if (data.moneyFlowPersistence !== null) {
+    const mfp = data.moneyFlowPersistence;
+    let earned = 0;
+    if (mfp >= 12) { earned = 15; evidence.push("Sustained money flow"); }
+    else if (mfp >= 8) { earned = 11; }
+    else if (mfp >= 5) { earned = 6; }
+    slots.push({ earned, possible: 15, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  return { score: nullNeutralScore(slots), evidence, caution };
+}
+
+// ── 4. Compression (0-100, weight 10%) ──
 
 function scoreCompressionQuality(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
 
-  // 5a. ATR ratio 5/20 (0-30)
+  // 4a. ATR ratio 5/20 (0-30)
   const atrRatio = data.atrRatio5v20;
   if (atrRatio !== null) {
     let earned = 0;
@@ -332,19 +289,15 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number; eviden
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 5b. Tight closes (0-20)
+  // 4b. Tight closes (0-20)
   if (data.vcpTightCloses !== null) {
-    slots.push({
-      earned: data.vcpTightCloses ? 20 : 0,
-      possible: 20,
-      hasData: true,
-    });
+    slots.push({ earned: data.vcpTightCloses ? 20 : 0, possible: 20, hasData: true });
     if (data.vcpTightCloses) evidence.push("Tight daily closes — low volatility");
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 5c. Inside bars (0-25)
+  // 4c. Inside bars (0-25)
   if (data.vcpInsideBarCount !== null) {
     const ibc = data.vcpInsideBarCount;
     let earned = 0;
@@ -356,13 +309,9 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number; eviden
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 5d. Closes near range top (0-25)
+  // 4d. Closes near range top (0-25)
   if (data.closesNearRangeTop !== null) {
-    slots.push({
-      earned: data.closesNearRangeTop ? 25 : 0,
-      possible: 25,
-      hasData: true,
-    });
+    slots.push({ earned: data.closesNearRangeTop ? 25 : 0, possible: 25, hasData: true });
     if (data.closesNearRangeTop) evidence.push("Closes near range top — buyers in control");
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
@@ -371,194 +320,49 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number; eviden
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
-// ── 6. Higher Low Quality (0-100, weight 10%) ──
-// Scores the quality and count of higher lows — key structural confirmation.
-
-function scoreHigherLowQuality(
-  data: PreRunStockData,
-  structureHLCount: number,
-  invalidationLevel: number | null,
-): { score: number; evidence: string[]; caution: string[] } {
-  const evidence: string[] = [];
-  const caution: string[] = [];
-  const slots: ScoreSlot[] = [];
-
-  // 6a. Higher low count from market structure analysis (0-40)
-  //
-  // This is the component's only count of higher lows. It previously also scored
-  // data.higherLowsCount — the same structural feature measured with 2-bar pivots
-  // instead of 3-bar — and an EMA reclaim test identical to ChoCH 3c, so a single
-  // bullish structure was paid for up to four times across two components.
-  {
-    let earned = 0;
-    if (structureHLCount >= 3) { earned = 40; evidence.push(`${structureHLCount} higher lows — strong bullish structure`); }
-    else if (structureHLCount >= 2) { earned = 30; evidence.push(`${structureHLCount} higher lows`); }
-    else if (structureHLCount >= 1) { earned = 18; evidence.push("1 higher low forming"); }
-    else { caution.push("No higher lows detected"); }
-    slots.push({ earned, possible: 40, hasData: true });
-  }
-
-  // 6b. Structural risk distance (0-40) — how tight is the structure the higher low defines?
-  //
-  // Replaces the two duplicate slots with something the model did not measure anywhere:
-  // the distance from price down to the invalidation level, in ATR units. A higher low
-  // 2 ATR below price is a tradeable structure; the same higher low 15 ATR below price
-  // is a statistic. This is what separates a good HL from a merely present one.
-  const atrPct = data.vcpAtrPct;
-  const price = data.currentPrice;
-  if (invalidationLevel !== null && atrPct !== null && atrPct > 0 && price !== null && price > 0) {
-    const riskPct = ((price - invalidationLevel) / price) * 100;
-    const riskAtr = riskPct / atrPct;
-    let earned = 0;
-    if (riskAtr <= 0) { earned = 0; caution.push("Price is at or below the invalidation level"); }
-    else if (riskAtr <= 4) { earned = 40; evidence.push(`Tight structure — invalidation ${riskAtr.toFixed(1)} ATR below price`); }
-    else if (riskAtr <= 7) { earned = 25; evidence.push(`Invalidation ${riskAtr.toFixed(1)} ATR below price`); }
-    else if (riskAtr <= 12) { earned = 12; }
-    else { earned = 4; caution.push("Invalidation level far below price — loose structure"); }
-    slots.push({ earned, possible: 40, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  return { score: nullNeutralScore(slots), evidence, caution };
-}
-
-// ── 7. RS Trajectory (0-100, weight 10%) ──
-// Uses trajectory (acceleration/trend) as primary, absolute level as secondary.
+// ── 5. RS Trajectory (0-100, weight 10%) ──
+//
+// Acceleration only. The absolute RS slots are gone: one of them read a sector-relative
+// field while claiming to be benchmark-relative, and both described the past 20 days.
 
 function scoreRSTrajectory(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
 
-  // 7a. RS acceleration vs SPY (0-35)
   const rsAccel = data.instRsAccelVsSPY;
+  const rsAccelTrend = data.instRsAccelTrend;
+
+  // 5a. RS acceleration vs SPY (0-60)
   if (rsAccel !== null) {
     let earned = 0;
-    if (rsAccel >= 5) { earned = 35; evidence.push(`RS accelerating strongly vs SPY (+${rsAccel.toFixed(1)})`); }
-    else if (rsAccel >= 3) { earned = 28; evidence.push(`RS improving vs SPY (+${rsAccel.toFixed(1)})`); }
-    else if (rsAccel >= 1) { earned = 22; }
-    else if (rsAccel >= -1) { earned = 14; }
-    // Key insight: slightly negative but improving trajectory = early inflection
-    else if (rsAccel >= -3 && (data.instRsAccelTrend ?? 0) > 0) {
-      earned = 18;
-      evidence.push("RS trajectory improving despite negative absolute");
-    }
-    else { earned = 0; caution.push("RS weakening vs SPY"); }
-    slots.push({ earned, possible: 35, hasData: true });
+    if (rsAccel >= 5) { earned = 60; evidence.push(`RS accelerating strongly vs SPY (+${rsAccel.toFixed(1)})`); }
+    else if (rsAccel >= 3) { earned = 48; evidence.push(`RS improving vs SPY (+${rsAccel.toFixed(1)})`); }
+    else if (rsAccel >= 1) { earned = 38; }
+    else if (rsAccel >= -1) { earned = 24; }
+    else if (rsAccel >= -3 && (rsAccelTrend ?? 0) > 0) {
+      earned = 30; evidence.push("RS trajectory improving despite a negative absolute reading");
+    } else { caution.push("RS weakening vs SPY"); }
+    slots.push({ earned, possible: 60, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  // 7b. RS vs SPY absolute (0-20) — benchmark-relative.
-  // Reads vcpRelStrengthVsSPY, the actual SPY-relative field. This slot previously read
-  // relativeStrength20d, which is sector-relative, so the component measured peer strength
-  // twice and never looked at the benchmark at all.
-  const rsSpy = data.vcpRelStrengthVsSPY;
-  if (rsSpy !== null) {
-    let earned = 0;
-    if (rsSpy >= 10) { earned = 20; evidence.push(`Outperforming SPY by ${rsSpy.toFixed(1)}pp`); }
-    else if (rsSpy >= 5) { earned = 15; }
-    else if (rsSpy >= 0) { earned = 10; }
-    else if (rsSpy >= -5) { earned = 5; }
-    else { caution.push(`Underperforming SPY by ${Math.abs(rsSpy).toFixed(1)}pp`); }
-    slots.push({ earned, possible: 20, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 7c. RS vs sector (0-20) — peer-relative.
-  // No fallback to relativeStrength20d: falling back to another field in the component
-  // is what let one number fill two slots. Absent data excludes the slot instead.
-  const rsSector = data.rs5dVsSector;
-  if (rsSector !== null) {
-    let earned = 0;
-    if (rsSector >= 8) { earned = 20; evidence.push("Outperforming sector significantly"); }
-    else if (rsSector >= 3) { earned = 14; }
-    else if (rsSector >= 0) { earned = 8; }
-    slots.push({ earned, possible: 20, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 7d. RS acceleration trend (0-25) — is acceleration itself increasing?
-  const rsAccelTrend = data.instRsAccelTrend;
+  // 5b. Acceleration trend (0-40)
   if (rsAccelTrend !== null) {
     let earned = 0;
-    if (rsAccelTrend > 2) { earned = 25; evidence.push("RS acceleration increasing — momentum building"); }
-    else if (rsAccelTrend > 0) { earned = 18; }
+    if (rsAccelTrend > 2) { earned = 40; evidence.push("RS acceleration increasing — momentum building"); }
+    else if (rsAccelTrend > 0.5) { earned = 30; }
+    else if (rsAccelTrend > 0) { earned = 20; }
     else if (rsAccelTrend > -1) { earned = 8; }
     else { caution.push("RS momentum fading"); }
-    slots.push({ earned, possible: 25, hasData: true });
+    slots.push({ earned, possible: 40, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
   return { score: nullNeutralScore(slots), evidence, caution };
 }
-
-// ── 8. Volume Profile (0-100, weight 20%) ──
-// Comprehensive volume analysis: accum/distrib ratio, OBV slope, money flow.
-
-function scoreVolumeProfile(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
-  const evidence: string[] = [];
-  const caution: string[] = [];
-  const slots: ScoreSlot[] = [];
-
-  // 8a. Up/down volume ratio (0-25)
-  const avgUp = data.avgVolumeUpDays;
-  const avgDown = data.avgVolumeDownDays;
-  if (avgUp !== null && avgDown !== null) {
-    const ratio = avgDown > 0 ? avgUp / avgDown : 1;
-    let earned = 0;
-    if (ratio >= 1.8) { earned = 25; evidence.push("Strong buying volume dominance"); }
-    else if (ratio >= 1.4) { earned = 18; evidence.push("Buyers outpacing sellers on volume"); }
-    else if (ratio >= 1.0) { earned = 10; }
-    else { caution.push("Sellers dominating volume"); }
-    slots.push({ earned, possible: 25, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 8b. OBV divergence (0-25)
-  if (data.obvDivergent !== null) {
-    slots.push({
-      earned: data.obvDivergent ? 25 : 0,
-      possible: 25,
-      hasData: true,
-    });
-    if (data.obvDivergent) evidence.push("OBV divergence — hidden buying");
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 8c. Accumulation day count (0-25)
-  if (data.accumulationDayCount !== null) {
-    const ad = data.accumulationDayCount;
-    let earned = 0;
-    if (ad >= 8) { earned = 25; evidence.push(`${ad} accumulation days in last 20`); }
-    else if (ad >= 5) { earned = 18; evidence.push(`${ad} accumulation days`); }
-    else if (ad >= 3) { earned = 10; }
-    slots.push({ earned, possible: 25, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  // 8d. Money flow persistence (0-25)
-  if (data.moneyFlowPersistence !== null) {
-    const mfp = data.moneyFlowPersistence;
-    let earned = 0;
-    if (mfp >= 12) { earned = 25; evidence.push("Sustained institutional money flow"); }
-    else if (mfp >= 8) { earned = 18; }
-    else if (mfp >= 5) { earned = 10; }
-    slots.push({ earned, possible: 25, hasData: true });
-  } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
-  }
-
-  return { score: nullNeutralScore(slots), evidence, caution };
-}
-
 // ── State Classification ──
 
 /**
@@ -566,24 +370,31 @@ function scoreVolumeProfile(data: PreRunStockData): { score: number; evidence: s
  * market structure analysis. States are ordered — the highest qualifying
  * state is returned.
  */
+// The ladder is unchanged — same 11 states, same ordering, same intent. What changed is
+// which components feed it: demand replaces the old accumulation/volume pair, and the
+// higher-low structural gates now come from the market-structure counts directly rather
+// than from a scored component that measured the same thing three ways.
+//
+// Runner Potential is deliberately NOT an input. How far a stock can move says nothing
+// about where in the cycle it currently sits.
+
 function classifyState(
   se: number,
-  accum: number,
-  choch: number,
-  bos: number,
+  demand: number,
   compression: number,
-  hlQuality: number,
   rs: number,
-  volume: number,
   data: PreRunStockData,
   chochDetected: boolean,
   bosDetected: boolean,
   structureBias: "bullish" | "bearish" | "neutral",
+  higherLowCount: number,
 ): TransitionState {
   const pctFromAth = data.pctFromAth ?? 100;
   const distEma = data.instDistFromEma20Atr ?? 0;
 
-  // STATE 10: EXTENDED — overextended from MAs
+  // STATE 10: EXTENDED — overextended from MAs.
+  // Requires BOTH conditions: a state should be specific. checkExtensionRisk uses OR
+  // because a risk flag should be conservative. The two are intentionally different.
   if (pctFromAth < 5 && distEma > 3) return "EXTENDED";
 
   // STATE 9: SUSTAINED_MARKUP — confirmed uptrend with bullish structure
@@ -592,56 +403,45 @@ function classifyState(
     structureBias === "bullish" &&
     rs >= 40 &&
     pctFromAth < 15 &&
-    volume >= 35
+    demand >= 35
   ) return "SUSTAINED_MARKUP";
 
-  // STATE 8: EARLY_EXPANSION — breakout from compression with volume
+  // STATE 8: EARLY_EXPANSION — breakout from compression with participation
   if (
     bosDetected &&
     compression >= 30 &&
-    volume >= 40 &&
+    demand >= 40 &&
     (data.closesNearRangeTop === true) &&
     rs >= 25
   ) return "EARLY_EXPANSION";
 
-  // STATE 7: COMPRESSION — ATR contracting near highs after BOS
-  if (
-    bosDetected &&
-    compression >= 40
-  ) return "COMPRESSION";
-  // Alt: compression even without BOS but with strong structure
-  if (
-    chochDetected &&
-    compression >= 50 &&
-    hlQuality >= 40
-  ) return "COMPRESSION";
+  // STATE 7: COMPRESSION — range tightening after a structural break
+  if (bosDetected && compression >= 40) return "COMPRESSION";
+  // Alt: strong compression after a ChoCH with higher lows in place
+  if (chochDetected && compression >= 50 && higherLowCount >= 2) return "COMPRESSION";
 
-  // STATE 6: BULLISH_BOS — break of structure confirmed
-  // Require meaningful HL quality + volume support to avoid catching every stock in a bull market
-  if (bosDetected && hlQuality >= 40 && volume >= 30) return "BULLISH_BOS";
+  // STATE 6: BULLISH_BOS — break of structure with demand behind it
+  if (bosDetected && higherLowCount >= 2 && demand >= 30) return "BULLISH_BOS";
 
   // STATE 5: HIGHER_LOW_FORMATION — higher low after ChoCH
-  if (chochDetected && hlQuality >= 45) return "HIGHER_LOW_FORMATION";
-  // Alt: strong HL quality without explicit ChoCH detection
-  if (hlQuality >= 55 && accum >= 40 && structureBias === "bullish") return "HIGHER_LOW_FORMATION";
+  if (chochDetected && higherLowCount >= 2) return "HIGHER_LOW_FORMATION";
+  // Alt: clear higher-low structure with demand, without an explicit ChoCH
+  if (higherLowCount >= 3 && demand >= 40 && structureBias === "bullish") return "HIGHER_LOW_FORMATION";
 
-  // STATE 4: BULLISH_CHOCH — change of character detected
-  // Require some accumulation evidence, not just a naked ChoCH
-  if (chochDetected && (accum >= 25 || se >= 30)) return "BULLISH_CHOCH";
+  // STATE 4: BULLISH_CHOCH — change of character with supporting evidence
+  if (chochDetected && (demand >= 25 || se >= 30)) return "BULLISH_CHOCH";
 
-  // STATE 3: DEMAND_INCREASING — buyers emerging
-  if (accum >= 45 && volume >= 45 && se >= 35) return "DEMAND_INCREASING";
-  // Alt: strong volume profile with solid accumulation
-  if (volume >= 55 && accum >= 40) return "DEMAND_INCREASING";
+  // STATE 3: DEMAND_INCREASING — buyers stepping in
+  if (demand >= 45 && se >= 35) return "DEMAND_INCREASING";
+  if (demand >= 55) return "DEMAND_INCREASING";
 
   // STATE 2: ACCUMULATION — range-bound with stealth buying
-  if (accum >= 35 && se >= 28) return "ACCUMULATION";
-  // Alt: OBV divergence present with meaningful seller exhaustion
-  if (data.obvDivergent === true && se >= 28 && accum >= 25) return "ACCUMULATION";
+  if (demand >= 35 && se >= 28) return "ACCUMULATION";
+  if (data.obvDivergent === true && se >= 28 && demand >= 25) return "ACCUMULATION";
 
   // STATE 1: SELLING_EXHAUSTION — selling pressure declining
   if (se >= 40) return "SELLING_EXHAUSTION";
-  if (se >= 30 && (data.vpDivergenceBullish === true)) return "SELLING_EXHAUSTION";
+  if (se >= 30 && data.vpDivergenceBullish === true) return "SELLING_EXHAUSTION";
 
   // STATE 0: MARKDOWN — default
   return "MARKDOWN";
@@ -669,6 +469,7 @@ export function classifyAlertState(
   invalidationLevel: number | null,
   breakConfirmed: boolean,
   extensionRisk: boolean,
+  scorePenalty = 0,
 ): TransitionAlertState {
   const stateNum = TRANSITION_STATE_ORDER[state];
 
@@ -684,12 +485,12 @@ export function classifyAlertState(
   const canTrigger = !extensionRisk && state !== "EXTENDED";
 
   // TRIGGERED: expansion states, strong score, confirmed break
-  if (canTrigger && stateNum >= 8 && overallScore >= 50 && breakConfirmed) return "TRIGGERED";
+  if (canTrigger && stateNum >= 8 && overallScore >= 50 + scorePenalty && breakConfirmed) return "TRIGGERED";
 
   if (stateNum >= 4 && triggerLevel !== null && currentPrice !== null && atrPct !== null) {
     const distToTrigger = ((triggerLevel - currentPrice) / currentPrice) * 100;
     // Price has cleared the trigger: TRIGGERED only with participation, else READY
-    if (distToTrigger <= 0 && overallScore >= 40) {
+    if (distToTrigger <= 0 && overallScore >= 40 + scorePenalty) {
       return canTrigger && breakConfirmed ? "TRIGGERED" : "READY";
     }
     // Within 2% or 2 ATR of an overhead trigger = READY
@@ -766,56 +567,70 @@ export const NO_STRUCTURE: StructureInput = {
 export function scoreTransitionWithStructure(
   data: PreRunStockData,
   structure: StructureInput,
+  regimeGate: RegimeGate = NEUTRAL_GATE,
 ): TransitionResult {
   const gates = evaluateGates(data);
 
-  // Score all 8 components
-  const seResult = scoreSellerExhaustion(data);
-  const accumResult = scoreAccumulationQuality(data);
-  const chochResult = scoreChochConfirmation(data, structure.chochDetected, structure.chochBarsAgo, structure.chochHolding);
-  const bosResult = scoreBosConfirmation(
-    data, structure.bosDetected, structure.bosBarsAgo, structure.chochDetected,
-    structure.bosHolding, structure.higherHighCount,
-  );
+  const seResult = scoreSupplyExhaustion(data);
+  const demandResult = scoreDemandEmergence(data);
   const compressionResult = scoreCompressionQuality(data);
-  const hlResult = scoreHigherLowQuality(data, structure.higherLowCount, structure.invalidationLevel);
+  const runnerResult = scoreRunnerPotential(data);
   const rsResult = scoreRSTrajectory(data);
-  const volResult = scoreVolumeProfile(data);
 
-  // Weighted composite
-  // SE(10%) + Accum(15%) + ChoCH(15%) + BOS(10%) + Compression(10%)
-  // + HL(10%) + RS(10%) + Volume(20%)
-  const rawWeighted =
-    seResult.score * 0.10 +
-    accumResult.score * 0.15 +
-    chochResult.score * 0.15 +
-    bosResult.score * 0.10 +
-    compressionResult.score * 0.10 +
-    hlResult.score * 0.10 +
-    rsResult.score * 0.10 +
-    volResult.score * 0.20;
+  // Pre-structure fix: when no break has printed, the structure slots are not applicable
+  // rather than failed. Charging a zero there meant a stock at the moment of maximum
+  // opportunity — supply done, demand emerging, structure about to flip — could never
+  // rank highly, because 25% of the composite was a zero for an event yet to happen.
+  // Structure is scored the moment a break exists, in either direction.
+  const structureHasPrinted =
+    structure.structureAvailable && (structure.chochDetected || structure.bosDetected);
 
-  const overallScore = Number.isFinite(rawWeighted)
-    ? Math.round(rawWeighted)
-    : 0;
+  const structureResult = scoreStructure(
+    structure.chochDetected, structure.chochHolding, structure.chochBarsAgo,
+    structure.bosDetected, structure.bosHolding, structure.bosBarsAgo,
+    structure.higherHighCount, structureHasPrinted,
+  );
+
+  // Weighted composite. When structure has not printed, its 25% is redistributed
+  // proportionally across the remaining components rather than scored as zero.
+  const weights = {
+    structure: structureHasPrinted ? 0.25 : 0,
+    se: 0.15,
+    demand: 0.20,
+    compression: 0.10,
+    runner: 0.20,
+    rs: 0.10,
+  };
+  const weightSum =
+    weights.structure + weights.se + weights.demand +
+    weights.compression + weights.runner + weights.rs;
+
+  const rawWeighted = (
+    structureResult.score * weights.structure +
+    seResult.score * weights.se +
+    demandResult.score * weights.demand +
+    compressionResult.score * weights.compression +
+    runnerResult.score * weights.runner +
+    rsResult.score * weights.rs
+  ) / weightSum;
+
+  const overallScore = Number.isFinite(rawWeighted) ? Math.round(rawWeighted) : 0;
 
   const scores: TransitionScores = {
-    sellerExhaustion: seResult.score,
-    accumulationQuality: accumResult.score,
-    chochConfirmation: chochResult.score,
-    bosConfirmation: bosResult.score,
-    compressionQuality: compressionResult.score,
-    higherLowQuality: hlResult.score,
+    structure: structureResult.score,
+    supplyExhaustion: seResult.score,
+    demandEmergence: demandResult.score,
+    compression: compressionResult.score,
+    runnerPotential: runnerResult.score,
     rsTrajectory: rsResult.score,
-    volumeProfile: volResult.score,
     overallScore,
   };
 
   // State classification
   const state = classifyState(
-    seResult.score, accumResult.score, chochResult.score, bosResult.score,
-    compressionResult.score, hlResult.score, rsResult.score, volResult.score,
+    seResult.score, demandResult.score, compressionResult.score, rsResult.score,
     data, structure.chochDetected, structure.bosDetected, structure.structureBias,
+    structure.higherLowCount,
   );
 
   // Trigger / invalidation
@@ -826,29 +641,25 @@ export function scoreTransitionWithStructure(
   // Alert state
   const alertState = classifyAlertState(
     state, overallScore, triggerLevel, data.currentPrice, data.vcpAtrPct ?? null,
-    invalidationLevel, structure.breakConfirmed, extensionRisk,
+    invalidationLevel, structure.breakConfirmed, extensionRisk, regimeGate.scorePenalty,
   );
 
   // Merge evidence
   const bullishEvidence = [
+    ...structureResult.evidence,
     ...seResult.evidence,
-    ...accumResult.evidence,
-    ...chochResult.evidence,
-    ...bosResult.evidence,
+    ...demandResult.evidence,
     ...compressionResult.evidence,
-    ...hlResult.evidence,
+    ...runnerResult.evidence,
     ...rsResult.evidence,
-    ...volResult.evidence,
   ];
   const cautionEvidence = [
+    ...structureResult.caution,
     ...seResult.caution,
-    ...accumResult.caution,
-    ...chochResult.caution,
-    ...bosResult.caution,
+    ...demandResult.caution,
     ...compressionResult.caution,
-    ...hlResult.caution,
+    ...runnerResult.caution,
     ...rsResult.caution,
-    ...volResult.caution,
   ];
 
   const stateNum = TRANSITION_STATE_ORDER[state];
@@ -860,18 +671,24 @@ export function scoreTransitionWithStructure(
     cautionEvidence.push("Chart too short for structure analysis — ChoCH/BOS not evaluated");
   }
 
+  // Regime gate raises the tier thresholds without touching the score itself.
+  if (regimeGate.scorePenalty > 0) cautionEvidence.push(regimeGate.label);
+
   const isPrimarySignal =
-    overallScore >= 45 &&
+    overallScore >= 45 + regimeGate.scorePenalty &&
     stateNum >= 4 && // BULLISH_CHOCH or higher
     alertState !== "INVALIDATED" &&
     !extensionRisk &&
     structure.structureAvailable;
 
-  // Nested inside primary: "stronger" is always a subset of "primary"
+  // Nested inside primary: "stronger" is always a subset of "primary".
+  // Runner Potential is a requirement, not just a contributor — a confirmed structural
+  // flip on a stock that cannot move is not a stronger signal.
   const isStrongerSignal =
     isPrimarySignal &&
-    overallScore >= 55 &&
-    stateNum >= 6; // BULLISH_BOS or higher
+    overallScore >= 55 + regimeGate.scorePenalty &&
+    stateNum >= 6 && // BULLISH_BOS or higher
+    runnerResult.score >= 50;
 
   return {
     data,
@@ -907,9 +724,10 @@ export function scoreTransitionWithOHLC(
   closes: number[],
   volumes: number[] = [],
   n = 3,
+  regimeGate: RegimeGate = NEUTRAL_GATE,
 ): TransitionResult {
   if (closes.length < MIN_STRUCTURE_BARS) {
-    return scoreTransitionWithStructure(data, NO_STRUCTURE);
+    return scoreTransitionWithStructure(data, NO_STRUCTURE, regimeGate);
   }
 
   const ms = analyzeMarketStructure(highs, lows, closes, n);
@@ -937,5 +755,5 @@ export function scoreTransitionWithOHLC(
     invalidationLevel: computeInvalidationLevel(ms.swingLows),
     breakConfirmed: confirmation.confirmed,
     structureAvailable: true,
-  });
+  }, regimeGate);
 }

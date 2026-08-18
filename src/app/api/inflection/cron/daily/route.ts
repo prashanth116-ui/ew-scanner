@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { scoreInflection } from "@/lib/prerun/inflection-scoring";
+import { buildRegimeGate } from "@/lib/prerun/regime-gate";
+import { fetchMacroRegime } from "@/lib/sector-rotation/regime";
 import { passesUniverseQualityGates } from "@/lib/prerun/scoring";
 import { buildScanUniverse } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
@@ -32,12 +34,11 @@ function resultToRecord(r: InflectionResult, scanDate: string): InflectionDailyR
     sector: getSectorForTicker(r.data.ticker),
     price: r.data.currentPrice ?? 0,
     overall_score: r.scores.overallScore,
-    se_score: r.scores.sellerExhaustion,
-    vc_score: r.scores.volatilityCompression,
-    be_score: r.scores.buyerEmergence,
-    rs_score: r.scores.relativeStrength,
-    la_score: r.scores.liquidityAuction,
-    ip_score: r.scores.institutionalParticipation,
+    se_score: r.scores.supplyExhaustion,
+    vc_score: r.scores.compression,
+    rs_score: r.scores.rsTrajectory,
+    demand_score: r.scores.demandEmergence,
+    runner_score: r.scores.runnerPotential,
     stage: r.stage,
     trade_read: r.tradeRead,
     extension_risk: r.extensionRisk,
@@ -74,12 +75,15 @@ export async function GET(request: NextRequest) {
       cleared = await clearInflectionDaily(today);
     }
 
-    // Pre-warm sector ETF cache + load historically-scored tickers
-    const [, scoredTickers] = await Promise.all([
+    // Pre-warm sector ETF cache + load historically-scored tickers + macro regime.
+    // Regime raises the signal-tier thresholds in a hostile tape; it does not change scores.
+    const [, scoredTickers, macroRegime] = await Promise.all([
       prefetchSectorETFs(),
       loadAllScoredTickers(),
+      fetchMacroRegime().catch(() => null),
     ]);
     const hasHistory = scoredTickers.size > 50;
+    const regimeGate = buildRegimeGate(macroRegime?.regime ?? null, macroRegime?.regimeConfidence ?? 100);
 
     const qualifying: InflectionResult[] = [];
     let pendingRecords: InflectionDailyRecord[] = [];
@@ -98,7 +102,7 @@ export async function GET(request: NextRequest) {
           const data = await fetchPreRunData(ticker);
           if (!data) return null;
           if (!passesUniverseQualityGates(data, ticker)) return null;
-          return scoreInflection(data);
+          return scoreInflection(data, regimeGate);
         })
       );
 
@@ -172,6 +176,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       scannedCount: universe.length,
       clearedCount: cleared,
+      regime: macroRegime?.regime ?? null,
+      regimeScorePenalty: regimeGate.scorePenalty,
       fetchedCount,
       qualifyingCount: qualifying.length,
       persistedCount: totalPersisted,

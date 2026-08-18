@@ -64,12 +64,11 @@ export const InflectionResultCard = memo(function InflectionResultCard({
   const isAvoid = result.tradeRead === "AVOID";
 
   const scoreBars = [
-    { label: "Seller Exhaust", score: s.sellerExhaustion, key: "SE" },
-    { label: "Vol Compress", score: s.volatilityCompression, key: "VC" },
-    { label: "Buyer Emerge", score: s.buyerEmergence, key: "BE" },
-    { label: "Rel Strength", score: s.relativeStrength, key: "RS" },
-    { label: "Auction", score: s.liquidityAuction, key: "LA" },
-    { label: "Inst Particip", score: s.institutionalParticipation, key: "IP" },
+    { label: "Supply Exhaust", score: s.supplyExhaustion, key: "SE" },
+    { label: "Demand Emerge", score: s.demandEmergence, key: "DE" },
+    { label: "Compression", score: s.compression, key: "CMP" },
+    { label: "Runner Potential", score: s.runnerPotential, key: "RUN" },
+    { label: "RS Trajectory", score: s.rsTrajectory, key: "RS" },
   ];
 
   const gates = [

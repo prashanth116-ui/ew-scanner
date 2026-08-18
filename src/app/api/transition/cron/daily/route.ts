@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs, fetchYahooChart } from "@/lib/prerun/data";
 import { scoreTransitionWithOHLC } from "@/lib/prerun/transition-scoring";
+import { buildRegimeGate } from "@/lib/prerun/regime-gate";
+import { fetchMacroRegime } from "@/lib/sector-rotation/regime";
 import { passesUniverseQualityGates } from "@/lib/prerun/scoring";
 import { buildScanUniverse } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
@@ -29,14 +31,12 @@ function resultToRecord(r: TransitionResult, scanDate: string): TransitionDailyR
     sector: getSectorForTicker(r.data.ticker),
     price: r.data.currentPrice ?? 0,
     overall_score: r.scores.overallScore,
-    se_score: r.scores.sellerExhaustion,
-    accum_score: r.scores.accumulationQuality,
-    choch_score: r.scores.chochConfirmation,
-    bos_score: r.scores.bosConfirmation,
-    compression_score: r.scores.compressionQuality,
-    hl_score: r.scores.higherLowQuality,
+    se_score: r.scores.supplyExhaustion,
+    compression_score: r.scores.compression,
     rs_score: r.scores.rsTrajectory,
-    volume_score: r.scores.volumeProfile,
+    structure_score: r.scores.structure,
+    demand_score: r.scores.demandEmergence,
+    runner_score: r.scores.runnerPotential,
     state: r.state,
     alert_state: r.alertState,
     trigger_level: r.triggerLevel,
@@ -75,12 +75,15 @@ export async function GET(request: NextRequest) {
       cleared = await clearTransitionDaily(today);
     }
 
-    // Pre-warm sector ETF cache + load historically-scored tickers
-    const [, scoredTickers] = await Promise.all([
+    // Pre-warm sector ETF cache + load historically-scored tickers + macro regime.
+    // Regime raises the alert-tier thresholds in a hostile tape; it does not change scores.
+    const [, scoredTickers, macroRegime] = await Promise.all([
       prefetchSectorETFs(),
       loadAllScoredTickers(),
+      fetchMacroRegime().catch(() => null),
     ]);
     const hasHistory = scoredTickers.size > 50;
+    const regimeGate = buildRegimeGate(macroRegime?.regime ?? null, macroRegime?.regimeConfidence ?? 100);
 
     const qualifying: TransitionResult[] = [];
     let pendingRecords: TransitionDailyRecord[] = [];
@@ -106,7 +109,7 @@ export async function GET(request: NextRequest) {
           const chart = await fetchYahooChart(ticker, "3mo", "1d");
           if (!chart) {
             // Scores without structure and flags the row via structureAvailable
-            return scoreTransitionWithOHLC(data, [], [], [], []);
+            return scoreTransitionWithOHLC(data, [], [], [], [], 3, regimeGate);
           }
 
           return scoreTransitionWithOHLC(
@@ -116,6 +119,7 @@ export async function GET(request: NextRequest) {
             chart.closes,
             chart.volumes,
             3, // 3-bar pivot confirmation
+            regimeGate,
           );
         })
       );
@@ -198,6 +202,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       scannedCount: universe.length,
       clearedCount: cleared,
+      regime: macroRegime?.regime ?? null,
+      regimeScorePenalty: regimeGate.scorePenalty,
       fetchedCount,
       qualifyingCount: qualifying.length,
       persistedCount: totalPersisted,

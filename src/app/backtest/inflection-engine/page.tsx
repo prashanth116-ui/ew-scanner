@@ -176,7 +176,7 @@ export default function InflectionBacktestPage() {
   const exportCSV = () => {
     if (signals.length === 0) return;
     const headers = [
-      "Ticker", "Date", "Price", "Overall", "SE", "VC", "BE", "RS", "LA", "IP",
+      "Ticker", "Date", "Price", "Overall", "SE", "DE", "CMP", "RUN", "RS",
       "Stage", "Trade Read", "Primary", "Stronger", "Ext Risk",
       "1d Ret", "2d Ret", "3d Ret", "5d Ret", "10d Ret",
       "Max Fav 5d", "Max Adv 5d",
@@ -184,8 +184,8 @@ export default function InflectionBacktestPage() {
     ];
     const rows = signals.map((s) => [
       s.ticker, s.date, s.price.toFixed(2), s.overallScore,
-      s.sellerExhaustion, s.volatilityCompression, s.buyerEmergence,
-      s.relativeStrength, s.liquidityAuction, s.institutionalParticipation,
+      s.supplyExhaustion, s.demandEmergence, s.compression,
+      s.runnerPotential, s.rsTrajectory,
       s.stage, s.tradeRead, s.isPrimarySignal, s.isStrongerSignal, s.extensionRisk,
       s.forward.return1d?.toFixed(2) ?? "", s.forward.return2d?.toFixed(2) ?? "",
       s.forward.return3d?.toFixed(2) ?? "", s.forward.return5d?.toFixed(2) ?? "",

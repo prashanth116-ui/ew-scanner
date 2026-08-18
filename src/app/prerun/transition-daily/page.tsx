@@ -32,13 +32,11 @@ interface TransitionDailyRow {
   price: number;
   overall_score: number;
   se_score: number;
-  accum_score: number;
-  choch_score: number;
-  bos_score: number;
   compression_score: number;
-  hl_score: number;
   rs_score: number;
-  volume_score: number;
+  structure_score: number;
+  demand_score: number;
+  runner_score: number;
   state: string;
   alert_state: string;
   trigger_level: number | null;
@@ -61,8 +59,8 @@ interface DroppedTicker {
 type AlertStateFilter = "ALL" | "TRIGGERED" | "READY" | "ARMED" | "WATCH";
 type StateFilter = "ALL" | "BULLISH_BOS" | "BULLISH_CHOCH" | "EARLY_EXPANSION" | "COMPRESSION" | "HIGHER_LOW_FORMATION" | "SUSTAINED_MARKUP" | "DEMAND_INCREASING" | "ACCUMULATION" | "SELLING_EXHAUSTION" | "EXTENDED";
 type SortField =
-  | "overall_score" | "se_score" | "accum_score" | "choch_score" | "bos_score"
-  | "compression_score" | "hl_score" | "rs_score" | "volume_score"
+  | "overall_score" | "structure_score" | "se_score" | "demand_score"
+  | "compression_score" | "runner_score" | "rs_score"
   | "state" | "alert_state" | "ticker" | "price" | "sector" | "streak" | "delta";
 
 // ── Helpers ──
@@ -202,7 +200,7 @@ function MiniScoreBar({ score }: { score: number }) {
 function exportCSV(results: TransitionDailyRow[], date: string, streaks: Record<string, number>, deltas: Record<string, number>) {
   const headers = [
     "Ticker", "Company", "Sector", "Price", "Score", "Delta", "Streak",
-    "SE", "Accum", "ChoCH", "BOS", "Compress", "HL", "RS", "VP",
+    "Structure", "SE", "Demand", "Compress", "Runner", "RS",
     "State", "Alert", "Trigger", "Invalidation",
     "Primary Signal", "Stronger Signal",
     "Bullish Evidence", "Caution Evidence",
@@ -215,14 +213,12 @@ function exportCSV(results: TransitionDailyRow[], date: string, streaks: Record<
     r.overall_score,
     deltas[r.ticker] ?? "",
     streaks[r.ticker] ?? 1,
+    r.structure_score,
     r.se_score,
-    r.accum_score,
-    r.choch_score,
-    r.bos_score,
+    r.demand_score,
     r.compression_score,
-    r.hl_score,
+    r.runner_score,
     r.rs_score,
-    r.volume_score,
     r.state,
     r.alert_state,
     r.trigger_level ?? "",
@@ -1048,14 +1044,12 @@ export default function TransitionDailyPage() {
                   <SortHeader field="overall_score" label="Score" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="delta" label="+/-" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="streak" label="Days" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="structure_score" label="Str" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="se_score" label="SE" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortHeader field="accum_score" label="Acc" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortHeader field="choch_score" label="ChCH" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortHeader field="bos_score" label="BOS" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="demand_score" label="Dmd" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="compression_score" label="Cmp" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortHeader field="hl_score" label="HL" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortHeader field="runner_score" label="Run" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="rs_score" label="RS" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortHeader field="volume_score" label="VP" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="state" label="State" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="alert_state" label="Alert" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666]">Flags</th>
@@ -1152,14 +1146,12 @@ export default function TransitionDailyPage() {
                         </td>
 
                         {/* Sub-scores */}
+                        <td className="px-2 py-2"><MiniScoreBar score={row.structure_score} /></td>
                         <td className="px-2 py-2"><MiniScoreBar score={row.se_score} /></td>
-                        <td className="px-2 py-2"><MiniScoreBar score={row.accum_score} /></td>
-                        <td className="px-2 py-2"><MiniScoreBar score={row.choch_score} /></td>
-                        <td className="px-2 py-2"><MiniScoreBar score={row.bos_score} /></td>
+                        <td className="px-2 py-2"><MiniScoreBar score={row.demand_score} /></td>
                         <td className="px-2 py-2"><MiniScoreBar score={row.compression_score} /></td>
-                        <td className="px-2 py-2"><MiniScoreBar score={row.hl_score} /></td>
+                        <td className="px-2 py-2"><MiniScoreBar score={row.runner_score} /></td>
                         <td className="px-2 py-2"><MiniScoreBar score={row.rs_score} /></td>
-                        <td className="px-2 py-2"><MiniScoreBar score={row.volume_score} /></td>
 
                         {/* State */}
                         <td className="px-2 py-2">

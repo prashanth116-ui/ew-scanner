@@ -106,7 +106,7 @@ type SortKey = "score" | "pctFromAth" | "shortFloat" | "earnings";
 type SortDir = "asc" | "desc";
 type VCPSortKey = "score" | "compression" | "atrPct" | "relStrength" | "dollarVolume" | "distFrom52wHigh";
 type InstSortKey = "composite" | "institutional" | "execution" | "risk" | "discipline" | "rsAccel" | "dollarVolume";
-type InflectionSortKey = "overall" | "sellerExhaustion" | "volatilityCompression" | "buyerEmergence" | "relativeStrength" | "liquidityAuction" | "institutionalParticipation";
+type InflectionSortKey = "overall" | "supplyExhaustion" | "demandEmergence" | "compression" | "runnerPotential" | "rsTrajectory";
 
 const MARKET_CAP_OPTIONS = [
   { label: "Any", value: 0 },
@@ -670,12 +670,11 @@ function PreRunPage() {
       let cmp = 0;
       switch (inflectionSortKey) {
         case "overall": cmp = a.scores.overallScore - b.scores.overallScore; break;
-        case "sellerExhaustion": cmp = a.scores.sellerExhaustion - b.scores.sellerExhaustion; break;
-        case "volatilityCompression": cmp = a.scores.volatilityCompression - b.scores.volatilityCompression; break;
-        case "buyerEmergence": cmp = a.scores.buyerEmergence - b.scores.buyerEmergence; break;
-        case "relativeStrength": cmp = a.scores.relativeStrength - b.scores.relativeStrength; break;
-        case "liquidityAuction": cmp = a.scores.liquidityAuction - b.scores.liquidityAuction; break;
-        case "institutionalParticipation": cmp = a.scores.institutionalParticipation - b.scores.institutionalParticipation; break;
+        case "supplyExhaustion": cmp = a.scores.supplyExhaustion - b.scores.supplyExhaustion; break;
+        case "demandEmergence": cmp = a.scores.demandEmergence - b.scores.demandEmergence; break;
+        case "compression": cmp = a.scores.compression - b.scores.compression; break;
+        case "runnerPotential": cmp = a.scores.runnerPotential - b.scores.runnerPotential; break;
+        case "rsTrajectory": cmp = a.scores.rsTrajectory - b.scores.rsTrajectory; break;
       }
       return -cmp;
     });
@@ -2333,12 +2332,11 @@ function PreRunPage() {
               {(
                 [
                   { key: "overall", label: "Overall" },
-                  { key: "sellerExhaustion", label: "SE" },
-                  { key: "volatilityCompression", label: "VC" },
-                  { key: "buyerEmergence", label: "BE" },
-                  { key: "relativeStrength", label: "RS" },
-                  { key: "liquidityAuction", label: "LA" },
-                  { key: "institutionalParticipation", label: "IP" },
+                  { key: "supplyExhaustion", label: "SE" },
+                  { key: "demandEmergence", label: "DE" },
+                  { key: "compression", label: "CMP" },
+                  { key: "runnerPotential", label: "RUN" },
+                  { key: "rsTrajectory", label: "RS" },
                 ] as { key: InflectionSortKey; label: string }[]
               ).map((s) => (
                 <button

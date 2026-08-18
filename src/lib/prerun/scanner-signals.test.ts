@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { classifyAlertState } from "./transition-scoring";
+import { classifyAlertState, scoreTransitionWithStructure, NO_STRUCTURE, type StructureInput } from "./transition-scoring";
 import { determineTradeRead } from "./inflection-scoring";
+import type { PreRunStockData } from "./types";
 
 /**
  * Alert-state and trade-read semantics for the Transition and Inflection scanners.
@@ -104,5 +105,108 @@ describe("determineTradeRead", () => {
 
   it("watches seller exhaustion", () => {
     expect(determineTradeRead("SELLER_EXHAUSTION", 60, 70, false)).toBe("WATCH");
+  });
+});
+
+/**
+ * The pre-structure fix. Before V3 the Transition engine charged a zero across 25% of the
+ * composite when no ChoCH or BOS had printed, so a stock at the moment of maximum
+ * opportunity — supply done, demand emerging, structure about to flip — could never rank
+ * highly. Structure slots now drop out of the denominator until a break exists.
+ */
+describe("pre-structure scoring", () => {
+  /** A stock with strong accumulation evidence and no structural break yet. */
+  function coiledStock(): PreRunStockData {
+    return {
+      ticker: "TEST",
+      companyName: "Test",
+      currentPrice: 100,
+      // Supply exhaustion — strong
+      absorption: 0.45,
+      structuralSpring: 2,
+      rangeAsymmetry: 1.6,
+      vpDivergenceBullish: true,
+      // Demand emergence — strong
+      closeLocationMean: 0.72,
+      closeLocationFlat: true,
+      pocketPivots: 3,
+      rvolTrajectory: 0.2,
+      obvDivergent: true,
+      moneyFlowPersistence: 13,
+      // Compression — strong
+      atrRatio5v20: 0.45,
+      vcpTightCloses: true,
+      vcpInsideBarCount: 3,
+      closesNearRangeTop: true,
+      // Runner potential — strong
+      overheadSupply: 4,
+      vcpAtrPct: 5,
+      pctFromAth: 45,
+      weeksInBase: 40,
+      floatTurnover20d: 2,
+      insiderBuys45d: 3,
+      // RS — strong
+      instRsAccelVsSPY: 6,
+      instRsAccelTrend: 3,
+      // Not extended
+      instDistFromEma20Atr: 1,
+    } as unknown as PreRunStockData;
+  }
+
+  const preBreak: StructureInput = {
+    ...NO_STRUCTURE,
+    structureAvailable: true,   // we looked; nothing has printed yet
+    higherLowCount: 2,
+    structureBias: "neutral",
+    invalidationLevel: 92,
+  };
+
+  it("lets a coiled pre-breakout stock score highly", () => {
+    const result = scoreTransitionWithStructure(coiledStock(), preBreak);
+    // Everything except structure is strong, so the composite should reflect that
+    expect(result.scores.overallScore).toBeGreaterThan(70);
+  });
+
+  it("reports the structure component as zero without dragging the composite down", () => {
+    const result = scoreTransitionWithStructure(coiledStock(), preBreak);
+    expect(result.scores.structure).toBe(0);
+    // The score is NOT the naive 0.25*0 + rest — structure's weight is redistributed
+    expect(result.scores.overallScore).toBeGreaterThan(
+      result.scores.supplyExhaustion * 0.15 +
+      result.scores.demandEmergence * 0.20 +
+      result.scores.compression * 0.10 +
+      result.scores.runnerPotential * 0.20 +
+      result.scores.rsTrajectory * 0.10,
+    );
+  });
+
+  it("keeps a pre-breakout stock in an early state despite the high score", () => {
+    // Score says "how good is the evidence"; state says "where in the cycle".
+    // A high score with no break must not read as a confirmed structural flip.
+    const result = scoreTransitionWithStructure(coiledStock(), preBreak);
+    expect(["ACCUMULATION", "DEMAND_INCREASING", "SELLING_EXHAUSTION"]).toContain(result.state);
+    expect(result.isPrimarySignal).toBe(false);
+  });
+
+  it("still charges a failed break as negative evidence", () => {
+    const failed: StructureInput = {
+      ...preBreak,
+      chochDetected: true,
+      chochHolding: false,     // broke, then fell back through
+      chochBarsAgo: 4,
+    };
+    const held: StructureInput = { ...failed, chochHolding: true };
+
+    const failedResult = scoreTransitionWithStructure(coiledStock(), failed);
+    const heldResult = scoreTransitionWithStructure(coiledStock(), held);
+
+    expect(failedResult.scores.structure).toBeLessThan(heldResult.scores.structure);
+    expect(failedResult.scores.overallScore).toBeLessThan(heldResult.scores.overallScore);
+  });
+
+  it("flags rows scored with no usable OHLC", () => {
+    const result = scoreTransitionWithStructure(coiledStock(), NO_STRUCTURE);
+    expect(result.structureAvailable).toBe(false);
+    expect(result.isPrimarySignal).toBe(false);
   });
 });

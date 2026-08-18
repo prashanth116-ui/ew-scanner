@@ -56,6 +56,30 @@ Applied in 6 cron routes: PreRun preset/4h, Inflection, Transition, VCP, Institu
 | Institutional | `Inst` | Large-cap institutional runners ($20B+) | `institutional-scoring.ts` |
 | PreRunner | `Rot` | Sector rotation leaders + turnarounds | `src/lib/prerunner/scoring.ts` |
 
+### Scanner V3 — Leading Inputs + Runner Potential
+Both accumulation-stage scanners were rebuilt to remove lagging inputs and add a magnitude dimension. **Intent unchanged:** Inflection still answers WHERE in the accumulation cycle; Transition still answers whether structure has flipped.
+
+**Removed as lagging:** RSI position, EMA21/50 reclaim, higher-low counts, absolute RS levels, institutional ownership % (quarterly 13F, ~45d stale), the Liquidity multiplier (near-inert against a $150M-gated universe).
+
+**Order-flow primitives** (`data.ts`, all from existing OHLCV, no new API calls):
+| Field | Meaning | Replaces |
+|---|---|---|
+| `absorption` | share of down bars with >=1.2x volume and <=0.7x range (Wyckoff effort/result) | RSI in both SE components |
+| `closeLocationMean` / `closeLocationFlat` | mean close position in range over 10 bars + flat-price flag | EMA reclaim |
+| `pocketPivots` | up days whose volume beat every down day of the prior 10 | accumulation-day count |
+| `structuralSpring` | undercut of a real swing low, reclaimed and held (2 = on volume) | `failedBreakdownRecovery`; works below the 50-day |
+| `rangeAsymmetry` | mean up-bar range / mean down-bar range over 20 bars | up/down volume ratio |
+| `rvolTrajectory` | 5-bar regression slope of relative volume — **existed already**, was QFE-only | nothing |
+| `overheadSupply` | % of last year's volume transacted above current price, from the 5y weekly chart | nothing |
+
+**Runner Potential** (`runner-potential.ts`, shared by both engines): overhead supply 30 · ATR% 25 · base energy 20 · float rotation 15 · insider buys 10. Answers *how far can this move*, which neither engine previously asked — two names with identical setup scores but 1.2% vs 4.5% ATR ranked the same. Deliberately **excluded from stage/state classification**: magnitude says nothing about cycle position. Required at >= 50 for `isStrongerSignal` in both engines.
+
+**Component counts:** Inflection 6 → 5 (SE 25 / Demand 25 / Compression 15 / **Runner 25** / RS 10). Transition 8 → 6 (Structure 25 / SE 15 / Demand 20 / Compression 10 / **Runner 20** / RS 10).
+
+**Regime gate** (`regime-gate.ts`): `buildRegimeGate()` maps the macro regime onto a threshold penalty (RISK_OFF +10, INFLATIONARY/MIXED +5, scaled by confidence) applied to `isPrimarySignal`, `isStrongerSignal` and TRIGGERED. **Not a scoring component** — it raises the bar for the alert tiers without changing scores, so backtests compare like with like across regimes. Both crons fetch it once via `fetchMacroRegime()` and report it in the response.
+
+**Shared aggregator:** `score-slot.ts` holds `ScoreSlot` + `nullNeutralScore()`, used by both scorers and Runner Potential.
+
 ### Shared Feature Semantics
 Fields in `PreRunStockData` that scorers must read carefully:
 - **`obvDivergent`** — OBV within 15% of its 20-bar **range** high while price is >10% below its 20-bar high. Normalized by range, not by the cumulative OBV level (that level depends on where the chart series starts and is not comparable across tickers).
@@ -95,7 +119,9 @@ Fields in `PreRunStockData` that scorers must read carefully:
 
 **Extension guard:** `checkExtensionRisk` (pctFromAth < 5 **or** distEma > 3 ATR) blocks TRIGGERED and `isPrimarySignal`, and is persisted as `extension_risk`. Note this is deliberately broader than the EXTENDED *state* (which requires both) — a risk flag should be conservative, a state should be specific.
 
-**8 scoring components** (weighted, 0-100): SE 10%, Acc 15%, ChCH 15%, BOS 10%, Cmp 10%, HL 10%, RS 10%, VP 20%. Uses N-bar pivots (default 3-bar) for swing detection. RS 7b reads `vcpRelStrengthVsSPY` (benchmark) and 7c reads `rs5dVsSector` (peers) with no cross-fallback. HL scores one higher-low count plus structural risk distance (price to invalidation, in ATR). BOS 4c scores higher-high follow-through.
+**6 scoring components** (V3, weighted to 100): Structure 25%, Supply Exhaustion 15%, Demand Emergence 20%, Compression 10%, **Runner Potential 20%**, RS Trajectory 10%. Uses N-bar pivots (default 3-bar) for swing detection.
+
+**Pre-structure scoring:** when no ChoCH/BOS has printed, the Structure slots are `hasData: false` and its 25% is redistributed proportionally across the remaining components. Previously a stock at the moment of maximum opportunity — supply done, demand emerging, structure about to flip — was charged a zero across 25% of the composite for an event that had not happened yet, and could never rank highly. A **detected-but-failed** break is still scored (ChoCH 12/40, BOS 10/35) because that is real negative evidence. Score answers *how good is the evidence*; state answers *where in the cycle* — a coiled pre-breakout name can score 75 while sitting in ACCUMULATION.
 
 **Cron:** Fetches 3mo daily chart for OHLC. Skips MARKDOWN state, gate failures, and scores < 25. Supports `?clear=true`. Series under 30 bars are scored with `structure_available = false` and excluded from confluence.
 
