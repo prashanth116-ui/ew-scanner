@@ -33,6 +33,11 @@ const TIERS = [
   { label: "Top 10%", q: 0.90 },
 ] as const;
 
+/** Fixed cutoffs, for when you want a specific number rather than a relative rank.
+ *  Percentiles adapt to the day and survive recalibration; fixed values are exact and
+ *  comparable across days. Both are useful, so both are offered. */
+const FIXED = [30, 35, 40, 45, 50, 55, 60, 65, 70] as const;
+
 function quantile(sorted: number[], q: number): number {
   if (sorted.length === 0) return 0;
   const i = Math.min(sorted.length - 1, Math.floor(sorted.length * q));
@@ -90,9 +95,16 @@ export function ComponentFilterBar<T>({
               }`}
             >
               <option value={0}>Any</option>
-              {(options[f.key] ?? []).map((o) => (
-                <option key={o.label} value={o.min}>{o.label}</option>
-              ))}
+              <optgroup label="Relative to today">
+                {(options[f.key] ?? []).map((o) => (
+                  <option key={o.label} value={o.min}>{o.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Fixed">
+                {FIXED.map((v) => (
+                  <option key={v} value={v}>{`≥ ${v}`}</option>
+                ))}
+              </optgroup>
             </select>
           </label>
         );
