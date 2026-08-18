@@ -157,6 +157,12 @@ export const SP400_MEMBERS: Set<string> = new Set([
 ]);
 
 // prettier-ignore
+/** True when the ticker sits in SP500 or NDX100. Membership is itself evidence of size,
+ *  which matters when a quote fetch omits market cap: unknown is not the same as small. */
+export function isIndexMember(ticker: string): boolean {
+  return SP500_MEMBERS.has(ticker) || NDX100_MEMBERS.has(ticker);
+}
+
 export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   // Tech / Software / Cloud
   "TSM", "SNOW", "NET", "MDB", "HUBS", "IOT", "MNDY", 

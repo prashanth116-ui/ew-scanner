@@ -3,6 +3,7 @@ import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { scoreInstitutionalAcceleration } from "@/lib/prerun/institutional-scoring";
 import { passesUniverseQualityGates } from "@/lib/prerun/scoring";
+import { skipAsNonScorer } from "@/lib/prerun/scan-gate";
 import { buildScanUniverse } from "@/data/index-tiers";
 import { getSectorForTicker } from "@/data/prerun-universe";
 
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
 
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
-          if (hasHistory && !scoredTickers.has(ticker)) return null;
+          if (skipAsNonScorer(ticker, hasHistory, scoredTickers)) return null;
           const data = await fetchPreRunData(ticker);
           if (!data) return null;
           if (!passesUniverseQualityGates(data, ticker)) { skippedGate++; return null; }

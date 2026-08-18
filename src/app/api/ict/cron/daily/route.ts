@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { buildScanUniverse } from "@/data/index-tiers";
+import { skipAsNonScorer } from "@/lib/prerun/scan-gate";
 import { getSectorForTicker } from "@/data/prerun-universe";
 import { fetchICTData } from "@/lib/ict/data";
 import { runMultiTimeframe } from "@/lib/ict/multi-tf";
@@ -114,7 +115,7 @@ export async function GET(request: NextRequest) {
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
           // Persistent non-scorer gate
-          if (hasHistory && !scoredTickers.has(ticker)) return null;
+          if (skipAsNonScorer(ticker, hasHistory, scoredTickers)) return null;
 
           // Fetch all timeframes
           const data = await fetchICTData(ticker);

@@ -14,19 +14,31 @@ import type {
 } from "./types";
 import { matchBestPattern, type PatternMatchResult } from "./patterns";
 import { getSectorForTicker } from "@/data/prerun-universe";
-import { ADDITIONAL_MEMBERS } from "@/data/index-tiers";
+import { ADDITIONAL_MEMBERS, isIndexMember } from "@/data/index-tiers";
 
 /** Universal quality gate: filters low-quality stocks before scoring.
- *  price >= $10, price <= $1000 (except Semiconductors), marketCap >= $10B (exempt: ADDITIONAL_MEMBERS),
- *  avgDollarVolume >= $150M/day, maxAtrPct60d >= 1.5% (structurally boring filter). */
+ *  price >= $10, price <= $1000 (except Semiconductors), marketCap >= $10B (exempt:
+ *  ADDITIONAL_MEMBERS and index members with an unknown mcap), avgDollarVolume >= $150M/day,
+ *  maxAtrPct60d >= 1.5% (structurally boring filter). */
 export function passesUniverseQualityGates(data: PreRunStockData, ticker: string): boolean {
   const price = data.currentPrice ?? 0;
-  const mcap = data.marketCap ?? 0;
   const dollarVol = data.vcpAvgDollarVolume ?? 0;
   const dq = data.dataQuality ?? 100; // treat missing as full quality
   if (price < 10 || dollarVol < 150_000_000 || dq < 40) return false;
-  // ADDITIONAL_MEMBERS are hand-curated — skip mcap gate (other gates still apply)
-  if (mcap < 10_000_000_000 && !ADDITIONAL_MEMBERS.has(ticker)) return false;
+
+  // Market cap gate. A null mcap means UNKNOWN, not zero. Coalescing it to 0 silently
+  // rejected index members whenever the quote fetch omitted the field — MU failed this on
+  // every day of a two-week window while trading $45B/day. Index membership already
+  // establishes size, so an unknown mcap is not grounds for rejection there; a
+  // known-small one still is.
+  const mcap = data.marketCap;
+  if (!ADDITIONAL_MEMBERS.has(ticker)) {          // hand-curated names are exempt outright
+    if (mcap === null) {
+      if (!isIndexMember(ticker)) return false;   // unknown size and no membership to vouch for it
+    } else if (mcap < 10_000_000_000) {
+      return false;                               // known small
+    }
+  }
   if (price > 1000 && getSectorForTicker(ticker) !== "Semiconductors") return false;
   const maxAtr = data.maxAtrPct60d ?? 999; // treat missing as pass
   if (maxAtr < 1.5) return false;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { fetchPreRunData, prefetchSectorETFs } from "@/lib/prerun/data";
 import { autoScorePreRun, passesUniverseQualityGates } from "@/lib/prerun/scoring";
+import { skipAsNonScorer } from "@/lib/prerun/scan-gate";
 import { computeQFE, computeMarketEnvironment } from "@/lib/prerun/qfe-scoring";
 import type { MarketEnvironment } from "@/lib/prerun/qfe-scoring";
 import { buildScanUniverse } from "@/data/index-tiers";
@@ -306,7 +307,7 @@ export async function GET(request: NextRequest) {
       const settled = await Promise.allSettled(
         batch.map(async (ticker) => {
           // Persistent non-scorer gate: skip tickers never seen in any scanner
-          if (hasHistory && !scoredTickers.has(ticker)) return null;
+          if (skipAsNonScorer(ticker, hasHistory, scoredTickers)) return null;
           const data = await fetchPreRunData(ticker);
           if (!data) return null;
           if (!passesUniverseQualityGates(data, ticker)) return null;
