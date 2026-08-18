@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { skipAsNonScorer } from "./scan-gate";
+import { skipAsNonScorer, PROBATION_CYCLE } from "./scan-gate";
 import { passesUniverseQualityGates } from "./scoring";
 import { ADDITIONAL_MEMBERS, isIndexMember } from "@/data/index-tiers";
 import type { PreRunStockData } from "./types";
@@ -24,21 +24,46 @@ function stock(over: Partial<PreRunStockData> = {}): PreRunStockData {
 describe("skipAsNonScorer", () => {
   const seen = new Set(["AAPL"]);
 
-  it("skips a ticker with no scanner history", () => {
-    expect(skipAsNonScorer("ZZZZ", true, seen)).toBe(true);
+  it("skips a no-history ticker on most days, but not forever", () => {
+    // The lockout must be temporary. A permanent skip is self-sealing: no scan -> no score
+    // -> no history -> no scan. MU sat locked out that way even after the bug that emptied
+    // its history was fixed.
+    const days = Array.from({ length: PROBATION_CYCLE * 2 }, (_, i) =>
+      new Date(Date.UTC(2026, 7, 1 + i)));
+    const scanned = days.filter((d) => !skipAsNonScorer("ZZZZ", true, seen, d));
+    expect(scanned.length).toBeGreaterThan(0);
+    expect(scanned.length).toBeLessThan(days.length);
+  });
+
+  it("re-tests every no-history ticker within one cycle", () => {
+    const days = Array.from({ length: PROBATION_CYCLE }, (_, i) =>
+      new Date(Date.UTC(2026, 7, 10 + i)));
+    for (const t of ["MU", "ZZZZ", "AAAA", "QQQQ", "WXYZ"]) {
+      const scanned = days.some((d) => !skipAsNonScorer(t, true, seen, d));
+      expect(scanned, `${t} never scanned within a full cycle`).toBe(true);
+    }
+  });
+
+  it("scans every day once a ticker has scored even once", () => {
+    const withHistory = new Set(["AAPL", "MU"]);
+    const days = Array.from({ length: PROBATION_CYCLE * 2 }, (_, i) =>
+      new Date(Date.UTC(2026, 7, 1 + i)));
+    expect(days.every((d) => !skipAsNonScorer("MU", true, withHistory, d))).toBe(true);
   });
 
   it("does not skip a ticker that has scored", () => {
     expect(skipAsNonScorer("AAPL", true, seen)).toBe(false);
   });
 
-  it("never skips a hand-curated ADDITIONAL_MEMBER, even with no history", () => {
+  it("never skips a hand-curated ADDITIONAL_MEMBER on any day", () => {
     // The circular lockout: no history -> never scanned -> never scores -> no history.
     // SNDK was added to the universe and could never enter under the old gate.
     const additional = [...ADDITIONAL_MEMBERS][0];
     expect(seen.has(additional)).toBe(false);
-    expect(skipAsNonScorer(additional, true, seen)).toBe(false);
-    expect(skipAsNonScorer("SNDK", true, seen)).toBe(false);
+    const days = Array.from({ length: PROBATION_CYCLE * 2 }, (_, i) =>
+      new Date(Date.UTC(2026, 7, 1 + i)));
+    expect(days.every((d) => !skipAsNonScorer(additional, true, seen, d))).toBe(true);
+    expect(days.every((d) => !skipAsNonScorer("SNDK", true, seen, d))).toBe(true);
   });
 
   it("is inert until the scored set is large enough to trust", () => {
