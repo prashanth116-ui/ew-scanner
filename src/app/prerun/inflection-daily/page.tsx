@@ -55,7 +55,7 @@ interface DroppedTicker {
 }
 
 type TradeReadFilter = "ALL" | "COILED" | "STARTER_POSITION_CANDIDATE" | "ADD_ON_CONFIRMATION" | "WATCH";
-type StageFilter = "ALL" | "INFLECTION" | "EARLY_ACCUMULATION" | "EXPANSION" | "SELLER_EXHAUSTION";
+type StageFilter = "ALL" | "INFLECTION" | "EARLY_ACCUMULATION" | "EXPANSION" | "SELLER_EXHAUSTION" | "UNCLASSIFIED";
 type SortField = "overall_score" | "se_score" | "demand_score" | "vc_score" | "runner_score" | "rs_score" | "stage" | "ticker" | "price" | "trade_read" | "sector" | "streak" | "delta" | "flags";
 
 const COMPONENT_FIELDS: ComponentField[] = [
@@ -145,6 +145,7 @@ function stageLabel(s: StageFilter): string {
     case "EARLY_ACCUMULATION": return "Early Accum.";
     case "EXPANSION": return "Expansion";
     case "SELLER_EXHAUSTION": return "Seller Exhaust.";
+    case "UNCLASSIFIED": return "Unclassified";
   }
 }
 
@@ -888,7 +889,7 @@ export default function InflectionDailyPage() {
         <span className="text-[#333]">|</span>
 
         {/* Stage filter */}
-        {(["ALL", "INFLECTION", "EARLY_ACCUMULATION", "EXPANSION", "SELLER_EXHAUSTION"] as StageFilter[]).map((f) => (
+        {(["ALL", "INFLECTION", "EARLY_ACCUMULATION", "EXPANSION", "SELLER_EXHAUSTION", "UNCLASSIFIED"] as StageFilter[]).map((f) => (
           <button
             key={f}
             onClick={() => setStageFilter(f)}

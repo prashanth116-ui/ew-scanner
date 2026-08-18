@@ -23,6 +23,10 @@ function stageBadge(stage: InflectionStage): { label: string; color: string } {
       return { label: "Seller Exhaust.", color: "text-amber-400 bg-amber-500/10 border-amber-500/30" };
     case "DISTRIBUTION":
       return { label: "Distribution", color: "text-red-400 bg-red-500/10 border-red-500/30" };
+    case "UNCLASSIFIED":
+      // Grey, not red — no stage gate matched, which is an absence of a verdict rather
+      // than a bearish one.
+      return { label: "Unclassified", color: "text-[#888] bg-[#1a1a1a] border-[#2a2a2a]" };
   }
 }
 

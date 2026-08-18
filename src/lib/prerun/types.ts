@@ -323,7 +323,21 @@ export const INST_MAX_SCORE = 100;
 
 // ── Inflection Engine types ──
 
-export type InflectionStage = "DISTRIBUTION" | "SELLER_EXHAUSTION" | "INFLECTION" | "EARLY_ACCUMULATION" | "EXPANSION";
+/**
+ * Accumulation-cycle stage.
+ *
+ * UNCLASSIFIED is the fall-through: no stage gate matched. It is deliberately distinct from
+ * DISTRIBUTION, which now requires positive evidence of selling. Previously both collapsed
+ * into DISTRIBUTION, so half the universe carried a bearish verdict the classifier had never
+ * actually reached — including rows scoring 48.
+ */
+export type InflectionStage =
+  | "UNCLASSIFIED"
+  | "DISTRIBUTION"
+  | "SELLER_EXHAUSTION"
+  | "INFLECTION"
+  | "EARLY_ACCUMULATION"
+  | "EXPANSION";
 export type InflectionTradeRead = "AVOID" | "WATCH" | "STARTER_POSITION_CANDIDATE" | "ADD_ON_CONFIRMATION";
 
 export interface InflectionScores {

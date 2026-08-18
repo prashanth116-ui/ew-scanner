@@ -181,8 +181,18 @@ function classifyStage(
   if (se >= 35 && compression >= 15) return "SELLER_EXHAUSTION";
   if (se >= 45) return "SELLER_EXHAUSTION";
 
-  // DISTRIBUTION: default
-  return "DISTRIBUTION";
+  // DISTRIBUTION: a POSITIVE finding, not a default. Requires actual evidence of selling —
+  // institutions distributing, or down bars producing more range than up bars — alongside
+  // supply that is demonstrably not exhausted. Previously this was the fall-through return,
+  // so it absorbed every stock no gate matched: half the universe, including rows scoring 48
+  // that the Transition engine simultaneously read as BULLISH_CHOCH.
+  const distributing =
+    (data.distributionDays20d !== null && data.distributionDays20d >= 6) ||
+    (data.rangeAsymmetry !== null && data.rangeAsymmetry < 0.9);
+  if (se < 35 && distributing) return "DISTRIBUTION";
+
+  // UNCLASSIFIED: no gate matched. Not a verdict — an absence of one.
+  return "UNCLASSIFIED";
 }
 
 // ── Trade Read ──
@@ -195,6 +205,9 @@ export function determineTradeRead(
   extensionRisk: boolean,
 ): InflectionTradeRead {
   if (stage === "DISTRIBUTION" || extensionRisk) return "AVOID";
+  // UNCLASSIFIED means no setup was identified, which is not the same as a bearish call.
+  // Routing it to AVOID asserted something the classifier never established.
+  if (stage === "UNCLASSIFIED") return "WATCH";
   if (stage === "SELLER_EXHAUSTION") return "WATCH";
 
   // STARTER is evaluated before ADD_ON. The reverse order sent the strongest

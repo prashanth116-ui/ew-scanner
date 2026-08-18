@@ -248,3 +248,24 @@ describe("pre-structure scoring", () => {
     expect(result.isPrimarySignal).toBe(false);
   });
 });
+
+/**
+ * DISTRIBUTION was the fall-through return of classifyStage, so it absorbed every stock no
+ * gate matched — half the universe, including rows scoring 48 that the Transition engine
+ * simultaneously read as BULLISH_CHOCH. It then mapped to AVOID, which the cron filters and
+ * the confluence excludes. These guard the split.
+ */
+describe("UNCLASSIFIED vs DISTRIBUTION", () => {
+  it("routes an unclassified stage to WATCH, not AVOID", () => {
+    // "No setup identified" is an absence of a verdict, not a bearish one.
+    expect(determineTradeRead("UNCLASSIFIED", 47, 30, false)).toBe("WATCH");
+  });
+
+  it("still routes genuine distribution to AVOID", () => {
+    expect(determineTradeRead("DISTRIBUTION", 47, 30, false)).toBe("AVOID");
+  });
+
+  it("still avoids an extended name whatever the stage", () => {
+    expect(determineTradeRead("UNCLASSIFIED", 60, 70, true)).toBe("AVOID");
+  });
+});

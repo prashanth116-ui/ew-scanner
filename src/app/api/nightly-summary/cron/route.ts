@@ -233,6 +233,9 @@ function consolidateResults(
   // returns WATCH unconditionally, so without this the earliest setups were half-weighted.
   for (const r of inflection) {
     if (r.trade_read === "AVOID") continue; // negative signal — exclude
+    // UNCLASSIFIED means no stage gate matched. It is not evidence of anything, so it
+    // contributes nothing to confluence — not even the half weight INF_WATCH carries.
+    if (r.stage === "UNCLASSIFIED") continue;
     const isCoiled = r.is_coiled === true;
     const isWatch = r.trade_read === "WATCH" && !isCoiled;
     const label = isCoiled && r.trade_read === "WATCH"
