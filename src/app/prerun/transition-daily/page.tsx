@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
+import { ComponentFilterBar, type ComponentField, type ComponentFilters } from "@/app/prerun/_components/component-filter-bar";
 import { fmtNum } from "@/lib/daily-format";
 import { formatDatePill, streakColor } from "@/lib/daily-page-utils";
 
@@ -64,6 +65,15 @@ type SortField =
   | "overall_score" | "structure_score" | "se_score" | "demand_score"
   | "compression_score" | "runner_score" | "rs_score"
   | "state" | "alert_state" | "ticker" | "price" | "sector" | "streak" | "delta";
+
+const COMPONENT_FIELDS: ComponentField[] = [
+  { key: "structure_score",   label: "Str", title: "Structure — ChoCH + BOS, holding, recency, follow-through" },
+  { key: "se_score",          label: "SE",  title: "Supply Exhaustion — absorption, spring, range asymmetry, distribution days" },
+  { key: "demand_score",      label: "Dmd", title: "Demand Emergence — close location, pocket pivots, RVOL, OBV, distance to trigger" },
+  { key: "compression_score", label: "Cmp", title: "Compression — ATR contraction, inside bars, tight closes, dry volume" },
+  { key: "runner_score",      label: "Run", title: "Runner Potential — overhead supply, ATR%, base energy, float rotation, risk distance" },
+  { key: "rs_score",          label: "RS",  title: "RS Trajectory — acceleration vs SPY and its trend" },
+];
 
 // ── Helpers ──
 
@@ -355,6 +365,7 @@ export default function TransitionDailyPage() {
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
   const [alertFilter, setAlertFilter] = useState<AlertStateFilter>("ALL");
+  const [componentFilters, setComponentFilters] = useState<ComponentFilters>({});
   const [stateFilter, setStateFilter] = useState<StateFilter>("ALL");
   const [minScore, setMinScore] = useState(0);
   const [tickerSearch, setTickerSearch] = useState("");
@@ -523,6 +534,10 @@ export default function TransitionDailyPage() {
     if (minScore > 0) {
       rows = rows.filter((r) => r.overall_score >= minScore);
     }
+    for (const f of COMPONENT_FIELDS) {
+      const min = componentFilters[f.key] ?? 0;
+      if (min > 0) rows = rows.filter((r) => Number((r as unknown as Record<string, unknown>)[f.key]) >= min);
+    }
     if (tickerSearch.trim()) {
       const q = tickerSearch.trim().toUpperCase();
       rows = rows.filter(
@@ -585,7 +600,7 @@ export default function TransitionDailyPage() {
     });
 
     return sorted;
-  }, [results, highConvictionOnly, highConvictionTickers, alertFilter, stateFilter, minScore, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
+  }, [results, highConvictionOnly, highConvictionTickers, alertFilter, stateFilter, minScore, componentFilters, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
@@ -913,6 +928,16 @@ export default function TransitionDailyPage() {
           <option value={50}>50+</option>
           <option value={60}>60+</option>
         </select>
+
+        <span className="text-[#333]">|</span>
+
+        {/* Component score thresholds — percentiles of today's rows, not fixed cutoffs */}
+        <ComponentFilterBar
+          rows={results}
+          fields={COMPONENT_FIELDS}
+          value={componentFilters}
+          onChange={setComponentFilters}
+        />
 
         <span className="text-[#333]">|</span>
 
