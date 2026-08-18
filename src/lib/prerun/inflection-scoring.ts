@@ -346,20 +346,23 @@ export function scoreInflection(
   // same setup needs more evidence to earn an alert in a hostile tape.
   if (regimeGate.scorePenalty > 0) cautionEvidence.push(regimeGate.label);
 
-  // Coiled: the pre-move tier, mirroring Transition's. SELLER_EXHAUSTION returns WATCH
-  // unconditionally from determineTradeRead, so 46% of the table — including names with
-  // strong Runner Potential — got the lowest read available and never reached the
-  // confluence. This surfaces the ones that are genuinely ready without promoting the rest.
+  // Coiled: pre-move tier. Definition is deliberately PARALLEL to Transition's so the flag
+  // means one thing across both pages — full setup, real Runner Potential, move has not
+  // started. It previously required stage SELLER_EXHAUSTION or INFLECTION, which made
+  // "coiled" mean "pre-move AND would otherwise be buried on this page" — a property of the
+  // page rather than the stock, so the same name could be coiled on one page and not the
+  // other. Pre-move here means any stage that is not EXPANSION.
   const isCoiledSignal =
-    (stage === "SELLER_EXHAUSTION" || stage === "INFLECTION") &&
-    overallScore >= 42 + regimeGate.scorePenalty &&
+    stage !== "EXPANSION" &&
+    stage !== "DISTRIBUTION" &&
+    overallScore >= 45 + regimeGate.scorePenalty &&
     runnerScore >= 50 &&
-    seScore >= 40 &&
-    compressionScore >= 30 &&
+    demandScore >= 38 &&
+    seScore >= 35 &&
     !extensionRisk;
 
   if (isCoiledSignal) {
-    bullishEvidence.push("Coiled — supply exhausted and compressed, with room to run");
+    bullishEvidence.push("Coiled — full setup in place, move has not started");
   }
 
   // Signal classification calibrated to actual distribution

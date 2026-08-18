@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
+import { useState, useEffect, useMemo, useCallback, Fragment, useRef } from "react";
 import {
   Loader2,
   Calendar,
@@ -329,6 +329,31 @@ export default function InflectionDailyPage() {
   const [loadingResults, setLoadingResults] = useState(false);
   const [tradeReadFilter, setTradeReadFilter] = useState<TradeReadFilter>("ALL");
   const [componentFilters, setComponentFilters] = useState<ComponentFilters>({});
+
+  // Default view: Runner Potential in the top half of the day.
+  //
+  // Of everything these engines measure, Runner Potential is the axis that separates names
+  // that can move from well-formed setups on stocks that cannot — a coiled base on a 1.2%
+  // ATR mega-cap and one on a 4.5% ATR name used to rank identically. Filtering on it is
+  // the one default justified by design rather than by an unvalidated threshold.
+  //
+  // Deliberately the ONLY default. Alert state, stage and score are left wide open so no
+  // tier is hidden — the timing preference (early vs confirmed) is the user's call, not a
+  // default. Applied once when the day's rows first arrive, and never re-applied after
+  // that, so clearing it sticks.
+  const defaultsApplied = useRef(false);
+  useEffect(() => {
+    if (defaultsApplied.current || results.length === 0) return;
+    defaultsApplied.current = true;
+    const runners = results
+      .map((r) => r.runner_score)
+      .filter((v) => Number.isFinite(v))
+      .sort((a, b) => a - b);
+    if (runners.length > 0) {
+      setComponentFilters({ runner_score: runners[Math.floor(runners.length * 0.5)] });
+    }
+  }, [results]);
+
   const [stageFilter, setStageFilter] = useState<StageFilter>("ALL");
   const [minScore, setMinScore] = useState(0);
   const [tickerSearch, setTickerSearch] = useState("");

@@ -112,10 +112,11 @@ export function ComponentFilterBar<T>({
       {activeCount > 0 && (
         <button
           onClick={() => onChange({})}
-          className="flex items-center gap-0.5 rounded border border-[#2a2a2a] px-1.5 py-1 text-[10px] text-[#888] transition-colors hover:border-white/20 hover:text-white"
+          title="Remove all component filters and show every row"
+          className="flex items-center gap-0.5 rounded border border-amber-500/40 px-1.5 py-1 text-[10px] text-amber-400 transition-colors hover:border-amber-400 hover:text-amber-300"
         >
           <X className="h-2.5 w-2.5" />
-          Clear {activeCount}
+          Clear {activeCount} filter{activeCount > 1 ? "s" : ""}
         </button>
       )}
     </div>
