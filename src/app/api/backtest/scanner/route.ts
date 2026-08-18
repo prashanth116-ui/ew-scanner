@@ -16,8 +16,12 @@
  * is bounded by retention, not by the requested range. The response reports the actual
  * dates found so a short window is visible rather than silent.
  *
- * GET /api/backtest/scanner?engine=inflection&days=14&minScore=40
+ * GET /api/backtest/scanner?engine=inflection&days=60&minVersion=3
+ * GET /api/backtest/scanner?engine=transition&days=60&minVersion=3&minMeasured=90
  * GET /api/backtest/scanner?engine=transition&days=14&alertState=TRIGGERED,READY
+ *
+ * minVersion  drop rows scored by an older engine — required for any accuracy claim
+ * minMeasured drop rows whose composite rested on thin data (see measured_pct)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -56,7 +60,12 @@ interface SignalRow {
 
 interface BucketStats {
   bucket: string;
+  /** Rows in this bucket. */
   signals: number;
+  /** Rows that actually had 5-day forward data — the sample every 5d statistic below is
+   *  computed on. Reporting only `signals` was misleading: a bucket could show 622 rows
+   *  with an average computed on 146 of them, which reads as far more evidence than exists. */
+  evaluated5d: number;
   avgReturn5d: number | null;
   medianReturn5d: number | null;
   winRate5d: number | null;
@@ -141,6 +150,7 @@ function summarize(rows: SignalRow[], bucket: string, baseline: number | null): 
   return {
     bucket,
     signals: rows.length,
+    evaluated5d: r5.length,
     avgReturn5d: round(avg5),
     medianReturn5d: round(median(r5)),
     winRate5d: r5.length > 0 ? round((r5.filter((v) => v > 0).length / r5.length) * 100, 1) : null,
@@ -214,6 +224,12 @@ export async function GET(request: NextRequest) {
 
     const days = Math.min(Math.max(Number(params.get("days") ?? 30), 1), 90);
     const minScore = Number(params.get("minScore") ?? 0);
+    // Scores from different engine versions are different measurements and must not be
+    // pooled. Defaults to 0 (no filter) so the parameter is opt-in, but any conclusion
+    // about accuracy should pass version=3.
+    const minVersion = Number(params.get("minVersion") ?? 0);
+    // Rows whose composite rested on thin data are weaker evidence, not equal evidence.
+    const minMeasured = Number(params.get("minMeasured") ?? 0);
     const bucketFilter = params.get("alertState") ?? params.get("tradeRead");
     const allowedBuckets = bucketFilter ? new Set(bucketFilter.split(",").map((s) => s.trim())) : null;
 
@@ -238,6 +254,8 @@ export async function GET(request: NextRequest) {
           ? fromInflection(r as InflectionDailyRecord)
           : fromTransition(r as TransitionDailyRecord);
         if (normalized.score < minScore) continue;
+        if (minVersion > 0 && (r.scanner_version ?? 2) < minVersion) continue;
+        if (minMeasured > 0 && (r.measured_pct ?? 100) < minMeasured) continue;
         if (allowedBuckets && !allowedBuckets.has(normalized.secondaryBucket)) continue;
         base.push(normalized);
       }
@@ -313,7 +331,16 @@ export async function GET(request: NextRequest) {
         dates,
         note: "Study window is bounded by the 90-day purge on the daily tables, not by the requested range.",
       },
-      filters: { minScore, buckets: allowedBuckets ? [...allowedBuckets] : null },
+      filters: {
+        minScore,
+        minVersion: minVersion || null,
+        minMeasured: minMeasured || null,
+        buckets: allowedBuckets ? [...allowedBuckets] : null,
+      },
+      caveat:
+        minVersion > 0
+          ? null
+          : "Rows may span multiple engine versions, whose scores are different measurements. Pass minVersion=3 before drawing any conclusion about accuracy.",
       lookahead: "none — scores are read from persisted rows, not recomputed",
       counts: {
         rowsLoaded: base.length,
