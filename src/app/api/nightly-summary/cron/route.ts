@@ -215,10 +215,16 @@ function consolidateResults(
     if (r.final_score > 0) add(r.ticker, { scanner: "PreRun", label: prerunLabel(r), score: r.final_score });
   }
   // INF AVOID = negative signal, skip entirely. INF WATCH = low-conviction badge only.
+  // A coiled row is a full pre-move setup, not a low-conviction watch: SELLER_EXHAUSTION
+  // returns WATCH unconditionally, so without this the earliest setups were half-weighted.
   for (const r of inflection) {
     if (r.trade_read === "AVOID") continue; // negative signal — exclude
-    const isWatch = r.trade_read === "WATCH";
-    add(r.ticker, { scanner: isWatch ? "INF_WATCH" : "Inflection", label: inflectionLabel(r), score: r.overall_score });
+    const isCoiled = r.is_coiled === true;
+    const isWatch = r.trade_read === "WATCH" && !isCoiled;
+    const label = isCoiled && r.trade_read === "WATCH"
+      ? `Inflect COILED ${r.overall_score}`
+      : inflectionLabel(r);
+    add(r.ticker, { scanner: isWatch ? "INF_WATCH" : "Inflection", label, score: r.overall_score });
   }
   for (const r of vcp) add(r.ticker, { scanner: "VCP", label: vcpLabel(r), score: r.total_score });
   for (const r of institutional) add(r.ticker, { scanner: "Institutional", label: institutionalLabel(r), score: r.composite_score });

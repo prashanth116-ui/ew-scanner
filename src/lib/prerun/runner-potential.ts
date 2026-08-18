@@ -21,7 +21,8 @@ import type { PreRunStockData } from "./types";
 import { nullNeutralScore, type ScoreSlot } from "./score-slot";
 
 export interface RunnerPotentialResult {
-  score: number;
+  /** null when nothing about this stock's move potential could be measured. */
+  score: number | null;
   evidence: string[];
   caution: string[];
 }

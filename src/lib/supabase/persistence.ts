@@ -479,6 +479,8 @@ export interface InflectionDailyRecord {
   runner_score?: number;
   /** Scoring engine version; delta/comparison logic must not mix versions. */
   scanner_version?: number;
+  /** Pre-move tier: supply exhausted, compressed, real Runner Potential, not yet moving. */
+  is_coiled?: boolean;
   /** Legacy V2 columns, no longer written (DB default 0): be_score, la_score, ip_score */
   be_score?: number;
   la_score?: number;

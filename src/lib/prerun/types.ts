@@ -348,6 +348,8 @@ export interface InflectionResult {
   stage: InflectionStage;
   tradeRead: InflectionTradeRead;
   extensionRisk: boolean;
+  /** Pre-move tier: supply exhausted, compressed, real Runner Potential, not yet moving. */
+  isCoiledSignal: boolean;
   bullishEvidence: string[];
   cautionEvidence: string[];
   invalidationLevel: number | null;

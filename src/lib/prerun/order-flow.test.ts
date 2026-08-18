@@ -7,6 +7,7 @@ import {
   calcRangeAsymmetry,
   calcOverheadSupply,
 } from "./data";
+import { weightedComposite, nullNeutralScore } from "./score-slot";
 
 /**
  * Order-flow primitives. Each replaces a lagging input in the Inflection or Transition
@@ -197,5 +198,53 @@ describe("calcOverheadSupply", () => {
 
   it("returns null with too little history", () => {
     expect(calcOverheadSupply(highs.slice(0, 10), lows.slice(0, 10), volumes.slice(0, 10), 100)).toBeNull();
+  });
+});
+
+describe("weightedComposite", () => {
+  it("redistributes weight when a component cannot be measured", () => {
+    // 80 at weight .25 and 40 at weight .25, with a third component unmeasurable.
+    // Correct answer is the average of the two available (60), not (80+40+0)/3 = 40.
+    expect(weightedComposite([
+      { score: 80, weight: 0.25 },
+      { score: 40, weight: 0.25 },
+      { score: null, weight: 0.50 },
+    ])).toBe(60);
+  });
+
+  it("matches a plain weighted average when everything is present", () => {
+    expect(weightedComposite([
+      { score: 100, weight: 0.5 },
+      { score: 0, weight: 0.5 },
+    ])).toBe(50);
+  });
+
+  it("does not let an unmeasurable component drag the score toward zero", () => {
+    const withNull = weightedComposite([{ score: 70, weight: 0.75 }, { score: null, weight: 0.25 }]);
+    const withZero = weightedComposite([{ score: 70, weight: 0.75 }, { score: 0, weight: 0.25 }]);
+    expect(withNull).toBe(70);
+    expect(withZero).toBeLessThan(withNull);
+  });
+
+  it("returns 0 only when nothing at all is measurable", () => {
+    expect(weightedComposite([{ score: null, weight: 1 }])).toBe(0);
+    expect(weightedComposite([])).toBe(0);
+  });
+});
+
+describe("nullNeutralScore", () => {
+  it("returns null when no slot has data", () => {
+    expect(nullNeutralScore([{ earned: 0, possible: 0, hasData: false }])).toBeNull();
+  });
+
+  it("scores only the slots that have data", () => {
+    expect(nullNeutralScore([
+      { earned: 10, possible: 10, hasData: true },
+      { earned: 0, possible: 50, hasData: false },
+    ])).toBe(100);
+  });
+
+  it("distinguishes a measured zero from no data", () => {
+    expect(nullNeutralScore([{ earned: 0, possible: 20, hasData: true }])).toBe(0);
   });
 });

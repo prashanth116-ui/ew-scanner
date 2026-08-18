@@ -30,7 +30,7 @@ import type {
   InflectionTradeRead,
   InflectionResult,
 } from "./types";
-import { nullNeutralScore, type ScoreSlot } from "./score-slot";
+import { nullNeutralScore, weightedComposite, displayScore, type ScoreSlot } from "./score-slot";
 import { scoreRunnerPotential } from "./runner-potential";
 import { NEUTRAL_GATE, type RegimeGate } from "./regime-gate";
 
@@ -52,7 +52,7 @@ function evaluateGates(data: PreRunStockData): InflectionGates {
 // the same effort. RSI and the raw pullback-depth ladder are gone — both described how far
 // price had already fallen rather than whether the selling was finished.
 
-function scoreSupplyExhaustion(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
+function scoreSupplyExhaustion(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -139,7 +139,7 @@ function scoreSupplyExhaustion(data: PreRunStockData): { score: number; evidence
 // bar; RVOL trajectory reads the slope of participation. None of them wait for a moving
 // average to cross, which is what the EMA-reclaim and higher-low slots they replace did.
 
-function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
+function scoreDemandEmergence(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -149,12 +149,12 @@ function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence:
   if (clv !== null) {
     const flat = data.closeLocationFlat === true;
     let earned = 0;
-    if (clv >= 0.65 && flat) { earned = 30; evidence.push("Closing near the highs while price goes nowhere — accumulation footprint"); }
-    else if (clv >= 0.65) { earned = 22; evidence.push("Consistently closing in the upper part of the range"); }
-    else if (clv >= 0.55) { earned = 16; }
-    else if (clv >= 0.45) { earned = 8; }
+    if (clv >= 0.65 && flat) { earned = 26; evidence.push("Closing near the highs while price goes nowhere — accumulation footprint"); }
+    else if (clv >= 0.65) { earned = 19; evidence.push("Consistently closing in the upper part of the range"); }
+    else if (clv >= 0.55) { earned = 14; }
+    else if (clv >= 0.45) { earned = 7; }
     else { caution.push("Closing in the lower half of the daily range"); }
-    slots.push({ earned, possible: 30, hasData: true });
+    slots.push({ earned, possible: 26, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -163,11 +163,11 @@ function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence:
   if (data.pocketPivots !== null) {
     const p = data.pocketPivots;
     let earned = 0;
-    if (p >= 3) { earned = 30; evidence.push(`${p} pocket pivots — repeated institutional footprints`); }
-    else if (p >= 2) { earned = 23; evidence.push(`${p} pocket pivots`); }
-    else if (p >= 1) { earned = 14; evidence.push("Pocket pivot — up volume exceeded every recent down day"); }
+    if (p >= 3) { earned = 26; evidence.push(`${p} pocket pivots — repeated institutional footprints`); }
+    else if (p >= 2) { earned = 20; evidence.push(`${p} pocket pivots`); }
+    else if (p >= 1) { earned = 12; evidence.push("Pocket pivot — up volume exceeded every recent down day"); }
     else { caution.push("No pocket pivots — demand has not outweighed supply"); }
-    slots.push({ earned, possible: 30, hasData: true });
+    slots.push({ earned, possible: 26, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -176,23 +176,42 @@ function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence:
   if (data.rvolTrajectory !== null) {
     const t = data.rvolTrajectory;
     let earned = 0;
-    if (t >= 0.15) { earned = 20; evidence.push("Relative volume building sharply"); }
-    else if (t >= 0.05) { earned = 15; evidence.push("Relative volume building"); }
-    else if (t >= 0) { earned = 8; }
+    if (t >= 0.15) { earned = 17; evidence.push("Relative volume building sharply"); }
+    else if (t >= 0.05) { earned = 13; evidence.push("Relative volume building"); }
+    else if (t >= 0) { earned = 7; }
     else { caution.push("Participation fading"); }
-    slots.push({ earned, possible: 20, hasData: true });
+    slots.push({ earned, possible: 17, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
   // 2d. OBV divergence (0-20) — stealth accumulation. Scored once, here only.
   if (data.obvDivergent !== null) {
-    slots.push({ earned: data.obvDivergent ? 20 : 0, possible: 20, hasData: true });
+    slots.push({ earned: data.obvDivergent ? 16 : 0, possible: 16, hasData: true });
     if (data.obvDivergent) evidence.push("OBV near the top of its range while price is not — stealth buying");
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
+
+  // 2e. Distance to the breakout level (0-15) — the "when" axis.
+  // Neither engine measured proximity to its trigger after the V3 rebuild, so a stock 1 ATR
+  // from breaking out and one 12 ATR away scored identically. Measured in ATR so it is
+  // comparable across volatility profiles, and peaked in a striking-distance band rather
+  // than at zero — sitting ON the level is extension, not readiness.
+  const atrPct = data.vcpAtrPct;
+  if (data.pctFromBaseHigh !== null && atrPct !== null && atrPct > 0) {
+    const atrUnits = data.pctFromBaseHigh / atrPct;
+    let earned = 0;
+    if (atrUnits <= 0.5) { earned = 6; }
+    else if (atrUnits <= 3) { earned = 15; evidence.push(`Breakout level ${atrUnits.toFixed(1)} ATR away — within striking distance`); }
+    else if (atrUnits <= 6) { earned = 9; evidence.push(`Breakout level ${atrUnits.toFixed(1)} ATR away`); }
+    else if (atrUnits <= 10) { earned = 4; }
+    else { caution.push("Breakout level more than 10 ATR away — no move within reach"); }
+    slots.push({ earned, possible: 15, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
@@ -202,7 +221,7 @@ function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence:
 // unchanged apart from the removal of the dry-volume slot, which now sits in nothing —
 // volume behaviour belongs to the demand and supply components.
 
-function scoreCompression(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
+function scoreCompression(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -289,7 +308,7 @@ function scoreCompression(data: PreRunStockData): { score: number; evidence: str
 // points described the last 20 days; at an inflection point RS is negative by definition and
 // the signal is the second derivative, not the level.
 
-function scoreRSTrajectory(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
+function scoreRSTrajectory(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -343,20 +362,26 @@ function classifyStage(
 ): InflectionStage {
   const pctFromAth = data.pctFromAth ?? 100;
 
-  // EXPANSION: near the highs with RS confirming
-  if (pctFromAth < 10 && rs >= 40) return "EXPANSION";
+  // Demand gates are anchored to the OBSERVED distribution of the V3 Demand Emergence
+  // component (median 22, p75 37), not to V2's Buyer Emergence, which ran ~20 points higher
+  // because it scored EMA reclaim and higher-low counts that most stocks satisfy. Carrying
+  // the old gates forward made EARLY_ACCUMULATION reachable by 4% of the universe.
+
+  // EXPANSION: already in markup. Tightened from (10%, 40) — that caught 29% of the table
+  // and routed all of it to ADD_ON, which is the opposite of catching a move early.
+  if (pctFromAth < 6 && rs >= 55) return "EXPANSION";
 
   // EARLY_ACCUMULATION: demand clearly present
-  if (demand >= 50 && rs >= 35 && se >= 30) return "EARLY_ACCUMULATION";
+  if (demand >= 32 && rs >= 35 && se >= 30) return "EARLY_ACCUMULATION";
   // Alt path: strong demand compensates for weaker RS
-  if (demand >= 55 && se >= 35 && compression >= 25) return "EARLY_ACCUMULATION";
+  if (demand >= 37 && se >= 35 && compression >= 25) return "EARLY_ACCUMULATION";
 
   // INFLECTION: supply exhausted + compressed + demand starting
-  if (se >= 40 && compression >= 30 && demand >= 25) return "INFLECTION";
+  if (se >= 40 && compression >= 30 && demand >= 18) return "INFLECTION";
   // Alt path: strong exhaustion + emerging demand without full compression
-  if (se >= 50 && demand >= 30 && compression >= 15) return "INFLECTION";
+  if (se >= 50 && demand >= 23 && compression >= 15) return "INFLECTION";
   // Alt path: strong compression + decent exhaustion
-  if (compression >= 50 && se >= 35 && demand >= 20) return "INFLECTION";
+  if (compression >= 50 && se >= 35 && demand >= 13) return "INFLECTION";
 
   // SELLER_EXHAUSTION: selling pressure declining, demand not yet present
   if (se >= 35 && compression >= 15) return "SELLER_EXHAUSTION";
@@ -435,28 +460,33 @@ export function scoreInflection(
   const runnerResult = scoreRunnerPotential(data, invalidationLevel);
   const rsResult = scoreRSTrajectory(data);
 
-  // Straight weighted average — no multiplier. Liquidity is handled by the universe gate.
-  const rawWeighted =
-    seResult.score * 0.25 +          // Is supply finished?
-    demandResult.score * 0.25 +      // Is demand appearing?
-    compressionResult.score * 0.15 + // Is the spring wound?
-    runnerResult.score * 0.25 +      // Can it actually move?
-    rsResult.score * 0.10;           // Is relative strength turning?
+  // Weighted average over the components that could actually be measured. A component with
+  // no data is skipped and its weight redistributed, rather than entering the sum as a zero.
+  const overallScore = weightedComposite([
+    { score: seResult.score, weight: 0.25 },          // Is supply finished?
+    { score: demandResult.score, weight: 0.25 },      // Is demand appearing?
+    { score: compressionResult.score, weight: 0.15 }, // Is the spring wound?
+    { score: runnerResult.score, weight: 0.25 },      // Can it actually move?
+    { score: rsResult.score, weight: 0.10 },          // Is relative strength turning?
+  ]);
 
-  const overallScore = Number.isFinite(rawWeighted) ? Math.round(rawWeighted) : 0;
+  const seScore = displayScore(seResult.score);
+  const demandScore = displayScore(demandResult.score);
+  const compressionScore = displayScore(compressionResult.score);
+  const runnerScore = displayScore(runnerResult.score);
 
   const scores: InflectionScores = {
-    supplyExhaustion: seResult.score,
-    demandEmergence: demandResult.score,
-    compression: compressionResult.score,
-    runnerPotential: runnerResult.score,
-    rsTrajectory: rsResult.score,
+    supplyExhaustion: seScore,
+    demandEmergence: demandScore,
+    compression: compressionScore,
+    runnerPotential: runnerScore,
+    rsTrajectory: displayScore(rsResult.score),
     overallScore,
   };
 
-  const stage = classifyStage(seResult.score, compressionResult.score, demandResult.score, rsResult.score, data);
+  const stage = classifyStage(seScore, compressionScore, demandScore, displayScore(rsResult.score), data);
   const extensionRisk = checkExtensionRisk(data);
-  const tradeRead = determineTradeRead(stage, overallScore, demandResult.score, extensionRisk);
+  const tradeRead = determineTradeRead(stage, overallScore, demandScore, extensionRisk);
 
   // Merge all evidence
   const bullishEvidence = [
@@ -478,6 +508,22 @@ export function scoreInflection(
   // same setup needs more evidence to earn an alert in a hostile tape.
   if (regimeGate.scorePenalty > 0) cautionEvidence.push(regimeGate.label);
 
+  // Coiled: the pre-move tier, mirroring Transition's. SELLER_EXHAUSTION returns WATCH
+  // unconditionally from determineTradeRead, so 46% of the table — including names with
+  // strong Runner Potential — got the lowest read available and never reached the
+  // confluence. This surfaces the ones that are genuinely ready without promoting the rest.
+  const isCoiledSignal =
+    (stage === "SELLER_EXHAUSTION" || stage === "INFLECTION") &&
+    overallScore >= 42 + regimeGate.scorePenalty &&
+    runnerScore >= 50 &&
+    seScore >= 40 &&
+    compressionScore >= 30 &&
+    !extensionRisk;
+
+  if (isCoiledSignal) {
+    bullishEvidence.push("Coiled — supply exhausted and compressed, with room to run");
+  }
+
   // Signal classification calibrated to actual distribution
   const isPrimarySignal =
     overallScore >= 42 + regimeGate.scorePenalty &&
@@ -493,9 +539,9 @@ export function scoreInflection(
   const isStrongerSignal =
     isPrimarySignal &&
     overallScore >= 50 + regimeGate.scorePenalty &&
-    demandResult.score >= 50 &&
-    seResult.score >= 45 &&
-    runnerResult.score >= 50;
+    demandScore >= 50 &&
+    seScore >= 45 &&
+    runnerScore >= 50;
 
   return {
     data,
@@ -504,6 +550,7 @@ export function scoreInflection(
     stage,
     tradeRead,
     extensionRisk,
+    isCoiledSignal,
     bullishEvidence,
     cautionEvidence,
     invalidationLevel,

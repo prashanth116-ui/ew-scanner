@@ -46,7 +46,7 @@ import {
   computeInvalidationLevel,
   evaluateBreakConfirmation,
 } from "./market-structure";
-import { nullNeutralScore, type ScoreSlot } from "./score-slot";
+import { nullNeutralScore, weightedComposite, displayScore, type ScoreSlot } from "./score-slot";
 import { scoreRunnerPotential } from "./runner-potential";
 import { NEUTRAL_GATE, type RegimeGate } from "./regime-gate";
 
@@ -74,8 +74,9 @@ function scoreStructure(
   bosHolding: boolean,
   bosBarsAgo: number | null,
   higherHighCount: number,
+  lowerHighCount: number,
   structureHasPrinted: boolean,
-): { score: number; evidence: string[]; caution: string[] } {
+): { score: number | null; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -83,8 +84,8 @@ function scoreStructure(
   // 1a. Change of character (0-40)
   if (structureHasPrinted) {
     slots.push({
-      earned: chochDetected ? (chochHolding ? 40 : 12) : 0,
-      possible: 40,
+      earned: chochDetected ? (chochHolding ? 30 : 9) : 0,
+      possible: 30,
       hasData: true,
     });
     if (chochDetected && chochHolding) evidence.push("Bullish ChoCH — broke above the recent swing high and is holding it");
@@ -97,8 +98,8 @@ function scoreStructure(
   // 1b. Break of structure (0-35)
   if (structureHasPrinted) {
     slots.push({
-      earned: bosDetected ? (bosHolding ? 35 : 10) : 0,
-      possible: 35,
+      earned: bosDetected ? (bosHolding ? 25 : 7) : 0,
+      possible: 25,
       hasData: true,
     });
     if (bosDetected && bosHolding) evidence.push("Bullish BOS — higher low confirmed and prior swing high taken, still holding");
@@ -112,11 +113,11 @@ function scoreStructure(
   const barsAgo = bosDetected ? bosBarsAgo : chochBarsAgo;
   if ((bosDetected || chochDetected) && barsAgo !== null) {
     let earned = 0;
-    if (barsAgo <= 5) { earned = 25; evidence.push(`Structure flipped ${barsAgo} bars ago — fresh`); }
-    else if (barsAgo <= 10) { earned = 18; }
-    else if (barsAgo <= 20) { earned = 10; }
-    else { earned = 4; caution.push(`Structural break was ${barsAgo} bars ago — aging`); }
-    slots.push({ earned, possible: 25, hasData: true });
+    if (barsAgo <= 5) { earned = 18; evidence.push(`Structure flipped ${barsAgo} bars ago — fresh`); }
+    else if (barsAgo <= 10) { earned = 13; }
+    else if (barsAgo <= 20) { earned = 7; }
+    else { earned = 3; caution.push(`Structural break was ${barsAgo} bars ago — aging`); }
+    slots.push({ earned, possible: 18, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -126,10 +127,23 @@ function scoreStructure(
   // so this reads as "recent structure is making higher highs", gated on a BOS existing.
   if (bosDetected) {
     let earned = 0;
-    if (higherHighCount >= 2) { earned = 20; evidence.push(`BOS with ${higherHighCount} higher highs in recent structure — trend extending`); }
-    else if (higherHighCount >= 1) { earned = 12; evidence.push("BOS with a higher high in recent structure"); }
+    if (higherHighCount >= 2) { earned = 14; evidence.push(`BOS with ${higherHighCount} higher highs in recent structure — trend extending`); }
+    else if (higherHighCount >= 1) { earned = 9; evidence.push("BOS with a higher high in recent structure"); }
     else { caution.push("BOS with no higher highs in recent structure"); }
-    slots.push({ earned, possible: 20, hasData: true });
+    slots.push({ earned, possible: 14, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  // 1e. Bearish structure penalty (0-15) — lower highs still forming alongside the break.
+  // analyzeMarketStructure computes lowerHighCount for structureBias and nothing scored it.
+  // A ChoCH printed while the swing structure is still making lower highs is weaker evidence
+  // than the same ChoCH inside clean structure.
+  if (structureHasPrinted) {
+    let earned = 13;
+    if (lowerHighCount >= 2) { earned = 0; caution.push(`${lowerHighCount} lower highs still in recent structure — break is fighting the trend`); }
+    else if (lowerHighCount >= 1) { earned = 7; }
+    slots.push({ earned, possible: 13, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -142,7 +156,7 @@ function scoreStructure(
 // Identical primitives to the Inflection engine, so "supply is finished" means one thing
 // across the system. RSI is gone.
 
-function scoreSupplyExhaustion(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
+function scoreSupplyExhaustion(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -215,7 +229,7 @@ function scoreSupplyExhaustion(data: PreRunStockData): { score: number; evidence
 // Replaces the V2 Accumulation Quality and Volume Profile components, which between them
 // scored OBV divergence twice and mixed two incompatible definitions of an "up day".
 
-function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
+function scoreDemandEmergence(data: PreRunStockData, triggerLevel: number | null): { score: number | null; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -225,12 +239,12 @@ function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence:
   if (clv !== null) {
     const flat = data.closeLocationFlat === true;
     let earned = 0;
-    if (clv >= 0.65 && flat) { earned = 25; evidence.push("Closing near the highs while price goes nowhere — accumulation footprint"); }
-    else if (clv >= 0.65) { earned = 19; evidence.push("Consistently closing in the upper part of the range"); }
-    else if (clv >= 0.55) { earned = 13; }
-    else if (clv >= 0.45) { earned = 6; }
+    if (clv >= 0.65 && flat) { earned = 22; evidence.push("Closing near the highs while price goes nowhere — accumulation footprint"); }
+    else if (clv >= 0.65) { earned = 16; evidence.push("Consistently closing in the upper part of the range"); }
+    else if (clv >= 0.55) { earned = 11; }
+    else if (clv >= 0.45) { earned = 5; }
     else { caution.push("Closing in the lower half of the daily range"); }
-    slots.push({ earned, possible: 25, hasData: true });
+    slots.push({ earned, possible: 22, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -239,11 +253,11 @@ function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence:
   if (data.pocketPivots !== null) {
     const p = data.pocketPivots;
     let earned = 0;
-    if (p >= 3) { earned = 25; evidence.push(`${p} pocket pivots — repeated institutional footprints`); }
-    else if (p >= 2) { earned = 19; evidence.push(`${p} pocket pivots`); }
-    else if (p >= 1) { earned = 12; evidence.push("Pocket pivot — up volume exceeded every recent down day"); }
+    if (p >= 3) { earned = 22; evidence.push(`${p} pocket pivots — repeated institutional footprints`); }
+    else if (p >= 2) { earned = 17; evidence.push(`${p} pocket pivots`); }
+    else if (p >= 1) { earned = 10; evidence.push("Pocket pivot — up volume exceeded every recent down day"); }
     else { caution.push("No pocket pivots — demand has not outweighed supply"); }
-    slots.push({ earned, possible: 25, hasData: true });
+    slots.push({ earned, possible: 22, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -252,18 +266,18 @@ function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence:
   if (data.rvolTrajectory !== null) {
     const t = data.rvolTrajectory;
     let earned = 0;
-    if (t >= 0.15) { earned = 20; evidence.push("Relative volume building sharply"); }
-    else if (t >= 0.05) { earned = 15; evidence.push("Relative volume building"); }
-    else if (t >= 0) { earned = 8; }
+    if (t >= 0.15) { earned = 17; evidence.push("Relative volume building sharply"); }
+    else if (t >= 0.05) { earned = 13; evidence.push("Relative volume building"); }
+    else if (t >= 0) { earned = 7; }
     else { caution.push("Participation fading"); }
-    slots.push({ earned, possible: 20, hasData: true });
+    slots.push({ earned, possible: 17, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
   // 3d. OBV divergence (0-15) — scored once, here only
   if (data.obvDivergent !== null) {
-    slots.push({ earned: data.obvDivergent ? 15 : 0, possible: 15, hasData: true });
+    slots.push({ earned: data.obvDivergent ? 13 : 0, possible: 13, hasData: true });
     if (data.obvDivergent) evidence.push("OBV near the top of its range while price is not — stealth buying");
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
@@ -273,20 +287,39 @@ function scoreDemandEmergence(data: PreRunStockData): { score: number; evidence:
   if (data.moneyFlowPersistence !== null) {
     const mfp = data.moneyFlowPersistence;
     let earned = 0;
-    if (mfp >= 12) { earned = 15; evidence.push("Sustained money flow"); }
-    else if (mfp >= 8) { earned = 11; }
-    else if (mfp >= 5) { earned = 6; }
-    slots.push({ earned, possible: 15, hasData: true });
+    if (mfp >= 12) { earned = 11; evidence.push("Sustained money flow"); }
+    else if (mfp >= 8) { earned = 8; }
+    else if (mfp >= 5) { earned = 4; }
+    slots.push({ earned, possible: 11, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
+
+  // 3f. Distance to the trigger (0-15) — the "when" axis.
+  // Transition computed a forward trigger level and scored nothing against it, so a stock
+  // 1 ATR from breaking out and one 12 ATR away were indistinguishable. Negative distance
+  // (already through the level) scores the striking-distance band too: the alert state
+  // handles what happens after a break, this slot only measures reachability.
+  const atrPct = data.vcpAtrPct;
+  const price = data.currentPrice;
+  if (triggerLevel !== null && price !== null && price > 0 && atrPct !== null && atrPct > 0) {
+    const atrUnits = Math.abs(((triggerLevel - price) / price) * 100) / atrPct;
+    let earned = 0;
+    if (atrUnits <= 3) { earned = 15; evidence.push(`Trigger ${atrUnits.toFixed(1)} ATR away — within striking distance`); }
+    else if (atrUnits <= 6) { earned = 9; evidence.push(`Trigger ${atrUnits.toFixed(1)} ATR away`); }
+    else if (atrUnits <= 10) { earned = 4; }
+    else { caution.push("Trigger more than 10 ATR away — no move within reach"); }
+    slots.push({ earned, possible: 15, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
 // ── 4. Compression (0-100, weight 10%) ──
 
-function scoreCompressionQuality(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
+function scoreCompressionQuality(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -354,7 +387,7 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number; eviden
 // Acceleration only. The absolute RS slots are gone: one of them read a sector-relative
 // field while claiming to be benchmark-relative, and both described the past 20 days.
 
-function scoreRSTrajectory(data: PreRunStockData): { score: number; evidence: string[]; caution: string[] } {
+function scoreRSTrajectory(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -407,6 +440,9 @@ function scoreRSTrajectory(data: PreRunStockData): { score: number; evidence: st
 // Runner Potential is deliberately NOT an input. How far a stock can move says nothing
 // about where in the cycle it currently sits.
 
+// Demand gates are anchored to the OBSERVED distribution of the V3 Demand Emergence
+// component (median 26, p75 37), not to V2's Accumulation/Volume pair, which ran higher
+// because it scored accumulation days and raw volume ratios that most stocks satisfy.
 function classifyState(
   se: number,
   demand: number,
@@ -432,41 +468,41 @@ function classifyState(
     structureBias === "bullish" &&
     rs >= 40 &&
     pctFromAth < 15 &&
-    demand >= 35
+    demand >= 28
   ) return "SUSTAINED_MARKUP";
 
   // STATE 8: EARLY_EXPANSION — breakout from compression with participation
   if (
     bosDetected &&
     compression >= 30 &&
-    demand >= 40 &&
+    demand >= 32 &&
     (data.closesNearRangeTop === true) &&
     rs >= 25
   ) return "EARLY_EXPANSION";
 
   // STATE 7: COMPRESSION — range tightening after a structural break
-  if (bosDetected && compression >= 40) return "COMPRESSION";
+  if (bosDetected && compression >= 32) return "COMPRESSION";
   // Alt: strong compression after a ChoCH with higher lows in place
-  if (chochDetected && compression >= 50 && higherLowCount >= 2) return "COMPRESSION";
+  if (chochDetected && compression >= 40 && higherLowCount >= 2) return "COMPRESSION";
 
   // STATE 6: BULLISH_BOS — break of structure with demand behind it
-  if (bosDetected && higherLowCount >= 2 && demand >= 30) return "BULLISH_BOS";
+  if (bosDetected && higherLowCount >= 2 && demand >= 24) return "BULLISH_BOS";
 
   // STATE 5: HIGHER_LOW_FORMATION — higher low after ChoCH
   if (chochDetected && higherLowCount >= 2) return "HIGHER_LOW_FORMATION";
   // Alt: clear higher-low structure with demand, without an explicit ChoCH
-  if (higherLowCount >= 3 && demand >= 40 && structureBias === "bullish") return "HIGHER_LOW_FORMATION";
+  if (higherLowCount >= 3 && demand >= 30 && structureBias === "bullish") return "HIGHER_LOW_FORMATION";
 
   // STATE 4: BULLISH_CHOCH — change of character with supporting evidence
-  if (chochDetected && (demand >= 25 || se >= 30)) return "BULLISH_CHOCH";
+  if (chochDetected && (demand >= 20 || se >= 30)) return "BULLISH_CHOCH";
 
   // STATE 3: DEMAND_INCREASING — buyers stepping in
-  if (demand >= 45 && se >= 35) return "DEMAND_INCREASING";
-  if (demand >= 55) return "DEMAND_INCREASING";
+  if (demand >= 32 && se >= 35) return "DEMAND_INCREASING";
+  if (demand >= 42) return "DEMAND_INCREASING";
 
   // STATE 2: ACCUMULATION — range-bound with stealth buying
-  if (demand >= 35 && se >= 28) return "ACCUMULATION";
-  if (data.obvDivergent === true && se >= 28 && demand >= 25) return "ACCUMULATION";
+  if (demand >= 24 && se >= 28) return "ACCUMULATION";
+  if (data.obvDivergent === true && se >= 28 && demand >= 18) return "ACCUMULATION";
 
   // STATE 1: SELLING_EXHAUSTION — selling pressure declining
   if (se >= 40) return "SELLING_EXHAUSTION";
@@ -601,7 +637,7 @@ export function scoreTransitionWithStructure(
   const gates = evaluateGates(data);
 
   const seResult = scoreSupplyExhaustion(data);
-  const demandResult = scoreDemandEmergence(data);
+  const demandResult = scoreDemandEmergence(data, structure.triggerLevel);
   const compressionResult = scoreCompressionQuality(data);
   const runnerResult = scoreRunnerPotential(data, structure.invalidationLevel);
   const rsResult = scoreRSTrajectory(data);
@@ -617,47 +653,40 @@ export function scoreTransitionWithStructure(
   const structureResult = scoreStructure(
     structure.chochDetected, structure.chochHolding, structure.chochBarsAgo,
     structure.bosDetected, structure.bosHolding, structure.bosBarsAgo,
-    structure.higherHighCount, structureHasPrinted,
+    structure.higherHighCount, structure.lowerHighCount, structureHasPrinted,
   );
 
-  // Weighted composite. When structure has not printed, its 25% is redistributed
-  // proportionally across the remaining components rather than scored as zero.
-  const weights = {
-    structure: structureHasPrinted ? 0.25 : 0,
-    se: 0.15,
-    demand: 0.20,
-    compression: 0.10,
-    runner: 0.20,
-    rs: 0.10,
-  };
-  const weightSum =
-    weights.structure + weights.se + weights.demand +
-    weights.compression + weights.runner + weights.rs;
+  // Weighted composite. Any component that could not be measured — including Structure
+  // before a break has printed — is skipped and its weight redistributed, rather than
+  // entering the sum as a zero.
+  const overallScore = weightedComposite([
+    { score: structureHasPrinted ? structureResult.score : null, weight: 0.25 },
+    { score: seResult.score, weight: 0.15 },
+    { score: demandResult.score, weight: 0.20 },
+    { score: compressionResult.score, weight: 0.10 },
+    { score: runnerResult.score, weight: 0.20 },
+    { score: rsResult.score, weight: 0.10 },
+  ]);
 
-  const rawWeighted = (
-    structureResult.score * weights.structure +
-    seResult.score * weights.se +
-    demandResult.score * weights.demand +
-    compressionResult.score * weights.compression +
-    runnerResult.score * weights.runner +
-    rsResult.score * weights.rs
-  ) / weightSum;
-
-  const overallScore = Number.isFinite(rawWeighted) ? Math.round(rawWeighted) : 0;
+  const seScore = displayScore(seResult.score);
+  const demandScore = displayScore(demandResult.score);
+  const compressionScore = displayScore(compressionResult.score);
+  const runnerScore = displayScore(runnerResult.score);
+  const rsScore = displayScore(rsResult.score);
 
   const scores: TransitionScores = {
-    structure: structureResult.score,
-    supplyExhaustion: seResult.score,
-    demandEmergence: demandResult.score,
-    compression: compressionResult.score,
-    runnerPotential: runnerResult.score,
-    rsTrajectory: rsResult.score,
+    structure: displayScore(structureResult.score),
+    supplyExhaustion: seScore,
+    demandEmergence: demandScore,
+    compression: compressionScore,
+    runnerPotential: runnerScore,
+    rsTrajectory: rsScore,
     overallScore,
   };
 
   // State classification
   const state = classifyState(
-    seResult.score, demandResult.score, compressionResult.score, rsResult.score,
+    seScore, demandScore, compressionScore, rsScore,
     data, structure.chochDetected, structure.bosDetected, structure.structureBias,
     structure.higherLowCount,
   );
@@ -711,9 +740,9 @@ export function scoreTransitionWithStructure(
     structure.structureAvailable &&
     stateNum >= 1 &&
     overallScore >= 45 + regimeGate.scorePenalty &&
-    runnerResult.score >= 50 &&
-    demandResult.score >= 35 &&
-    seResult.score >= 35 &&
+    runnerScore >= 50 &&
+    demandScore >= 30 &&
+    seScore >= 35 &&
     !extensionRisk;
 
   if (isCoiledSignal) {
@@ -734,7 +763,7 @@ export function scoreTransitionWithStructure(
     isPrimarySignal &&
     overallScore >= 55 + regimeGate.scorePenalty &&
     stateNum >= 6 && // BULLISH_BOS or higher
-    runnerResult.score >= 50;
+    runnerScore >= 50;
 
   return {
     data,

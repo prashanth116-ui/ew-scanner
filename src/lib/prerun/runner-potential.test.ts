@@ -54,7 +54,7 @@ describe("scoreRunnerPotential", () => {
     const dud = scoreRunnerPotential(make({
       pctFromAth: 35, weeksInBase: 30, overheadSupply: 48, vcpAtrPct: 1.4, floatTurnover20d: 0.2,
     }));
-    expect(runner.score - dud.score).toBeGreaterThan(40);
+    expect(runner.score!  - dud.score!).toBeGreaterThan(40);
   });
 
   it("excludes missing inputs rather than scoring them zero", () => {
@@ -63,8 +63,8 @@ describe("scoreRunnerPotential", () => {
     expect(result.score).toBe(100);
   });
 
-  it("returns 0 when nothing is measurable", () => {
-    expect(scoreRunnerPotential(make()).score).toBe(0);
+  it("returns null when nothing is measurable, so the composite can redistribute", () => {
+    expect(scoreRunnerPotential(make()).score).toBeNull();
   });
 });
 
