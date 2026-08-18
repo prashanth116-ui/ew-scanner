@@ -574,13 +574,13 @@ export function scoreTransitionWithStructure(
   // Regime gate raises the tier thresholds without touching the score itself.
   if (regimeGate.scorePenalty > 0) cautionEvidence.push(regimeGate.label);
 
-  // Coiled: the pre-break tier. Everything except structure says this is ready, and the
-  // break has not happened yet — which is the whole point. Requires real Runner Potential
-  // so the list is movers rather than tidy bases, and excludes extended names.
+  // Coiled: the pre-move tier. IDENTICAL definition on both engines — same gate, same
+  // thresholds, same pre-break test. "Has structure broken" is read from
+  // data.hasBrokenStructure, computed once in the data layer, so this is a property of the
+  // stock rather than of whichever page you are looking at. Requires strictly `false`:
+  // a null means the chart was too short to tell, which is not the same as "no break".
   const isCoiledSignal =
-    !structureHasPrinted &&
-    structure.structureAvailable &&
-    stateNum >= 1 &&
+    data.hasBrokenStructure === false &&
     overallScore >= 45 + regimeGate.scorePenalty &&
     runnerScore >= 50 &&
     demandScore >= 38 &&
@@ -588,7 +588,7 @@ export function scoreTransitionWithStructure(
     !extensionRisk;
 
   if (isCoiledSignal) {
-    bullishEvidence.push("Coiled — full setup in place, structural break has not printed yet");
+    bullishEvidence.push("Coiled — full setup in place, no structural break has printed yet");
   }
 
   const isPrimarySignal =

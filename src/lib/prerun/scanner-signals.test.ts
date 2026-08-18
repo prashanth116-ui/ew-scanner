@@ -150,6 +150,8 @@ describe("pre-structure scoring", () => {
       instRsAccelTrend: 3,
       // Not extended
       instDistFromEma20Atr: 1,
+      // No structural break has printed — this fixture IS the pre-break case
+      hasBrokenStructure: false,
     } as unknown as PreRunStockData;
   }
 
@@ -195,6 +197,7 @@ describe("pre-structure scoring", () => {
       chochHolding: false,     // broke, then fell back through
       chochBarsAgo: 4,
     };
+    // A detected break means structure HAS printed, so the row is no longer pre-break
     const held: StructureInput = { ...failed, chochHolding: true };
 
     const failedResult = scoreTransitionWithStructure(coiledStock(), failed);
@@ -214,13 +217,22 @@ describe("pre-structure scoring", () => {
   });
 
   it("does not flag coiled once the break has printed", () => {
+    // Coiled reads data.hasBrokenStructure — the data-layer field both engines share — not
+    // the per-engine StructureInput. That is deliberate: it is the only way Inflection, which
+    // has no structure detection of its own, can ask the same question as Transition.
     const broken: StructureInput = {
       ...preBreak,
       chochDetected: true,
       chochHolding: true,
       chochBarsAgo: 3,
     };
-    expect(scoreTransitionWithStructure(coiledStock(), broken).isCoiledSignal).toBe(false);
+    const stock = { ...coiledStock(), hasBrokenStructure: true } as PreRunStockData;
+    expect(scoreTransitionWithStructure(stock, broken).isCoiledSignal).toBe(false);
+  });
+
+  it("does not flag coiled when the chart was too short to tell", () => {
+    const stock = { ...coiledStock(), hasBrokenStructure: null } as unknown as PreRunStockData;
+    expect(scoreTransitionWithStructure(stock, preBreak).isCoiledSignal).toBe(false);
   });
 
   it("does not flag coiled on a stock that cannot move", () => {

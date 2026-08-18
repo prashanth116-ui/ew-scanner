@@ -47,6 +47,7 @@ function stock(over: Partial<PreRunStockData> = {}): PreRunStockData {
     instRsAccelVsSPY: 6,
     instRsAccelTrend: 3,
     instDistFromEma20Atr: 1,
+    hasBrokenStructure: false,
     vcpAvgDollarVolume: 500_000_000,
     marketCap: 50_000_000_000,
     ...over,
@@ -86,6 +87,24 @@ describe("shared components report identically on both engines", () => {
       expect(scoreTransitionWithStructure(d, NO_STRUCTURE).scores.runnerPotential).toBeGreaterThan(0);
     });
   }
+
+  it("coiled is identical on both engines — same gate, same pre-break test", () => {
+    // Coiled previously meant "pre-break" on Transition and merely "not extended" on
+    // Inflection, because only Transition had structure detection. hasBrokenStructure now
+    // lives in the data layer, so both engines ask the same question of the same field.
+    for (const broken of [false, true, null]) {
+      const d = stock({ hasBrokenStructure: broken } as Partial<PreRunStockData>);
+      const inf = scoreInflection(d);
+      const trn = scoreTransitionWithStructure(d, NO_STRUCTURE);
+      expect(inf.isCoiledSignal).toBe(trn.isCoiledSignal);
+    }
+  });
+
+  it("coiled requires a strict false — an unknowable chart is not 'no break'", () => {
+    expect(scoreInflection(stock({ hasBrokenStructure: false } as Partial<PreRunStockData>)).isCoiledSignal).toBe(true);
+    expect(scoreInflection(stock({ hasBrokenStructure: true } as Partial<PreRunStockData>)).isCoiledSignal).toBe(false);
+    expect(scoreInflection(stock({ hasBrokenStructure: null } as Partial<PreRunStockData>)).isCoiledSignal).toBe(false);
+  });
 
   it("both components stay within 0-100", () => {
     for (const [, over] of cases) {

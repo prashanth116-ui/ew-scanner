@@ -61,6 +61,7 @@ function makeData(overrides: Partial<PreRunStockData> = {}): PreRunStockData {
     pocketPivots: null,
     structuralSpring: null,
     rangeAsymmetry: null,
+    hasBrokenStructure: null,
     overheadSupply: null,
     aboveEma21: null,
     aboveEma50: null,

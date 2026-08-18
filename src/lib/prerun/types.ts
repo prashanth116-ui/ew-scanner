@@ -83,6 +83,7 @@ export interface PreRunStockData {
   pocketPivots: number | null;             // Up days in last 10 whose volume beat every down day of the prior 10
   structuralSpring: number | null;         // 2 = undercut on volume then reclaimed, 1 = reclaimed, 0 = none
   rangeAsymmetry: number | null;           // mean up-bar range / mean down-bar range over 20 bars
+  hasBrokenStructure: boolean | null;      // Bullish ChoCH or BOS has printed. null = chart too short to tell
   overheadSupply: number | null;           // % of last year's volume transacted above current price (lower = cleaner)
   aboveEma21: boolean | null;              // M: Is price currently above 21 EMA. null = chart shorter than EMA50 period
   aboveEma50: boolean | null;              // M: Is price currently above 50 EMA. null = chart shorter than EMA50 period

@@ -10,6 +10,7 @@ import { getYahooCrumb, invalidateCrumbCache } from "../squeeze/fetch";
 import { getSectorForTicker, getSectorETF } from "@/data/prerun-universe";
 import { fetchWithRetry, extractRaw, deduplicatedChartFetch, toYahooSymbol } from "@/lib/yahoo-utils";
 import { logError } from "@/lib/error-logger";
+import { detectChoCH, detectBOS } from "./market-structure";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -2365,6 +2366,7 @@ export async function fetchPreRunData(
   let pocketPivots: number | null = null;
   let structuralSpring: number | null = null;
   let rangeAsymmetry: number | null = null;
+  let hasBrokenStructure: boolean | null = null;
 
   if (chart3mo && chart3mo.closes.length >= 21 * bm) {
     const { highs, lows, closes, volumes } = chart3mo;
@@ -2374,6 +2376,16 @@ export async function fetchPreRunData(
     closeLocationFlat = clv?.flatPrice ?? null;
     pocketPivots = calcPocketPivots(closes, volumes, bm);
     structuralSpring = calcStructuralSpring(lows, closes, volumes, bm);
+    // Has a bullish structural break printed? Computed HERE, in the data layer, because
+    // whether a stock has broken structure is a property of the stock — not of whichever
+    // engine happens to own the detection code. Previously only Transition could ask this,
+    // so "coiled" meant "pre-break" on one page and merely "not extended" on the other.
+    // Same 30-bar minimum the Transition engine uses (MIN_STRUCTURE_BARS), so the two can
+    // never disagree about whether structure was even evaluable. Below that this stays null,
+    // and the coiled gate requires a strict false — unknowable is not "no break".
+    hasBrokenStructure = closes.length >= 30
+      ? detectChoCH(highs, lows, closes, 3).detected || detectBOS(highs, lows, closes, 3).detected
+      : null;
     rangeAsymmetry = calcRangeAsymmetry(highs, lows, closes, bm);
   }
 
@@ -2455,6 +2467,7 @@ export async function fetchPreRunData(
     pocketPivots,
     structuralSpring,
     rangeAsymmetry,
+    hasBrokenStructure,
     overheadSupply,
     aboveEma21,
     aboveEma50,
