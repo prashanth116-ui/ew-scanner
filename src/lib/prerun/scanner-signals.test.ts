@@ -204,6 +204,32 @@ describe("pre-structure scoring", () => {
     expect(failedResult.scores.overallScore).toBeLessThan(heldResult.scores.overallScore);
   });
 
+
+  it("flags a coiled pre-break setup", () => {
+    // The tier that answers "catch it before the move": full setup, no break yet.
+    const result = scoreTransitionWithStructure(coiledStock(), preBreak);
+    expect(result.isCoiledSignal).toBe(true);
+    expect(result.isPrimarySignal).toBe(false);   // no break, so not primary
+    expect(result.bullishEvidence.join(" ")).toContain("Coiled");
+  });
+
+  it("does not flag coiled once the break has printed", () => {
+    const broken: StructureInput = {
+      ...preBreak,
+      chochDetected: true,
+      chochHolding: true,
+      chochBarsAgo: 3,
+    };
+    expect(scoreTransitionWithStructure(coiledStock(), broken).isCoiledSignal).toBe(false);
+  });
+
+  it("does not flag coiled on a stock that cannot move", () => {
+    // Same accumulation evidence, no runner potential
+    const dud = { ...coiledStock(), vcpAtrPct: 1.1, overheadSupply: 55, floatTurnover20d: 0.1,
+                  pctFromAth: 3, weeksInBase: 1 } as unknown as PreRunStockData;
+    expect(scoreTransitionWithStructure(dud, preBreak).isCoiledSignal).toBe(false);
+  });
+
   it("flags rows scored with no usable OHLC", () => {
     const result = scoreTransitionWithStructure(coiledStock(), NO_STRUCTURE);
     expect(result.structureAvailable).toBe(false);

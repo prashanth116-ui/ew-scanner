@@ -420,6 +420,15 @@ export interface TransitionResult {
   structureAvailable: boolean;
   bullishEvidence: string[];
   cautionEvidence: string[];
+  /**
+   * Pre-break high-conviction setup: supply exhausted, demand emerging, compression tight
+   * and Runner Potential real — but NO structural break has printed yet.
+   *
+   * This is the tier that catches a move before it starts. isPrimarySignal requires
+   * BULLISH_CHOCH or higher, which by definition means the break already happened, so
+   * every genuinely early setup landed in WATCH and was invisible to the confluence.
+   */
+  isCoiledSignal: boolean;
   /** True if state >= BULLISH_CHOCH, score >= 45, not extended, and structure was available */
   isPrimarySignal: boolean;
   /** True if isPrimarySignal AND state >= BULLISH_BOS AND score >= 55 */

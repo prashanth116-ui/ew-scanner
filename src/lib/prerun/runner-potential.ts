@@ -30,9 +30,17 @@ export interface RunnerPotentialResult {
  * Score 0-100. Higher = more room and more fuel for a sustained move.
  *
  * Slots, in descending order of how much they determine the size of a move:
- *   overhead supply 30 · ADR 25 · base energy 20 · float rotation 15 · insider conviction 10
+ *   overhead supply 27 · ADR 22 · base energy 18 · float rotation 13 · risk distance 12
+ *   · insider conviction 8
+ *
+ * Risk distance makes this a reward-vs-risk measure rather than pure magnitude: a runner
+ * with the invalidation level 3 ATR below price is a better trade than the same runner with
+ * it 15 ATR below, because the position can actually be sized.
  */
-export function scoreRunnerPotential(data: PreRunStockData): RunnerPotentialResult {
+export function scoreRunnerPotential(
+  data: PreRunStockData,
+  invalidationLevel: number | null = null,
+): RunnerPotentialResult {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -42,12 +50,12 @@ export function scoreRunnerPotential(data: PreRunStockData): RunnerPotentialResu
   const overhead = data.overheadSupply;
   if (overhead !== null) {
     let earned = 0;
-    if (overhead <= 5) { earned = 30; evidence.push("Clean air overhead — almost no supply above current price"); }
-    else if (overhead <= 15) { earned = 24; evidence.push(`Light overhead supply (${overhead.toFixed(0)}% of yearly volume above)`); }
-    else if (overhead <= 30) { earned = 15; evidence.push(`Moderate overhead supply (${overhead.toFixed(0)}%)`); }
-    else if (overhead <= 45) { earned = 7; caution.push(`Heavy overhead supply (${overhead.toFixed(0)}%) — trapped holders to work through`); }
+    if (overhead <= 5) { earned = 27; evidence.push("Clean air overhead — almost no supply above current price"); }
+    else if (overhead <= 15) { earned = 22; evidence.push(`Light overhead supply (${overhead.toFixed(0)}% of yearly volume above)`); }
+    else if (overhead <= 30) { earned = 14; evidence.push(`Moderate overhead supply (${overhead.toFixed(0)}%)`); }
+    else if (overhead <= 45) { earned = 6; caution.push(`Heavy overhead supply (${overhead.toFixed(0)}%) — trapped holders to work through`); }
     else { earned = 0; caution.push(`Very heavy overhead supply (${overhead.toFixed(0)}%) — multiple ceilings above`); }
-    slots.push({ earned, possible: 30, hasData: true });
+    slots.push({ earned, possible: 27, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -57,12 +65,12 @@ export function scoreRunnerPotential(data: PreRunStockData): RunnerPotentialResu
   const atrPct = data.vcpAtrPct;
   if (atrPct !== null) {
     let earned = 0;
-    if (atrPct >= 5) { earned = 25; evidence.push(`${atrPct.toFixed(1)}% ATR — high daily range`); }
-    else if (atrPct >= 3.5) { earned = 21; evidence.push(`${atrPct.toFixed(1)}% ATR — good range`); }
-    else if (atrPct >= 2.5) { earned = 14; }
-    else if (atrPct >= 1.8) { earned = 7; }
+    if (atrPct >= 5) { earned = 22; evidence.push(`${atrPct.toFixed(1)}% ATR — high daily range`); }
+    else if (atrPct >= 3.5) { earned = 19; evidence.push(`${atrPct.toFixed(1)}% ATR — good range`); }
+    else if (atrPct >= 2.5) { earned = 12; }
+    else if (atrPct >= 1.8) { earned = 6; }
     else { earned = 0; caution.push(`${atrPct.toFixed(1)}% ATR — too little daily range to run`); }
-    slots.push({ earned, possible: 25, hasData: true });
+    slots.push({ earned, possible: 22, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -78,12 +86,12 @@ export function scoreRunnerPotential(data: PreRunStockData): RunnerPotentialResu
     const durationScore = Math.min(weeks, 52) / 52;
     const energy = depthScore * durationScore;
     let earned = 0;
-    if (energy >= 0.45) { earned = 20; evidence.push(`Deep, long base (${depth.toFixed(0)}% off ATH, ${weeks}w) — substantial stored energy`); }
-    else if (energy >= 0.25) { earned = 15; evidence.push(`${depth.toFixed(0)}% off ATH over ${weeks}w`); }
-    else if (energy >= 0.12) { earned = 9; }
+    if (energy >= 0.45) { earned = 18; evidence.push(`Deep, long base (${depth.toFixed(0)}% off ATH, ${weeks}w) — substantial stored energy`); }
+    else if (energy >= 0.25) { earned = 13; evidence.push(`${depth.toFixed(0)}% off ATH over ${weeks}w`); }
+    else if (energy >= 0.12) { earned = 8; }
     else if (energy >= 0.05) { earned = 4; }
     else { caution.push("Shallow or brief base — little stored energy"); }
-    slots.push({ earned, possible: 20, hasData: true });
+    slots.push({ earned, possible: 18, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -93,11 +101,11 @@ export function scoreRunnerPotential(data: PreRunStockData): RunnerPotentialResu
   const turnover = data.floatTurnover20d;
   if (turnover !== null) {
     let earned = 0;
-    if (turnover >= 1.5) { earned = 15; evidence.push("Float turning over rapidly — supply changing hands"); }
-    else if (turnover >= 0.8) { earned = 11; }
+    if (turnover >= 1.5) { earned = 13; evidence.push("Float turning over rapidly — supply changing hands"); }
+    else if (turnover >= 0.8) { earned = 10; }
     else if (turnover >= 0.4) { earned = 6; }
     else { earned = 2; }
-    slots.push({ earned, possible: 15, hasData: true });
+    slots.push({ earned, possible: 13, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -110,10 +118,29 @@ export function scoreRunnerPotential(data: PreRunStockData): RunnerPotentialResu
     const b45 = buys45 ?? 0;
     const b90 = buys90 ?? 0;
     let earned = 0;
-    if (b45 >= 3) { earned = 10; evidence.push(`${b45} insider buys in 45 days — cluster`); }
-    else if (b45 >= 1 || b90 >= 3) { earned = 7; evidence.push("Recent insider buying"); }
+    if (b45 >= 3) { earned = 8; evidence.push(`${b45} insider buys in 45 days — cluster`); }
+    else if (b45 >= 1 || b90 >= 3) { earned = 6; evidence.push("Recent insider buying"); }
     else if (b90 >= 1) { earned = 3; }
-    slots.push({ earned, possible: 10, hasData: true });
+    slots.push({ earned, possible: 8, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
+
+  // 6. Risk distance (0-12) — how tight is the stop this setup implies?
+  // Restored from the pre-V3 Transition higher-low component, where it was the one measure
+  // of trade quality. Magnitude alone is not enough: a 40% runner with a 20% stop is a
+  // worse trade than a 25% runner with a 4% stop.
+  const price = data.currentPrice;
+  const atr = data.vcpAtrPct;
+  if (invalidationLevel !== null && price !== null && price > 0 && atr !== null && atr > 0) {
+    const riskAtr = ((price - invalidationLevel) / price) * 100 / atr;
+    let earned = 0;
+    if (riskAtr <= 0) { earned = 0; caution.push("Price is at or below the invalidation level"); }
+    else if (riskAtr <= 4) { earned = 12; evidence.push(`Tight structure — invalidation ${riskAtr.toFixed(1)} ATR below price`); }
+    else if (riskAtr <= 7) { earned = 8; }
+    else if (riskAtr <= 12) { earned = 4; }
+    else { earned = 1; caution.push("Invalidation far below price — loose structure, hard to size"); }
+    slots.push({ earned, possible: 12, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }

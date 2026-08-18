@@ -226,10 +226,17 @@ function consolidateResults(
   // Transition: only TRIGGERED and READY count (ARMED/WATCH too low-conviction).
   // Rows scored without usable OHLC have no ChoCH/BOS evidence behind the state, so
   // they cannot stand as a structural confirmation.
+  // Coiled rows count too: the whole point of that tier is that the setup is complete and
+  // the break has NOT happened yet. Requiring TRIGGERED/READY meant the confluence only
+  // ever saw stocks that had already moved.
   for (const r of transition) {
     if (r.structure_available === false) continue;
-    if (r.alert_state === "TRIGGERED" || r.alert_state === "READY") {
-      add(r.ticker, { scanner: "Transition", label: transLabel(r), score: r.overall_score });
+    const isCoiled = r.is_coiled === true;
+    if (r.alert_state === "TRIGGERED" || r.alert_state === "READY" || isCoiled) {
+      const label = isCoiled && r.alert_state !== "TRIGGERED" && r.alert_state !== "READY"
+        ? `Trans COILED ${r.overall_score}`
+        : transLabel(r);
+      add(r.ticker, { scanner: "Transition", label, score: r.overall_score });
     }
   }
 

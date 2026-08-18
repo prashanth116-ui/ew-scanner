@@ -151,11 +151,11 @@ function scoreSupplyExhaustion(data: PreRunStockData): { score: number; evidence
   if (data.absorption !== null) {
     const a = data.absorption;
     let earned = 0;
-    if (a >= 0.4) { earned = 30; evidence.push(`${(a * 100).toFixed(0)}% of down bars absorbed — supply is being taken`); }
-    else if (a >= 0.25) { earned = 23; evidence.push(`${(a * 100).toFixed(0)}% of down bars absorbed`); }
-    else if (a >= 0.12) { earned = 13; }
+    if (a >= 0.4) { earned = 25; evidence.push(`${(a * 100).toFixed(0)}% of down bars absorbed — supply is being taken`); }
+    else if (a >= 0.25) { earned = 19; evidence.push(`${(a * 100).toFixed(0)}% of down bars absorbed`); }
+    else if (a >= 0.12) { earned = 11; }
     else { caution.push("Selling is meeting no absorption"); }
-    slots.push({ earned, possible: 30, hasData: true });
+    slots.push({ earned, possible: 25, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -164,9 +164,9 @@ function scoreSupplyExhaustion(data: PreRunStockData): { score: number; evidence
   if (data.structuralSpring !== null) {
     const s = data.structuralSpring;
     let earned = 0;
-    if (s >= 2) { earned = 25; evidence.push("Spring — undercut of structure on volume, reclaimed and held"); }
-    else if (s >= 1) { earned = 15; evidence.push("Shakeout below structure, reclaimed"); }
-    slots.push({ earned, possible: 25, hasData: true });
+    if (s >= 2) { earned = 21; evidence.push("Spring — undercut of structure on volume, reclaimed and held"); }
+    else if (s >= 1) { earned = 13; evidence.push("Shakeout below structure, reclaimed"); }
+    slots.push({ earned, possible: 21, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
@@ -175,23 +175,38 @@ function scoreSupplyExhaustion(data: PreRunStockData): { score: number; evidence
   if (data.rangeAsymmetry !== null) {
     const r = data.rangeAsymmetry;
     let earned = 0;
-    if (r >= 1.5) { earned = 25; evidence.push("Up bars far wider than down bars — supply drying up"); }
-    else if (r >= 1.15) { earned = 18; evidence.push("Up bars wider than down bars"); }
-    else if (r >= 0.95) { earned = 9; }
+    if (r >= 1.5) { earned = 21; evidence.push("Up bars far wider than down bars — supply drying up"); }
+    else if (r >= 1.15) { earned = 15; evidence.push("Up bars wider than down bars"); }
+    else if (r >= 0.95) { earned = 8; }
     else { caution.push("Down bars still producing more range than up bars"); }
-    slots.push({ earned, possible: 25, hasData: true });
+    slots.push({ earned, possible: 21, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
   // 2d. Volume-price divergence (0-20) — null when no recent lower low exists
   if (data.vpDivergenceBullish !== null) {
-    slots.push({ earned: data.vpDivergenceBullish ? 20 : 0, possible: 20, hasData: true });
+    slots.push({ earned: data.vpDivergenceBullish ? 16 : 0, possible: 16, hasData: true });
     if (data.vpDivergenceBullish) evidence.push("Volume-price divergence: selling into lows is drying up");
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
+
+  // 2e. Distribution days (0-17) — restored from V2's Accumulation Quality component.
+  // Nothing else in V3 measures institutional SELLING; without it a stock can score highly
+  // on demand while it is being quietly distributed.
+  if (data.distributionDays20d !== null) {
+    const dist = data.distributionDays20d;
+    let earned = 0;
+    if (dist <= 1) { earned = 17; evidence.push("Zero or minimal distribution days — no institutional selling"); }
+    else if (dist <= 3) { earned = 11; }
+    else if (dist <= 5) { earned = 5; }
+    else { caution.push(`${dist} distribution days — institutions are selling into this`); }
+    slots.push({ earned, possible: 17, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
@@ -280,18 +295,18 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number; eviden
   const atrRatio = data.atrRatio5v20;
   if (atrRatio !== null) {
     let earned = 0;
-    if (atrRatio <= 0.5) { earned = 30; evidence.push(`ATR contracting sharply (ratio ${atrRatio.toFixed(2)})`); }
-    else if (atrRatio <= 0.65) { earned = 22; evidence.push(`ATR contracting (ratio ${atrRatio.toFixed(2)})`); }
-    else if (atrRatio <= 0.8) { earned = 14; }
+    if (atrRatio <= 0.5) { earned = 25; evidence.push(`ATR contracting sharply (ratio ${atrRatio.toFixed(2)})`); }
+    else if (atrRatio <= 0.65) { earned = 18; evidence.push(`ATR contracting (ratio ${atrRatio.toFixed(2)})`); }
+    else if (atrRatio <= 0.8) { earned = 12; }
     else if (atrRatio > 1.2) { caution.push("Volatility expanding — not compressing"); }
-    slots.push({ earned, possible: 30, hasData: true });
+    slots.push({ earned, possible: 25, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
   // 4b. Tight closes (0-20)
   if (data.vcpTightCloses !== null) {
-    slots.push({ earned: data.vcpTightCloses ? 20 : 0, possible: 20, hasData: true });
+    slots.push({ earned: data.vcpTightCloses ? 16 : 0, possible: 16, hasData: true });
     if (data.vcpTightCloses) evidence.push("Tight daily closes — low volatility");
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
@@ -301,22 +316,36 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number; eviden
   if (data.vcpInsideBarCount !== null) {
     const ibc = data.vcpInsideBarCount;
     let earned = 0;
-    if (ibc >= 3) { earned = 25; evidence.push(`${ibc} inside bars — high compression`); }
-    else if (ibc >= 2) { earned = 18; evidence.push(`${ibc} inside bars`); }
-    else if (ibc >= 1) { earned = 10; }
-    slots.push({ earned, possible: 25, hasData: true });
+    if (ibc >= 3) { earned = 21; evidence.push(`${ibc} inside bars — high compression`); }
+    else if (ibc >= 2) { earned = 15; evidence.push(`${ibc} inside bars`); }
+    else if (ibc >= 1) { earned = 8; }
+    slots.push({ earned, possible: 21, hasData: true });
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
   // 4d. Closes near range top (0-25)
   if (data.closesNearRangeTop !== null) {
-    slots.push({ earned: data.closesNearRangeTop ? 25 : 0, possible: 25, hasData: true });
+    slots.push({ earned: data.closesNearRangeTop ? 21 : 0, possible: 21, hasData: true });
     if (data.closesNearRangeTop) evidence.push("Closes near range top — buyers in control");
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
+
+  // 4e. Dry volume days (0-17) — restored from V2. Volume drying up inside a base means
+  // supply has been absorbed and there is nothing left to sell at these prices.
+  if (data.vcpDryVolumeDays !== null) {
+    const dry = data.vcpDryVolumeDays;
+    let earned = 0;
+    if (dry >= 5) { earned = 17; evidence.push(`${dry} dry volume days — supply absorbed`); }
+    else if (dry >= 3) { earned = 12; evidence.push(`${dry} dry volume days`); }
+    else if (dry >= 2) { earned = 6; }
+    else if (dry >= 1) { earned = 2; }
+    slots.push({ earned, possible: 17, hasData: true });
+  } else {
+    slots.push({ earned: 0, possible: 0, hasData: false });
+  }
   return { score: nullNeutralScore(slots), evidence, caution };
 }
 
@@ -574,7 +603,7 @@ export function scoreTransitionWithStructure(
   const seResult = scoreSupplyExhaustion(data);
   const demandResult = scoreDemandEmergence(data);
   const compressionResult = scoreCompressionQuality(data);
-  const runnerResult = scoreRunnerPotential(data);
+  const runnerResult = scoreRunnerPotential(data, structure.invalidationLevel);
   const rsResult = scoreRSTrajectory(data);
 
   // Pre-structure fix: when no break has printed, the structure slots are not applicable
@@ -674,6 +703,23 @@ export function scoreTransitionWithStructure(
   // Regime gate raises the tier thresholds without touching the score itself.
   if (regimeGate.scorePenalty > 0) cautionEvidence.push(regimeGate.label);
 
+  // Coiled: the pre-break tier. Everything except structure says this is ready, and the
+  // break has not happened yet — which is the whole point. Requires real Runner Potential
+  // so the list is movers rather than tidy bases, and excludes extended names.
+  const isCoiledSignal =
+    !structureHasPrinted &&
+    structure.structureAvailable &&
+    stateNum >= 1 &&
+    overallScore >= 45 + regimeGate.scorePenalty &&
+    runnerResult.score >= 50 &&
+    demandResult.score >= 35 &&
+    seResult.score >= 35 &&
+    !extensionRisk;
+
+  if (isCoiledSignal) {
+    bullishEvidence.push("Coiled — full setup in place, structural break has not printed yet");
+  }
+
   const isPrimarySignal =
     overallScore >= 45 + regimeGate.scorePenalty &&
     stateNum >= 4 && // BULLISH_CHOCH or higher
@@ -700,6 +746,7 @@ export function scoreTransitionWithStructure(
     invalidationLevel,
     extensionRisk,
     structureAvailable: structure.structureAvailable,
+    isCoiledSignal,
     bullishEvidence,
     cautionEvidence,
     isPrimarySignal,

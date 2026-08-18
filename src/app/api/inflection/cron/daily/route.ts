@@ -39,6 +39,7 @@ function resultToRecord(r: InflectionResult, scanDate: string): InflectionDailyR
     rs_score: r.scores.rsTrajectory,
     demand_score: r.scores.demandEmergence,
     runner_score: r.scores.runnerPotential,
+    scanner_version: 3,
     stage: r.stage,
     trade_read: r.tradeRead,
     extension_risk: r.extensionRisk,

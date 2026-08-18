@@ -477,6 +477,8 @@ export interface InflectionDailyRecord {
   demand_score?: number;
   /** V3 Runner Potential — new dimension, no V2 equivalent */
   runner_score?: number;
+  /** Scoring engine version; delta/comparison logic must not mix versions. */
+  scanner_version?: number;
   /** Legacy V2 columns, no longer written (DB default 0): be_score, la_score, ip_score */
   be_score?: number;
   la_score?: number;
@@ -625,7 +627,7 @@ export async function loadInflectionDailyDates(limit = 14): Promise<string[]> {
  *  Returns only ticker, scan_date, overall_score to keep payload small. */
 export async function loadInflectionDailyMulti(
   dates: string[]
-): Promise<Array<{ scan_date: string; ticker: string; overall_score: number }>> {
+): Promise<Array<{ scan_date: string; ticker: string; overall_score: number; scanner_version: number }>> {
   if (dates.length === 0) return [];
 
   try {
@@ -634,7 +636,7 @@ export async function loadInflectionDailyMulti(
 
     const { data, error } = await supabase
       .from("inflection_daily")
-      .select("scan_date, ticker, overall_score")
+      .select("scan_date, ticker, overall_score, scanner_version")
       .in("scan_date", dates)
       .order("scan_date", { ascending: false });
 
@@ -642,7 +644,7 @@ export async function loadInflectionDailyMulti(
       console.error("[persistence] loadInflectionDailyMulti error:", error.message);
       return [];
     }
-    return (data ?? []) as Array<{ scan_date: string; ticker: string; overall_score: number }>;
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; overall_score: number; scanner_version: number }>;
   } catch (err) {
     console.error("[persistence] loadInflectionDailyMulti exception:", err);
     return [];
@@ -1878,6 +1880,10 @@ export interface TransitionDailyRecord {
   extension_risk?: boolean;
   /** False when the OHLC series was too short to run ChoCH/BOS detection. */
   structure_available?: boolean;
+  /** Pre-break high-conviction setup — the tier that catches a move before it starts. */
+  is_coiled?: boolean;
+  /** Scoring engine version; delta/comparison logic must not mix versions. */
+  scanner_version?: number;
   bullish_evidence: string[];
   caution_evidence: string[];
 }
@@ -2014,7 +2020,7 @@ export async function loadTransitionDailyDates(limit = 14): Promise<string[]> {
 /** Load transition daily results for multiple dates (for streak/delta). */
 export async function loadTransitionDailyMulti(
   dates: string[]
-): Promise<Array<{ scan_date: string; ticker: string; overall_score: number }>> {
+): Promise<Array<{ scan_date: string; ticker: string; overall_score: number; scanner_version: number }>> {
   if (dates.length === 0) return [];
 
   try {
@@ -2023,7 +2029,7 @@ export async function loadTransitionDailyMulti(
 
     const { data, error } = await supabase
       .from("transition_daily")
-      .select("scan_date, ticker, overall_score")
+      .select("scan_date, ticker, overall_score, scanner_version")
       .in("scan_date", dates)
       .order("scan_date", { ascending: false });
 
@@ -2031,7 +2037,7 @@ export async function loadTransitionDailyMulti(
       console.error("[persistence] loadTransitionDailyMulti error:", error.message);
       return [];
     }
-    return (data ?? []) as Array<{ scan_date: string; ticker: string; overall_score: number }>;
+    return (data ?? []) as Array<{ scan_date: string; ticker: string; overall_score: number; scanner_version: number }>;
   } catch (err) {
     console.error("[persistence] loadTransitionDailyMulti exception:", err);
     return [];

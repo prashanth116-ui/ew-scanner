@@ -47,6 +47,8 @@ interface TransitionDailyRow {
   extension_risk?: boolean;
   /** False when the chart was too short to evaluate ChoCH/BOS. Optional: absent on pre-migration rows. */
   structure_available?: boolean;
+  /** Pre-break high-conviction setup — full setup in place, break has not printed yet. */
+  is_coiled?: boolean;
   bullish_evidence: string[];
   caution_evidence: string[];
 }
@@ -56,7 +58,7 @@ interface DroppedTicker {
   prev_score: number;
 }
 
-type AlertStateFilter = "ALL" | "TRIGGERED" | "READY" | "ARMED" | "WATCH";
+type AlertStateFilter = "ALL" | "COILED" | "TRIGGERED" | "READY" | "ARMED" | "WATCH";
 type StateFilter = "ALL" | "BULLISH_BOS" | "BULLISH_CHOCH" | "EARLY_EXPANSION" | "COMPRESSION" | "HIGHER_LOW_FORMATION" | "SUSTAINED_MARKUP" | "DEMAND_INCREASING" | "ACCUMULATION" | "SELLING_EXHAUSTION" | "EXTENDED";
 type SortField =
   | "overall_score" | "structure_score" | "se_score" | "demand_score"
@@ -112,6 +114,7 @@ function alertBadge(alert: string): { label: string; color: string } {
 function alertFilterLabel(f: AlertStateFilter): string {
   switch (f) {
     case "ALL": return "All";
+    case "COILED": return "Coiled";
     case "TRIGGERED": return "Triggered";
     case "READY": return "Ready";
     case "ARMED": return "Armed";
@@ -510,7 +513,9 @@ export default function TransitionDailyPage() {
       rows = rows.filter((r) => highConvictionTickers.has(r.ticker));
     }
     if (alertFilter !== "ALL") {
-      rows = rows.filter((r) => r.alert_state === alertFilter);
+      rows = alertFilter === "COILED"
+        ? rows.filter((r) => r.is_coiled === true)
+        : rows.filter((r) => r.alert_state === alertFilter);
     }
     if (stateFilter !== "ALL") {
       rows = rows.filter((r) => r.state === stateFilter);

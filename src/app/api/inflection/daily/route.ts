@@ -57,20 +57,30 @@ export async function GET(request: NextRequest) {
     streaks[ticker] = streak;
   }
 
-  // Build score delta vs previous day
+  // Build score delta vs previous day.
+  //
+  // Only compares rows produced by the SAME scoring engine. V3 recomposed the components,
+  // so a V3 score and a V2 score are different measurements and subtracting them produces
+  // a number that looks like a move and is not one. Rows written before the version column
+  // existed default to 2. When the versions differ the ticker is simply omitted from
+  // `deltas`, and the UI renders a dash.
   const deltas: Record<string, number> = {};
+  let deltaVersionMismatch = 0;
   if (prevDate) {
-    const prevScores = new Map<string, number>();
+    const prevRows = new Map<string, { score: number; version: number }>();
     for (const r of multiDayRows) {
       if (r.scan_date === prevDate) {
-        prevScores.set(r.ticker, r.overall_score);
+        prevRows.set(r.ticker, { score: r.overall_score, version: r.scanner_version ?? 2 });
       }
     }
     for (const r of results) {
-      const prev = prevScores.get(r.ticker);
-      if (prev !== undefined) {
-        deltas[r.ticker] = r.overall_score - prev;
+      const prev = prevRows.get(r.ticker);
+      if (!prev) continue;
+      if (prev.version !== (r.scanner_version ?? 2)) {
+        deltaVersionMismatch++;
+        continue;
       }
+      deltas[r.ticker] = r.overall_score - prev.score;
     }
   }
 
@@ -91,6 +101,7 @@ export async function GET(request: NextRequest) {
     results,
     streaks,
     deltas,
+    deltaVersionMismatch,
     dropped,
   }, {
     headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=120" },
