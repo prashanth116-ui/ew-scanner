@@ -12,7 +12,7 @@
  *   2. Transition becomes backtestable at all. Its structure fields (state, alert state,
  *      trigger level) are already persisted; nothing re-derives them.
  *
- * The tradeoff is window length: both daily tables purge at 14 days, so the study window
+ * The tradeoff is window length: both daily tables purge at 90 days, so the study window
  * is bounded by retention, not by the requested range. The response reports the actual
  * dates found so a short window is visible rather than silent.
  *
@@ -212,7 +212,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "engine must be 'inflection' or 'transition'" }, { status: 400 });
     }
 
-    const days = Math.min(Math.max(Number(params.get("days") ?? 14), 1), 60);
+    const days = Math.min(Math.max(Number(params.get("days") ?? 30), 1), 90);
     const minScore = Number(params.get("minScore") ?? 0);
     const bucketFilter = params.get("alertState") ?? params.get("tradeRead");
     const allowedBuckets = bucketFilter ? new Set(bucketFilter.split(",").map((s) => s.trim())) : null;
@@ -311,7 +311,7 @@ export async function GET(request: NextRequest) {
         datesRequested: days,
         datesFound: dates.length,
         dates,
-        note: "Study window is bounded by the 14-day purge on the daily tables, not by the requested range.",
+        note: "Study window is bounded by the 90-day purge on the daily tables, not by the requested range.",
       },
       filters: { minScore, buckets: allowedBuckets ? [...allowedBuckets] : null },
       lookahead: "none — scores are read from persisted rows, not recomputed",

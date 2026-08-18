@@ -22,6 +22,10 @@ export const maxDuration = 300; // 5 minutes
 const BATCH_SIZE = 15;
 const BATCH_DELAY = 500;
 const PERSIST_INTERVAL = 50;
+/** Retention window. At 14 days the table held ~10 scan dates on a Tue-Sat schedule and the
+ *  window slid forward daily, so the backtest could never accumulate a sample no matter how
+ *  long it ran. 90 days is ~65 scan dates at ~200 rows: trivial for Postgres. */
+const RETENTION_DAYS = 90;
 
 function resultToRecord(r: TransitionResult, scanDate: string): TransitionDailyRecord {
   return {
@@ -169,7 +173,7 @@ export async function GET(request: NextRequest) {
     qualifying.sort((a, b) => b.scores.overallScore - a.scores.overallScore);
 
     // Purge old data
-    const purged = await purgeOldTransitionDaily(14).catch(() => 0);
+    const purged = await purgeOldTransitionDaily(RETENTION_DAYS).catch(() => 0);
 
     // Determine "new today"
     let newTickers: string[] = [];

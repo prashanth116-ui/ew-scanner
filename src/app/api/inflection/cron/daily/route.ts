@@ -19,9 +19,15 @@ import type { InflectionResult } from "@/lib/prerun/types";
 
 export const maxDuration = 300; // 5 minutes
 
-const BATCH_SIZE = 10;
-const BATCH_DELAY = 1100; // Respect Finnhub 60/min rate limit
+// Matched to the Transition cron, which runs the SAME fetchPreRunData over the SAME
+// universe at 15/500 and completes in 98-167s. At 10/1100 this route was taking 188-243s
+// and hit the 240s time guard on 2026-08-18, truncating the scan to 333 of 464 tickers.
+// Intermittent truncation puts holes in the dataset the backtest depends on.
+const BATCH_SIZE = 15;
+const BATCH_DELAY = 500;
 const PERSIST_INTERVAL = 50;
+/** Retention window. Long enough for the backtest to build a real sample. */
+const RETENTION_DAYS = 90;
 /** Rows below this score carry no signal and would still count as a confluence vote.
  *  Matches the Transition cron's floor. */
 const MIN_OVERALL_SCORE = 25;
@@ -150,7 +156,10 @@ export async function GET(request: NextRequest) {
     qualifying.sort((a, b) => b.scores.overallScore - a.scores.overallScore);
 
     // Purge old data
-    const purged = await purgeOldInflectionDaily(14).catch(() => 0);
+    // 90 days, not 14. At 14 the table held ~10 scan dates on a Tue-Sat schedule and the
+    // window slid forward daily, so the backtest could never accumulate a sample no matter
+    // how long it ran. 90 days is ~65 scan dates at ~200 rows: trivial for Postgres.
+    const purged = await purgeOldInflectionDaily(RETENTION_DAYS).catch(() => 0);
 
     // Determine "new today" — tickers not in yesterday's results
     // Load yesterday's tickers from Supabase for comparison
