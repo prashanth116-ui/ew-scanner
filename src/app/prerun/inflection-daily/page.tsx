@@ -1011,8 +1011,6 @@ export default function InflectionDailyPage() {
                 <tr className="bg-[#111] border-b border-[#2a2a2a] sticky top-0 z-10">
                   <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666] w-8"></th>
                   <SortHeader field="ticker" label="Ticker" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666]">Company</th>
-                  <SortHeader field="sector" label="Sector" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="price" label="Price" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="overall_score" label="Score" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="delta" label="+/-" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
@@ -1025,6 +1023,8 @@ export default function InflectionDailyPage() {
                   <SortHeader field="stage" label="Stage" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="trade_read" label="Read" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortHeader field="flags" label="Flags" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#666]">Company</th>
+                  <SortHeader field="sector" label="Sector" currentSort={sortField} sortAsc={sortAsc} onSort={handleSort} />
                 </tr>
               </thead>
               <tbody>
@@ -1056,24 +1056,6 @@ export default function InflectionDailyPage() {
                         {/* Ticker */}
                         <td className="px-2 py-2 font-bold text-white whitespace-nowrap">
                           {row.ticker}
-                        </td>
-
-                        {/* Company */}
-                        <td className="px-2 py-2 text-[#a0a0a0] max-w-[140px] truncate">
-                          {row.company_name}
-                        </td>
-
-                        {/* Sector */}
-                        <td className="px-2 py-2 text-[10px] whitespace-nowrap">
-                          <span className="text-[#777]">{row.sector || "-"}</span>
-                          {(() => {
-                            const qb = quadrantBadge(sectorQuadrants.get(row.sector ?? "") ?? "");
-                            return qb ? (
-                              <span className={`ml-1 inline-flex items-center rounded border px-1 py-0 text-[7px] font-bold ${qb.color}`}>
-                                {qb.label}
-                              </span>
-                            ) : null;
-                          })()}
                         </td>
 
                         {/* Price */}
@@ -1187,6 +1169,24 @@ export default function InflectionDailyPage() {
                             )}
                           </div>
                         </td>
+                        {/* Company */}
+                        <td className="px-2 py-2 text-[#a0a0a0] max-w-[140px] truncate">
+                          {row.company_name}
+                        </td>
+
+                        {/* Sector */}
+                        <td className="px-2 py-2 text-[10px] whitespace-nowrap">
+                          <span className="text-[#777]">{row.sector || "-"}</span>
+                          {(() => {
+                            const qb = quadrantBadge(sectorQuadrants.get(row.sector ?? "") ?? "");
+                            return qb ? (
+                              <span className={`ml-1 inline-flex items-center rounded border px-1 py-0 text-[7px] font-bold ${qb.color}`}>
+                                {qb.label}
+                              </span>
+                            ) : null;
+                          })()}
+                        </td>
+
                       </tr>
 
                       {/* Expanded evidence */}
