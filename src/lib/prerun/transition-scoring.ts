@@ -51,9 +51,9 @@ import {
   computeInvalidationLevel,
   evaluateBreakConfirmation,
 } from "./market-structure";
-import { weightedComposite, displayScore, measuredWeightPct, nullNeutralScore, type ScoreSlot } from "./score-slot";
+import { weightedComposite, displayScore, measuredWeightPct, nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
 import { scoreRunnerPotential } from "./runner-potential";
-import { scoreSupplyExhaustion } from "./supply-exhaustion";
+import { scoreSupplyExhaustion, type ComponentResult } from "./supply-exhaustion";
 import { scoreDemandEmergence } from "./demand-emergence";
 import { scoreRSTrajectory } from "./rs-trajectory";
 import { NEUTRAL_GATE, type RegimeGate } from "./regime-gate";
@@ -84,7 +84,7 @@ function scoreStructure(
   higherHighCount: number,
   lowerHighCount: number,
   structureHasPrinted: boolean,
-): { score: number | null; evidence: string[]; caution: string[] } {
+): ComponentResult {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -156,12 +156,12 @@ function scoreStructure(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
 }
 
 // ── Compression (0-100, weight 10%) ──
 
-function scoreCompressionQuality(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
+function scoreCompressionQuality(data: PreRunStockData): ComponentResult {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -221,7 +221,7 @@ function scoreCompressionQuality(data: PreRunStockData): { score: number | null;
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
-  return { score: nullNeutralScore(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
 }
 
 // ── State Classification ──
@@ -460,12 +460,12 @@ export function scoreTransitionWithStructure(
   // before a break has printed — is skipped and its weight redistributed, rather than
   // entering the sum as a zero.
   const components = [
-    { score: structureHasPrinted ? structureResult.score : null, weight: 0.25 },
-    { score: seResult.score, weight: 0.15 },
-    { score: demandResult.score, weight: 0.20 },
-    { score: compressionResult.score, weight: 0.10 },
-    { score: runnerResult.score, weight: 0.20 },
-    { score: rsResult.score, weight: 0.10 },
+    { score: structureHasPrinted ? structureResult.score : null, coverage: structureResult.coverage, weight: 0.25 },
+    { score: seResult.score, coverage: seResult.coverage, weight: 0.15 },
+    { score: demandResult.score, coverage: demandResult.coverage, weight: 0.20 },
+    { score: compressionResult.score, coverage: compressionResult.coverage, weight: 0.10 },
+    { score: runnerResult.score, coverage: runnerResult.coverage, weight: 0.20 },
+    { score: rsResult.score, coverage: rsResult.coverage, weight: 0.10 },
   ];
   const overallScore = weightedComposite(components);
   // Structure is legitimately absent pre-break, so it does not count as missing data here.

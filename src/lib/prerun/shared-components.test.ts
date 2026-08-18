@@ -48,6 +48,9 @@ function stock(over: Partial<PreRunStockData> = {}): PreRunStockData {
     instRsAccelTrend: 3,
     instDistFromEma20Atr: 1,
     hasBrokenStructure: false,
+    recentSwingLow: 92,
+    vcpSma50: 95,
+    low52w: 70,
     vcpAvgDollarVolume: 500_000_000,
     marketCap: 50_000_000_000,
     ...over,
@@ -115,7 +118,8 @@ describe("shared components report identically on both engines", () => {
   });
 
   it("reports how much of the composite was measurable", () => {
-    // Full data -> everything measured
+    // Full data -> everything measured. Inflection derives its own invalidation level from
+    // recentSwingLow, so Runner Potential's risk-distance slot is measurable here.
     expect(scoreInflection(stock()).measuredPct).toBe(100);
     // Strip the inputs behind two whole components; coverage must drop, not silently
     // renormalize away
@@ -130,9 +134,27 @@ describe("shared components report identically on both engines", () => {
   });
 
   it("does not count Structure as missing before a break has printed", () => {
-    // Pre-break rows legitimately have no structure — that is not thin data
+    // Pre-break rows legitimately have no structure — that is not thin data, so the 25%
+    // Structure weight is excluded from the denominator rather than counted as a gap.
+    // 97 rather than 100 because NO_STRUCTURE carries no invalidation level either, so
+    // Runner Potential's risk-distance slot (12 of its 100 points at weight 0.20) genuinely
+    // could not be measured. That is the metric working, not a rounding artefact.
     const r = scoreTransitionWithStructure(stock(), NO_STRUCTURE);
-    expect(r.measuredPct).toBe(100);
+    expect(r.measuredPct).toBe(97);
+    expect(r.cautionEvidence.join(" ")).not.toContain("could be measured");
+  });
+
+  it("drops sharply when slots inside a component go missing", () => {
+    // The case the component-level metric could not see: whole components almost never
+    // return null, but individual slots drop out constantly on upstream fetch failures.
+    const thin = stock({
+      absorption: null, structuralSpring: null, rangeAsymmetry: null,
+      closeLocationMean: null, pocketPivots: null, rvolTrajectory: null,
+      overheadSupply: null, vcpAtrPct: null,
+    } as Partial<PreRunStockData>);
+    const r = scoreInflection(thin);
+    expect(r.measuredPct).toBeLessThan(70);
+    expect(r.cautionEvidence.join(" ")).toContain("could be measured");
   });
 
   it("both components stay within 0-100", () => {

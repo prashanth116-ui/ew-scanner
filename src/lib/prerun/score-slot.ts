@@ -37,10 +37,30 @@ export function nullNeutralScore(slots: ScoreSlot[]): number | null {
   return Math.round((totalEarned / totalPossible) * 100);
 }
 
+/**
+ * Share of a component's SLOT weight that had data, 0-100.
+ *
+ * This is the granularity that matters. Renormalization happens per slot, so a component
+ * scored from two of its six slots returns a number indistinguishable from one scored from
+ * all six — and that, not whole components going missing, is what produced 18-point swings
+ * for the same ticker between two crons minutes apart. Whole components almost never return
+ * null, because that needs every slot to be unavailable at once.
+ */
+export function slotCoveragePct(slots: ScoreSlot[]): number {
+  const total = slots.reduce((sum, s) => sum + (s.hasData ? s.possible : 0), 0);
+  const declared = slots.reduce((sum, s) => sum + s.possible, 0);
+  // `possible` is 0 on slots without data, so reconstruct the intended denominator from
+  // the component's own full weight — every component in both engines sums to 100.
+  const intended = declared > 0 ? Math.max(declared, 100) : 100;
+  return Math.round((total / intended) * 100);
+}
+
 /** A scored component and its share of the composite. */
 export interface WeightedComponent {
   score: number | null;
   weight: number;
+  /** Share of this component's slot weight that had data, 0-100. Defaults to 100. */
+  coverage?: number;
 }
 
 /**
@@ -80,8 +100,11 @@ export function displayScore(score: number | null): number {
 export function measuredWeightPct(components: WeightedComponent[]): number {
   const total = components.reduce((sum, c) => sum + c.weight, 0);
   if (total <= 0) return 0;
-  const have = components
-    .filter((c) => c.score !== null)
-    .reduce((sum, c) => sum + c.weight, 0);
+  // Weight each component by how much of ITS OWN slot weight had data, not merely by
+  // whether it produced a score at all.
+  const have = components.reduce(
+    (sum, c) => sum + c.weight * (c.score === null ? 0 : (c.coverage ?? 100) / 100),
+    0,
+  );
   return Math.round((have / total) * 100);
 }

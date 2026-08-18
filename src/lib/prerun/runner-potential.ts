@@ -18,14 +18,11 @@
 import "server-only";
 
 import type { PreRunStockData } from "./types";
-import { nullNeutralScore, type ScoreSlot } from "./score-slot";
+import { nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
+import type { ComponentResult } from "./supply-exhaustion";
 
-export interface RunnerPotentialResult {
-  /** null when nothing about this stock's move potential could be measured. */
-  score: number | null;
-  evidence: string[];
-  caution: string[];
-}
+/** null score when nothing about this stock's move potential could be measured. */
+export type RunnerPotentialResult = ComponentResult;
 
 /**
  * Score 0-100. Higher = more room and more fuel for a sustained move.
@@ -146,5 +143,5 @@ export function scoreRunnerPotential(
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
 }

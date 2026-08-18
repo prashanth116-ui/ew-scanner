@@ -16,7 +16,7 @@
 import "server-only";
 
 import type { PreRunStockData } from "./types";
-import { nullNeutralScore, type ScoreSlot } from "./score-slot";
+import { nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
 import type { ComponentResult } from "./supply-exhaustion";
 
 /** RS acceleration vs SPY 60 · acceleration trend 40 */
@@ -57,5 +57,5 @@ export function scoreRSTrajectory(data: PreRunStockData): ComponentResult {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
 }

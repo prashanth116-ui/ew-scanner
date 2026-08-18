@@ -19,7 +19,7 @@
 import "server-only";
 
 import type { PreRunStockData } from "./types";
-import { nullNeutralScore, type ScoreSlot } from "./score-slot";
+import { nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
 import type { ComponentResult } from "./supply-exhaustion";
 
 /** Close location 24 · pocket pivots 24 · RVOL 16 · OBV 14 · money flow 10 · distance 12 */
@@ -106,5 +106,5 @@ export function scoreDemandEmergence(data: PreRunStockData): ComponentResult {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
 }

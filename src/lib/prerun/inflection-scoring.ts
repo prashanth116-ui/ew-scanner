@@ -35,9 +35,9 @@ import type {
   InflectionTradeRead,
   InflectionResult,
 } from "./types";
-import { weightedComposite, displayScore, measuredWeightPct, nullNeutralScore, type ScoreSlot } from "./score-slot";
+import { weightedComposite, displayScore, measuredWeightPct, nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
 import { scoreRunnerPotential } from "./runner-potential";
-import { scoreSupplyExhaustion } from "./supply-exhaustion";
+import { scoreSupplyExhaustion, type ComponentResult } from "./supply-exhaustion";
 import { scoreDemandEmergence } from "./demand-emergence";
 import { scoreRSTrajectory } from "./rs-trajectory";
 import { NEUTRAL_GATE, type RegimeGate } from "./regime-gate";
@@ -59,7 +59,7 @@ function evaluateGates(data: PreRunStockData): InflectionGates {
 // unchanged apart from the removal of the dry-volume slot, which now sits in nothing —
 // volume behaviour belongs to the demand and supply components.
 
-function scoreCompression(data: PreRunStockData): { score: number | null; evidence: string[]; caution: string[] } {
+function scoreCompression(data: PreRunStockData): ComponentResult {
   const evidence: string[] = [];
   const caution: string[] = [];
   const slots: ScoreSlot[] = [];
@@ -137,7 +137,7 @@ function scoreCompression(data: PreRunStockData): { score: number | null; eviden
   } else {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
-  return { score: nullNeutralScore(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
 }
 
 // ── Stage Classification ──
@@ -257,11 +257,11 @@ export function scoreInflection(
   // Weighted average over the components that could actually be measured. A component with
   // no data is skipped and its weight redistributed, rather than entering the sum as a zero.
   const components = [
-    { score: seResult.score, weight: 0.25 },          // Is supply finished?
-    { score: demandResult.score, weight: 0.25 },      // Is demand appearing?
-    { score: compressionResult.score, weight: 0.15 }, // Is the spring wound?
-    { score: runnerResult.score, weight: 0.25 },      // Can it actually move?
-    { score: rsResult.score, weight: 0.10 },          // Is relative strength turning?
+    { score: seResult.score, coverage: seResult.coverage, weight: 0.25 },                   // Supply finished?
+    { score: demandResult.score, coverage: demandResult.coverage, weight: 0.25 },           // Demand appearing?
+    { score: compressionResult.score, coverage: compressionResult.coverage, weight: 0.15 }, // Spring wound?
+    { score: runnerResult.score, coverage: runnerResult.coverage, weight: 0.25 },           // Can it move?
+    { score: rsResult.score, coverage: rsResult.coverage, weight: 0.10 },                   // RS turning?
   ];
   const overallScore = weightedComposite(components);
   const measuredPct = measuredWeightPct(components);

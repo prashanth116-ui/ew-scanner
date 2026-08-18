@@ -17,10 +17,12 @@
 import "server-only";
 
 import type { PreRunStockData } from "./types";
-import { nullNeutralScore, type ScoreSlot } from "./score-slot";
+import { nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
 
 export interface ComponentResult {
   score: number | null;
+  /** Share of this component's slot weight that had data, 0-100. */
+  coverage: number;
   evidence: string[];
   caution: string[];
 }
@@ -103,5 +105,5 @@ export function scoreSupplyExhaustion(data: PreRunStockData): ComponentResult {
     slots.push({ earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
 }
