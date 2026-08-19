@@ -84,6 +84,23 @@ export function getTelegramChatId(channel: TelegramChannel): string | undefined 
   return process.env[CHANNEL_ENV[channel]] || process.env.TELEGRAM_CHAT_ID;
 }
 
+/**
+ * Telegram rejects a sendMessage over 4096 characters outright — the whole alert is lost,
+ * not truncated. Trim at a line boundary with a visible marker instead, so a busy night
+ * costs you the tail of the message rather than all of it. The margin leaves room for the
+ * marker itself and for any multi-byte characters in ticker labels.
+ */
+export const TELEGRAM_MAX = 4096;
+const TELEGRAM_SAFE = 3900;
+
+export function capForTelegram(message: string): string {
+  if (message.length <= TELEGRAM_SAFE) return message;
+  const marker = "\n\u2026 trimmed to fit Telegram's limit";
+  const budget = TELEGRAM_SAFE - marker.length;
+  const cut = message.lastIndexOf("\n", budget);
+  return message.slice(0, cut > 0 ? cut : budget) + marker;
+}
+
 export async function sendTelegramMessage(
   botToken: string,
   chatId: string,
