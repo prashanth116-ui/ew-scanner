@@ -451,6 +451,8 @@ const MAX_CATALYSTS = 3;
 const MAX_DROPPED = 5;
 /** Focus names listed in full. Above this the list stops being a shortlist. */
 const MAX_FOCUS = 15;
+/** Independent scanners a focus name needs before it reaches the FOCUS section. */
+const FOCUS_MIN_TIER = 2;
 
 /** Short sector labels for inline display — covers all 31 sector-universe.ts displayNames */
 const SECTOR_SHORT: Record<string, string> = {
@@ -548,12 +550,21 @@ function formatNightlySummary(
   lines.push("");
 
   // FOCUS - the whole point of the message. Everything below it is context you can read
-  // if you want to; this is the part you act on. Drawn across all tiers so a focus name
+  // if you want to; this is the part you act on. Drawn across tiers so a focus name
   // scoring 5/5 and one scoring 2/5 appear together, ranked by conviction then RS.
+  //
   // A focus name with no scanner hit tonight is not in the tier map at all, so it does
   // not show up here - the list says which names matter, the scanners say when.
+  //
+  // FOCUS_MIN_TIER exists because the first run against real data produced 91 focus
+  // names, 43 of them single-scanner hits, under a cap of 15. The header read
+  // "FOCUS (91)" above a list of 15, which claims far more actionable names than there
+  // were. Requiring two independent scanners cuts that to ~47 and makes the count mean
+  // something. Focus names below the bar are not lost: they still carry a star in the
+  // collapsed tier lines below.
   const focusNames: { tier: number; t: ConsolidatedTicker }[] = [];
   for (const [level, entries] of tiers) {
+    if (level < FOCUS_MIN_TIER) continue;
     for (const t of entries) if (t.isFocus) focusNames.push({ tier: level, t });
   }
   focusNames.sort((a, b) =>
@@ -563,9 +574,7 @@ function formatNightlySummary(
     lines.push(`<b>\u2605 FOCUS (${focusNames.length})</b>`);
     for (const { tier, t } of focusNames.slice(0, MAX_FOCUS)) {
       const runnerTag = t.runnerScore != null ? ` R${t.runnerScore}` : "";
-      // Tier 0 means the only hits were badge-only (VCP/QFE/4h/ICT) or a lone INF_WATCH.
-      // "0/5" would read as "no signal" when there IS one, so say what it is instead.
-      const tierTag = tier >= 1 ? ` ${tier}/5` : " badge";
+      const tierTag = ` ${tier}/5`;
       lines.push(
         ...formatTickerBlock(t).map((l, i) => (i === 0 ? l + tierTag + runnerTag : l))
       );
