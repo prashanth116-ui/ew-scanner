@@ -57,6 +57,10 @@
       "schedule": "50 2 * * 2-6"
     },
     {
+      "path": "/api/catalyst-tags/sync",
+      "schedule": "45 2 * * 2-6"
+    },
+    {
       "path": "/api/nightly-summary/cron",
       "schedule": "0 3 * * 2-6"
     },

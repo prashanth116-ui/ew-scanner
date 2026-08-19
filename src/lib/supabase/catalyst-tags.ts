@@ -27,6 +27,9 @@ export interface CatalystTag {
   note?: string | null;
   resolved?: boolean;
   outcome?: string | null;
+  /** 'manual' = typed by hand, never touched by a syncer. 'auto:*' = feed-owned. Drives
+   *  alert behaviour: only manual tags promote a name past the FOCUS tier gate. */
+  source?: string;
   created_at?: string;
   updated_at?: string;
 }

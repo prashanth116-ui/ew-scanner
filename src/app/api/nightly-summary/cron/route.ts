@@ -37,6 +37,7 @@ import type {
 import { loadDiscoveredTickers } from "@/lib/discovery/storage";
 import { isFocusTicker } from "@/data/focus-list";
 import { loadCatalystMap, type CatalystTagWithCountdown } from "@/lib/supabase/catalyst-tags";
+import { EARNINGS_SOURCE } from "@/lib/catalyst/earnings-sync";
 
 export const maxDuration = 60;
 
@@ -588,8 +589,13 @@ function formatNightlySummary(
       // much the scanners agree, and the scanners cannot see a readout date at all — so
       // requiring their agreement is exactly the wrong test for the one case where you
       // most need the reminder. MRNA sat at tier 1 the night before it gapped 117%.
+      // Only a HAND-ENTERED catalyst overrides the tier bar. You already know earnings
+      // are coming — a Phase 3 readout is the one you would forget, and that is the one
+      // you had to type in. Auto-synced earnings still badge the row, they just do not
+      // promote it, or earnings season would flood the section every fortnight.
       const urgent =
         t.catalyst != null &&
+        t.catalyst.source !== EARNINGS_SOURCE &&
         t.catalyst.daysUntil >= 0 &&
         t.catalyst.daysUntil <= CATALYST_URGENT_DAYS;
       if (level < FOCUS_MIN_TIER && !urgent) continue;
