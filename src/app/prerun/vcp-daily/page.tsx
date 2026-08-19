@@ -17,6 +17,8 @@ import Link from "next/link";
 import { fmtNum } from "@/lib/daily-format";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
 import { formatDatePill, streakColor } from "@/lib/daily-page-utils";
+import { isFocusTicker } from "@/data/focus-list";
+import { FocusToggle } from "@/components/focus-toggle";
 
 // ── Types ──
 
@@ -252,8 +254,18 @@ export default function VCPDailyPage() {
     setSortField((prev) => { if (prev === field) { setSortAsc((a) => !a); return field; } setSortAsc(false); return field; });
   }, []);
 
+  const [focusOnly, setFocusOnly] = useState(false);
+  // Focus names on this screen — the same hand-owned list the nightly Telegram
+  // reads. A toggle, never a default: the scanners exist to notice a name ENTERING
+  // the list, which defaulting to focus-only would hide.
+  const focusTickers = useMemo(
+    () => new Set(results.filter((r) => isFocusTicker(r.ticker)).map((r) => r.ticker)),
+    [results],
+  );
+
   const filtered = useMemo(() => {
     let rows = results;
+    if (focusOnly) rows = rows.filter((r) => focusTickers.has(r.ticker));
     if (phaseFilter !== "ALL") rows = rows.filter((r) => r.phase === phaseFilter);
     if (tickerSearch.trim()) {
       const q = tickerSearch.trim().toUpperCase();
@@ -272,7 +284,7 @@ export default function VCPDailyPage() {
       else cmp = (b[sortField as keyof VCPDailyRow] as number ?? 0) - (a[sortField as keyof VCPDailyRow] as number ?? 0);
       return sortAsc ? -cmp : cmp;
     });
-  }, [results, phaseFilter, tickerSearch, sortField, sortAsc, streaks, deltas]);
+  }, [focusOnly, focusTickers, results, phaseFilter, tickerSearch, sortField, sortAsc, streaks, deltas]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
@@ -361,6 +373,11 @@ export default function VCPDailyPage() {
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
+          <FocusToggle
+            count={focusTickers.size}
+            active={focusOnly}
+            onToggle={() => setFocusOnly((v) => !v)}
+          />
           <button onClick={handleCopy} className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border border-[#2a2a2a] transition-colors">
             {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />} {copied ? "Copied" : "Copy"}
           </button>

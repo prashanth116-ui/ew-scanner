@@ -225,12 +225,58 @@ export const ADDITIONAL_MEMBERS: Set<string> = new Set([
   // 2026-08-17 additions
   "SNDK",   // Sandisk — NAND/storage, spun out of Western Digital. Memory cycle
             // peer to MU; clears price and dollar-volume gates comfortably.
+  // 2026-08-18 additions — focus-list names that no index or sector basket reaches.
+  // Without these entries they would sit in FOCUS_LIST looking active but never be
+  // fetched by any cron. All three clear the price and dollar-volume gates.
+  "HIMS",   // Hims & Hers Health — telehealth/GLP-1. 7.0% ATR on $453M/day.
+  "BE",     // Bloom Energy — fuel cells for datacenter power. 12.0% ATR on $3.5B/day.
+  "IREN",   // IREN — bitcoin miner pivoting to HPC/AI hosting, same trade as RIOT.
+            // 9.6% ATR on $1.8B/day.
+  // 2026-08-18, second pass. These ten were listed in sector-universe.ts — so they were
+  // already voting in sector breadth, 15% of the rotation composite — while being in no
+  // index and no ADDITIONAL_MEMBERS, which meant no scanner ever evaluated them. Six are
+  // semiconductors, the most-watched sector in the system. CRDO ran at 9.6% ATR on
+  // $1.2B/day without ever being scored once. Scanning them is a correctness fix, and it
+  // is independent of the focus list.
+  "CRDO",   // 9.6% ATR, 1.2B/day — Credo Technology
+  "MTZ",    // 7.3% ATR, 460M/day — MasTec
+  "MTSI",   // 7.1% ATR, 422M/day — MACOM Technology
+  "ENTG",   // 6.9% ATR, 376M/day — Entegris
+  "MKSI",   // 6.7% ATR, 467M/day — MKS Instruments
+  "ASX",    // 5.8% ATR, 318M/day — ASE Technology
+  "U",      // 5.1% ATR, 483M/day — Unity Software
+  "STM",    // 4.7% ATR, 582M/day — STMicroelectronics
+  "AEM",    // 3.9% ATR, 491M/day — Agnico Eagle Mines
+  "RVMD",   // 3.6% ATR, 327M/day — Revolution Medicines
+  // 2026-08-18, blind spots in no basket either. Same themes as names already tracked:
+  // OKLO is nuclear/AI power alongside BE and CEG, HUT is a miner-to-HPC pivot like IREN
+  // and RIOT, FN/AMKR/ONTO are the semi supply chain, RGTI pairs with IONQ on quantum.
+  "HUT",    // 12.2% ATR, 463M/day — Hut 8 Mining
+  "FN",     // 10.1% ATR, 479M/day — Fabrinet
+  "DOCN",   // 9.4% ATR, 415M/day — DigitalOcean
+  "ONTO",   // 8.5% ATR, 349M/day — Onto Innovation
+  "OKLO",   // 8.3% ATR, 420M/day — Oklo
+  "AMKR",   // 7.2% ATR, 326M/day — Amkor Technology
+  "RGTI",   // 6.3% ATR, 333M/day — Rigetti Computing
 ]);
 
 // prettier-ignore
-/** Tickers excluded from scan universe. These are SP500/NDX members that are
- *  structurally unlikely to produce swing-tradeable breakouts due to ultra-low
- *  volatility, secular decline, or utility-like price behavior.
+/** Tickers suppressed EVERYWHERE — both the scanner universe and the sector-rotation
+ *  measurement path. SP500/NDX members that are structurally unlikely to produce
+ *  swing-tradeable breakouts due to ultra-low volatility, secular decline, or
+ *  utility-like price behavior.
+ *
+ *  ⚠️ This set is NOT free to edit. It is load-bearing for sector breadth (15% of the
+ *  rotation composite). The path is indirect and easy to miss: sector-rotation.ts
+ *  filters this set out of the batch-quote fetch, and Tier-1 breadth resolves each
+ *  listed sector member through those same batch quotes — so an excluded symbol has
+ *  no quote, drops out of `quotesInSector`, and cannot vote. Adding a name here
+ *  therefore SHIFTS the breadth percentage of every basket that lists it, by
+ *  composition (cutting weak names inflates breadth; cutting strong names deflates it).
+ *
+ *  If your intent is only "stop scanning this for setups," use SCAN_SKIP below —
+ *  it has no effect on breadth or on any sector-rotation output.
+ *
  *  Last updated: 2026-08-08. Review quarterly. */
 export const SCAN_EXCLUSIONS: Set<string> = new Set([
   // Industrials — low ATR%, utility-like, conglomerate discount, or secular decline
@@ -396,10 +442,37 @@ export const SCAN_EXCLUSIONS: Set<string> = new Set([
   "SOLV",   // Solventum — 3M medical spinoff, ATR% ~1.3%, no growth catalyst
 ]);
 
-/** Build the scan universe: SP500 + NDX100 + ADDITIONAL minus SCAN_EXCLUSIONS. */
+/**
+ * Tickers dropped from the SCANNER universe only.
+ *
+ * SCAN_EXCLUSIONS was doing two unrelated jobs: pruning the scan candidate pool AND
+ * silencing sector-breadth voters. Those jobs want different lists. Breadth wants the
+ * full, unbiased sector membership; the scanners want a pool free of names that will
+ * never produce a setup worth taking. Overloading one set meant every attempt to shrink
+ * the scan pool quietly moved a 15% component of the rotation composite, and had to be
+ * paid for with the "remove above-SMA and below-SMA names in the current ratio" ritual.
+ *
+ * This set is the pressure-release valve. It is subtracted from buildScanUniverse() and
+ * read by nothing else — no breadth, no enrichment, no rotation tracker, no sector
+ * bucketing. Shrink it freely.
+ *
+ * Safe because scanner scoring is per-ticker and absolute: PreRun criteria, Inflection
+ * stages, Transition states, Institutional and VCP composites are all computed from one
+ * ticker's own OHLCV against fixed thresholds. Removing ticker X cannot change ticker Y's
+ * score. The only cross-sectional couplings are (a) the RS percentile inside
+ * topStocksToWatch, which needs >= 3 scored PreRun names in a sector, and (b) the Tier-2
+ * breadth fallback, which needs >= 5. Keep sectors above those counts and nothing moves.
+ *
+ * Starts empty by design — populate it from evidence (tickers that never cleared a
+ * meaningful score in any scanner), not from taste. Taste already has SCAN_EXCLUSIONS.
+ */
+export const SCAN_SKIP: Set<string> = new Set<string>([]);
+
+/** Build the scan universe: SP500 + NDX100 + ADDITIONAL minus SCAN_EXCLUSIONS and SCAN_SKIP. */
 export function buildScanUniverse(): string[] {
   const all = new Set([...SP500_MEMBERS, ...NDX100_MEMBERS, ...ADDITIONAL_MEMBERS]);
   for (const t of SCAN_EXCLUSIONS) all.delete(t);
+  for (const t of SCAN_SKIP) all.delete(t);
   return [...all];
 }
 

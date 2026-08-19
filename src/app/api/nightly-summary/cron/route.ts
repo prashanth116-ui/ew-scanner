@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
-import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
+import { sendTelegramMessage, getTelegramChatId, capForTelegram } from "@/lib/ew-wave/telegram";
 import { createAdminClient } from "@/lib/supabase/server";
 import {
   loadPreRunDaily,
@@ -35,6 +35,7 @@ import type {
   ICTDailyRecord,
 } from "@/lib/supabase/persistence";
 import { loadDiscoveredTickers } from "@/lib/discovery/storage";
+import { isFocusTicker } from "@/data/focus-list";
 
 export const maxDuration = 60;
 
@@ -53,6 +54,12 @@ interface ConsolidatedTicker {
   rsAccel: number | null; // RS acceleration (positive = improving vs SPY)
   sector: string | null;  // GICS sector for context
   isNew: boolean;         // true if ticker is new today (not in yesterday's scans)
+  /** Best Runner Potential across the engines that scored this ticker, or null if
+   *  neither Inflection nor Transition produced one. */
+  runnerScore: number | null;
+  /** Passes the focus predicate — the names worth acting on tonight, as opposed to
+   *  the names worth knowing about. */
+  isFocus: boolean;
 }
 
 // ── Catalyst signal loader (no existing load function) ──
@@ -297,6 +304,17 @@ function consolidateResults(
   for (const r of prerunner) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
   for (const r of transition) { if (!sectorMap.has(r.ticker)) sectorMap.set(r.ticker, r.sector); }
 
+  // Runner Potential lookup, shown alongside focus names as a magnitude read. Both
+  // engines score the same Runner component from the same shared module, so taking the
+  // max across them is a best-available read rather than a mix of two different measures.
+  const runnerMap = new Map<string, number>();
+  for (const r of [...inflection, ...transition]) {
+    if (r.runner_score != null) {
+      const prev = runnerMap.get(r.ticker);
+      if (prev == null || r.runner_score > prev) runnerMap.set(r.ticker, r.runner_score);
+    }
+  }
+
   // Build consolidated list with tiers
   const tiers = new Map<number, ConsolidatedTicker[]>();
 
@@ -343,9 +361,17 @@ function consolidateResults(
     const rsAccel = rsAccelMap.get(ticker) ?? null;
     const sector = sectorMap.get(ticker) ?? null;
 
-    const entry: ConsolidatedTicker = { ticker, hits, maxScore, rsAccel, sector, isNew: newTickerSet.has(ticker) };
-
     const tierKey = Math.floor(independentCount);
+    const runnerScore = runnerMap.get(ticker) ?? null;
+    const isFocus = isFocusTicker(ticker);
+
+    const entry: ConsolidatedTicker = {
+      ticker, hits, maxScore, rsAccel, sector,
+      isNew: newTickerSet.has(ticker),
+      runnerScore,
+      isFocus,
+    };
+
     if (!tiers.has(tierKey)) tiers.set(tierKey, []);
     tiers.get(tierKey)!.push(entry);
   }
@@ -368,6 +394,8 @@ function consolidateResults(
     rsAccel: null,
     sector: null,
     isNew: false,
+    runnerScore: null,
+    isFocus: false,
   }));
   catalystEntries.sort((a, b) => b.maxScore - a.maxScore);
 
@@ -417,13 +445,14 @@ async function computeNewDropped(
 // ── Telegram formatter ──
 
 // Per-tier display caps
-const TIER_CAPS: Record<number, number> = {
-  5: 10, // 5/5 scanners — show all (very rare)
-  4: 7,  // 4/5 — top 7
-  3: 5,  // 3/5 — top 5
-};
+/** Names listed per tier. These are now one word each, so the caps can be generous. */
+const TIER_CAPS: Record<number, number> = { 5: 20, 4: 20, 3: 15 };
 const MAX_CATALYSTS = 3;
 const MAX_DROPPED = 5;
+/** Focus names listed in full. Above this the list stops being a shortlist. */
+const MAX_FOCUS = 15;
+/** Independent scanners a focus name needs before it reaches the FOCUS section. */
+const FOCUS_MIN_TIER = 2;
 
 /** Short sector labels for inline display — covers all 31 sector-universe.ts displayNames */
 const SECTOR_SHORT: Record<string, string> = {
@@ -475,6 +504,7 @@ function shortSector(sector: string | null): string {
  */
 function formatTickerBlock(t: ConsolidatedTicker): string[] {
   const newBadge = t.isNew ? "*" : "";
+  const focusBadge = t.isFocus ? "\u2605" : "";
   const rsTag = t.rsAccel != null
     ? ` [RS ${t.rsAccel > 0 ? "+" : ""}${t.rsAccel.toFixed(1)}]`
     : "";
@@ -482,7 +512,7 @@ function formatTickerBlock(t: ConsolidatedTicker): string[] {
   const labels = t.hits.map((h) => h.label).join(" \u00b7 ");
 
   return [
-    `${newBadge}<b>${t.ticker}</b>${rsTag}${sectorTag}`,
+    `${focusBadge}${newBadge}<b>${t.ticker}</b>${rsTag}${sectorTag}`,
     `  ${labels}`,
   ];
 }
@@ -519,35 +549,60 @@ function formatNightlySummary(
   lines.push(`${totalTickers} tickers \u00b7 ${multiCount} multi | ${countParts.join(" ")}`);
   lines.push("");
 
-  // Tiers 5 and 4 — full two-line display (highest conviction)
-  for (const tierLevel of [5, 4]) {
+  // FOCUS - the whole point of the message. Everything below it is context you can read
+  // if you want to; this is the part you act on. Drawn across tiers so a focus name
+  // scoring 5/5 and one scoring 2/5 appear together, ranked by conviction then RS.
+  //
+  // A focus name with no scanner hit tonight is not in the tier map at all, so it does
+  // not show up here - the list says which names matter, the scanners say when.
+  //
+  // FOCUS_MIN_TIER exists because the first run against real data produced 91 focus
+  // names, 43 of them single-scanner hits, under a cap of 15. The header read
+  // "FOCUS (91)" above a list of 15, which claims far more actionable names than there
+  // were. Requiring two independent scanners cuts that to ~47 and makes the count mean
+  // something. Focus names below the bar are not lost: they still carry a star in the
+  // collapsed tier lines below.
+  const focusNames: { tier: number; t: ConsolidatedTicker }[] = [];
+  for (const [level, entries] of tiers) {
+    if (level < FOCUS_MIN_TIER) continue;
+    for (const t of entries) if (t.isFocus) focusNames.push({ tier: level, t });
+  }
+  focusNames.sort((a, b) =>
+    b.tier - a.tier || (b.t.rsAccel ?? -999) - (a.t.rsAccel ?? -999)
+  );
+  if (focusNames.length > 0) {
+    lines.push(`<b>\u2605 FOCUS (${focusNames.length})</b>`);
+    for (const { tier, t } of focusNames.slice(0, MAX_FOCUS)) {
+      const runnerTag = t.runnerScore != null ? ` R${t.runnerScore}` : "";
+      const tierTag = ` ${tier}/5`;
+      lines.push(
+        ...formatTickerBlock(t).map((l, i) => (i === 0 ? l + tierTag + runnerTag : l))
+      );
+    }
+    if (focusNames.length > MAX_FOCUS) {
+      lines.push(`... +${focusNames.length - MAX_FOCUS} more`);
+    }
+    lines.push("");
+  }
+
+  // Tiers 5, 4 and 3 — names only. The full two-line block is reserved for the FOCUS
+  // section above: these are the names worth KNOWING about, not the ones worth acting
+  // on tonight, and printing scanner labels for all of them is what made the message
+  // something to skim rather than read. A focus name always appears in full above, so
+  // collapsing here never hides one. Starred names are new today.
+  for (const tierLevel of [5, 4, 3]) {
     const entries = tiers.get(tierLevel);
     if (!entries || entries.length === 0) continue;
 
-    const cap = TIER_CAPS[tierLevel] ?? 7;
-    lines.push(`<b>\u25c6 ${tierLevel}/5 SCANNERS (${entries.length})</b>`);
-    for (const t of entries.slice(0, cap)) {
-      lines.push(...formatTickerBlock(t));
-    }
-    if (entries.length > cap) {
-      lines.push(`... +${entries.length - cap} more`);
-    }
-    lines.push("");
+    const cap = TIER_CAPS[tierLevel] ?? 12;
+    const shown = entries
+      .slice(0, cap)
+      .map((t) => `${t.isFocus ? "★" : ""}${t.isNew ? "*" : ""}${t.ticker}`)
+      .join(", ");
+    const extra = entries.length > cap ? ` (+${entries.length - cap})` : "";
+    lines.push(`<b>\u25c6 ${tierLevel}/5 (${entries.length}):</b> ${shown}${extra}`);
   }
-
-  // Tier 3 — two-line display with tighter cap
-  const tier3 = tiers.get(3);
-  if (tier3 && tier3.length > 0) {
-    const cap = TIER_CAPS[3] ?? 5;
-    lines.push(`<b>\u25c6 3/5 (${tier3.length})</b>`);
-    for (const t of tier3.slice(0, cap)) {
-      lines.push(...formatTickerBlock(t));
-    }
-    if (tier3.length > cap) {
-      lines.push(`... +${tier3.length - cap} more`);
-    }
-    lines.push("");
-  }
+  if ([5, 4, 3].some((l) => (tiers.get(l)?.length ?? 0) > 0)) lines.push("");
 
   // Tier 2 — count only (too many to list)
   const tier2Count = tiers.get(2)?.length ?? 0;
@@ -592,7 +647,10 @@ function formatNightlySummary(
     }
   }
   if (multiNew.length > 0) {
-    const newNames = multiNew.slice(0, 8).map((t) => t.ticker).join(", ");
+    const newNames = multiNew
+      .slice(0, 8)
+      .map((t) => `${t.isFocus ? "\u2605" : ""}${t.ticker}`)
+      .join(", ");
     const extra = multiNew.length > 8 ? ` (+${multiNew.length - 8})` : "";
     lines.push(`<b>NEW (multi):</b> ${newNames}${extra}`);
   }
@@ -606,7 +664,10 @@ function formatNightlySummary(
 
   // 4h-ONLY — tickers on 4h scanner but NOT daily (early detections)
   if (fourHourOnly.length > 0) {
-    const display = fourHourOnly.slice(0, 8).join(", ");
+    const display = fourHourOnly
+      .slice(0, 8)
+      .map((t) => `${isFocusTicker(t) ? "\u2605" : ""}${t}`)
+      .join(", ");
     const extra = fourHourOnly.length > 8 ? ` (+${fourHourOnly.length - 8})` : "";
     lines.push(`<b>4h ONLY:</b> ${display}${extra}`);
   }
@@ -916,7 +977,7 @@ export async function GET(request: NextRequest) {
         discoveryStocks, discoveryCrypto, scannerCounts, todayTickers.size,
         fourHourOnly,
       );
-      const tgResult = await sendTelegramMessage(botToken, chatId, message);
+      const tgResult = await sendTelegramMessage(botToken, chatId, capForTelegram(message));
       telegramSent = tgResult.ok;
       if (!tgResult.ok) {
         logError("api/nightly-summary/cron/telegram", new Error(tgResult.error ?? "Telegram send failed"));
@@ -924,7 +985,7 @@ export async function GET(request: NextRequest) {
 
       // Message 2: Per-scanner detail with sub-scores and classifications
       const detailMsg = formatScannerDetail(prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, transition);
-      const detailResult = await sendTelegramMessage(botToken, chatId, detailMsg);
+      const detailResult = await sendTelegramMessage(botToken, chatId, capForTelegram(detailMsg));
       detailSent = detailResult.ok;
       if (!detailResult.ok) {
         logError("api/nightly-summary/cron/detail-telegram", new Error(detailResult.error ?? "Detail Telegram send failed"));

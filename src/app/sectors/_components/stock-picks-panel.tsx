@@ -12,6 +12,8 @@ import type {
 } from "@/lib/sector-rotation/types";
 import { usePersistedFilter, clearPersistedFilters } from "@/lib/hooks/use-filter-persistence";
 import type { PicksSortKey } from "./types";
+import { isFocusTicker } from "@/data/focus-list";
+import { FocusToggle } from "@/components/focus-toggle";
 import { CONVICTION_STYLE, CATEGORY_STYLE, CONV_ORDER, CAT_ORDER, PHASE_ORDER } from "./constants";
 import { quadrantColor } from "./helpers";
 import { CollapsiblePanel } from "./shared";
@@ -129,6 +131,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
   const [rsAccelFilter, setRsAccelFilter] = usePersistedFilter<"all" | "positive" | "strong">("ew-filter:picks:rsAccel", "all");
   const [volFilter, setVolFilter] = usePersistedFilter<"all" | "above" | "high">("ew-filter:picks:vol", "all");
   const [aboveSmaFilter, setAboveSmaFilter] = usePersistedFilter<"all" | "above" | "below">("ew-filter:picks:aboveSma", "all");
+  const [focusOnly, setFocusOnly] = usePersistedFilter<boolean>("ew-filter:picks:focus", false);
   const [sortKey, setSortKey] = useState<PicksSortKey>("conviction");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedSectors, setExpandedSectors] = useState<Set<string>>(new Set());
@@ -138,8 +141,17 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
     return ["ALL", ...Array.from(s).sort()];
   }, [stocks]);
 
+  // Picks draws from the sector universe with an institutional-grade gate (mcap >= $10B),
+  // so sub-$10B focus names — OKLO, HUT, RGTI, IREN, DOCN — can never appear here at all.
+  // The count reflects what is actually on this screen, not the size of the focus list.
+  const focusCount = useMemo(
+    () => stocks.filter((s) => isFocusTicker(s.symbol)).length,
+    [stocks],
+  );
+
   const filtered = useMemo(() => {
     let list = stocks;
+    if (focusOnly) list = list.filter((s) => isFocusTicker(s.symbol));
     if (filter !== "ALL") list = list.filter((s) => s.conviction === filter);
     if (crossFilterSector) list = list.filter((s) => s.sector === crossFilterSector);
     else if (sectorFilter !== "ALL") list = list.filter((s) => s.sector === sectorFilter);
@@ -170,7 +182,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
       return sortDir === "desc" ? -cmp : cmp;
     });
     return sorted;
-  }, [stocks, filter, sectorFilter, crossFilterSector, categoryFilter, phaseFilter, quadrantFilter, rsAccelFilter, volFilter, aboveSmaFilter, sortKey, sortDir]);
+  }, [stocks, focusOnly, filter, sectorFilter, crossFilterSector, categoryFilter, phaseFilter, quadrantFilter, rsAccelFilter, volFilter, aboveSmaFilter, sortKey, sortDir]);
 
   const stocksBySector = useMemo(() => {
     const groups = new Map<string, { etf: string; sector: string; quadrant: RRGQuadrant; stocks: EnrichedStock[] }>();
@@ -221,6 +233,7 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
     setFilter("ALL"); setSectorFilter("ALL"); setCategoryFilter("ALL");
     setPhaseFilter("ALL"); setQuadrantFilter("ALL");
     setRsAccelFilter("all"); setVolFilter("all"); setAboveSmaFilter("all");
+    setFocusOnly(false);
   };
 
   const applyTopPicks = () => {
@@ -249,6 +262,11 @@ export function StockPicksPanel({ stocks, collapsed, onToggle, rotationPerfMap, 
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2 px-1 pb-3">
+        <FocusToggle
+          count={focusCount}
+          active={focusOnly}
+          onToggle={() => setFocusOnly(!focusOnly)}
+        />
         <select value={filter} onChange={(e) => setFilter(e.target.value as ConvictionLevel | "ALL")} className={selectClass}>
           <option value="ALL">All Conviction</option>
           <option value="HIGH">HIGH</option>

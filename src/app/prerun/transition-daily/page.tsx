@@ -22,6 +22,8 @@ import { TableErrorBoundary } from "@/components/table-error-boundary";
 import { ComponentFilterBar, type ComponentField, type ComponentFilters } from "@/app/prerun/_components/component-filter-bar";
 import { fmtNum } from "@/lib/daily-format";
 import { formatDatePill, streakColor } from "@/lib/daily-page-utils";
+import { isFocusTicker } from "@/data/focus-list";
+import { FocusToggle } from "@/components/focus-toggle";
 
 // ── Types ──
 
@@ -434,6 +436,7 @@ export default function TransitionDailyPage() {
   const [showDropped, setShowDropped] = useState(false);
   const [copied, setCopied] = useState(false);
   const [highConvictionOnly, setHighConvictionOnly] = useState(false);
+  const [focusOnly, setFocusOnly] = useState(false);
   const [enrichmentMap, setEnrichmentMap] = useState<Map<string, { phase: string; rsAccel: number | null; category: string; volRatio: number; conviction: string; sectorQuadrant: string }>>(new Map());
   const [quadrantFilter, setQuadrantFilter] = useState<string>("ALL");
   const [phaseFilter, setPhaseFilter] = useState<string>("ALL");
@@ -575,12 +578,21 @@ export default function TransitionDailyPage() {
     return set;
   }, [results, inflectionTickers, sectorQuadrants]);
 
+  // Focus names scoring today — the same hand-owned list the nightly Telegram reads.
+  const focusTickers = useMemo(
+    () => new Set(results.filter((r) => isFocusTicker(r.ticker)).map((r) => r.ticker)),
+    [results],
+  );
+
   // Filter and sort results
   const filtered = useMemo(() => {
     let rows = results;
 
     if (highConvictionOnly) {
       rows = rows.filter((r) => highConvictionTickers.has(r.ticker));
+    }
+    if (focusOnly) {
+      rows = rows.filter((r) => focusTickers.has(r.ticker));
     }
     if (alertFilter !== "ALL") {
       rows = alertFilter === "COILED"
@@ -675,7 +687,7 @@ export default function TransitionDailyPage() {
     });
 
     return sorted;
-  }, [results, highConvictionOnly, highConvictionTickers, alertFilter, stateFilter, minScore, componentFilters, flagFilter, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
+  }, [results, highConvictionOnly, highConvictionTickers, focusOnly, focusTickers, alertFilter, stateFilter, minScore, componentFilters, flagFilter, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
@@ -1048,8 +1060,13 @@ export default function TransitionDailyPage() {
           ))}
         </div>
 
-        {/* High Conviction toggle + Copy + CSV export */}
+        {/* Focus + High Conviction toggles + Copy + CSV export */}
         <div className="ml-auto flex items-center gap-2">
+          <FocusToggle
+            count={focusTickers.size}
+            active={focusOnly}
+            onToggle={() => setFocusOnly((v) => !v)}
+          />
           {highConvictionTickers.size > 0 && (
             <button
               onClick={() => setHighConvictionOnly((v) => !v)}

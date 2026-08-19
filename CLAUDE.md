@@ -19,8 +19,9 @@ All cron scanners share a quality gate — `passesUniverseQualityGates()` in `sr
 Applied in 6 cron routes: PreRun preset/4h, Inflection, Transition, VCP, Institutional. NOT in single-ticker lookups or PreRunner.
 
 ### Scan Universe
-- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS minus SCAN_EXCLUSIONS (~463 tickers). Built via `buildScanUniverse()` in `src/data/index-tiers.ts`.
-- **SCAN_EXCLUSIONS (145 tickers):** Structurally boring stocks (low ATR, secular decline, utility-like). Defined in `src/data/index-tiers.ts`. Review quarterly.
+- **Universe:** SP500 + NDX100 + ADDITIONAL_MEMBERS minus SCAN_EXCLUSIONS minus SCAN_SKIP (~464 tickers). Built via `buildScanUniverse()` in `src/data/index-tiers.ts`.
+- **SCAN_EXCLUSIONS (145 tickers):** Structurally boring stocks (low ATR, secular decline, utility-like). Suppressed **everywhere** — scanners *and* the sector-rotation measurement path, so edits move sector breadth (see the Sector Rotation section). Review quarterly.
+- **SCAN_SKIP (empty):** Scanner-universe-only exclusions. Read by `buildScanUniverse()` and nothing else — no breadth, enrichment, rotation tracker or sector bucketing. **Use this, not SCAN_EXCLUSIONS, to shrink the scan pool.** Safe because scanner scoring is per-ticker and absolute; removing ticker X cannot change ticker Y's score. The only cross-sectional couplings are the RS percentile in `topStocksToWatch` (needs >= 3 scored PreRun names per sector) and the Tier-2 breadth fallback (needs >= 5). Populate from evidence, not taste.
 - **ADDITIONAL_MEMBERS (98 tickers):** Non-index stocks added for momentum/breakout relevance. Exempt from mcap gate — but price >= $10 and dollar volume >= $150M still apply, so sub-gate names sit dormant until they clear. Defined in `src/data/index-tiers.ts`. Last updated 2026-08-15. Review quarterly.
 - **Share-class tickers:** Index lists use the dotted form (`BRK.B`, `BF.B`, `MOG.A`); Yahoo only accepts the dashed form. `toYahooSymbol()` in `yahoo-utils.ts` rewrites the outbound request and `fetchBatchQuotes` maps the response back, so internal/persisted symbols stay dotted. Any **new** Yahoo fetch site must call it — a dotted symbol returns an undefined price rather than an error, so it fails silently.
 - **NDX100 updated:** Reflects June 22, 2026 rebalance + July 7, 2026 SPCX addition.
@@ -130,7 +131,7 @@ Fields in `PreRunStockData` that scorers must read carefully:
 ### Sector Rotation System
 Scores 39 ETFs across 4 categories via Yahoo Finance chart API.
 
-**⚠️ Sector stock lists are load-bearing for scoring.** `sector-rotation.ts` computes **breadth** — 15% of the composite (`COMPOSITE.BASE_WEIGHTS.breadth`) — as the % of a sector's `stocks` trading above their 50d SMA. It reads `sectorDef.stocks` directly with **no quality gating**: every listed symbol votes, including SCAN_EXCLUSIONS members and names that fail `QUALITY_GATES`. Consequences when editing a `stocks` array:
+**⚠️ Sector stock lists are load-bearing for scoring.** `sector-rotation.ts` computes **breadth** — 15% of the composite (`COMPOSITE.BASE_WEIGHTS.breadth`) — as the % of a sector's `stocks` trading above their 50d SMA. Names that fail `QUALITY_GATES` still vote; those gates apply in enrichment, not breadth. **SCAN_EXCLUSIONS members do not vote**, and the path is indirect: `sector-rotation.ts:134-136` filters the set out of the batch-quote fetch, and Tier-1 breadth resolves each listed member through those same batch quotes (`:244-247`), so an excluded symbol has no quote and drops out of `quotesInSector`. 100 of the 594 sector symbols are currently excluded this way. **Adding a name to SCAN_EXCLUSIONS therefore shifts breadth** — use SCAN_SKIP instead when the intent is only to stop scanning. Consequences when editing a `stocks` array:
 - Breadth is a *percentage*, so list size doesn't dilute it — but **composition shifts it**. Cutting weak names inflates breadth and the composite (survivorship bias); cutting strong names deflates it.
 - Tier 1 breadth needs **>= `SCORING_SIGNALS.BREADTH_MIN_CONSTITUENTS` (5) stocks with a resolvable quote + SMA50**. Below that it falls back to PreRun data (Tier 2). If Tier 2 also falls short, a basket that **lists stocks** reports `breadthPct: null` and `computeComposite()` reweights the remaining 5 components (dataQuality drops to 85). The ETF sigmoid proxy (Tier 3) is reserved for genuinely **stock-less** baskets — cross-asset ETFs and the money-flow theme ETFs — because it is derived from the ETF's own price vs SMA20 and would otherwise restate momentum (25% of composite) as breadth (15%).
 - Removing a symbol from its **canonical** sector also changes `getSectorForSymbol()`, which buckets the PreRun universe — the ticker falls to "Other".
@@ -254,6 +255,27 @@ When asked for audit, check: (1) functional correctness, (2) code quality/resili
 - **`GET /api/backtest/scanner?engine=inflection|transition&days=14&minScore=N`** — evaluates **persisted daily rows** against forward returns. No lookahead: scores are read, not recomputed. Groups by state, alert state, score bucket and signal flags, with each bucket's edge measured against the whole-cohort average. Window is bounded by the 14-day table purge, which the response reports.
 - **`POST /api/backtest/inflection`** — re-scores history from live data. Reaches further back, but quote/fundamental fields are as-of-now, so Institutional Participation (15% of the composite) carries lookahead. The response says so.
 - **Calibrate after, not before.** Any change to a shared feature field shifts every score distribution, so re-tune `classifyStage`/`classifyState` thresholds only once the inputs are settled.
+
+### Focus List
+`src/data/focus-list.ts` — separates **the names you scan** (~464) from **the names you trade** (109). The universe stays wide so the scanners can still notice a name *entering* the tradeable set; the noise is filtered at the output, where a rejected name is one query away instead of gone.
+
+**One hand-owned list. `FOCUS_LIST` + `isFocusTicker()`, nothing else** — no scoring, no override sets, no precedence. Membership *is* the answer. Add a ticker to see it, delete it to stop. Isomorphic (no `server-only`) so pages and the nightly Telegram read the same list.
+
+**Seeded 2026-08-18** by measuring a 1y daily history for all 302 scanned members of the technology, semiconductor, software, health care, financial, consumer-discretionary, AI, aerospace, defense and space baskets, screening on **ATR% >= 3.0 · avg dollar volume >= $300M/day · price >= $15**. 154 cleared it; the seed took the top of each sector by tradeability (ATR% x log10 dollar volume), **capped per sector** — an uncapped global rank comes back ~60% semis, which defeats a rotation-driven system. **No momentum term:** a list that reads recent performance needs rebuilding every regime turn and drops exactly the names that are basing before they run.
+
+Why ATR% is the discriminator: below ~3% a 3-5 day swing does not clear its own slippage — which is what most SCAN_EXCLUSIONS comments ("ATR% ~1.0%") are really saying. The $300M bar is ~2x the universe gate; raising it further selects for mega-cap, not tradeability, and starves every sector except semis and software.
+
+**32 hand-additions on 2026-08-18** put back the large-cap core the ATR%-weighted cap had squeezed out (semis AVGO/TSM/ASML/QCOM/TXN/ADI; software CRWD/PANW/SNOW/ADBE/CRM/INTU/MDB/ZS/OKTA; consumer BKNG/ABNB/DASH/MELI/EBAY/LULU). A further 10 came from baskets the seed never drew from — communication services (APP/RDDT/RBLX/SPOT), the datacenter-buildout industrials (FIX/PWR), CEG (same AI-power trade as VST/NRG but filed under utilities), MNST/CELH, and CRCL — plus SPCX, which had been dropped by a 60-bar history minimum despite carrying the second-heaviest dollar volume in the universe. Several sectors now exceed the generator caps and five sectors exist that the script does not generate — expected, since the cap governs what the script *proposes*, not what the list holds. **`CRCL` is in no sector basket**, so it reports as "Other" on scanner rows.
+
+`node scripts/measure-focus-candidates.mjs` re-measures and prints a fresh block. Treat it as a suggestion to diff against — the list is hand-owned, not generated. The inline ATR%/volume comments record why each name qualified; they are not live.
+
+**Tests** (`focus-list.test.ts`) guard the failure mode that matters: every focus ticker must be in `buildScanUniverse()`. Adding a ticker to the focus list does **not** add it to the universe — an unreachable name sits there looking active while being structurally invisible.
+
+**Wired into:**
+- **Nightly Telegram** — `★ FOCUS` section at the top carries the only full two-line blocks (ticker, RS, sector, tier, runner score, scanner labels). Tiers 5/4/3 collapse to one line of names each, `★` marking focus members and `*` marking new. Tiers 2/1 stay counts. A focus name always appears in full above, so collapsing never hides one.
+- **`/prerun/inflection-daily`, `/prerun/transition-daily`** — Focus toggle beside High Conviction.
+
+Note the **second Telegram message** (`DETAIL_CAP`, per-scanner breakdowns, sent separately at route.ts:969) was left untouched — it is still full-length.
 
 ## Open Items
 - **Preset-resume may be redundant** with ~470 ticker universe fitting in single pass.
