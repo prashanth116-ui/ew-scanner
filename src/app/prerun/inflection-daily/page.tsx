@@ -23,7 +23,8 @@ import { ComponentFilterBar, type ComponentField, type ComponentFilters } from "
 import { fmtNum } from "@/lib/daily-format";
 import { formatDatePill, streakColor } from "@/lib/daily-page-utils";
 import { isFocusTicker } from "@/data/focus-list";
-import { FocusToggle } from "@/components/focus-toggle";
+import { FocusToggle, SpringToggle } from "@/components/focus-toggle";
+import { isLoadedSpring } from "@/lib/prerun/loaded-spring";
 
 // ── Types ──
 
@@ -403,6 +404,7 @@ export default function InflectionDailyPage() {
   const [instTickers, setInstTickers] = useState<Map<string, { classification: string; score: number }>>(new Map());
   const [highConvictionOnly, setHighConvictionOnly] = useState(false);
   const [focusOnly, setFocusOnly] = useState(false);
+  const [springOnly, setSpringOnly] = useState(false);
   const [enrichmentMap, setEnrichmentMap] = useState<Map<string, { phase: string; rsAccel: number | null; category: string; volRatio: number; conviction: string; sectorQuadrant: string }>>(new Map());
   const [quadrantFilter, setQuadrantFilter] = useState<string>("ALL");
   const [phaseFilter, setPhaseFilter] = useState<string>("ALL");
@@ -550,6 +552,20 @@ export default function InflectionDailyPage() {
     [results],
   );
 
+  // Loaded springs — room to run, no trigger yet. Explicitly NOT an entry signal:
+  // low demand is the defining feature, so most of these stay where they are. It is a
+  // research queue for names worth going and finding a catalyst date for.
+  const springTickers = useMemo(
+    () => new Set(results.filter((r) => isLoadedSpring({
+      runnerScore: r.runner_score,
+      seScore: r.se_score,
+      demandScore: r.demand_score,
+      extensionRisk: r.extension_risk,
+      isCoiled: r.is_coiled,
+    })).map((r) => r.ticker)),
+    [results],
+  );
+
   // Filter and sort results
   const filtered = useMemo(() => {
     let rows = results;
@@ -559,6 +575,9 @@ export default function InflectionDailyPage() {
     }
     if (focusOnly) {
       rows = rows.filter((r) => focusTickers.has(r.ticker));
+    }
+    if (springOnly) {
+      rows = rows.filter((r) => springTickers.has(r.ticker));
     }
     if (tradeReadFilter !== "ALL") {
       rows = tradeReadFilter === "COILED"
@@ -653,7 +672,7 @@ export default function InflectionDailyPage() {
     });
 
     return sorted;
-  }, [results, highConvictionOnly, highConvictionTickers, focusOnly, focusTickers, tradeReadFilter, stageFilter, minScore, componentFilters, flagFilter, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
+  }, [results, highConvictionOnly, highConvictionTickers, focusOnly, focusTickers, springOnly, springTickers, tradeReadFilter, stageFilter, minScore, componentFilters, flagFilter, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
@@ -921,6 +940,11 @@ export default function InflectionDailyPage() {
             count={focusTickers.size}
             active={focusOnly}
             onToggle={() => setFocusOnly((v) => !v)}
+          />
+          <SpringToggle
+            count={springTickers.size}
+            active={springOnly}
+            onToggle={() => setSpringOnly((v) => !v)}
           />
           {highConvictionTickers.size > 0 && (
             <button
