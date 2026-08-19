@@ -939,7 +939,16 @@ export async function GET(request: NextRequest) {
 
   try {
     const startTime = Date.now();
-    const today = new Date().toISOString().slice(0, 10);
+    // `?date=YYYY-MM-DD` re-runs the alert for an earlier scan date. Useful to re-send a
+    // night that failed to deliver, and to check a format change against real data rather
+    // than waiting for the next cron. `?dryRun=true` returns the message text instead of
+    // sending it, so the format can be inspected without putting a test alert on a phone.
+    const dateParam = new URL(request.url).searchParams.get("date");
+    if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      return NextResponse.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
+    }
+    const dryRun = new URL(request.url).searchParams.get("dryRun") === "true";
+    const today = dateParam ?? new Date().toISOString().slice(0, 10);
 
     // Load all scanner results for today in parallel
     const [prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, discovered, transition, ict] = await Promise.all([
@@ -1018,6 +1027,17 @@ export async function GET(request: NextRequest) {
         discoveryStocks, discoveryCrypto, scannerCounts, todayTickers.size,
         fourHourOnly,
       );
+      if (dryRun) {
+        return NextResponse.json({
+          dryRun: true,
+          scanDate: today,
+          summary: capForTelegram(message),
+          detail: capForTelegram(
+            formatScannerDetail(prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, transition),
+          ),
+        });
+      }
+
       const tgResult = await sendTelegramMessage(botToken, chatId, capForTelegram(message));
       telegramSent = tgResult.ok;
       if (!tgResult.ok) {
