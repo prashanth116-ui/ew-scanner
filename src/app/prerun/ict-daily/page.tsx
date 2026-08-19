@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
+import { isFocusTicker } from "@/data/focus-list";
+import { FocusToggle } from "@/components/focus-toggle";
 import { fmtNum } from "@/lib/daily-format";
 import { formatDatePill, streakColor } from "@/lib/daily-page-utils";
 
@@ -174,9 +176,17 @@ export default function ICTDailyPage() {
     });
   }, []);
 
+  const [focusOnly, setFocusOnly] = useState(false);
+  // Focus names on this screen — the same hand-owned list the nightly Telegram reads.
+  const focusTickers = useMemo(
+    () => new Set(rows.filter((r) => isFocusTicker(r.ticker)).map((r) => r.ticker)),
+    [rows],
+  );
+
   // Filtered + sorted rows
   const displayRows = useMemo(() => {
     let filtered = rows;
+    if (focusOnly) filtered = filtered.filter((r) => focusTickers.has(r.ticker));
 
     if (searchQuery) {
       const q = searchQuery.toUpperCase();
@@ -207,7 +217,7 @@ export default function ICTDailyPage() {
     });
 
     return sorted;
-  }, [rows, searchQuery, stateFilter, sortField, sortAsc, streaks, deltas]);
+  }, [rows, focusOnly, focusTickers, searchQuery, stateFilter, sortField, sortAsc, streaks, deltas]);
 
   // State distribution
   const stateCounts = useMemo(() => {
@@ -344,6 +354,11 @@ export default function ICTDailyPage() {
             ))}
           </select>
         </div>
+        <FocusToggle
+          count={focusTickers.size}
+          active={focusOnly}
+          onToggle={() => setFocusOnly((v) => !v)}
+        />
       </div>
 
       {/* Table */}

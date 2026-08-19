@@ -17,6 +17,8 @@ import {
 import Link from "next/link";
 import { fmtNum } from "@/lib/daily-format";
 import { formatDatePill, streakColor, scoreBarColor, formatMktCap } from "@/lib/daily-page-utils";
+import { isFocusTicker } from "@/data/focus-list";
+import { FocusToggle } from "@/components/focus-toggle";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
 
 // ── Types ──
@@ -349,8 +351,18 @@ export default function PreRunPresetDailyPage() {
     });
   }, []);
 
+  const [focusOnly, setFocusOnly] = useState(false);
+  // Focus names on this screen — the same hand-owned list the nightly Telegram
+  // reads. A toggle, never a default: the scanners exist to notice a name ENTERING
+  // the list, which defaulting to focus-only would hide.
+  const focusTickers = useMemo(
+    () => new Set(results.filter((r) => isFocusTicker(r.ticker)).map((r) => r.ticker)),
+    [results],
+  );
+
   const filtered = useMemo(() => {
     let rows = results;
+    if (focusOnly) rows = rows.filter((r) => focusTickers.has(r.ticker));
     if (preset === "leading" && leadingFloor > 18) rows = rows.filter((r) => r.final_score >= leadingFloor);
     if (minScore > 0) rows = rows.filter((r) => r.final_score >= minScore);
     if (tickerSearch.trim()) {
@@ -373,7 +385,7 @@ export default function PreRunPresetDailyPage() {
       else cmp = b.final_score - a.final_score;
       return sortAsc ? -cmp : cmp;
     });
-  }, [results, minScore, tickerSearch, sortField, sortAsc, streaks, deltas, preset, leadingFloor]);
+  }, [focusOnly, focusTickers, results, minScore, tickerSearch, sortField, sortAsc, streaks, deltas, preset, leadingFloor]);
 
   const handleCopyWatchlist = useCallback(() => {
     const tickers = filtered.map((r) => r.ticker).join(", ");
@@ -626,6 +638,11 @@ export default function PreRunPresetDailyPage() {
           <option value={26}>26+</option>
         </select>
         <div className="ml-auto flex items-center gap-2">
+          <FocusToggle
+            count={focusTickers.size}
+            active={focusOnly}
+            onToggle={() => setFocusOnly((v) => !v)}
+          />
           <button onClick={handleCopyWatchlist}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border border-[#2a2a2a] transition-colors">
             {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}

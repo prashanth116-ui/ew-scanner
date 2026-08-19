@@ -16,7 +16,6 @@ import {
   Copy,
   Check,
   Target,
-  Star,
 } from "lucide-react";
 import Link from "next/link";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
@@ -24,6 +23,7 @@ import { ComponentFilterBar, type ComponentField, type ComponentFilters } from "
 import { fmtNum } from "@/lib/daily-format";
 import { formatDatePill, streakColor } from "@/lib/daily-page-utils";
 import { isFocusTicker } from "@/data/focus-list";
+import { FocusToggle } from "@/components/focus-toggle";
 
 // ── Types ──
 
@@ -1062,19 +1062,11 @@ export default function TransitionDailyPage() {
 
         {/* Focus + High Conviction toggles + Copy + CSV export */}
         <div className="ml-auto flex items-center gap-2">
-          {focusTickers.size > 0 && (
-            <button
-              onClick={() => setFocusOnly((v) => !v)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs border transition-colors ${
-                focusOnly
-                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                  : "bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border-[#2a2a2a]"
-              }`}
-            >
-              <Star className="h-3 w-3" />
-              Focus ({focusTickers.size})
-            </button>
-          )}
+          <FocusToggle
+            count={focusTickers.size}
+            active={focusOnly}
+            onToggle={() => setFocusOnly((v) => !v)}
+          />
           {highConvictionTickers.size > 0 && (
             <button
               onClick={() => setHighConvictionOnly((v) => !v)}
