@@ -277,6 +277,29 @@ Why ATR% is the discriminator: below ~3% a 3-5 day swing does not clear its own 
 
 Note the **second Telegram message** (`DETAIL_CAP`, per-scanner breakdowns, sent separately at route.ts:969) was left untouched — it is still full-length.
 
+### Component Slot Breakdown
+`inflection_daily.component_slots` / `transition_daily.component_slots` (JSONB, migration 027) carry the per-slot parts behind each component score, keyed by component:
+
+```
+{"demand":[{"label":"pocket_pivots","earned":0,"possible":24,"hasData":true,"pct":0},
+           {"label":"rvol_trajectory","earned":12,"possible":16,"hasData":true,"pct":75}]}
+```
+
+**Why:** a component score cannot be attributed. "demand_score = 20" does not say whether volume was flat, whether there were no pocket pivots, or whether OBV could not be measured — and those lead to different decisions. V2 exposed `accum_score` and `volume_score` separately; V3 merged them into `demand_score` and lost the granularity, despite computing strictly more slots than V2 did (six for demand alone against V2's two).
+
+**No scoring change.** The slots always existed and were summed before persisting; this names and stores them. `slot-breakdown.test.ts` asserts the slots reproduce the component score they explain.
+
+`ScoreSlot.label` is **required**, so the compiler proves all 70 slots are named — an unnamed slot persists an unattributable number. `hasData` is kept rather than collapsed to zero: "measured, and the answer is no" must stay distinct from "could not measure", or downstream consumers reintroduce the bug `nullNeutralScore` prevents. **Labels are schema** — renaming one breaks saved queries.
+
+### Catalyst Tags
+`catalyst_tags` (migration 028) holds hand-entered dated events — readouts, earnings, court rulings — that no price scanner can see. MRNA is the motivating case: flat at $63 for a week with five scanners on it, then +117% on 9.5x volume from a clinical readout.
+
+- **Never purged.** Scan rows are derived and reproducible; these are typed by hand and often entered weeks ahead, beyond the 14-day window.
+- **Free-text `event_type`**, not an enum — the catalysts that matter are the ones nobody anticipated a category for.
+- **Auth required on read and write.** An open POST would let anyone write rows that appear in the nightly Telegram; a tracked catalyst is a trading intention, not public information.
+- **UI:** `/catalysts`. Badge component `catalyst-badge.tsx`; date arithmetic shared with the server via `lib/catalyst-date.ts` so Telegram and the page can never disagree by a day.
+- **Alert behaviour:** see `src/app/api/CLAUDE.md` — a catalyst within 5 days promotes a focus name past the tier gate.
+
 ## Open Items
 - **Preset-resume may be redundant** with ~470 ticker universe fitting in single pass.
 - **NDX100 next rebalance:** September 2026 — update `src/data/index-tiers.ts`.

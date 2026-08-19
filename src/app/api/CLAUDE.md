@@ -43,7 +43,15 @@ Pre-filters: `dailyChangePct < 8%` + AVOID excluded. Per-category cap 8, combine
 
 
 ### Nightly Summary Cron
-2 Telegram messages at 11 PM ET. **Message 1 (Confluence):** Cross-scanner tiers (5/5 → 1/5), RS accel sorting, new/dropped, watchlist. **Message 2 (Scanner Detail):** Per-scanner breakdowns.
+2 Telegram messages at 11 PM ET. **Message 1 (Confluence):** `★ FOCUS` section, then collapsed tiers, new/dropped, watchlist. **Message 2 (Scanner Detail):** Per-scanner breakdowns.
+
+**Message 1 layout (2026-08-19):** `★ FOCUS` leads and carries the only full two-line blocks — ticker, RS, sector, tier, runner score, scanner labels. Tiers 5/4/3 then collapse to **one line of names each** (`★` = focus, `*` = new); tiers 2/1 stay counts. Caps rose to 20/20/15 since entries are one word. A focus name always appears in full above, so collapsing never hides one.
+
+**FOCUS gate:** `FOCUS_MIN_TIER = 2` — a focus name needs two independent scanners. Ungated it produced 91 names under a cap of 15, so the header claimed far more actionable names than existed. Names below the bar keep their `★` in the collapsed tier lines.
+
+**Catalyst override:** a hand-entered catalyst within `CATALYST_URGENT_DAYS = 5` promotes a focus name past the tier bar and prints a `⚡ <type> in Nd` line under it. The tier measures scanner agreement and the scanners cannot see a readout date, so their agreement is the wrong test for exactly that case. Loaded via `loadCatalystMap()`; a load failure degrades to no badges rather than losing the alert.
+
+**Length guard:** `capForTelegram()` (in `lib/ew-wave/telegram.ts`) trims at a line boundary at 3900 chars. Telegram rejects >4096 outright — the whole message is lost, not truncated — and nothing guarded this before.
 
 **Scanner label mapping (Telegram → internal):**
 | Label | Scanner | Notes |
