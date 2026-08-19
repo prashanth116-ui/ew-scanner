@@ -18,7 +18,7 @@
 import "server-only";
 
 import type { PreRunStockData } from "./types";
-import { nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
+import { nullNeutralScore, slotCoveragePct, slotBreakdown, type ScoreSlot } from "./score-slot";
 import type { ComponentResult } from "./supply-exhaustion";
 
 /** null score when nothing about this stock's move potential could be measured. */
@@ -53,9 +53,9 @@ export function scoreRunnerPotential(
     else if (overhead <= 30) { earned = 14; evidence.push(`Moderate overhead supply (${overhead.toFixed(0)}%)`); }
     else if (overhead <= 45) { earned = 6; caution.push(`Heavy overhead supply (${overhead.toFixed(0)}%) — trapped holders to work through`); }
     else { earned = 0; caution.push(`Very heavy overhead supply (${overhead.toFixed(0)}%) — multiple ceilings above`); }
-    slots.push({ earned, possible: 27, hasData: true });
+    slots.push({ label: "overhead_supply", earned, possible: 27, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "overhead_supply", earned: 0, possible: 0, hasData: false });
   }
 
   // 2. ADR / daily range (0-22) — the raw capacity to move.
@@ -68,9 +68,9 @@ export function scoreRunnerPotential(
     else if (atrPct >= 2.5) { earned = 12; }
     else if (atrPct >= 1.8) { earned = 6; }
     else { earned = 0; caution.push(`${atrPct.toFixed(1)}% ATR — too little daily range to run`); }
-    slots.push({ earned, possible: 22, hasData: true });
+    slots.push({ label: "adr", earned, possible: 22, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "adr", earned: 0, possible: 0, hasData: false });
   }
 
   // 3. Base energy (0-18) — depth multiplied by duration.
@@ -89,9 +89,9 @@ export function scoreRunnerPotential(
     else if (energy >= 0.12) { earned = 8; }
     else if (energy >= 0.05) { earned = 4; }
     else { caution.push("Shallow or brief base — little stored energy"); }
-    slots.push({ earned, possible: 18, hasData: true });
+    slots.push({ label: "base_energy", earned, possible: 18, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "base_energy", earned: 0, possible: 0, hasData: false });
   }
 
   // 4. Float rotation (0-13) — how quickly the tradeable supply is changing hands.
@@ -103,9 +103,9 @@ export function scoreRunnerPotential(
     else if (turnover >= 0.8) { earned = 10; }
     else if (turnover >= 0.4) { earned = 6; }
     else { earned = 2; }
-    slots.push({ earned, possible: 13, hasData: true });
+    slots.push({ label: "float_rotation", earned, possible: 13, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "float_rotation", earned: 0, possible: 0, hasData: false });
   }
 
   // 5. Insider conviction (0-8) — moved here from Institutional Participation.
@@ -119,9 +119,9 @@ export function scoreRunnerPotential(
     if (b45 >= 3) { earned = 8; evidence.push(`${b45} insider buys in 45 days — cluster`); }
     else if (b45 >= 1 || b90 >= 3) { earned = 6; evidence.push("Recent insider buying"); }
     else if (b90 >= 1) { earned = 3; }
-    slots.push({ earned, possible: 8, hasData: true });
+    slots.push({ label: "insider_conviction", earned, possible: 8, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "insider_conviction", earned: 0, possible: 0, hasData: false });
   }
 
   // 6. Risk distance (0-12) — how tight is the stop this setup implies?
@@ -138,10 +138,10 @@ export function scoreRunnerPotential(
     else if (riskAtr <= 7) { earned = 8; }
     else if (riskAtr <= 12) { earned = 4; }
     else { earned = 1; caution.push("Invalidation far below price — loose structure, hard to size"); }
-    slots.push({ earned, possible: 12, hasData: true });
+    slots.push({ label: "risk_distance", earned, possible: 12, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "risk_distance", earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution, slots: slotBreakdown(slots) };
 }

@@ -14,9 +14,43 @@
  */
 
 export interface ScoreSlot {
+  /** Stable snake_case identifier for this slot, e.g. "pocket_pivots".
+   *
+   *  Required, not optional, so the compiler proves every slot is named. These are
+   *  persisted and queried, so a missing label would silently produce an unattributable
+   *  number — which is the exact problem the breakdown exists to solve. Treat a label as
+   *  part of the schema: renaming one breaks any saved query that referenced it. */
+  label: string;
   earned: number;
   possible: number;
   hasData: boolean;
+}
+
+/** One slot flattened for persistence. `pct` is null when the slot had no data. */
+export interface SlotBreakdown {
+  label: string;
+  earned: number;
+  possible: number;
+  hasData: boolean;
+  pct: number | null;
+}
+
+/**
+ * Flatten slots for storage.
+ *
+ * Keeps `hasData` rather than collapsing to a number, because "measured, and the answer
+ * is no" and "could not measure" must stay distinguishable downstream — the same
+ * distinction nullNeutralScore relies on. A consumer that treats both as 0 reintroduces
+ * the bug this module exists to prevent.
+ */
+export function slotBreakdown(slots: ScoreSlot[]): SlotBreakdown[] {
+  return slots.map((s) => ({
+    label: s.label,
+    earned: s.earned,
+    possible: s.possible,
+    hasData: s.hasData,
+    pct: s.hasData && s.possible > 0 ? Math.round((s.earned / s.possible) * 100) : null,
+  }));
 }
 
 /**

@@ -17,7 +17,7 @@
 import "server-only";
 
 import type { PreRunStockData } from "./types";
-import { nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
+import { nullNeutralScore, slotCoveragePct, slotBreakdown, type ScoreSlot, type SlotBreakdown } from "./score-slot";
 
 export interface ComponentResult {
   score: number | null;
@@ -25,6 +25,9 @@ export interface ComponentResult {
   coverage: number;
   evidence: string[];
   caution: string[];
+  /** Per-slot breakdown behind `score`. Persisted so a component score can be attributed
+   *  to its parts — "demand 20" is not actionable, "pocket_pivots 0/24, rvol 12/16" is. */
+  slots: SlotBreakdown[];
 }
 
 /** Absorption 22 · spring 18 · range asymmetry 18 · VP divergence 12 · body contraction 15
@@ -42,9 +45,9 @@ export function scoreSupplyExhaustion(data: PreRunStockData): ComponentResult {
     else if (a >= 0.25) { earned = 17; evidence.push(`${(a * 100).toFixed(0)}% of down bars absorbed`); }
     else if (a >= 0.12) { earned = 10; }
     else { caution.push("Selling is meeting no absorption"); }
-    slots.push({ earned, possible: 22, hasData: true });
+    slots.push({ label: "absorption", earned, possible: 22, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "absorption", earned: 0, possible: 0, hasData: false });
   }
 
   // Structural spring (0-18) — shakeout below real structure, reclaimed and held
@@ -53,9 +56,9 @@ export function scoreSupplyExhaustion(data: PreRunStockData): ComponentResult {
     let earned = 0;
     if (s >= 2) { earned = 18; evidence.push("Spring — undercut of structure on volume, reclaimed and held"); }
     else if (s >= 1) { earned = 11; evidence.push("Shakeout below structure, reclaimed"); }
-    slots.push({ earned, possible: 18, hasData: true });
+    slots.push({ label: "structural_spring", earned, possible: 18, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "structural_spring", earned: 0, possible: 0, hasData: false });
   }
 
   // Range asymmetry (0-18) — down bars producing less range than up bars
@@ -66,17 +69,17 @@ export function scoreSupplyExhaustion(data: PreRunStockData): ComponentResult {
     else if (r >= 1.15) { earned = 13; evidence.push("Up bars wider than down bars"); }
     else if (r >= 0.95) { earned = 7; }
     else { caution.push("Down bars still producing more range than up bars"); }
-    slots.push({ earned, possible: 18, hasData: true });
+    slots.push({ label: "range_asymmetry", earned, possible: 18, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "range_asymmetry", earned: 0, possible: 0, hasData: false });
   }
 
   // Volume-price divergence (0-12) — null when no recent lower low exists
   if (data.vpDivergenceBullish !== null) {
-    slots.push({ earned: data.vpDivergenceBullish ? 12 : 0, possible: 12, hasData: true });
+    slots.push({ label: "volume_price_divergence", earned: data.vpDivergenceBullish ? 12 : 0, possible: 12, hasData: true });
     if (data.vpDivergenceBullish) evidence.push("Volume-price divergence: selling into lows is drying up");
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "volume_price_divergence", earned: 0, possible: 0, hasData: false });
   }
 
   // Down-day body contraction (0-15)
@@ -87,9 +90,9 @@ export function scoreSupplyExhaustion(data: PreRunStockData): ComponentResult {
     else if (ratio <= 0.7) { earned = 11; evidence.push("Down-day candles getting smaller"); }
     else if (ratio <= 0.9) { earned = 5; }
     else { caution.push("Down-day bodies not contracting"); }
-    slots.push({ earned, possible: 15, hasData: true });
+    slots.push({ label: "down_body_contraction", earned, possible: 15, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "down_body_contraction", earned: 0, possible: 0, hasData: false });
   }
 
   // Distribution days (0-15) — the only measure of institutional SELLING in either engine
@@ -100,10 +103,10 @@ export function scoreSupplyExhaustion(data: PreRunStockData): ComponentResult {
     else if (dist <= 3) { earned = 10; }
     else if (dist <= 5) { earned = 4; }
     else { caution.push(`${dist} distribution days — institutions are selling into this`); }
-    slots.push({ earned, possible: 15, hasData: true });
+    slots.push({ label: "distribution_days", earned, possible: 15, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "distribution_days", earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution, slots: slotBreakdown(slots) };
 }

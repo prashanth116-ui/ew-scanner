@@ -55,6 +55,7 @@ function resultToRecord(r: TransitionResult, scanDate: string): TransitionDailyR
     scanner_version: 3,
     bullish_evidence: r.bullishEvidence,
     caution_evidence: r.cautionEvidence,
+    component_slots: r.componentSlots,
   };
 }
 

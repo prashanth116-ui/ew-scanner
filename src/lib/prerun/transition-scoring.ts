@@ -51,7 +51,7 @@ import {
   computeInvalidationLevel,
   evaluateBreakConfirmation,
 } from "./market-structure";
-import { weightedComposite, displayScore, measuredWeightPct, nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
+import { weightedComposite, displayScore, measuredWeightPct, nullNeutralScore, slotCoveragePct, slotBreakdown, type ScoreSlot } from "./score-slot";
 import { scoreRunnerPotential } from "./runner-potential";
 import { scoreSupplyExhaustion, type ComponentResult } from "./supply-exhaustion";
 import { scoreDemandEmergence } from "./demand-emergence";
@@ -91,7 +91,7 @@ function scoreStructure(
 
   // Change of character (0-30)
   if (structureHasPrinted) {
-    slots.push({
+    slots.push({ label: "change_of_character",
       earned: chochDetected ? (chochHolding ? 30 : 9) : 0,
       possible: 30,
       hasData: true,
@@ -100,12 +100,12 @@ function scoreStructure(
     else if (chochDetected) caution.push("ChoCH failed — price has fallen back below the level it broke");
     else caution.push("No change of character detected");
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "change_of_character", earned: 0, possible: 0, hasData: false });
   }
 
   // Break of structure (0-25)
   if (structureHasPrinted) {
-    slots.push({
+    slots.push({ label: "break_of_structure",
       earned: bosDetected ? (bosHolding ? 25 : 7) : 0,
       possible: 25,
       hasData: true,
@@ -114,7 +114,7 @@ function scoreStructure(
     else if (bosDetected) caution.push("BOS failed — price has fallen back below the level it broke");
     else if (chochDetected) caution.push("ChoCH detected but BOS not yet confirmed");
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "break_of_structure", earned: 0, possible: 0, hasData: false });
   }
 
   // Recency of the most recent break (0-18) — a fresh flip beats an aging one
@@ -125,9 +125,9 @@ function scoreStructure(
     else if (barsAgo <= 10) { earned = 13; }
     else if (barsAgo <= 20) { earned = 7; }
     else { earned = 3; caution.push(`Structural break was ${barsAgo} bars ago — aging`); }
-    slots.push({ earned, possible: 18, hasData: true });
+    slots.push({ label: "break_recency", earned, possible: 18, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "break_recency", earned: 0, possible: 0, hasData: false });
   }
 
   // Higher-high follow-through (0-14) — only meaningful once a BOS exists.
@@ -138,9 +138,9 @@ function scoreStructure(
     if (higherHighCount >= 2) { earned = 14; evidence.push(`BOS with ${higherHighCount} higher highs in recent structure — trend extending`); }
     else if (higherHighCount >= 1) { earned = 9; evidence.push("BOS with a higher high in recent structure"); }
     else { caution.push("BOS with no higher highs in recent structure"); }
-    slots.push({ earned, possible: 14, hasData: true });
+    slots.push({ label: "higher_high_follow_through", earned, possible: 14, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "higher_high_follow_through", earned: 0, possible: 0, hasData: false });
   }
 
   // Bearish structure penalty (0-13) — lower highs still forming alongside the break.
@@ -151,12 +151,12 @@ function scoreStructure(
     let earned = 13;
     if (lowerHighCount >= 2) { earned = 0; caution.push(`${lowerHighCount} lower highs still in recent structure — break is fighting the trend`); }
     else if (lowerHighCount >= 1) { earned = 7; }
-    slots.push({ earned, possible: 13, hasData: true });
+    slots.push({ label: "bearish_structure_penalty", earned, possible: 13, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "bearish_structure_penalty", earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution, slots: slotBreakdown(slots) };
 }
 
 // ── Compression (0-100, weight 10%) ──
@@ -174,17 +174,17 @@ function scoreCompressionQuality(data: PreRunStockData): ComponentResult {
     else if (atrRatio <= 0.65) { earned = 18; evidence.push(`ATR contracting (ratio ${atrRatio.toFixed(2)})`); }
     else if (atrRatio <= 0.8) { earned = 12; }
     else if (atrRatio > 1.2) { caution.push("Volatility expanding — not compressing"); }
-    slots.push({ earned, possible: 25, hasData: true });
+    slots.push({ label: "atr_ratio_5_20", earned, possible: 25, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "atr_ratio_5_20", earned: 0, possible: 0, hasData: false });
   }
 
   // Tight closes (0-16)
   if (data.vcpTightCloses !== null) {
-    slots.push({ earned: data.vcpTightCloses ? 16 : 0, possible: 16, hasData: true });
+    slots.push({ label: "tight_closes", earned: data.vcpTightCloses ? 16 : 0, possible: 16, hasData: true });
     if (data.vcpTightCloses) evidence.push("Tight daily closes — low volatility");
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "tight_closes", earned: 0, possible: 0, hasData: false });
   }
 
   // Inside bars (0-21)
@@ -194,17 +194,17 @@ function scoreCompressionQuality(data: PreRunStockData): ComponentResult {
     if (ibc >= 3) { earned = 21; evidence.push(`${ibc} inside bars — high compression`); }
     else if (ibc >= 2) { earned = 15; evidence.push(`${ibc} inside bars`); }
     else if (ibc >= 1) { earned = 8; }
-    slots.push({ earned, possible: 21, hasData: true });
+    slots.push({ label: "inside_bars", earned, possible: 21, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "inside_bars", earned: 0, possible: 0, hasData: false });
   }
 
   // Closes near range top (0-21)
   if (data.closesNearRangeTop !== null) {
-    slots.push({ earned: data.closesNearRangeTop ? 21 : 0, possible: 21, hasData: true });
+    slots.push({ label: "closes_near_range_top", earned: data.closesNearRangeTop ? 21 : 0, possible: 21, hasData: true });
     if (data.closesNearRangeTop) evidence.push("Closes near range top — buyers in control");
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "closes_near_range_top", earned: 0, possible: 0, hasData: false });
   }
 
 
@@ -217,11 +217,11 @@ function scoreCompressionQuality(data: PreRunStockData): ComponentResult {
     else if (dry >= 3) { earned = 12; evidence.push(`${dry} dry volume days`); }
     else if (dry >= 2) { earned = 6; }
     else if (dry >= 1) { earned = 2; }
-    slots.push({ earned, possible: 17, hasData: true });
+    slots.push({ label: "dry_volume_days", earned, possible: 17, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "dry_volume_days", earned: 0, possible: 0, hasData: false });
   }
-  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution, slots: slotBreakdown(slots) };
 }
 
 // ── State Classification ──
@@ -587,6 +587,14 @@ export function scoreTransitionWithStructure(
     cautionEvidence,
     isPrimarySignal,
     isStrongerSignal,
+    componentSlots: {
+      structure: structureResult.slots,
+      supply_exhaustion: seResult.slots,
+      demand: demandResult.slots,
+      compression: compressionResult.slots,
+      runner: runnerResult.slots,
+      rs_trajectory: rsResult.slots,
+    },
   };
 }
 

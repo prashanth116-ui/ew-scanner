@@ -57,6 +57,7 @@ function resultToRecord(r: InflectionResult, scanDate: string): InflectionDailyR
     bullish_evidence: r.bullishEvidence,
     caution_evidence: r.cautionEvidence,
     invalidation: r.invalidationLevel,
+    component_slots: r.componentSlots,
   };
 }
 

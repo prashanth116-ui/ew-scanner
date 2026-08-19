@@ -234,17 +234,17 @@ describe("weightedComposite", () => {
 
 describe("nullNeutralScore", () => {
   it("returns null when no slot has data", () => {
-    expect(nullNeutralScore([{ earned: 0, possible: 0, hasData: false }])).toBeNull();
+    expect(nullNeutralScore([{ label: "a", earned: 0, possible: 0, hasData: false }])).toBeNull();
   });
 
   it("scores only the slots that have data", () => {
     expect(nullNeutralScore([
-      { earned: 10, possible: 10, hasData: true },
-      { earned: 0, possible: 50, hasData: false },
+      { label: "a", earned: 10, possible: 10, hasData: true },
+      { label: "b", earned: 0, possible: 50, hasData: false },
     ])).toBe(100);
   });
 
   it("distinguishes a measured zero from no data", () => {
-    expect(nullNeutralScore([{ earned: 0, possible: 20, hasData: true }])).toBe(0);
+    expect(nullNeutralScore([{ label: "a", earned: 0, possible: 20, hasData: true }])).toBe(0);
   });
 });

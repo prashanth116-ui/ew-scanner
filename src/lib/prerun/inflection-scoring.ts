@@ -35,7 +35,7 @@ import type {
   InflectionTradeRead,
   InflectionResult,
 } from "./types";
-import { weightedComposite, displayScore, measuredWeightPct, nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
+import { weightedComposite, displayScore, measuredWeightPct, nullNeutralScore, slotCoveragePct, slotBreakdown, type ScoreSlot } from "./score-slot";
 import { scoreRunnerPotential } from "./runner-potential";
 import { scoreSupplyExhaustion, type ComponentResult } from "./supply-exhaustion";
 import { scoreDemandEmergence } from "./demand-emergence";
@@ -74,9 +74,9 @@ function scoreCompression(data: PreRunStockData): ComponentResult {
     else if (atrRatio <= 0.95) { earned = 8; }
     else if (atrRatio <= 1.05) { earned = 3; }
     else { caution.push("Volatility expanding — no compression"); }
-    slots.push({ earned, possible: 26, hasData: true });
+    slots.push({ label: "atr_ratio_5_20", earned, possible: 26, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "atr_ratio_5_20", earned: 0, possible: 0, hasData: false });
   }
 
   // Nested range contraction (0-26)
@@ -97,9 +97,9 @@ function scoreCompression(data: PreRunStockData): ComponentResult {
     } else if (r5 < r10) {
       earned = 5;
     }
-    slots.push({ earned, possible: 26, hasData: true });
+    slots.push({ label: "nested_range_contraction", earned, possible: 26, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "nested_range_contraction", earned: 0, possible: 0, hasData: false });
   }
 
   // Inside bars (0-16)
@@ -109,17 +109,17 @@ function scoreCompression(data: PreRunStockData): ComponentResult {
     if (bars >= 3) { earned = 16; evidence.push(`${bars} inside bars — extreme compression`); }
     else if (bars >= 2) { earned = 11; evidence.push(`${bars} inside bars`); }
     else if (bars >= 1) { earned = 5; }
-    slots.push({ earned, possible: 16, hasData: true });
+    slots.push({ label: "inside_bars", earned, possible: 16, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "inside_bars", earned: 0, possible: 0, hasData: false });
   }
 
   // Tight closes (0-16)
   if (data.vcpTightCloses !== null) {
-    slots.push({ earned: data.vcpTightCloses ? 16 : 0, possible: 16, hasData: true });
+    slots.push({ label: "tight_closes", earned: data.vcpTightCloses ? 16 : 0, possible: 16, hasData: true });
     if (data.vcpTightCloses) evidence.push("Tight cluster of closes — coiling");
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "tight_closes", earned: 0, possible: 0, hasData: false });
   }
 
 
@@ -133,11 +133,11 @@ function scoreCompression(data: PreRunStockData): ComponentResult {
     else if (dry >= 3) { earned = 11; evidence.push(`${dry} dry volume days`); }
     else if (dry >= 2) { earned = 6; }
     else if (dry >= 1) { earned = 2; }
-    slots.push({ earned, possible: 16, hasData: true });
+    slots.push({ label: "dry_volume_days", earned, possible: 16, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "dry_volume_days", earned: 0, possible: 0, hasData: false });
   }
-  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution, slots: slotBreakdown(slots) };
 }
 
 // ── Stage Classification ──
@@ -371,5 +371,12 @@ export function scoreInflection(
     invalidationLevel,
     isPrimarySignal,
     isStrongerSignal,
+    componentSlots: {
+      supply_exhaustion: seResult.slots,
+      demand: demandResult.slots,
+      compression: compressionResult.slots,
+      runner: runnerResult.slots,
+      rs_trajectory: rsResult.slots,
+    },
   };
 }

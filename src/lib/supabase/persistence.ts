@@ -495,6 +495,9 @@ export interface InflectionDailyRecord {
   is_stronger: boolean;
   bullish_evidence: string[];
   caution_evidence: string[];
+  /** Per-slot breakdown keyed by component, e.g. { demand: [{label,earned,possible,hasData,pct}] }.
+   *  Diagnostics only - no score depends on it. Labels are schema. */
+  component_slots?: Record<string, Array<{ label: string; earned: number; possible: number; hasData: boolean; pct: number | null }>>;
   invalidation: number | null;
 }
 
@@ -1892,6 +1895,9 @@ export interface TransitionDailyRecord {
   measured_pct?: number;
   /** Scoring engine version; delta/comparison logic must not mix versions. */
   scanner_version?: number;
+  /** Per-slot breakdown keyed by component, e.g. { demand: [{label,earned,possible,hasData,pct}] }.
+   *  Diagnostics only - no score depends on it. Labels are schema. */
+  component_slots?: Record<string, Array<{ label: string; earned: number; possible: number; hasData: boolean; pct: number | null }>>;
   bullish_evidence: string[];
   caution_evidence: string[];
 }

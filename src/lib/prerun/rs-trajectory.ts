@@ -16,7 +16,7 @@
 import "server-only";
 
 import type { PreRunStockData } from "./types";
-import { nullNeutralScore, slotCoveragePct, type ScoreSlot } from "./score-slot";
+import { nullNeutralScore, slotCoveragePct, slotBreakdown, type ScoreSlot } from "./score-slot";
 import type { ComponentResult } from "./supply-exhaustion";
 
 /** RS acceleration vs SPY 60 · acceleration trend 40 */
@@ -39,9 +39,9 @@ export function scoreRSTrajectory(data: PreRunStockData): ComponentResult {
       earned = 30; evidence.push("RS trajectory turning while still negative — early inflection");
     } else if (rsAccel >= -3) { earned = 10; }
     else { caution.push("RS deteriorating vs SPY"); }
-    slots.push({ earned, possible: 60, hasData: true });
+    slots.push({ label: "rs_acceleration_vs_spy", earned, possible: 60, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "rs_acceleration_vs_spy", earned: 0, possible: 0, hasData: false });
   }
 
   // Acceleration trend (0-40) — is the acceleration itself increasing?
@@ -52,10 +52,10 @@ export function scoreRSTrajectory(data: PreRunStockData): ComponentResult {
     else if (rsAccelTrend > 0) { earned = 20; }
     else if (rsAccelTrend > -1) { earned = 8; }
     else { caution.push("RS momentum fading"); }
-    slots.push({ earned, possible: 40, hasData: true });
+    slots.push({ label: "acceleration_trend", earned, possible: 40, hasData: true });
   } else {
-    slots.push({ earned: 0, possible: 0, hasData: false });
+    slots.push({ label: "acceleration_trend", earned: 0, possible: 0, hasData: false });
   }
 
-  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution };
+  return { score: nullNeutralScore(slots), coverage: slotCoveragePct(slots), evidence, caution, slots: slotBreakdown(slots) };
 }

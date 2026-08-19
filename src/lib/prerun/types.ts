@@ -373,6 +373,13 @@ export interface InflectionResult {
   invalidationLevel: number | null;
   isPrimarySignal: boolean;
   isStrongerSignal: boolean;
+  /** Per-component slot breakdown behind the component scores.
+   *
+   *  A component score alone is not actionable: "demand 20" does not say whether volume
+   *  was flat or whether there were no pocket pivots. This carries the parts, keyed by
+   *  component, so a row can be attributed, sorted and backtested at slot granularity.
+   *  Labels are schema - renaming one breaks saved queries. */
+  componentSlots: Record<string, SlotBreakdown[]>;
 }
 
 export const INFLECTION_MAX_SCORE = 100;
@@ -456,6 +463,13 @@ export interface TransitionResult {
   isPrimarySignal: boolean;
   /** True if isPrimarySignal AND state >= BULLISH_BOS AND score >= 55 */
   isStrongerSignal: boolean;
+  /** Per-component slot breakdown behind the component scores.
+   *
+   *  A component score alone is not actionable: "demand 20" does not say whether volume
+   *  was flat or whether there were no pocket pivots. This carries the parts, keyed by
+   *  component, so a row can be attributed, sorted and backtested at slot granularity.
+   *  Labels are schema - renaming one breaks saved queries. */
+  componentSlots: Record<string, SlotBreakdown[]>;
 }
 
 export const TRANSITION_MAX_SCORE = 100;
@@ -657,4 +671,5 @@ export const PRERUN_PRESETS: PreRunPreset[] = [
     filters: { minPctFromAth: 0, minShortFloat: 0, minScore: 0 },
     viewMode: "inflection",
   },
-];
+];import type { SlotBreakdown } from "./score-slot";
+
