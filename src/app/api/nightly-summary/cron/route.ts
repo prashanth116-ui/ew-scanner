@@ -36,6 +36,7 @@ import type {
 } from "@/lib/supabase/persistence";
 import { loadDiscoveredTickers } from "@/lib/discovery/storage";
 import { isFocusTicker } from "@/data/focus-list";
+import { loadCatalystMap, type CatalystTagWithCountdown } from "@/lib/supabase/catalyst-tags";
 
 export const maxDuration = 60;
 
@@ -60,6 +61,9 @@ interface ConsolidatedTicker {
   /** Passes the focus predicate — the names worth acting on tonight, as opposed to
    *  the names worth knowing about. */
   isFocus: boolean;
+  /** Soonest hand-entered catalyst, if any. Nothing derived from price can see these,
+   *  which is the entire reason they are typed in by hand. */
+  catalyst: CatalystTagWithCountdown | null;
 }
 
 // ── Catalyst signal loader (no existing load function) ──
@@ -222,6 +226,7 @@ function consolidateResults(
   newTickerSet: Set<string>,
   transition: TransitionDailyRecord[],
   ict: ICTDailyRecord[],
+  catalystMap: Map<string, CatalystTagWithCountdown>,
 ): { tiers: Map<number, ConsolidatedTicker[]>; catalysts: ConsolidatedTicker[]; fourHourOnly: string[] } {
   // Independent scanner hits (count toward confluence)
   const map = new Map<string, ScannerHit[]>();
@@ -370,6 +375,7 @@ function consolidateResults(
       isNew: newTickerSet.has(ticker),
       runnerScore,
       isFocus,
+      catalyst: catalystMap.get(ticker) ?? null,
     };
 
     if (!tiers.has(tierKey)) tiers.set(tierKey, []);
@@ -396,6 +402,7 @@ function consolidateResults(
     isNew: false,
     runnerScore: null,
     isFocus: false,
+    catalyst: null,
   }));
   catalystEntries.sort((a, b) => b.maxScore - a.maxScore);
 
@@ -453,6 +460,8 @@ const MAX_DROPPED = 5;
 const MAX_FOCUS = 15;
 /** Independent scanners a focus name needs before it reaches the FOCUS section. */
 const FOCUS_MIN_TIER = 2;
+/** A catalyst this close promotes a focus name past the tier bar. */
+const CATALYST_URGENT_DAYS = 5;
 
 /** Short sector labels for inline display — covers all 31 sector-universe.ts displayNames */
 const SECTOR_SHORT: Record<string, string> = {
@@ -511,10 +520,19 @@ function formatTickerBlock(t: ConsolidatedTicker): string[] {
   const sectorTag = t.sector ? ` ${shortSector(t.sector)}` : "";
   const labels = t.hits.map((h) => h.label).join(" \u00b7 ");
 
-  return [
+  // A dated catalyst gets its own line rather than a suffix. It is not another scanner
+  // opinion — it is the date the position stops being about the chart, and burying it in
+  // a run of labels is how you miss it.
+  const lines = [
     `${focusBadge}${newBadge}<b>${t.ticker}</b>${rsTag}${sectorTag}`,
     `  ${labels}`,
   ];
+  if (t.catalyst) {
+    const d = t.catalyst.daysUntil;
+    const when = d === 0 ? "TODAY" : d === 1 ? "tomorrow" : d > 0 ? `in ${d}d` : `${Math.abs(d)}d ago`;
+    lines.push(`  ⚡ ${t.catalyst.event_type} ${when}`);
+  }
+  return lines;
 }
 
 function formatNightlySummary(
@@ -564,8 +582,19 @@ function formatNightlySummary(
   // collapsed tier lines below.
   const focusNames: { tier: number; t: ConsolidatedTicker }[] = [];
   for (const [level, entries] of tiers) {
-    if (level < FOCUS_MIN_TIER) continue;
-    for (const t of entries) if (t.isFocus) focusNames.push({ tier: level, t });
+    for (const t of entries) {
+      if (!t.isFocus) continue;
+      // A dated catalyst inside the window overrides the tier bar. The tier measures how
+      // much the scanners agree, and the scanners cannot see a readout date at all — so
+      // requiring their agreement is exactly the wrong test for the one case where you
+      // most need the reminder. MRNA sat at tier 1 the night before it gapped 117%.
+      const urgent =
+        t.catalyst != null &&
+        t.catalyst.daysUntil >= 0 &&
+        t.catalyst.daysUntil <= CATALYST_URGENT_DAYS;
+      if (level < FOCUS_MIN_TIER && !urgent) continue;
+      focusNames.push({ tier: level, t });
+    }
   }
   focusNames.sort((a, b) =>
     b.tier - a.tier || (b.t.rsAccel ?? -999) - (a.t.rsAccel ?? -999)
@@ -934,9 +963,15 @@ export async function GET(request: NextRequest) {
     const { newTickers, droppedTickers } = await computeNewDropped(today, todayTickers);
     const newTickerSet = new Set(newTickers);
 
+    // Hand-entered catalysts. Failing to load these must not lose the whole alert, so a
+    // fetch error degrades to no badges rather than throwing.
+    const catalystMap = await loadCatalystMap({ withinDays: 21, pastDays: 1 })
+      .catch(() => new Map<string, CatalystTagWithCountdown>());
+
     // Consolidate (QFE + VCP + Setup4h excluded from confluence count)
     const { tiers, catalysts, fourHourOnly } = consolidateResults(
       prerun, prerun4h, inflection, vcp, institutional, prerunner, qfe, catalyst, newTickerSet, transition, ict,
+      catalystMap,
     );
 
     // Discovery counts

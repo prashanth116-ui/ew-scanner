@@ -46,6 +46,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/prerun/ict-daily", label: "ICT" },
     { href: "/prerun/runner-guide", label: "Runner Guide" },
     { href: "/prerun/backtest", label: "Backtest" },
+    { href: "/catalysts", label: "Catalysts" },
   ],
   sectors: [
     { href: "/sectors/brief", label: "Brief" },
