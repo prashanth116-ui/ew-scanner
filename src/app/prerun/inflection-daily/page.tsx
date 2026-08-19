@@ -16,12 +16,14 @@ import {
   Copy,
   Check,
   Target,
+  Star,
 } from "lucide-react";
 import Link from "next/link";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
 import { ComponentFilterBar, type ComponentField, type ComponentFilters } from "@/app/prerun/_components/component-filter-bar";
 import { fmtNum } from "@/lib/daily-format";
 import { formatDatePill, streakColor } from "@/lib/daily-page-utils";
+import { isFocusTicker } from "@/data/focus-list";
 
 // ── Types ──
 
@@ -400,6 +402,7 @@ export default function InflectionDailyPage() {
   const [sectorQuadrants, setSectorQuadrants] = useState<Map<string, string>>(new Map());
   const [instTickers, setInstTickers] = useState<Map<string, { classification: string; score: number }>>(new Map());
   const [highConvictionOnly, setHighConvictionOnly] = useState(false);
+  const [focusOnly, setFocusOnly] = useState(false);
   const [enrichmentMap, setEnrichmentMap] = useState<Map<string, { phase: string; rsAccel: number | null; category: string; volRatio: number; conviction: string; sectorQuadrant: string }>>(new Map());
   const [quadrantFilter, setQuadrantFilter] = useState<string>("ALL");
   const [phaseFilter, setPhaseFilter] = useState<string>("ALL");
@@ -541,12 +544,21 @@ export default function InflectionDailyPage() {
     return set;
   }, [results, transitionTickers, sectorQuadrants]);
 
+  // Focus names scoring today — the same hand-owned list the nightly Telegram reads.
+  const focusTickers = useMemo(
+    () => new Set(results.filter((r) => isFocusTicker(r.ticker)).map((r) => r.ticker)),
+    [results],
+  );
+
   // Filter and sort results
   const filtered = useMemo(() => {
     let rows = results;
 
     if (highConvictionOnly) {
       rows = rows.filter((r) => highConvictionTickers.has(r.ticker));
+    }
+    if (focusOnly) {
+      rows = rows.filter((r) => focusTickers.has(r.ticker));
     }
     if (tradeReadFilter !== "ALL") {
       rows = tradeReadFilter === "COILED"
@@ -641,7 +653,7 @@ export default function InflectionDailyPage() {
     });
 
     return sorted;
-  }, [results, highConvictionOnly, highConvictionTickers, tradeReadFilter, stageFilter, minScore, componentFilters, flagFilter, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
+  }, [results, highConvictionOnly, highConvictionTickers, focusOnly, focusTickers, tradeReadFilter, stageFilter, minScore, componentFilters, flagFilter, tickerSearch, sortField, sortAsc, streaks, deltas, enrichmentMap, quadrantFilter, phaseFilter, rsAccelFilter, volumeFilter]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(filtered.map((r) => r.ticker).join(", "));
@@ -903,8 +915,21 @@ export default function InflectionDailyPage() {
           </button>
         ))}
 
-        {/* High Conviction toggle + Copy + CSV export */}
+        {/* Focus + High Conviction toggles + Copy + CSV export */}
         <div className="ml-auto flex items-center gap-2">
+          {focusTickers.size > 0 && (
+            <button
+              onClick={() => setFocusOnly((v) => !v)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs border transition-colors ${
+                focusOnly
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  : "bg-[#1a1a1a] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] border-[#2a2a2a]"
+              }`}
+            >
+              <Star className="h-3 w-3" />
+              Focus ({focusTickers.size})
+            </button>
+          )}
           {highConvictionTickers.size > 0 && (
             <button
               onClick={() => setHighConvictionOnly((v) => !v)}
