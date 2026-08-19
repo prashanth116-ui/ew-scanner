@@ -62,7 +62,14 @@ export async function GET(request: NextRequest) {
     if (!result.ok) {
       logError("api/hunt/cron/telegram", new Error(result.error ?? "send failed"));
     }
-    return NextResponse.json({ ...counts, sent: result.ok });
+    // Surface the reason. A cron that reports sent:false with no cause is undebuggable
+    // at 3am, and the failure modes here are all diagnosable from the API response —
+    // HTML parse errors, rate limits, a revoked token.
+    return NextResponse.json({
+      ...counts,
+      sent: result.ok,
+      ...(result.ok ? {} : { sendError: result.error ?? "unknown" }),
+    });
   } catch (err) {
     logError("api/hunt/cron", err);
     return NextResponse.json({ error: "Hunt report failed" }, { status: 500 });

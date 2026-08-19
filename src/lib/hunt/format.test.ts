@@ -4,7 +4,7 @@ import type { HuntReport, HuntName } from "./hunt-report";
 
 const name = (over: Partial<HuntName> = {}): HuntName => ({
   ticker: "TEST", isFocus: false, runner: 60, se: 40, demand: 30,
-  score: 45, label: "SELLER_EXHAUSTION", catalyst: null, ...over,
+  score: 45, label: "SELLER_EXHAUSTION", catalyst: null, hints: [], ...over,
 });
 
 const report = (over: Partial<HuntReport> = {}): HuntReport => ({
@@ -25,7 +25,7 @@ describe("formatHuntReport", () => {
   it("says plainly that LOADED is not an entry signal", () => {
     // The single most misreadable section — low demand is its defining feature.
     const out = formatHuntReport(report({ loaded: [name()] }), "d");
-    expect(out).toContain("NOT an entry");
+    expect(out).toContain("DO NOT BUY");
   });
 
   it("stars focus names", () => {
@@ -43,14 +43,14 @@ describe("formatHuntReport", () => {
 
   it("marks a loaded name with no known catalyst as the thing to research", () => {
     const out = formatHuntReport(report({ loaded: [name()] }), "d");
-    expect(out).toContain("no known catalyst");
+    expect(out).toContain("no known date");
   });
 
   it("caps each section and says how many were withheld", () => {
     const many = Array.from({ length: 30 }, (_, i) => name({ ticker: `T${i}` }));
     const out = formatHuntReport(report({ coiled: many }), "d");
     expect(out).toContain("COILED (30)");
-    expect(out).toContain("+18 more");
+    expect(out).toContain("+20 more");
   });
 
   it("treats an empty night as a valid answer rather than a failure", () => {
@@ -70,7 +70,7 @@ describe("formatHuntReport", () => {
     const n = name({ ticker: "MRNA", isFocus: true });
     const out = formatHuntReport(report({ loaded: [n], research: [n] }), "d");
     expect(out).toContain("HOMEWORK");
-    expect(out).toContain("go find one");
+    expect(out).toContain("the only step the scanners cannot do for you");
   });
 
   it("drops numbers that were not measured rather than printing zero", () => {
@@ -79,5 +79,39 @@ describe("formatHuntReport", () => {
     expect(out).toContain("se40");
     expect(out).not.toContain("R0");
     expect(out).not.toContain("d0");
+  });
+});
+
+describe("directive hints", () => {
+  const withHints = (hints: string[]) => name({ ticker: "STX", isFocus: true, hints });
+
+  it("surfaces a computed reading beside the numbers", () => {
+    // The numbers alone require the reader to derive the implication at 6am.
+    const out = formatHuntReport(report({ ready: [withHints(["demand thin"])] }), "d");
+    expect(out).toContain("← demand thin");
+  });
+
+  it("caps hints so a row cannot become an essay", () => {
+    const out = formatHuntReport(report({
+      ready: [withHints(["one", "two", "three", "four"])],
+    }), "d");
+    expect(out).toContain("one, two");
+    expect(out).not.toContain("three");
+  });
+
+  it("adds nothing when there is nothing to say", () => {
+    const out = formatHuntReport(report({ coiled: [name({ hints: [] })] }), "d");
+    expect(out).not.toContain("←");
+  });
+
+  it("carries a legend and a closing rule so the message is self-explaining", () => {
+    const out = formatHuntReport(report({ coiled: [name()] }), "d");
+    expect(out).toContain("R=room to move");
+    expect(out).toContain("Buy COILED");
+  });
+
+  it("omits the closing rule on an empty night, which has its own message", () => {
+    const out = formatHuntReport(report(), "d");
+    expect(out).not.toContain("Buy COILED");
   });
 });

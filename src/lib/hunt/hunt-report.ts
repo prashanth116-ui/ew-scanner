@@ -37,6 +37,10 @@ export interface HuntName {
   /** Cross-reference: what the OTHER engine says about the same name. */
   cross?: string;
   catalyst: CatalystTagWithCountdown | null;
+  /** Short directive annotations — what this row's numbers imply, computed rather than
+   *  left for the reader to derive at 6am. Kept to at most two per row: an alert that
+   *  needs a decoder ring is not finished, but one that explains every number is noise. */
+  hints: string[];
 }
 
 export interface HuntReport {
@@ -47,6 +51,19 @@ export interface HuntReport {
   /** Loaded springs with no known catalyst — the actual homework. */
   research: HuntName[];
 }
+
+/**
+ * Thresholds for the directive hints. These annotate, they never filter — a hint is a
+ * reading of numbers already on the row, so it can never hide a name from you.
+ */
+const HINT = {
+  /** Below this, structure flipped without buyers behind it — the classic failed break. */
+  THIN_DEMAND: 30,
+  /** A catalyst this close means an entry now is held through the event. */
+  EVENT_WINDOW: 10,
+  /** Runner at or above this is the reason to look at a name at all. */
+  BIG_RUNNER: 70,
+} as const;
 
 /** Focus names first, then by the section's own ranking. */
 function focusFirst<T extends { isFocus: boolean }>(rows: T[]): T[] {
@@ -83,6 +100,7 @@ export async function buildHuntReport(scanDate: string): Promise<HuntReport> {
       label: i?.stage ?? t?.state ?? "",
       cross: t ? `${t.state} / ${t.alert_state}` : undefined,
       catalyst: cat(ticker),
+      hints: [],
     };
   }).sort((a, b) => (b.runner ?? 0) - (a.runner ?? 0));
 
@@ -114,6 +132,7 @@ export async function buildHuntReport(scanDate: string): Promise<HuntReport> {
       label: r.state,
       alertState: r.alert_state,
       catalyst: cat(r.ticker),
+      hints: [],
     }))
     // READY before TRIGGERED at equal quality: READY is a trigger still ahead of you.
     .sort((a, b) =>
@@ -140,9 +159,29 @@ export async function buildHuntReport(scanDate: string): Promise<HuntReport> {
       score: r.overall_score,
       label: r.stage,
       catalyst: cat(r.ticker),
+      hints: [],
     }))
     .sort((a, b) => springRank({ runnerScore: b.runner, seScore: b.se }) -
                     springRank({ runnerScore: a.runner, seScore: a.se }));
+
+  // Cross-section reads have to happen here, once every section exists.
+  const loadedTickers = new Set(loaded.map((n) => n.ticker));
+
+  for (const n of coiled) {
+    // Coiled AND its trigger already within reach is the tightest timing in the message.
+    if (n.cross?.includes("READY") || n.cross?.includes("TRIGGERED")) n.hints.push("trigger in reach");
+    if ((n.runner ?? 0) >= HINT.BIG_RUNNER) n.hints.push("big runner");
+  }
+
+  for (const n of ready) {
+    // The trap this report exists to name: structure flipped, runner large, nobody
+    // buying. Seductive on the headline numbers and exactly where a breakout fails.
+    if ((n.demand ?? 100) < HINT.THIN_DEMAND) {
+      n.hints.push(loadedTickers.has(n.ticker) ? "loaded but no buyers — size small" : "demand thin");
+    }
+    if (n.alertState === "TRIGGERED") n.hints.push("already moved");
+    if (n.catalyst && n.catalyst.daysUntil <= HINT.EVENT_WINDOW) n.hints.push("holds through event");
+  }
 
   return {
     scanDate,
