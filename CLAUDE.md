@@ -160,7 +160,9 @@ SSL raid -> structure high -> displacement -> MSS -> FVG -> retrace -> higher lo
 
 **Aggregation:** `aggregateSessions()` in `aggregate.ts`, **not** the shared `aggregate4hOHLC`. That helper groups by index from the series start (buckets straddle days) and drops the trailing partial group. Both are fine for the calibrated PreRun 4h scanner it serves and neither is acceptable here, so this is a separate function rather than a change to that one.
 
-**HTF bias** (`computeHTFBias`): ALIGNED (a swing TF past MSS) / NEUTRAL (raided, not flipped) / COUNTER (no bullish structure on either). Applied as a **gate on `is_tradeable` and the nightly badge, never as a score adjustment** — same treatment the regime gate gets in Inflection/Transition, so scores stay comparable across regimes.
+**HTF bias** (`computeHTFBias`): ALIGNED (a swing TF past MSS, **or** reading structurally bullish) / COUNTER (both swing TFs structurally bearish) / NEUTRAL otherwise. Applied as a **gate on `is_tradeable` and the nightly badge, never as a score adjustment** — same treatment the regime gate gets in Inflection/Transition, so scores stay comparable across regimes.
+
+⚠️ **The ladder cannot supply this on its own.** A ladder state of NONE means *no setup has started*, not *this chart is bearish* — a stock in a clean uptrend that never swept a pool of equal lows never enters the ladder at all. Reading NONE as bearish labelled 55% of the production board COUNTER, JPM/ICE/CMG/DOW among them. `readStructuralBias()` in `engine.ts` reads the chart directly instead: last two confirmed pivot highs and lows, higher-lows-plus-higher-highs is bullish, the mirror is bearish, anything else neutral. Still indicator-free.
 
 **Cron:** one `fetchBatchQuotes(universe)` up front supplies `company_name` and a sub-$10 price pre-gate (saves 3 chart calls per rejected name). Persists state order >= 3 and score >= 15. 14-day retention, `?clear=true`.
 

@@ -448,6 +448,63 @@ function computeDealingRange(low: number, high: number, close: number): DealingR
   };
 }
 
+/**
+ * Raw structural bias of a series, independent of the setup ladder.
+ *
+ * The ladder cannot answer this. A state of NONE means "no ICT setup has
+ * started here", which is not the same as "this chart is bearish" — a stock in
+ * a clean uptrend that never swept a pool of equal lows sits at NONE forever.
+ * Reading NONE as bearish labelled 55% of the board COUNTER, including JPM,
+ * ICE, CMG and DOW, and that gate suppresses tradeable rows and the nightly
+ * badge.
+ *
+ * Pure structure, no indicators: compare the last two confirmed pivot lows and
+ * pivot highs. Higher lows with either higher highs or a close above the last
+ * pivot high is bullish; the mirror is bearish; anything else is neutral.
+ */
+export function readStructuralBias(
+  highs: number[],
+  lows: number[],
+  closes: number[],
+  lookback = 60,
+  pivotBars = 2,
+): "BULLISH" | "BEARISH" | "NEUTRAL" {
+  const n = closes.length;
+  if (n < pivotBars * 2 + 4) return "NEUTRAL";
+
+  const start = Math.max(pivotBars, n - lookback);
+  const pivotHighs: number[] = [];
+  const pivotLows: number[] = [];
+
+  for (let k = start; k <= n - 1 - pivotBars; k++) {
+    let isHigh = true;
+    let isLow = true;
+    for (let d = 1; d <= pivotBars; d++) {
+      if (highs[k - d] > highs[k] || highs[k + d] > highs[k]) isHigh = false;
+      if (lows[k - d] < lows[k] || lows[k + d] < lows[k]) isLow = false;
+    }
+    if (isHigh) pivotHighs.push(highs[k]);
+    if (isLow) pivotLows.push(lows[k]);
+  }
+
+  if (pivotHighs.length < 2 || pivotLows.length < 2) return "NEUTRAL";
+
+  const lastHigh = pivotHighs[pivotHighs.length - 1];
+  const prevHigh = pivotHighs[pivotHighs.length - 2];
+  const lastLow = pivotLows[pivotLows.length - 1];
+  const prevLow = pivotLows[pivotLows.length - 2];
+  const close = closes[n - 1];
+
+  const higherLows = lastLow > prevLow;
+  const higherHighs = lastHigh > prevHigh;
+  const lowerLows = lastLow < prevLow;
+  const lowerHighs = lastHigh < prevHigh;
+
+  if (higherLows && (higherHighs || close > lastHigh)) return "BULLISH";
+  if (lowerLows && (lowerHighs || close < lastLow)) return "BEARISH";
+  return "NEUTRAL";
+}
+
 // ── Main Engine ──
 
 /**

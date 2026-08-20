@@ -9,7 +9,7 @@ import "server-only";
 
 import { TIMEFRAMES, MULTI_TF, TF_FAMILY, HTF_TIMEFRAMES } from "./config";
 import type { Timeframe, TFFamily } from "./config";
-import { runICTEngine } from "./engine";
+import { runICTEngine, readStructuralBias } from "./engine";
 import { scoreICTSetup } from "./scoring";
 import { ICTState, ICT_STATE_LABELS } from "./types";
 import type { ICTMultiTFResult, ICTTimeframeResult, HTFBias } from "./types";
@@ -57,7 +57,7 @@ export function runMultiTimeframe(
 
   const armedFamilies = [...new Set(armedTimeframes.map((tf) => TF_FAMILY[tf]))];
 
-  const { bias: htfBias, evidence: htfEvidence } = computeHTFBias(results);
+  const { bias: htfBias, evidence: htfEvidence } = computeHTFBias(results, data);
 
   const confluenceScore = computeConfluence(results, best, armedFamilies.length);
 
@@ -147,27 +147,48 @@ function computeRiskReward(
  * stay comparable across regimes. Same treatment the regime gate gets in the
  * Inflection and Transition engines.
  */
-function computeHTFBias(results: ICTTimeframeResult[]): { bias: HTFBias; evidence: string } {
+function computeHTFBias(
+  results: ICTTimeframeResult[],
+  data: MultiTFData,
+): { bias: HTFBias; evidence: string } {
   const htf = results.filter((r) => HTF_TIMEFRAMES.includes(r.timeframe));
   if (htf.length === 0) {
     return { bias: "NEUTRAL", evidence: "no daily or weekly data" };
   }
 
-  const strongest = htf.reduce((a, b) =>
-    b.setup.currentState > a.setup.currentState ? b : a
-  );
-  const label = ICT_STATE_LABELS[strongest.setup.currentState];
+  // A flipped ladder is the strongest signal available.
+  const flipped = htf.find((r) => r.setup.currentState >= ICTState.BULLISH_MSS);
+  if (flipped) {
+    return {
+      bias: "ALIGNED",
+      evidence: `${flipped.timeframe} structure at ${ICT_STATE_LABELS[flipped.setup.currentState]}`,
+    };
+  }
 
-  if (strongest.setup.currentState >= ICTState.BULLISH_MSS) {
-    return { bias: "ALIGNED", evidence: `${strongest.timeframe} structure at ${label}` };
+  // Otherwise read the chart directly. The ladder sitting at NONE means no
+  // setup has STARTED, not that the timeframe is bearish — a clean uptrend
+  // that never swept a pool of equal lows never enters the ladder at all.
+  const structural = htf.map((r) => {
+    const ohlc = data.timeframes[r.timeframe];
+    return {
+      timeframe: r.timeframe,
+      bias: ohlc ? readStructuralBias(ohlc.highs, ohlc.lows, ohlc.closes) : "NEUTRAL",
+    };
+  });
+
+  const bullish = structural.find((x) => x.bias === "BULLISH");
+  if (bullish) {
+    return { bias: "ALIGNED", evidence: `${bullish.timeframe} making higher highs and higher lows` };
   }
-  if (strongest.setup.currentState >= ICTState.SSL_RAID) {
-    return { bias: "NEUTRAL", evidence: `${strongest.timeframe} only at ${label} — structure not yet flipped` };
+
+  if (structural.every((x) => x.bias === "BEARISH")) {
+    return {
+      bias: "COUNTER",
+      evidence: `${structural.map((x) => x.timeframe).join(" and ")} making lower highs and lower lows`,
+    };
   }
-  return {
-    bias: "COUNTER",
-    evidence: `no bullish structure on ${htf.map((r) => r.timeframe).join(" or ")}`,
-  };
+
+  return { bias: "NEUTRAL", evidence: "swing structure neither trending up nor breaking down" };
 }
 
 /**

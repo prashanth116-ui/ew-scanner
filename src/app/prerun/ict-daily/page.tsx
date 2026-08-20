@@ -146,6 +146,12 @@ function biasBadge(bias: string | null): { label: string; color: string; title: 
   }
 }
 
+/**
+ * Minimum reward-to-risk for the Top Picks banner. A setup whose target is
+ * nearer than its stop is not a top pick however good the structure looks.
+ */
+const MIN_TOP_PICK_RR = 1.5;
+
 /** Sort comparator that always puts nulls last, whichever direction is active. */
 function nullsLast(
   a: number | null | undefined,
@@ -309,8 +315,14 @@ export default function ICTDailyPage() {
   ]);
 
   /**
-   * Top Picks: the rows the page exists to surface. Past the trigger stage,
-   * with higher-timeframe bias behind them, fresh, and not already extended.
+   * Top Picks: the rows the page exists to surface. Armed or better, higher
+   * timeframe behind them, fresh, not extended, and carrying a reward-to-risk
+   * worth taking.
+   *
+   * The R:R bar is a filter, not just a sort key. Ranking by it alone put a
+   * 0.38R setup — target nearer than the stop — at the head of the banner.
+   * A null R:R also fails: the draw is already behind price, so there is no
+   * defined target to size against.
    */
   const topPicks = useMemo(() => {
     return rows
@@ -319,7 +331,9 @@ export default function ICTDailyPage() {
           r.is_tradeable === true &&
           r.best_state_order >= 9 &&
           !r.is_chasing &&
-          !r.is_late_entry,
+          !r.is_late_entry &&
+          r.risk_reward != null &&
+          r.risk_reward >= MIN_TOP_PICK_RR,
       )
       .sort((a, b) => (b.risk_reward ?? 0) - (a.risk_reward ?? 0) || b.best_score - a.best_score)
       .slice(0, 10);
@@ -456,7 +470,7 @@ export default function ICTDailyPage() {
             <Zap className="h-4 w-4 text-cyan-400" />
             <span className="text-sm font-semibold text-cyan-300">Top Picks</span>
             <span className="text-xs text-[#888]">
-              armed or better · higher-timeframe bias aligned · fresh · not extended — ranked by reward-to-risk
+              armed or better · higher-timeframe bias aligned · fresh · not extended · {MIN_TOP_PICK_RR}R minimum
             </span>
           </div>
           <div className="flex flex-wrap gap-1.5">

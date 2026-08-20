@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runICTEngine } from "./engine";
+import { runICTEngine, readStructuralBias } from "./engine";
 import { scoreICTSetup } from "./scoring";
 import { detectBullishCISD } from "./cisd";
 import { aggregateSessions, splitSessions } from "./aggregate";
@@ -392,6 +392,51 @@ describe("ICT Engine — Stale expiry", () => {
     if (setup.bslLevel !== null && setup.distanceToBslPct !== null) {
       expect(Math.abs(setup.distanceToBslPct)).toBeLessThan(100);
     }
+  });
+});
+
+describe("ICT Engine — Structural bias", () => {
+  /**
+   * The ladder cannot answer this. NONE means "no setup has started", not
+   * "bearish" — reading it as bearish labelled 55% of the production board
+   * COUNTER, including JPM, ICE, CMG and DOW, and that gate suppresses
+   * tradeable rows and the nightly badge.
+   */
+
+  /** Triangle wave: 8-bar swings, each swing displaced by `drift`. */
+  function zigzag(swings: number, drift: number): Fixture {
+    const b = builder();
+    for (let i = 0; i < swings; i++) {
+      const base = 150 + i * drift;
+      for (const v of [0, 1, 2, 3, 4, 3, 2, 1]) {
+        const p = base + v;
+        b.add(p, p + 0.4, p - 0.4, p);
+      }
+    }
+    return b.f;
+  }
+
+  it("reads a clean uptrend as bullish even with no setup in the ladder", () => {
+    const f = zigzag(8, 2);
+    expect(readStructuralBias(f.highs, f.lows, f.closes)).toBe("BULLISH");
+    // And the ladder never started, which is exactly the case that broke.
+    expect(run(f).currentState).toBe(ICTState.NONE);
+  });
+
+  it("reads a persistent downtrend as bearish", () => {
+    const f = zigzag(8, -2);
+    expect(readStructuralBias(f.highs, f.lows, f.closes)).toBe("BEARISH");
+  });
+
+  it("reads a flat range as neutral, not bearish", () => {
+    const f = zigzag(8, 0);
+    expect(readStructuralBias(f.highs, f.lows, f.closes)).toBe("NEUTRAL");
+  });
+
+  it("returns neutral rather than guessing on a short series", () => {
+    const b = builder();
+    for (let i = 0; i < 5; i++) b.add(100, 101, 99, 100);
+    expect(readStructuralBias(b.f.highs, b.f.lows, b.f.closes)).toBe("NEUTRAL");
   });
 });
 
