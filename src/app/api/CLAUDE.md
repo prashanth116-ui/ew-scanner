@@ -29,7 +29,9 @@ Pre-filters: `dailyChangePct < 8%` + AVOID excluded. Per-category cap 8, combine
 
 **Cross-scanner confluence:** Loads PreRun (`PRIORITY`/`KEEP`), Inflection (`STARTER`/`ADD_ON`), Transition (`TRIGGERED`/`READY`), Institutional (`SHORTLIST`/`WATCHLIST`) data for current date. Multi-system confirmed stocks shown with scanner badges in Telegram messages.
 
-**Rotation breadth:** Tracks qualified vs total stocks per rotation. Displayed as `📊 N/M stocks qualify (Broad/Moderate/Narrow — context)`.
+**Tradeable candidates (NOT breadth):** `RotationSnapshot.candidates = { tradeable, tracked }`, displayed as `🎯 N/M tradeable`. `tracked` is what the rotation tracker fetched (price >= $10, dollar vol >= $200M, resolvable chart); `tradeable` is that set minus names gapping >= 8% and minus enrichment `AVOID`.
+
+⚠️ This was called **breadth** and printed as "N/M stocks qualify (Broad — wide participation)". It is not breadth and moves the opposite way: the count FALLS when a sector strengthens, because a stock ripping 8%+ is excluded as untradeable. On 2026-08-19 MRNA +177% *reduced* the biotech figure to 8/10 while real biotech breadth was 82% and rising. Real breadth is `SectorRotationScore.breadthPct` (% of members above their own 50d SMA) — it feeds 15% of the composite and is what `/sectors` displays. Guarded by `candidates.test.ts`.
 
 **Historical stats:** Pattern stats enriched onto rotation changes. Shows `📈 Avg +X.X% over Nd (N prior rotations)`.
 

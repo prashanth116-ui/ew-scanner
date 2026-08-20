@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
       // Build stock map with scanner badges using shared helpers
       const scannerHitMap = buildScannerHitMap(prerunData, inflectionData, transitionData, institutionalData);
       const enrichedMap = buildEnrichedMap(current.enrichedStocks);
-      const { stockMap: builtStockMap, breadthMap } = buildStockMap(
+      const { stockMap: builtStockMap, candidateMap } = buildStockMap(
         rotationResult.activeRotations, scannerHitMap, enrichedMap,
       );
       stockMap = builtStockMap;
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
       currentRotations = buildCurrentRotations(rotationResult.activeRotations);
       rotationChanges = detectRotationChanges(currentRotations, previous?.rotations, stockMap);
 
-      // Enrich rotation changes with breadth and historical pattern stats
+      // Enrich rotation changes with candidate counts and historical pattern stats
       const historyMap = new Map<string, { avgReturn: number; avgDuration: number; count: number }>();
       for (const ps of rotationResult.patternStats) {
         if (ps.totalRotations > 0) {
@@ -189,9 +189,9 @@ export async function GET(request: NextRequest) {
         const sectorId = sectorIdLookup.get(change.sectorName);
         if (!sectorId) continue;
 
-        // Attach breadth (non-ended only)
+        // Attach tradeable-candidate counts (non-ended only)
         if (change.type !== "rotation_ended") {
-          change.breadth = breadthMap.get(sectorId);
+          change.candidates = candidateMap.get(sectorId);
         }
 
         // Attach historical stats

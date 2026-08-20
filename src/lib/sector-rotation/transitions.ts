@@ -196,8 +196,20 @@ export interface RotationChange {
   quadrant: string;
   previousLifecycle?: string;
   topStocks?: RotationTopStock[];
-  // Rotation breadth: how many stocks qualify vs total in sector
-  breadth?: { qualified: number; total: number };
+  /**
+   * How many tracked stocks are currently TRADEABLE CANDIDATES — not breadth.
+   *
+   * `total` is what the rotation tracker fetched for this sector (price >= $10, dollar
+   * volume >= $200M, resolvable chart), and `candidates` is that set minus names gapping
+   * >= 8% and minus enrichment category AVOID.
+   *
+   * This was called `breadth` and it is not one. Breadth rises when a sector strengthens;
+   * this FALLS, because a stock ripping 8%+ is excluded as untradeable. On 2026-08-19
+   * MRNA's +177% actively reduced the biotech figure while biotech breadth was 82% and
+   * rising. Real breadth is `SectorRotationScore.breadthPct` — % of members above their
+   * own 50d SMA — which is what feeds the composite and what /sectors displays.
+   */
+  candidates?: { tradeable: number; tracked: number };
   // Historical pattern stats for this sector
   historicalAvgReturn?: number;
   historicalAvgDuration?: number;
@@ -414,17 +426,19 @@ export function formatRotationChanges(changes: RotationChange[], calculatedAt: s
         lines.push(`    ${qTag(c.quadrant)} \u2022 ${c.lifecycle} \u2022 ${c.conviction}`);
       }
 
-      // Rotation breadth (non-ended only)
-      if (c.breadth && c.type !== "rotation_ended") {
-        const pct = c.breadth.total > 0
-          ? Math.round((c.breadth.qualified / c.breadth.total) * 100)
+      // Tradeable candidates (non-ended only). Deliberately NOT described as breadth or
+      // participation — the count drops when a stock gaps, so those words would invert
+      // the meaning. It answers "how many can I act on", not "how broad is this move".
+      if (c.candidates && c.type !== "rotation_ended") {
+        const pct = c.candidates.tracked > 0
+          ? Math.round((c.candidates.tradeable / c.candidates.tracked) * 100)
           : 0;
-        const breadthLabel = pct >= 50
-          ? "Broad \u2014 wide participation, strong rotation"
+        const label = pct >= 50
+          ? "most of the sector is actionable"
           : pct >= 25
-            ? "Moderate \u2014 selective participation"
-            : "Narrow \u2014 few stocks participating";
-        lines.push(`    \uD83D\uDCCA ${c.breadth.qualified}/${c.breadth.total} stocks qualify (${breadthLabel})`);
+            ? "selective \u2014 several excluded as gapping or AVOID"
+            : "thin \u2014 few names currently actionable";
+        lines.push(`    \uD83C\uDFAF ${c.candidates.tradeable}/${c.candidates.tracked} tradeable (${label})`);
       }
 
       // Historical pattern stats

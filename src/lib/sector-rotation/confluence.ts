@@ -73,10 +73,11 @@ export function buildStockMap(
   enrichedMap: Map<string, { conviction: string; category: string }>,
 ): {
   stockMap: Map<string, RotationTopStock[]>;
-  breadthMap: Map<string, { qualified: number; total: number }>;
+  candidateMap: Map<string, { tradeable: number; tracked: number }>;
 } {
   const stockMap = new Map<string, RotationTopStock[]>();
-  const breadthMap = new Map<string, { qualified: number; total: number }>();
+  // Tradeable-candidate counts, NOT breadth — see RotationSnapshot.candidates.
+  const candidateMap = new Map<string, { tradeable: number; tracked: number }>();
 
   const passesFilters = (s: RotationStockPerformance): boolean => {
     if (Math.abs(s.dailyChangePct) >= 8) return false;
@@ -163,13 +164,13 @@ export function buildStockMap(
     ].slice(0, 15);
     if (combined.length > 0) stockMap.set(r.event.sectorId, combined);
 
-    breadthMap.set(r.event.sectorId, {
-      qualified: eligible.length,
-      total: r.stocks.length,
+    candidateMap.set(r.event.sectorId, {
+      tradeable: eligible.length,
+      tracked: r.stocks.length,
     });
   }
 
-  return { stockMap, breadthMap };
+  return { stockMap, candidateMap };
 }
 
 /** Build RotationSnapshot[] from active rotation details. */
