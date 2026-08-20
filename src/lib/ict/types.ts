@@ -155,6 +155,12 @@ export interface ICTSetup {
 
   // Premium / discount
   dealingRange: DealingRange | null;
+  /**
+   * Deepest range-retracement reached at or after the MSS bar — the entry this
+   * setup actually OFFERED, as distinct from where price happens to sit now.
+   * Null before structure shifts.
+   */
+  entryRetracement: number | null;
 
   // Higher low
   higherLowBar: number | null;

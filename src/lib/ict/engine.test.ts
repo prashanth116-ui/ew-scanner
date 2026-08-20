@@ -532,15 +532,63 @@ describe("ICT Scoring", () => {
   it("pays OTE more than premium", () => {
     const f = buildFullProgressionFixture();
     const setup = run(f);
-    const at = (retracement: number) =>
+    const at = (entryRetracement: number) =>
       scoreICTSetup(
-        { ...setup, dealingRange: { low: 100, high: 110, equilibrium: 105, retracement, inDiscount: retracement >= 0.5, inOTE: retracement >= 0.62 && retracement <= 0.79 } },
-        f.opens, f.highs, f.lows, f.closes, "4h",
+        { ...setup, entryRetracement }, f.opens, f.highs, f.lows, f.closes, "4h",
       ).components.entryQuality;
 
     expect(at(0.70)).toBe(SCORING.ENTRY_QUALITY_MAX);
     expect(at(0.55)).toBeLessThan(at(0.70));
     expect(at(0.10)).toBeLessThan(at(0.55));
+  });
+
+  /**
+   * ARMED requires price within 3% of the draw, so it is in premium by
+   * construction. Grading entry quality off current position scored every
+   * state the scanner exists to find at close to zero.
+   */
+  it("grades the entry the setup offered, not where price sits now", () => {
+    const f = buildFullProgressionFixture();
+    const setup = run(f);
+    // Price is at the range high (premium) but the setup offered an OTE pullback.
+    const offered = {
+      ...setup,
+      entryRetracement: 0.70,
+      dealingRange: { low: 100, high: 110, equilibrium: 105, retracement: 0.02, inDiscount: false, inOTE: false },
+    };
+    const score = scoreICTSetup(offered, f.opens, f.highs, f.lows, f.closes, "4h");
+    expect(score.components.entryQuality).toBe(SCORING.ENTRY_QUALITY_MAX);
+  });
+
+  /**
+   * The bug that left Top Picks permanently empty: every state >= ARMED was
+   * flagged late because compression into the draw is premium by definition.
+   */
+  it("does not flag an armed setup as late merely for trading in premium", () => {
+    const f = buildFullProgressionFixture();
+    const setup = run(f);
+    const armedInPremium = {
+      ...setup,
+      currentState: ICTState.ARMED,
+      transitions: setup.transitions.filter((t) => t.toState < ICTState.TRIGGER),
+      dealingRange: { low: 100, high: 110, equilibrium: 105, retracement: 0.01, inDiscount: false, inOTE: false },
+    };
+    const score = scoreICTSetup(armedInPremium, f.opens, f.highs, f.lows, f.closes, "4h");
+    expect(score.isLateEntry).toBe(false);
+  });
+
+  it("still flags late once the trigger is well behind price", () => {
+    const f = buildFullProgressionFixture();
+    const setup = run(f);
+    const stale = {
+      ...setup,
+      currentState: ICTState.TRIGGER,
+      transitions: setup.transitions.map((t) =>
+        t.toState === ICTState.TRIGGER ? { ...t, barIndex: 20 } : t,
+      ),
+    };
+    const score = scoreICTSetup(stale, f.opens, f.highs, f.lows, f.closes, "4h");
+    expect(score.isLateEntry).toBe(true);
   });
 
   // C7 — flags arm from ARMED, not TRIGGER.
@@ -556,6 +604,29 @@ describe("ICT Scoring", () => {
     expect(setup.currentState).toBeLessThan(ICTState.ARMED);
     const score = scoreICTSetup(setup, b.f.opens, b.f.highs, b.f.lows, b.f.closes, "1d");
     expect(score.isChasing).toBe(false);
+  });
+});
+
+describe("ICT Scoring — transition selection", () => {
+  /**
+   * `transitions` is an audit trail and survives a reset, so a plain .find()
+   * returns the first matching transition ever recorded — which may belong to a
+   * setup that died hundreds of bars ago.
+   */
+  it("ignores transitions belonging to a previous, dead setup", () => {
+    const f = buildFullProgressionFixture();
+    const setup = run(f);
+    const ghost = {
+      ...setup,
+      transitions: [
+        { fromState: ICTState.ARMED, toState: ICTState.TRIGGER, barIndex: 2, timestamp: 0, price: 1, evidence: "ghost" },
+        ...setup.transitions,
+      ],
+    };
+    const withGhost = scoreICTSetup(ghost, f.opens, f.highs, f.lows, f.closes, "4h");
+    const without = scoreICTSetup(setup, f.opens, f.highs, f.lows, f.closes, "4h");
+    expect(withGhost.isLateEntry).toBe(without.isLateEntry);
+    expect(withGhost.components.displacementQuality).toBe(without.components.displacementQuality);
   });
 });
 

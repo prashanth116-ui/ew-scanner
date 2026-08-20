@@ -41,6 +41,7 @@ function emptySetup(): ICTSetup {
     sslRaid: null,
     retracementDepth: null,
     dealingRange: null,
+    entryRetracement: null,
     higherLowBar: null,
     cisd: { triggered: false, bearishOpen: null, bearishBarIndex: null, runLength: 0 },
     distanceToBslPct: null,
@@ -72,6 +73,7 @@ function resetSetup(setup: ICTSetup): void {
   setup.sslRaid = null;
   setup.retracementDepth = null;
   setup.dealingRange = null;
+  setup.entryRetracement = null;
   setup.higherLowBar = null;
   setup.cisd = { triggered: false, bearishOpen: null, bearishBarIndex: null, runLength: 0 };
   setup.distanceToBslPct = null;
@@ -537,6 +539,18 @@ export function runICTEngine(
     if (setup.currentState >= ICTState.SSL_RAID && setup.sslRaid) {
       if (highs[i] > rangeHigh) rangeHigh = highs[i];
       setup.dealingRange = computeDealingRange(setup.sslRaid.raidBarLow, rangeHigh, closes[i]);
+
+      // Deepest discount offered since structure shifted. Grading entry quality
+      // off the CURRENT position penalises exactly the states the scanner exists
+      // to find: ARMED means price has compressed to within 3% of the draw, so
+      // it sits at the top of its own range by definition. What matters is
+      // whether the setup ever offered a discount entry, not where it is now.
+      if (setup.currentState >= ICTState.BULLISH_MSS && setup.dealingRange) {
+        const r = setup.dealingRange.retracement;
+        if (setup.entryRetracement === null || r > setup.entryRetracement) {
+          setup.entryRetracement = r;
+        }
+      }
     }
 
     // Distance to the draw is refreshed on every bar once a BSL exists, not
@@ -662,9 +676,15 @@ function advanceOnce(
       // current one. The displacement gap's third candle typically prints
       // before structure formally shifts, so a search that started on the bar
       // after MSS stepped straight over it.
-      const dispBar = setup.transitions.find(
-        (t) => t.toState === ICTState.BULLISH_DISPLACEMENT,
-      )?.barIndex ?? i;
+      // Search backwards: `transitions` survives a reset, so the first match
+      // could belong to a setup that died long ago.
+      const dispBar = [...setup.transitions]
+        .reverse()
+        .find(
+          (t) =>
+            t.toState === ICTState.BULLISH_DISPLACEMENT &&
+            t.barIndex >= (setup.sslBarIndex ?? 0),
+        )?.barIndex ?? i;
       const fvg = findRecentFVG(opens, highs, lows, closes, dispBar, i);
       if (fvg) {
         setup.currentState = ICTState.FVG_CONFIRMED;

@@ -76,6 +76,23 @@ function computeComponents(
   };
 }
 
+/**
+ * The most recent transition into `state` that belongs to the CURRENT setup.
+ *
+ * `transitions` is an audit trail and deliberately survives a reset, so a plain
+ * `.find()` returns the first such transition ever recorded — potentially from
+ * a setup that died hundreds of bars ago. That mis-scored displacement quality
+ * against the wrong candle and measured lateness from a stale trigger.
+ */
+function currentTransition(setup: ICTSetup, state: ICTState) {
+  const origin = setup.sslBarIndex ?? 0;
+  for (let i = setup.transitions.length - 1; i >= 0; i--) {
+    const t = setup.transitions[i];
+    if (t.toState === state && t.barIndex >= origin) return t;
+  }
+  return undefined;
+}
+
 // ── Component Scoring Functions ──
 
 /** State Score: linear from state order. */
@@ -97,9 +114,7 @@ function scoreDisplacement(
 ): number {
   if (setup.currentState < ICTState.BULLISH_DISPLACEMENT) return 0;
 
-  const dispTransition = setup.transitions.find(
-    (t) => t.toState === ICTState.BULLISH_DISPLACEMENT
-  );
+  const dispTransition = currentTransition(setup, ICTState.BULLISH_DISPLACEMENT);
   if (!dispTransition) return 0;
 
   const i = dispTransition.barIndex;
@@ -171,21 +186,32 @@ function scoreRetracement(setup: ICTSetup): number {
 }
 
 /**
- * Entry Quality: premium/discount position within the dealing range.
+ * Entry Quality: premium/discount position of the entry the setup OFFERED.
  *
  * Full marks inside the OTE band (0.62-0.79 retracement of the raid-low to
  * range-high leg), most of the marks anywhere in discount, and close to
- * nothing in premium. Without this the engine happily armed setups trading at
- * the top of their own leg, which is the entry the framework exists to avoid.
+ * nothing in premium.
+ *
+ * Measured against `entryRetracement` — the deepest discount reached since
+ * structure shifted — not against where price sits today. ICT has two entry
+ * models: the retracement into a PD array, and the expansion through
+ * liquidity. ARMED is the second one, and it means price has compressed to
+ * within 3% of the draw, so it is at the top of its own range BY DEFINITION.
+ * Grading it on current position scored every state the scanner exists to find
+ * at close to zero. Asking "did this setup ever offer a discount entry"
+ * measures the same idea without contradicting the ladder.
+ *
+ * A setup that never pulled back still scores low here, which is correct: it
+ * offered no entry, only a chase.
  */
 function scoreEntryQuality(setup: ICTSetup): number {
   const range = setup.dealingRange;
   if (!range || setup.currentState < ICTState.SSL_RAID) return 0;
 
-  const r = range.retracement;
+  const r = setup.entryRetracement ?? range.retracement;
   const max = SCORING.ENTRY_QUALITY_MAX;
 
-  if (range.inOTE) return max;
+  if (r >= RANGE.OTE_MIN && r <= RANGE.OTE_MAX) return max;
 
   if (r > RANGE.OTE_MAX) {
     // Below OTE — deep discount. Safe, but the leg may be failing, so it does
@@ -361,27 +387,35 @@ function detectChasing(
 }
 
 /**
- * Detect late entry based on distance from FVG, position in the dealing range,
- * and candles since TRIGGER.
+ * Detect late entry — "the entry this setup offered has already gone".
+ *
+ * Which entry that is depends on the model the setup is running. Below
+ * BSL_BUILT the setup is still a retracement play, so distance above the FVG
+ * measures lateness. At BSL_BUILT and beyond it is an expansion play and the
+ * entry is the break of the draw, so bars-since-TRIGGER is the measure and
+ * distance above the FVG is not — price is SUPPOSED to be well above the gap
+ * by then.
+ *
+ * An earlier version also flagged anything trading in premium. That reads as
+ * reasonable and is self-defeating: ARMED requires price within 3% of the
+ * draw, which is premium by construction, so it flagged every state the page
+ * is built to surface and left the Top Picks banner permanently empty.
+ * Premium is still shown, as its own badge, where it is information rather
+ * than a disqualification.
  */
 function detectLateEntry(setup: ICTSetup, closes: number[]): boolean {
   if (setup.currentState < CHASE.MIN_STATE_FOR_FLAGS) return false;
 
-  // Trading in premium, above the OTE band, is late by construction.
-  if (setup.dealingRange && setup.dealingRange.retracement < RANGE.EQUILIBRIUM * 0.5) return true;
-
-  if (setup.fvgZone) {
+  if (setup.currentState < ICTState.BSL_BUILT && setup.fvgZone) {
     const price = closes[closes.length - 1];
     const fvgMid = (setup.fvgZone.upper + setup.fvgZone.lower) / 2;
     const distPct = ((price - fvgMid) / fvgMid) * 100;
     if (distPct > CHASE.LATE_ENTRY_FVG_DISTANCE_PCT) return true;
   }
 
-  const triggerTransition = setup.transitions.find(
-    (t) => t.toState === ICTState.TRIGGER
-  );
+  const triggerTransition = currentTransition(setup, ICTState.TRIGGER);
   if (triggerTransition) {
-    const candlesSince = setup.barsProcessed - triggerTransition.barIndex;
+    const candlesSince = setup.barsProcessed - 1 - triggerTransition.barIndex;
     if (candlesSince > CHASE.LATE_ENTRY_CANDLES_SINCE_TRIGGER) return true;
   }
 
