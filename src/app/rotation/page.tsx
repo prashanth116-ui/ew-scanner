@@ -558,19 +558,50 @@ function HistoricalProjection({
 
 // ── Section 1: Active Rotation Cards (enhanced) ──
 
+/**
+ * Is this rotation broad, or one stock?
+ *
+ * Two numbers, because they fail differently. `breadthPct` is the % of sector members
+ * above their own 50d SMA — the same figure that feeds 15% of the rotation composite and
+ * that /sectors displays. It is a trend measure and immune to a single outlier: one stock
+ * doubling moves it by one member.
+ *
+ * The median member move is today's participation. A cap-weighted ETF return can be one
+ * name; a median cannot. On 2026-08-19 biotech showed breadth 82% and a +3.78% median —
+ * the pair is what proved the healthcare rotation was real rather than MRNA's +177%
+ * dragging the composite.
+ *
+ * Deliberately NOT the tradeable-candidate count from the 6pm alert. That figure excludes
+ * names gapping >= 8%, so it FALLS when a sector rips — it answers "how many can I act
+ * on", not "is this real", and putting it here would re-import the confusion.
+ */
+function participation(
+  stocks: { dailyChangePct: number }[],
+  breadthPct: number | null | undefined,
+): { breadth: number | null; median: number | null } {
+  const moves = stocks.map((s) => s.dailyChangePct).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+  const median = moves.length ? moves[Math.floor(moves.length / 2)] : null;
+  return { breadth: breadthPct ?? null, median };
+}
+
 function ActiveRotationCards({
   rotations,
   onExpand,
   expandedId,
   regime,
   patternStats,
+  sectorScores,
 }: {
   rotations: ActiveRotationDetail[];
   onExpand: (id: string | null) => void;
   expandedId: string | null;
   regime: RegimeData | null | undefined;
   patternStats: RotationPatternStats[];
+  /** Already fetched for the heatmap; carries breadthPct per sector. */
+  sectorScores: SectorRotationScore[] | null;
 }) {
+  const breadthByEtf = new Map((sectorScores ?? []).map((x) => [x.etf, x.breadthPct]));
+
   if (rotations.length === 0) {
     return (
       <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-8 text-center text-[#888]">
@@ -590,6 +621,7 @@ function ActiveRotationCards({
         const exitWarnings = computeExitWarnings(r.event);
         const regimeAlignment = regime ? isRegimeAligned(r.event.sectorName, regime) : "neutral";
         const actionSignal = computeActionSignal(lifecycle, conviction, regimeAlignment);
+        const part = participation(r.stocks, breadthByEtf.get(r.event.etf));
 
         return (
           <button
@@ -651,6 +683,38 @@ function ActiveRotationCards({
                 {r.event.etfPerformancePct.toFixed(1)}%
               </span>
             </div>
+
+            {/* Is this broad, or one stock? Breadth is the 50d-SMA trend measure that
+                feeds the composite; the median is today's participation. Both are
+                immune to a single outlier, which a cap-weighted ETF return is not. */}
+            {(part.breadth !== null || part.median !== null) && (
+              <div className="mt-2 flex items-center gap-3 text-[10px]">
+                {part.breadth !== null && (
+                  <span
+                    className="flex items-center gap-1"
+                    title="Percentage of sector members trading above their own 50-day SMA. Unaffected by any single stock's move."
+                  >
+                    <span className="text-[#888]">Breadth</span>
+                    <span className={
+                      part.breadth >= 60 ? "font-semibold text-green-400"
+                        : part.breadth >= 40 ? "font-semibold text-amber-400"
+                          : "font-semibold text-red-400"
+                    }>{part.breadth}%</span>
+                  </span>
+                )}
+                {part.median !== null && (
+                  <span
+                    className="flex items-center gap-1"
+                    title="Median move of the sector's stocks today. A cap-weighted return can be one name; a median cannot."
+                  >
+                    <span className="text-[#888]">Median</span>
+                    <span className={part.median >= 0 ? "font-semibold text-green-400" : "font-semibold text-red-400"}>
+                      {part.median > 0 ? "+" : ""}{part.median.toFixed(1)}%
+                    </span>
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Enhancement #2: Conviction score */}
             <div className="mt-2 flex items-center gap-2">
@@ -2338,6 +2402,7 @@ export default function RotationTrackerPage() {
               expandedId={expandedSector}
               regime={data.regime}
               patternStats={data.patternStats}
+              sectorScores={heatmapSectors}
             />
           </section>
 
