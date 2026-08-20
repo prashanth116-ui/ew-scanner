@@ -117,17 +117,40 @@ export const SCORING = {
 };
 
 /**
- * Coherence and recency are measured in bars, so their budgets have to be
- * per-timeframe — 20 bars is three days of 4h and five months of weekly.
+ * Coherence, recency and expiry are measured in bars, so their budgets have to
+ * be per-timeframe — 20 bars is three days of 4h and five months of weekly.
+ *
+ * `staleExpiry` is the load-bearing one. Several states are absorbing in
+ * practice: FVG_CONFIRMED waits for a retracement, BSL_BUILT waits for
+ * compression, IGNITION cannot advance at all — and none of them invalidate,
+ * because price walking AWAY never breaks a protected low sitting far below.
+ * Without expiry a setup parks in one of them for the length of the chart. The
+ * first production run had median ages of 297 bars at BSL and 577 at Ignition,
+ * with names reporting a BSL target 85% below spot from 2000+ bars earlier.
  */
-export const BAR_BUDGETS: Record<string, { coherenceIdeal: number; coherenceMax: number; recencyFresh: number; recencyStale: number }> = {
-  "1h": { coherenceIdeal: 40, coherenceMax: 160, recencyFresh: 8, recencyStale: 40 },
-  "4h": { coherenceIdeal: 20, coherenceMax: 60, recencyFresh: 4, recencyStale: 20 },
-  "1d": { coherenceIdeal: 15, coherenceMax: 45, recencyFresh: 3, recencyStale: 12 },
-  "1wk": { coherenceIdeal: 8, coherenceMax: 26, recencyFresh: 2, recencyStale: 8 },
+export interface BarBudget {
+  coherenceIdeal: number;
+  coherenceMax: number;
+  recencyFresh: number;
+  recencyStale: number;
+  staleExpiry: number;
+}
+
+export const BAR_BUDGETS: Record<string, BarBudget> = {
+  "1h": { coherenceIdeal: 40, coherenceMax: 160, recencyFresh: 8, recencyStale: 40, staleExpiry: 60 },
+  "4h": { coherenceIdeal: 20, coherenceMax: 60, recencyFresh: 4, recencyStale: 20, staleExpiry: 40 },
+  "1d": { coherenceIdeal: 15, coherenceMax: 45, recencyFresh: 3, recencyStale: 12, staleExpiry: 25 },
+  "1wk": { coherenceIdeal: 8, coherenceMax: 26, recencyFresh: 2, recencyStale: 8, staleExpiry: 13 },
 };
 
-export const DEFAULT_BAR_BUDGET = { coherenceIdeal: 20, coherenceMax: 60, recencyFresh: 4, recencyStale: 20 };
+export const DEFAULT_BAR_BUDGET: BarBudget = {
+  coherenceIdeal: 20, coherenceMax: 60, recencyFresh: 4, recencyStale: 20, staleExpiry: 40,
+};
+
+/** Budget lookup with a safe fallback for an unknown timeframe label. */
+export function barBudget(timeframe: string): BarBudget {
+  return BAR_BUDGETS[timeframe] ?? DEFAULT_BAR_BUDGET;
+}
 
 // ── Chase Risk / Extension Flags ──
 

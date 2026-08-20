@@ -32,7 +32,7 @@ export function runMultiTimeframe(
     const ohlc = data.timeframes[tf];
     if (!ohlc) continue;
 
-    const setup = runICTEngine(ohlc.opens, ohlc.highs, ohlc.lows, ohlc.closes, ohlc.timestamps);
+    const setup = runICTEngine(ohlc.opens, ohlc.highs, ohlc.lows, ohlc.closes, ohlc.timestamps, tf);
     const score = scoreICTSetup(setup, ohlc.opens, ohlc.highs, ohlc.lows, ohlc.closes, tf);
 
     results.push({ timeframe: tf, setup, score });

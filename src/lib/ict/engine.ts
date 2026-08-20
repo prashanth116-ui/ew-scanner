@@ -14,7 +14,7 @@
  * already taken out.
  */
 
-import { SSL, MSS, DISPLACEMENT, FVG, BSL, ARMED, RANGE } from "./config";
+import { SSL, MSS, DISPLACEMENT, FVG, BSL, ARMED, RANGE, barBudget } from "./config";
 import { detectBullishCISD } from "./cisd";
 import { ICTState } from "./types";
 import type {
@@ -460,9 +460,12 @@ export function runICTEngine(
   lows: number[],
   closes: number[],
   timestamps: number[],
+  timeframe = "4h",
 ): ICTSetup {
   const n = closes.length;
   if (n < SSL.LOOKBACK + 1) return emptySetup();
+
+  const { staleExpiry } = barBudget(timeframe);
 
   const setup = emptySetup();
   let rangeHigh = -Infinity;
@@ -494,6 +497,30 @@ export function runICTEngine(
       // low (often far below) to break kept scoring a dead idea.
       invalidationReason =
         `FVG inverted — close ${closes[i].toFixed(2)} below gap floor ${setup.fvgZone.lower.toFixed(2)}`;
+    }
+
+    // ── 1b. EXPIRY ──
+    // Several states are absorbing: FVG_CONFIRMED waits for a retracement that
+    // may never come, BSL_BUILT waits for a compression that may never form,
+    // and IGNITION cannot advance at all. None of them invalidate when price
+    // simply walks away, so without this a setup parks in one for the length of
+    // the chart and the board fills with fossils carrying targets far behind
+    // spot. A setup that has not progressed in staleExpiry bars is abandoned
+    // and the engine goes back to hunting a fresh raid.
+    if (
+      !invalidationReason &&
+      setup.currentState >= ICTState.SSL_RAID &&
+      setup.stateBarIndex !== null &&
+      i - setup.stateBarIndex > staleExpiry
+    ) {
+      setup.cautionEvidence.push(
+        `Expired at bar ${i}: ${ICTState[setup.currentState]} unchanged for ${i - setup.stateBarIndex} bars`,
+      );
+      // Not recorded as a prior invalidation — nothing broke, the idea simply
+      // went stale, and flagging it as a break would misreport the risk.
+      resetSetup(setup);
+      rangeHigh = -Infinity;
+      continue;
     }
 
     if (invalidationReason) {

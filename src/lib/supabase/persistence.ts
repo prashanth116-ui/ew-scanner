@@ -2277,10 +2277,26 @@ export async function upsertICTDaily(records: import("@/lib/ict/types").ICTDaily
         .upsert(batch, { onConflict: "scan_date,ticker" })
         .select("id");
 
-      if (error) {
-        console.error("[persistence] upsertICTDaily error:", error.message);
-      } else {
+      if (!error) {
         upserted += data?.length ?? 0;
+        continue;
+      }
+
+      // One bad row used to cost the whole batch, silently: the error is logged
+      // and a count returned, so the caller reports "persisted 369" against 422
+      // qualifying with no indication of what happened. Fall back to per-row so
+      // a rejected value costs one row and names itself in the log.
+      console.error("[persistence] upsertICTDaily batch error:", error.message);
+      for (const record of batch) {
+        const { data: rowData, error: rowError } = await supabase
+          .from("ict_daily")
+          .upsert([record], { onConflict: "scan_date,ticker" })
+          .select("id");
+        if (rowError) {
+          console.error(`[persistence] upsertICTDaily dropped ${record.ticker}:`, rowError.message);
+        } else {
+          upserted += rowData?.length ?? 0;
+        }
       }
     }
     return upserted;

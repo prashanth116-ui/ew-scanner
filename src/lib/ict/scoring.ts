@@ -9,7 +9,7 @@
  * columns the page presents as independent readings.
  */
 
-import { SCORING, CHASE, DISPLACEMENT, RANGE, BAR_BUDGETS, DEFAULT_BAR_BUDGET } from "./config";
+import { SCORING, CHASE, DISPLACEMENT, RANGE, barBudget, DEFAULT_BAR_BUDGET } from "./config";
 import type { Timeframe } from "./config";
 import { ICTState } from "./types";
 import type { ICTSetup, ICTScore, ICTScoreComponents } from "./types";
@@ -30,7 +30,7 @@ export function scoreICTSetup(
   closes: number[],
   timeframe: Timeframe | string = "4h",
 ): ICTScore {
-  const budget = BAR_BUDGETS[timeframe] ?? DEFAULT_BAR_BUDGET;
+  const budget = barBudget(timeframe);
   const components = computeComponents(setup, opens, highs, lows, closes, budget);
 
   const total = Math.min(100, Math.round(

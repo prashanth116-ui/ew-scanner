@@ -4,7 +4,7 @@ import { scoreICTSetup } from "./scoring";
 import { detectBullishCISD } from "./cisd";
 import { aggregateSessions, splitSessions } from "./aggregate";
 import { ICTState } from "./types";
-import { SCORING } from "./config";
+import { SCORING, barBudget } from "./config";
 
 // ── Synthetic OHLC Fixture Builder ──
 
@@ -325,6 +325,73 @@ describe("ICT Engine — Invalidation", () => {
     full.closes[25] = 210.5;
     const setup = run(full);
     expect(setup.priorInvalidation!.barsAgo).toBe(full.closes.length - 1 - 25);
+  });
+});
+
+describe("ICT Engine — Stale expiry", () => {
+  /**
+   * Several states are absorbing: FVG_CONFIRMED waits for a retracement,
+   * BSL_BUILT waits for a compression, IGNITION cannot advance at all. None of
+   * them invalidate when price walks AWAY, because the protected low sits far
+   * below. Without expiry a setup parks in one for the length of the chart.
+   */
+  function driftUpFrom(fixture: Fixture, bars: number): Fixture {
+    const f: Fixture = {
+      opens: [...fixture.opens], highs: [...fixture.highs], lows: [...fixture.lows],
+      closes: [...fixture.closes], timestamps: [...fixture.timestamps],
+    };
+    let px = f.closes[f.closes.length - 1];
+    let t = f.timestamps[f.timestamps.length - 1];
+    for (let i = 0; i < bars; i++) {
+      px += 0.05; // never revisits the gap, never breaks the protected low
+      t += 3600;
+      f.opens.push(px);
+      f.highs.push(px + 0.1);
+      f.lows.push(px - 0.05);
+      f.closes.push(px + 0.02);
+      f.timestamps.push(t);
+    }
+    return f;
+  }
+
+  it("holds a state that is still inside its expiry budget", () => {
+    const f = driftUpFrom(buildFullProgressionFixture(), 10);
+    const setup = runICTEngine(f.opens, f.highs, f.lows, f.closes, f.timestamps, "4h");
+    expect(setup.currentState).toBe(ICTState.IGNITION);
+  });
+
+  it("abandons a setup that has not progressed within the budget", () => {
+    const budget = barBudget("4h").staleExpiry;
+    const f = driftUpFrom(buildFullProgressionFixture(), budget + 5);
+    const setup = runICTEngine(f.opens, f.highs, f.lows, f.closes, f.timestamps, "4h");
+    expect(setup.currentState).toBe(ICTState.NONE);
+    expect(setup.bslLevel).toBeNull();
+    expect(setup.cautionEvidence.some((e) => /Expired/.test(e))).toBe(true);
+  });
+
+  it("does not report an expiry as a break — nothing was invalidated", () => {
+    const f = driftUpFrom(buildFullProgressionFixture(), barBudget("4h").staleExpiry + 5);
+    const setup = runICTEngine(f.opens, f.highs, f.lows, f.closes, f.timestamps, "4h");
+    expect(setup.priorInvalidation).toBeNull();
+  });
+
+  it("expires on the timeframe's own budget, not a shared constant", () => {
+    const drift = barBudget("1wk").staleExpiry + 3; // past weekly, inside hourly
+    const f = driftUpFrom(buildFullProgressionFixture(), drift);
+    const weekly = runICTEngine(f.opens, f.highs, f.lows, f.closes, f.timestamps, "1wk");
+    const hourly = runICTEngine(f.opens, f.highs, f.lows, f.closes, f.timestamps, "1h");
+    expect(weekly.currentState).toBe(ICTState.NONE);
+    expect(hourly.currentState).toBe(ICTState.IGNITION);
+  });
+
+  it("keeps the reported target within reach of price", () => {
+    // The failure this guards: a BSL target 85% below spot, carried for 2000+
+    // bars, which also overflowed the persisted numeric column.
+    const f = driftUpFrom(buildFullProgressionFixture(), 400);
+    const setup = runICTEngine(f.opens, f.highs, f.lows, f.closes, f.timestamps, "4h");
+    if (setup.bslLevel !== null && setup.distanceToBslPct !== null) {
+      expect(Math.abs(setup.distanceToBslPct)).toBeLessThan(100);
+    }
   });
 });
 
