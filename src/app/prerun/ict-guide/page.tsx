@@ -220,8 +220,17 @@ export default function ICTGuidePage() {
           </p>
           <p className="text-[#888]">
             Note this is a different measurement from Retrace Depth. Depth grades how far into
-            the <em>gap</em> price traded; entry quality grades where the setup sits in the
-            <em> whole leg</em>. A setup can be mid-gap and still be in premium.
+            the <em>gap</em> price traded; entry quality grades where in the{" "}
+            <em>whole leg</em> the entry sat. A setup can be mid-gap and still be in premium.
+          </p>
+          <p className="rounded border border-[#2a2a2a] bg-[#141414] px-3 py-2 text-[#888]">
+            <strong className="text-white">The badge and the score read different moments.</strong>{" "}
+            OTE / Disc / Prem describe where price is <em>right now</em>. The Entry score grades
+            the deepest discount the setup offered since structure shifted. They diverge on
+            purpose: an armed setup has compressed to within 3% of its draw, so it is in premium
+            by construction — scoring it on current position would zero out every state this page
+            exists to surface. A <code className="rounded bg-[#1a1a1a] px-1">Prem</code> badge
+            beside a high Entry score means the discount entry has already gone.
           </p>
         </Section>
 
