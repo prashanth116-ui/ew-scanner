@@ -59,7 +59,7 @@ const LADDER: [string, string, string][] = [
 const COMPONENTS: [string, number, string][] = [
   ["State", 12, "Progression along the ladder. Deliberately a minority of the score — every other component is already gated on reaching a state, so a tall state weight charges twice for the same evidence."],
   ["Displacement", 14, "How far the displacement body exceeded the three bodies before it."],
-  ["Entry (P/D + OTE)", 14, "Where price sits in the dealing range. Full marks inside the 0.62-0.79 OTE band, most of the marks anywhere in discount, near zero in premium."],
+  ["Entry (P/D + OTE)", 14, "Where in the dealing range the entry the setup OFFERED sat — the deepest discount reached since structure shifted, not where price is now. Full marks inside the 0.62-0.79 OTE band, most of the marks anywhere in discount, near zero if it never pulled back."],
   ["FVG Quality", 10, "Gap size as a percentage of price. Bigger imbalance, stronger void."],
   ["BSL Cluster", 10, "How many equal highs rest at the draw. Discounted heavily if price has already cleared it."],
   ["Compression", 10, "Consecutive higher lows and contracting ranges, measured at the bar the setup reached its current state — not at today's unrelated tail."],
