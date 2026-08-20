@@ -179,6 +179,8 @@ Inputs: ES=F, NQ=F, YM=F, RTY=F, VIX, sector breadth.
 ### Crypto Rotation
 Mirrors equity sector rotation for crypto. Adapted quality gates from `CRYPTO_QUALITY_GATES` in config (lower thresholds, `MAX_EXTENSION_PCT: 200`). Reuses equity classification/conviction. Null mcap rejection aligned with equity.
 
+**Canonical basket is pinned**, same as equity. `CRYPTO_PRIMARY_SECTOR` in `crypto-sector-universe.ts` maps each of the 9 tokens listed in 2+ of the 10 baskets to its canonical id; `findUnpinnedContestedCrypto()` plus `crypto-sector-universe.test.ts` fail the build on an unpinned overlap. Tie-break, in order: **(1) a basket's proxy token — its `etf` — is pinned to that basket**, since benchmarking a basket against a token scored elsewhere is incoherent; (2) otherwise the narrative that drives the price. Unlike equity, crypto emits **one row per token** — `crypto-rotation.ts` skips non-canonical baskets outright, so `isCanonicalSector` is always true there and there is no per-basket picks view to preserve.
+
 ## Patterns & Conventions
 
 ### Centralized Config Pattern

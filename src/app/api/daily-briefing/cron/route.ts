@@ -646,7 +646,9 @@ export async function GET(request: NextRequest) {
     // 9. Collect top picks from enriched stocks
     const topPicks: { symbol: string; acceleration: number; category: string; conviction: string }[] = [];
     if (sectorResult?.enrichedStocks?.passed) {
-      const convictionOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+      // ConvictionLevel is HIGH | MEDIUM | WATCH; the filter below admits only
+      // the first two, so WATCH is here purely to make the map total.
+      const convictionOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
       const sorted = [...sectorResult.enrichedStocks.passed]
         // One row per basket a symbol is listed in, all sharing the same
         // stock-level rsAccel — without this filter a triple-listed name sorts

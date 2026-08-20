@@ -10,7 +10,7 @@
 import "server-only";
 
 import { fetchYahooChart, calcSMA, fetchBatchQuotes } from "@/lib/prerun/data";
-import { CRYPTO_UNIVERSE, CRYPTO_BENCHMARK, getAllCryptoSymbols } from "@/data/crypto-sector-universe";
+import { CRYPTO_UNIVERSE, CRYPTO_BENCHMARK, getAllCryptoSymbols, getCryptoSectorForSymbol } from "@/data/crypto-sector-universe";
 import { mergeWithDiscovered } from "@/lib/discovery/merge";
 import type { SectorRotationScore, RRGQuadrant } from "../sector-rotation/types";
 import type { StockInput } from "../sector-rotation/stock-enrichment";
@@ -315,7 +315,6 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
   const rawRoc20dLookup = new Map(rawScores.map((r) => [r.displayName, r.roc20d]));
 
   const stockInputs: StockInput[] = [];
-  const seenTokens = new Set<string>();
   for (const sectorDef of CRYPTO_UNIVERSE) {
     const scored = sectorLookup.get(sectorDef.displayName);
     if (!scored) continue;
@@ -323,9 +322,11 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
     const sectorAccel = rawAccelLookup.get(sectorDef.displayName) ?? 0;
 
     for (const token of sectorDef.stocks) {
-      // Deduplicate: tokens appearing in multiple sectors use first sector only
-      if (seenTokens.has(token.symbol)) continue;
-      seenTokens.add(token.symbol);
+      // One row per token, emitted from its canonical basket. Previously this
+      // deduped to whichever basket CRYPTO_UNIVERSE happened to declare first,
+      // so reordering the file silently rescored 9 of the 69 tokens against a
+      // different quadrant/composite. CRYPTO_PRIMARY_SECTOR decides it now.
+      if (getCryptoSectorForSymbol(token.symbol) !== sectorDef.displayName) continue;
 
       const q = batchQuotes.get(token.symbol);
       if (!q || q.price <= 0) continue;
@@ -334,8 +335,7 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
         symbol: token.symbol,
         shortName: token.name,
         sector: sectorDef.displayName,
-        // seenTokens above already collapses multi-listed tokens to their first
-        // basket, so every crypto row is the only row for its symbol.
+        // The canonical-basket guard above emits exactly one row per token.
         isCanonicalSector: true,
         sectorEtf: sectorDef.etf,
         price: q.price,

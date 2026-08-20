@@ -179,16 +179,76 @@ export const CRYPTO_UNIVERSE: SectorDefinition[] = [
   },
 ];
 
+// ── Canonical sector ──
+
+/**
+ * Canonical basket for every token listed in 2+ baskets.
+ *
+ * Mirrors PRIMARY_SECTOR in sector-universe.ts and exists for the same reason:
+ * a token's canonical basket decides which quadrant, composite, acceleration
+ * and stealth read scores it, and leaving that to declaration order means
+ * reordering CRYPTO_UNIVERSE silently rescores tokens. `findUnpinnedContestedCrypto()`
+ * returns any overlap missing an entry here, and crypto-sector-universe.test.ts
+ * fails the build when that list is non-empty.
+ *
+ * Rule of thumb, in order:
+ *   1. A basket's proxy token (its `etf`) is pinned to that basket. Benchmarking
+ *      a basket against a token scored under a different basket is incoherent.
+ *   2. Otherwise, the basket whose narrative actually drives the token's price.
+ *
+ * Uncontested tokens are omitted — they resolve to their only basket.
+ */
+export const CRYPTO_PRIMARY_SECTOR: Record<string, string> = {
+  // Proxy tokens — rule 1.
+  "RENDER-USD": "ai-compute", // proxy of ai-compute (also listed in depin)
+  "LINK-USD": "infra",        // proxy of infra (also listed in rwa)
+  "FIL-USD": "depin",         // proxy of depin (also listed in infra)
+  "IMX-USD": "gaming",        // proxy of gaming (also listed in layer-2)
+
+  // Narrative calls — rule 2.
+  "AKT-USD": "ai-compute",    // GPU leasing for AI, not generic physical infra
+  "AR-USD": "depin",          // permanent storage runs on operator hardware
+  "GRT6719-USD": "infra",     // indexing/query — named in the infra description
+  "MKR-USD": "defi",          // RWA-backed balance sheet, but trades as DeFi
+  "PENDLE-USD": "defi",       // yield tokenization is a DeFi primitive
+};
+
 // ── Lookup helpers ──
 
+// Pinned tokens take their declared basket; everything else resolves to its only
+// basket (or, defensively, the first basket that lists it).
 const _symbolToSector = new Map<string, SectorDefinition>();
 for (const sector of CRYPTO_UNIVERSE) {
   for (const stock of sector.stocks) {
-    // First mapping wins (some tokens appear in multiple sectors)
-    if (!_symbolToSector.has(stock.symbol)) {
+    const pinned = CRYPTO_PRIMARY_SECTOR[stock.symbol];
+    if (pinned !== undefined) {
+      if (pinned === sector.id) _symbolToSector.set(stock.symbol, sector);
+    } else if (!_symbolToSector.has(stock.symbol)) {
       _symbolToSector.set(stock.symbol, sector);
     }
   }
+}
+
+/**
+ * Tokens listed in 2+ baskets with no CRYPTO_PRIMARY_SECTOR entry.
+ * Non-empty means declaration order is deciding a canonical basket — pin it.
+ */
+export function findUnpinnedContestedCrypto(): { symbol: string; sectors: string[] }[] {
+  const seen = new Map<string, string[]>();
+  for (const sector of CRYPTO_UNIVERSE) {
+    for (const stock of sector.stocks) {
+      const list = seen.get(stock.symbol);
+      if (list) list.push(sector.id);
+      else seen.set(stock.symbol, [sector.id]);
+    }
+  }
+  const unpinned: { symbol: string; sectors: string[] }[] = [];
+  for (const [symbol, sectors] of seen) {
+    if (sectors.length > 1 && CRYPTO_PRIMARY_SECTOR[symbol] === undefined) {
+      unpinned.push({ symbol, sectors });
+    }
+  }
+  return unpinned.sort((a, b) => a.symbol.localeCompare(b.symbol));
 }
 
 export function getCryptoSectorForSymbol(symbol: string): string {

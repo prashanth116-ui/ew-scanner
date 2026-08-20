@@ -50,3 +50,9 @@ __pycache__/
 
 # windows artifacts
 nul
+
+# claude code session transcripts (dated dumps at repo root)
+/????-??-??-*.txt
+
+# local debug dumps, incl. windows-flattened absolute paths
+*alert-debug.json
