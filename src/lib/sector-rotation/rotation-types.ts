@@ -47,6 +47,20 @@ export interface RotationStockPerformance {
   dailyChangePct: number; // today's % change from regularMarketChangePercent
   isTurnaroundCandidate: boolean; // lagging stock with positive RS acceleration + volume
   daysToEarnings: number | null; // enriched client-side from prerun scan
+  /**
+   * Which scanners also flagged this name tonight, e.g. [{scanner:"Trans", detail:"READY"}].
+   *
+   * Attached by /api/rotation-tracker so the page can show the same cross-scanner
+   * confluence the Telegram alert shows. It was previously built only inside the alert
+   * routes, which meant the most useful part of that message existed nowhere in the UI.
+   * Absent when the scanner tables could not be read — that is a missing read, not an
+   * absence of hits, so consumers must not render it as "no scanners".
+   */
+  scannerHits?: { scanner: string; detail: string }[];
+  /** Sector-enrichment conviction (HIGH / MEDIUM / WATCH), merged client-side from the
+   *  /api/sector-rotation response the page already fetches. Absent for names outside
+   *  the enrichment universe — it gates on mcap >= $10B, so most small caps have none. */
+  enrichedConviction?: string;
   nextEarningsDate: string | null; // enriched client-side from prerun scan
   rs20d: number | null; // enriched client-side from prerun scan (relativeStrength20d)
   rsAccelPrior: number; // Sector RS 5 days ago (same formula, shifted window)

@@ -584,6 +584,50 @@ function participation(
   return { breadth: breadthPct ?? null, median };
 }
 
+/**
+ * Cross-scanner hits and enrichment conviction — the part of the Telegram confluence
+ * alert that previously existed nowhere in the UI.
+ *
+ * Colour is by scanner, not by strength, so the eye groups by source. Strength lives in
+ * the detail text (READY vs TRIGGERED), which is what actually differs between rows.
+ */
+const SCANNER_TONE: Record<string, string> = {
+  Setup: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+  Inflect: "bg-violet-500/15 text-violet-300 border-violet-500/30",
+  Trans: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  Inst: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+};
+
+function ScannerBadges({ hits }: { hits?: { scanner: string; detail: string }[] }) {
+  if (!hits?.length) return <span className="text-[#444]">—</span>;
+  return (
+    <span className="flex flex-wrap justify-center gap-0.5">
+      {/* Two or more independent scanners is the signal worth catching at a glance;
+          the alert marks it with a star and so does this. */}
+      {hits.length >= 2 && <span title="Multiple scanners agree" className="text-amber-400">★</span>}
+      {hits.map((h) => (
+        <span
+          key={`${h.scanner}-${h.detail}`}
+          title={`${h.scanner}: ${h.detail}`}
+          className={`rounded border px-1 py-px text-[9px] font-medium whitespace-nowrap ${
+            SCANNER_TONE[h.scanner] ?? "bg-[#1a1a1a] text-[#999] border-[#333]"
+          }`}
+        >
+          {h.scanner}:{h.detail}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function ConvictionCell({ level }: { level?: string }) {
+  if (!level) return <span className="text-[#444]">—</span>;
+  const tone = level === "HIGH" ? "text-green-400"
+    : level === "MEDIUM" ? "text-amber-400"
+      : "text-[#888]";
+  return <span className={`text-[10px] font-semibold ${tone}`}>{level}</span>;
+}
+
 function ActiveRotationCards({
   rotations,
   onExpand,
@@ -1227,6 +1271,12 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("finalScore")} aria-sort={stockAriaSort("finalScore")} title="Pre-run scan score (0-41)">
               Score<SortArrow col="finalScore" />
             </th>
+            <th className="px-1.5 py-1.5 text-center" title="Which other scanners flagged this name tonight">
+              Scanners
+            </th>
+            <th className="px-1.5 py-1.5 text-center" title="Sector-enrichment conviction: 6 weighted signals plus a phase penalty">
+              Conv
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -1313,6 +1363,8 @@ function StockPerformanceTable({
                   ) : <span className="text-[#444]">-</span>}
                 </td>
                 <td className="px-1.5 py-1.5 text-right text-[#666]">{s.finalScore != null && s.finalScore > 0 ? s.finalScore : "-"}</td>
+                <td className="px-1.5 py-1.5 text-center"><ScannerBadges hits={s.scannerHits} /></td>
+                <td className="px-1.5 py-1.5 text-center"><ConvictionCell level={s.enrichedConviction} /></td>
               </tr>
             );
           })}
@@ -2123,6 +2175,7 @@ export default function RotationTrackerPage() {
   const [expandedSector, setExpandedSector] = useState<string | null>(null);
   const [showAllSectors, setShowAllSectors] = useState(false);
   const [heatmapSectors, setHeatmapSectors] = useState<SectorRotationScore[] | null>(null);
+  const [enrichedStocks, setEnrichedStocks] = useState<{ symbol: string; conviction: string }[]>([]);
   const [prerunServerMap, setPrerunServerMap] = useState<Map<string, { verdict: string; score: number; daysToEarnings: number | null; nextEarningsDate: string | null; rs20d: number | null }>>(new Map());
   const [collapsedPanels, togglePanel] = useCollapsedPanels("ew-rotation-collapsed-v1", ["timeline", "pattern-stats", "recently-ended"]);
   const consecutiveFailures = useRef(0);
@@ -2183,6 +2236,9 @@ export default function RotationTrackerPage() {
       if (!res.ok) return;
       const result = await res.json();
       if (result.sectors) setHeatmapSectors(result.sectors);
+      // The same response already carries enrichment. Keeping it costs nothing and
+      // saves a second request for the conviction column.
+      if (result.enrichedStocks?.passed) setEnrichedStocks(result.enrichedStocks.passed);
     } catch {
       // Non-critical — heatmap is supplementary
     }
@@ -2204,17 +2260,21 @@ export default function RotationTrackerPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Enrich stocks with earnings + verdict + score data from prerun scan
+  // Enrich stocks with earnings + verdict + score data from prerun scan, and with
+  // sector-enrichment conviction from the rotation response.
   const enrichedData = useMemo(() => {
     if (!data) return null;
     const scanResults = loadScanResults();
+    const convictionByTicker = new Map(enrichedStocks.map((e) => [e.symbol, e.conviction]));
 
     const scanByTicker = new Map<string, (typeof scanResults)[number]>();
     for (const r of scanResults) { if (r.data?.ticker) scanByTicker.set(r.data.ticker, r); }
 
     const hasLocalData = scanByTicker.size > 0;
     const hasServerData = prerunServerMap.size > 0;
-    if (!hasLocalData && !hasServerData) return data;
+    // Conviction alone is worth a pass — bailing here on an empty prerun scan used to
+    // drop it silently.
+    if (!hasLocalData && !hasServerData && convictionByTicker.size === 0) return data;
 
     return {
       ...data,
@@ -2223,9 +2283,11 @@ export default function RotationTrackerPage() {
         stocks: rotation.stocks.map((s) => {
           const preRun = scanByTicker.get(s.symbol);
           const serverData = prerunServerMap.get(s.symbol);
-          if (!preRun && !serverData) return s;
+          const conviction = convictionByTicker.get(s.symbol);
+          if (!preRun && !serverData) return conviction ? { ...s, enrichedConviction: conviction } : s;
           return {
             ...s,
+            enrichedConviction: conviction,
             daysToEarnings: preRun?.data.daysToEarnings ?? serverData?.daysToEarnings ?? s.daysToEarnings,
             nextEarningsDate: preRun?.data.nextEarningsDate ?? serverData?.nextEarningsDate ?? s.nextEarningsDate,
             rs20d: s.rs20d ?? preRun?.data.relativeStrength20d ?? serverData?.rs20d ?? null,
@@ -2235,7 +2297,7 @@ export default function RotationTrackerPage() {
         }),
       })),
     };
-  }, [data, prerunServerMap]);
+  }, [data, prerunServerMap, enrichedStocks]);
 
   // Find expanded rotation detail
   const expandedDetail = useMemo(() => {
