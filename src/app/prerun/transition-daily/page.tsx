@@ -509,6 +509,8 @@ export default function TransitionDailyPage() {
           // Build enrichment map from enrichedStocks.passed
           const eMap = new Map<string, { phase: string; rsAccel: number | null; category: string; volRatio: number; conviction: string; sectorQuadrant: string }>();
           for (const s of sectorJson.enrichedStocks?.passed ?? []) {
+            // Multi-listed symbols emit one row per basket; keep the canonical one.
+            if (s.isCanonicalSector === false) continue;
             eMap.set(s.symbol, {
               phase: s.phase,
               rsAccel: s.rsAccel ?? null,

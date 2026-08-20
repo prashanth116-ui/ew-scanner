@@ -2238,7 +2238,13 @@ export default function RotationTrackerPage() {
       if (result.sectors) setHeatmapSectors(result.sectors);
       // The same response already carries enrichment. Keeping it costs nothing and
       // saves a second request for the conviction column.
-      if (result.enrichedStocks?.passed) setEnrichedStocks(result.enrichedStocks.passed);
+      if (result.enrichedStocks?.passed) {
+        // Keyed by symbol below — keep only the canonical-sector row per symbol.
+        setEnrichedStocks(
+          (result.enrichedStocks.passed as { symbol: string; conviction: string; isCanonicalSector?: boolean }[])
+            .filter((s) => s.isCanonicalSector !== false),
+        );
+      }
     } catch {
       // Non-critical — heatmap is supplementary
     }

@@ -35,6 +35,15 @@ export interface StockInput {
   sectorComposite: number;
   sectorAcceleration: number;
   sectorStealth: boolean;
+  /**
+   * True when `sector` is the symbol's canonical sector (its PRIMARY_SECTOR pin).
+   *
+   * A symbol listed in N baskets produces N rows here, one per basket, each
+   * carrying that basket's quadrant/composite/acceleration/stealth. That is
+   * deliberate — ORCL scored against IGV and against AIQ are different reads.
+   * Consumers that key by symbol must pick one, and this is which one.
+   */
+  isCanonicalSector: boolean;
 }
 
 // ── Derived helpers ──
@@ -401,6 +410,7 @@ export function enrichStocks(stocks: StockInput[]): {
       sectorQuadrant: s.sectorQuadrant,
       sectorComposite: s.sectorComposite,
       sectorStealth: s.sectorStealth,
+      isCanonicalSector: s.isCanonicalSector,
       ...(dataWarnings.length > 0 ? { dataWarnings } : {}),
     };
   });

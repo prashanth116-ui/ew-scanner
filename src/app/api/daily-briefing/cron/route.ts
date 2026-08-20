@@ -648,6 +648,10 @@ export async function GET(request: NextRequest) {
     if (sectorResult?.enrichedStocks?.passed) {
       const convictionOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
       const sorted = [...sectorResult.enrichedStocks.passed]
+        // One row per basket a symbol is listed in, all sharing the same
+        // stock-level rsAccel — without this filter a triple-listed name sorts
+        // adjacently and eats three of the five slots below.
+        .filter((s) => s.isCanonicalSector !== false)
         .filter((s) => s.conviction === "HIGH" || s.conviction === "MEDIUM")
         .sort((a, b) => {
           const tierDiff = (convictionOrder[a.conviction] ?? 99) - (convictionOrder[b.conviction] ?? 99);

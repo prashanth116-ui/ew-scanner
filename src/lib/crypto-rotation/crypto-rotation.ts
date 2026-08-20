@@ -334,6 +334,9 @@ export async function calculateCryptoRotation(): Promise<CryptoRotationResult> {
         symbol: token.symbol,
         shortName: token.name,
         sector: sectorDef.displayName,
+        // seenTokens above already collapses multi-listed tokens to their first
+        // basket, so every crypto row is the only row for its symbol.
+        isCanonicalSector: true,
         sectorEtf: sectorDef.etf,
         price: q.price,
         sma50: q.sma50,

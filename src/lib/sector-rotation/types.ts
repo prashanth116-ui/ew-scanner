@@ -88,6 +88,12 @@ export interface EnrichedStock {
   sectorQuadrant: RRGQuadrant;
   sectorComposite: number;
   sectorStealth: boolean;
+  /**
+   * True when `sector` is this symbol's canonical sector (PRIMARY_SECTOR pin).
+   * Multi-listed symbols emit one row per basket; symbol-keyed consumers must
+   * filter on this or they silently collapse to whichever row sorted last.
+   */
+  isCanonicalSector: boolean;
   inActiveRotation?: boolean;
   rotationPerfPct?: number | null;
   /** Quality gates bypassed due to null data (e.g. "marketCap_null", "institutional_null") */

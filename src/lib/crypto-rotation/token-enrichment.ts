@@ -159,6 +159,7 @@ export function enrichCryptoTokens(
       sectorQuadrant: s.sectorQuadrant,
       sectorComposite: s.sectorComposite,
       sectorStealth: s.sectorStealth,
+      isCanonicalSector: s.isCanonicalSector,
     };
   });
 

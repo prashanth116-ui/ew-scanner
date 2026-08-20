@@ -690,6 +690,7 @@ export async function calculateSectorRotation(
         sectorComposite: scored.compositeScore,
         sectorAcceleration: sectorAccel,
         sectorStealth: scored.stealthAccumulation,
+        isCanonicalSector: getSectorForSymbol(stock.symbol) === sectorDef.displayName,
       });
     }
   }

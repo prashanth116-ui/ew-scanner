@@ -49,13 +49,25 @@ export function buildScannerHitMap(
   return map;
 }
 
-/** Build ticker → { conviction, category } lookup from enriched sector rotation stocks. */
+/**
+ * Build ticker → { conviction, category } lookup from enriched sector rotation stocks.
+ *
+ * `passed` carries one row per basket a symbol is listed in (105 of 594 symbols
+ * sit in 2+), and it arrives sorted HIGH → MEDIUM → WATCH. Collapsing it into a
+ * symbol-keyed map without filtering therefore kept the *last* row — the weakest
+ * conviction read of that symbol. Keep the canonical-sector row instead, so this
+ * agrees with PRIMARY_SECTOR and with the `sector` column on every scanner row.
+ *
+ * Rows without the flag (crypto, snapshots persisted before it existed) are
+ * treated as canonical — those paths dedupe upstream.
+ */
 export function buildEnrichedMap(
-  enrichedStocks?: { passed?: { symbol: string; conviction: string; category: string }[] },
+  enrichedStocks?: { passed?: { symbol: string; conviction: string; category: string; isCanonicalSector?: boolean }[] },
 ): Map<string, { conviction: string; category: string }> {
   const map = new Map<string, { conviction: string; category: string }>();
   if (enrichedStocks?.passed) {
     for (const s of enrichedStocks.passed) {
+      if (s.isCanonicalSector === false) continue;
       map.set(s.symbol, { conviction: s.conviction, category: s.category });
     }
   }
