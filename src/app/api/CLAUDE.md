@@ -66,8 +66,9 @@ Pre-filters: `dailyChangePct < 8%` + AVOID excluded. Per-category cap 8, combine
 | `QFE` | QFE | Badge only |
 | `VCP` | VCP | Badge only |
 | `Setup4h` | PreRun 4h | Badge only |
+| `ICT` | ICT pre-expansion | Badge only. BSL_BUILT+ (state >= 8) and `htf_bias !== COUNTER` |
 
-**Confluence rules:** 5 scanners counted (Setup, Inflect, Trans, Inst, Rot). QFE/VCP/Setup4h excluded. INF WATCH badge-only, INF AVOID excluded entirely. `finalScore > 0` required for persistence. 4h-ONLY section: tickers on 4h but NOT daily Setup.
+**Confluence rules:** 5 scanners counted (Setup, Inflect, Trans, Inst, Rot). QFE/VCP/Setup4h/ICT excluded. ICT rows at `htf_bias === "COUNTER"` are dropped before badging — the engine is bullish-only, so a setup with no bullish structure on either swing timeframe is the read most likely to be wrong, and a badge in the alert reads as confirmation. The label carries reward-to-risk and a `stale` marker past 10 bars. INF WATCH badge-only, INF AVOID excluded entirely. `finalScore > 0` required for persistence. 4h-ONLY section: tickers on 4h but NOT daily Setup.
 
 **Correlated pair discount:** Inflect + Trans on the same ticker counts as **1.5**, not 2 (`CORRELATED_PAIR_DISCOUNT`). Transition's seller-exhaustion component reads the same four inputs as Inflection's, and its volume profile overlaps Inflection's buyer emergence on three more — so a hit from both is not two independent confirmations. Same mechanism as the existing 0.5 weight for INF WATCH; tier is `Math.floor(independentCount)`.
 

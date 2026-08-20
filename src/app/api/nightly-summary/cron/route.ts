@@ -292,10 +292,16 @@ function consolidateResults(
   const qfeMap = new Map<string, string>();
   for (const r of qfe) qfeMap.set(r.ticker, r.rating);
 
-  // ICT lookup (badge only, not counted for confluence)
+  // ICT lookup (badge only, not counted for confluence).
+  //
+  // COUNTER-bias rows are dropped rather than badged. The engine is bullish-only,
+  // so a setup with no bullish structure on either swing timeframe is the one read
+  // most likely to be wrong, and a badge in the alert reads as confirmation.
   const ictMap = new Map<string, ICTDailyRecord>();
   for (const r of ict) {
-    if (r.best_state_order >= 8) ictMap.set(r.ticker, r); // BSL_BUILT+ only (states 8-11)
+    if (r.best_state_order < 8) continue; // BSL_BUILT+ only (states 8-11)
+    if (r.htf_bias === "COUNTER") continue;
+    ictMap.set(r.ticker, r);
   }
 
   // RS acceleration lookup
@@ -342,7 +348,13 @@ function consolidateResults(
     // ICT badge (not counted for confluence — separate price-action engine)
     const ictRec = ictMap.get(ticker);
     if (ictRec) {
-      hits.push({ scanner: "ICT", label: `ICT ${ictRec.best_state} ${ictRec.best_score}`, score: 0 });
+      const rr = ictRec.risk_reward != null ? ` ${ictRec.risk_reward.toFixed(1)}R` : "";
+      const stale = ictRec.state_bars_ago != null && ictRec.state_bars_ago > 10 ? " stale" : "";
+      hits.push({
+        scanner: "ICT",
+        label: `ICT ${ictRec.best_state} ${ictRec.best_score}${rr}${stale}`,
+        score: 0,
+      });
     }
 
     const NON_CONFLUENCE = new Set(["QFE", "VCP", "Setup4h", "ICT"]);

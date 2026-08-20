@@ -1,15 +1,26 @@
 /**
  * ICT Quality Score (0-100) from price-action components only.
  * No lagging indicators — purely derived from engine output and raw OHLC.
+ *
+ * Ten components, budgeted so that progression along the state ladder is a
+ * minority of the score. Every component below State is already gated on
+ * reaching a state, so a 30-point state ladder was charging twice for the same
+ * evidence and made `score` a near-restatement of `state_order` — the two
+ * columns the page presents as independent readings.
  */
 
-import { SCORING, CHASE, DISPLACEMENT } from "./config";
+import { SCORING, CHASE, DISPLACEMENT, RANGE, BAR_BUDGETS, DEFAULT_BAR_BUDGET } from "./config";
+import type { Timeframe } from "./config";
 import { ICTState } from "./types";
 import type { ICTSetup, ICTScore, ICTScoreComponents } from "./types";
 
 /**
  * Compute the quality score for an ICT setup.
  * All components are price-action only — no moving averages or oscillators.
+ *
+ * `timeframe` selects the bar budgets for coherence and recency: 20 bars is
+ * three days of 4h and five months of weekly, so a single constant cannot mean
+ * the same thing across the set.
  */
 export function scoreICTSetup(
   setup: ICTSetup,
@@ -17,18 +28,22 @@ export function scoreICTSetup(
   highs: number[],
   lows: number[],
   closes: number[],
+  timeframe: Timeframe | string = "4h",
 ): ICTScore {
-  const components = computeComponents(setup, opens, highs, lows, closes);
+  const budget = BAR_BUDGETS[timeframe] ?? DEFAULT_BAR_BUDGET;
+  const components = computeComponents(setup, opens, highs, lows, closes, budget);
 
   const total = Math.min(100, Math.round(
     components.stateScore +
     components.displacementQuality +
     components.fvgQuality +
     components.retracementDepth +
+    components.entryQuality +
     components.bslQuality +
     components.compressionQuality +
     components.structureCoherence +
-    components.invalidationDistance
+    components.invalidationDistance +
+    components.recency
   ));
 
   const isChasing = detectChasing(setup, opens, highs, lows, closes);
@@ -37,36 +52,40 @@ export function scoreICTSetup(
   return { total, components, isChasing, isLateEntry };
 }
 
+type BarBudget = typeof DEFAULT_BAR_BUDGET;
+
 function computeComponents(
   setup: ICTSetup,
   opens: number[],
   highs: number[],
   lows: number[],
   closes: number[],
+  budget: BarBudget,
 ): ICTScoreComponents {
   return {
     stateScore: scoreState(setup),
     displacementQuality: scoreDisplacement(setup, opens, highs, lows, closes),
     fvgQuality: scoreFVG(setup, closes),
     retracementDepth: scoreRetracement(setup),
+    entryQuality: scoreEntryQuality(setup),
     bslQuality: scoreBSL(setup),
     compressionQuality: scoreCompression(setup, highs, lows),
-    structureCoherence: scoreCoherence(setup),
+    structureCoherence: scoreCoherence(setup, budget),
     invalidationDistance: scoreInvalidationDistance(setup, closes),
+    recency: scoreRecency(setup, budget),
   };
 }
 
 // ── Component Scoring Functions ──
 
-/** State Score (0-30): Linear from state order. */
+/** State Score: linear from state order. */
 function scoreState(setup: ICTSetup): number {
   if (setup.currentState === ICTState.NONE) return 0;
-  // ICTState values range 1-11, normalize to 0-30
-  return Math.round((setup.currentState / 11) * SCORING.STATE_MAX);
+  return Math.round((setup.currentState / ICTState.IGNITION) * SCORING.STATE_MAX);
 }
 
 /**
- * Displacement Quality (0-15): How much the displacement body exceeds prior bodies.
+ * Displacement Quality: how much the displacement body exceeds prior bodies.
  * Finds the displacement transition and compares body size ratios.
  */
 function scoreDisplacement(
@@ -78,7 +97,6 @@ function scoreDisplacement(
 ): number {
   if (setup.currentState < ICTState.BULLISH_DISPLACEMENT) return 0;
 
-  // Find the displacement bar from transitions
   const dispTransition = setup.transitions.find(
     (t) => t.toState === ICTState.BULLISH_DISPLACEMENT
   );
@@ -91,7 +109,6 @@ function scoreDisplacement(
   const range = highs[i] - lows[i];
   if (range <= 0) return 0;
 
-  // Average ratio of body to previous bodies
   let totalRatio = 0;
   for (let j = 1; j <= DISPLACEMENT.COMPARISON_BARS; j++) {
     const prevBody = Math.abs(closes[i - j] - opens[i - j]);
@@ -105,11 +122,11 @@ function scoreDisplacement(
 
   // Scale: ratio of 1.5 = half score, ratio of 3+ = full score
   const normalized = Math.min(1, (avgRatio - 1) / 2);
-  return Math.round(normalized * SCORING.DISPLACEMENT_QUALITY_MAX);
+  return Math.round(Math.max(0, normalized) * SCORING.DISPLACEMENT_QUALITY_MAX);
 }
 
 /**
- * FVG Size Quality (0-10): FVG gap as % of price.
+ * FVG Size Quality: FVG gap as % of price.
  * Larger gaps represent stronger liquidity voids.
  */
 function scoreFVG(setup: ICTSetup, closes: number[]): number {
@@ -127,8 +144,12 @@ function scoreFVG(setup: ICTSetup, closes: number[]): number {
 }
 
 /**
- * Retracement Depth (0-10): How deep into FVG zone.
- * 50-75% is optimal (Goldilocks zone). Shallower or overshoot penalized.
+ * Retracement Depth: how deep into the FVG zone price traded.
+ * 50-75% is the goldilocks fill. Shallower or overshoot penalized.
+ *
+ * This grades the gap only. Where the setup sits in the LEG is scored
+ * separately by entry quality — the two are different scales and a setup can
+ * be mid-gap while the leg as a whole is in premium.
  */
 function scoreRetracement(setup: ICTSetup): number {
   if (setup.retracementDepth === null || setup.currentState < ICTState.FVG_RETRACEMENT) return 0;
@@ -143,7 +164,6 @@ function scoreRetracement(setup: ICTSetup): number {
   } else if (depth < optMin) {
     normalized = depth / optMin; // Shallow — linear penalty
   } else {
-    // Overshoot — penalize beyond optimal max
     normalized = Math.max(0, 1 - (depth - optMax) / (1 - optMax));
   }
 
@@ -151,21 +171,57 @@ function scoreRetracement(setup: ICTSetup): number {
 }
 
 /**
- * BSL Cluster Quality (0-10): Count of clustered highs * tightness.
- * More clustered highs at similar levels = stronger BSL.
+ * Entry Quality: premium/discount position within the dealing range.
+ *
+ * Full marks inside the OTE band (0.62-0.79 retracement of the raid-low to
+ * range-high leg), most of the marks anywhere in discount, and close to
+ * nothing in premium. Without this the engine happily armed setups trading at
+ * the top of their own leg, which is the entry the framework exists to avoid.
+ */
+function scoreEntryQuality(setup: ICTSetup): number {
+  const range = setup.dealingRange;
+  if (!range || setup.currentState < ICTState.SSL_RAID) return 0;
+
+  const r = range.retracement;
+  const max = SCORING.ENTRY_QUALITY_MAX;
+
+  if (range.inOTE) return max;
+
+  if (r > RANGE.OTE_MAX) {
+    // Below OTE — deep discount. Safe, but the leg may be failing, so it does
+    // not earn the premium band's full marks.
+    const overshoot = (r - RANGE.OTE_MAX) / (1 - RANGE.OTE_MAX);
+    return Math.round(max * (0.85 - 0.35 * Math.min(1, overshoot)));
+  }
+
+  if (r >= RANGE.EQUILIBRIUM) {
+    // Discount but above OTE: ramp from 0.55 at equilibrium to 1.0 at OTE_MIN.
+    const t = (r - RANGE.EQUILIBRIUM) / (RANGE.OTE_MIN - RANGE.EQUILIBRIUM);
+    return Math.round(max * (0.55 + 0.45 * Math.min(1, Math.max(0, t))));
+  }
+
+  // Premium: decays to zero at the range high.
+  const t = r / RANGE.EQUILIBRIUM;
+  return Math.round(max * 0.5 * Math.min(1, Math.max(0, t)));
+}
+
+/**
+ * BSL Cluster Quality: count of clustered highs, discounted if already cleared.
  */
 function scoreBSL(setup: ICTSetup): number {
   if (setup.bslLevel === null || setup.currentState < ICTState.BSL_BUILT) return 0;
 
-  // Score based on cluster count (min 2 required to reach this state)
-  // 2 = base, 3 = good, 4+ = excellent
   const countScore = Math.min(1, (setup.bslClusterCount - 1) / 3);
-  return Math.round(countScore * SCORING.BSL_CLUSTER_QUALITY_MAX);
+  const clearedPenalty = setup.bslUnbroken ? 1 : 0.4;
+  return Math.round(countScore * clearedPenalty * SCORING.BSL_CLUSTER_QUALITY_MAX);
 }
 
 /**
- * Compression Quality (0-10): Consecutive higher lows + decreasing ranges.
- * No ATR — uses direct range comparisons.
+ * Compression Quality: consecutive higher lows + decreasing ranges, measured
+ * at the bar the setup reached its current state.
+ *
+ * Measuring from the end of the series scored a setup that armed twenty bars
+ * ago against today's unrelated tail.
  */
 function scoreCompression(
   setup: ICTSetup,
@@ -174,12 +230,12 @@ function scoreCompression(
 ): number {
   if (setup.currentState < ICTState.ARMED) return 0;
 
-  const n = highs.length;
+  const anchor = setup.stateBarIndex ?? highs.length - 1;
+  const end = Math.min(anchor, highs.length - 1);
   let consecutiveHL = 0;
   let contractingRanges = 0;
 
-  // Count consecutive higher lows from the end
-  for (let i = n - 1; i >= 1; i--) {
+  for (let i = end; i >= 1; i--) {
     if (lows[i] > lows[i - 1]) {
       consecutiveHL++;
       if (highs[i] - lows[i] < highs[i - 1] - lows[i - 1]) {
@@ -190,7 +246,6 @@ function scoreCompression(
     }
   }
 
-  // Score: 2 HL = base, 4+ = excellent. Contracting ranges add bonus.
   const hlScore = Math.min(1, consecutiveHL / 4);
   const contractScore = consecutiveHL > 0 ? contractingRanges / consecutiveHL : 0;
   const combined = hlScore * 0.6 + contractScore * 0.4;
@@ -199,33 +254,49 @@ function scoreCompression(
 }
 
 /**
- * Structure Coherence (0-10): Bars from SSL to current state.
- * Faster progression = more coherent setup.
+ * Structure Coherence: bars from SSL to the current state.
+ * Faster progression = more coherent setup. Budgets are per-timeframe.
  */
-function scoreCoherence(setup: ICTSetup): number {
+function scoreCoherence(setup: ICTSetup, budget: BarBudget): number {
   if (setup.sslBarIndex === null || setup.currentState < ICTState.SSL_RAID) return 0;
 
-  const barsElapsed = setup.barsProcessed - setup.sslBarIndex;
-  if (barsElapsed <= 0) return 0;
+  const anchor = setup.stateBarIndex ?? setup.barsProcessed - 1;
+  const barsElapsed = anchor - setup.sslBarIndex;
+  if (barsElapsed < 0) return 0;
 
-  const ideal = SCORING.COHERENCE_IDEAL_BARS;
-  const maxBars = SCORING.COHERENCE_MAX_BARS;
+  if (barsElapsed <= budget.coherenceIdeal) return SCORING.STRUCTURE_COHERENCE_MAX;
+  if (barsElapsed >= budget.coherenceMax) return 0;
 
-  if (barsElapsed <= ideal) {
-    return SCORING.STRUCTURE_COHERENCE_MAX;
-  }
-  if (barsElapsed >= maxBars) {
-    return 0;
-  }
-
-  // Linear decay between ideal and max
-  const ratio = 1 - (barsElapsed - ideal) / (maxBars - ideal);
+  const ratio = 1 - (barsElapsed - budget.coherenceIdeal) / (budget.coherenceMax - budget.coherenceIdeal);
   return Math.round(ratio * SCORING.STRUCTURE_COHERENCE_MAX);
 }
 
 /**
- * Invalidation Distance (0-5): % distance from current price to protected low.
- * Too tight = high risk, too far = less relevant.
+ * Recency: how long ago the reported state was actually reached.
+ *
+ * A state persists until it advances or invalidates, so "Armed" alone says
+ * nothing about whether the compression is live or six weeks stale. Without
+ * this the two are indistinguishable on a scanner whose entire premise is
+ * pre-expansion timing.
+ */
+function scoreRecency(setup: ICTSetup, budget: BarBudget): number {
+  if (setup.currentState === ICTState.NONE || setup.stateBarIndex === null) return 0;
+
+  const barsAgo = Math.max(0, setup.barsProcessed - 1 - setup.stateBarIndex);
+  if (barsAgo <= budget.recencyFresh) return SCORING.RECENCY_MAX;
+  if (barsAgo >= budget.recencyStale) return 0;
+
+  const ratio = 1 - (barsAgo - budget.recencyFresh) / (budget.recencyStale - budget.recencyFresh);
+  return Math.round(ratio * SCORING.RECENCY_MAX);
+}
+
+/**
+ * Invalidation Distance: % from current price to the protected low.
+ *
+ * A BAND, not a ramp. The previous version scored monotonically upward — the
+ * further the stop, the higher the score — which inverts the framework:
+ * precision is the edge, and a 12% stop is more risk for the same objective,
+ * not more safety. Below MIN the stop sits inside noise.
  */
 function scoreInvalidationDistance(setup: ICTSetup, closes: number[]): number {
   if (setup.protectedLow === null || setup.currentState < ICTState.SSL_RAID) return 0;
@@ -234,25 +305,33 @@ function scoreInvalidationDistance(setup: ICTSetup, closes: number[]): number {
   if (price <= 0) return 0;
 
   const distPct = ((price - setup.protectedLow) / price) * 100;
+  const max = SCORING.INVALIDATION_DISTANCE_MAX;
 
-  if (distPct >= SCORING.INVALIDATION_SAFE_PCT) {
-    return SCORING.INVALIDATION_DISTANCE_MAX;
-  }
-  if (distPct <= SCORING.INVALIDATION_DANGER_PCT) {
-    return 0;
+  if (distPct <= SCORING.INVALIDATION_MIN_PCT) return 0;
+  if (distPct >= SCORING.INVALIDATION_MAX_PCT) return 0;
+
+  if (distPct < SCORING.INVALIDATION_IDEAL_MIN) {
+    const ratio = (distPct - SCORING.INVALIDATION_MIN_PCT) /
+      (SCORING.INVALIDATION_IDEAL_MIN - SCORING.INVALIDATION_MIN_PCT);
+    return Math.round(ratio * max);
   }
 
-  // Linear scale between danger and safe
-  const ratio = (distPct - SCORING.INVALIDATION_DANGER_PCT) /
-    (SCORING.INVALIDATION_SAFE_PCT - SCORING.INVALIDATION_DANGER_PCT);
-  return Math.round(ratio * SCORING.INVALIDATION_DISTANCE_MAX);
+  if (distPct <= SCORING.INVALIDATION_IDEAL_MAX) return max;
+
+  const ratio = 1 - (distPct - SCORING.INVALIDATION_IDEAL_MAX) /
+    (SCORING.INVALIDATION_MAX_PCT - SCORING.INVALIDATION_IDEAL_MAX);
+  return Math.round(ratio * max);
 }
 
 // ── Chase Risk Detection ──
 
 /**
- * Detect if the current setup is a chase (multiple consecutive expansion candles).
- * Uses direct range comparisons — no ATR.
+ * Detect if the current setup is a chase (multiple consecutive expansion
+ * candles). Measured at the series end — chasing is a statement about now.
+ *
+ * Armed from ARMED rather than TRIGGER: a name that has already run five bars
+ * into its draw is a chase whether or not CISD has printed, and ARMED is where
+ * the decision is actually being made.
  */
 function detectChasing(
   setup: ICTSetup,
@@ -261,12 +340,11 @@ function detectChasing(
   lows: number[],
   closes: number[],
 ): boolean {
-  if (setup.currentState < ICTState.TRIGGER) return false;
+  if (setup.currentState < CHASE.MIN_STATE_FOR_FLAGS) return false;
 
   const n = closes.length;
   let expansionCount = 0;
 
-  // Count consecutive expansion candles from the end
   for (let i = n - 1; i >= 1; i--) {
     const range = highs[i] - lows[i];
     const prevRange = highs[i - 1] - lows[i - 1];
@@ -283,12 +361,15 @@ function detectChasing(
 }
 
 /**
- * Detect late entry based on distance from FVG and candles since trigger.
+ * Detect late entry based on distance from FVG, position in the dealing range,
+ * and candles since TRIGGER.
  */
 function detectLateEntry(setup: ICTSetup, closes: number[]): boolean {
-  if (setup.currentState < ICTState.TRIGGER) return false;
+  if (setup.currentState < CHASE.MIN_STATE_FOR_FLAGS) return false;
 
-  // Check distance from FVG zone
+  // Trading in premium, above the OTE band, is late by construction.
+  if (setup.dealingRange && setup.dealingRange.retracement < RANGE.EQUILIBRIUM * 0.5) return true;
+
   if (setup.fvgZone) {
     const price = closes[closes.length - 1];
     const fvgMid = (setup.fvgZone.upper + setup.fvgZone.lower) / 2;
@@ -296,7 +377,6 @@ function detectLateEntry(setup: ICTSetup, closes: number[]): boolean {
     if (distPct > CHASE.LATE_ENTRY_FVG_DISTANCE_PCT) return true;
   }
 
-  // Check candles since TRIGGER state
   const triggerTransition = setup.transitions.find(
     (t) => t.toState === ICTState.TRIGGER
   );

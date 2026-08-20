@@ -1,16 +1,22 @@
 /**
- * ICT Data Fetching — OHLC for 5 timeframes.
+ * ICT Data Fetching — OHLC for every scanned timeframe.
  * SERVER-ONLY: Used by /api/ict/* routes.
  *
- * 3 Yahoo API calls per ticker max:
- *   1. 2y:1h   → aggregated into 4h, 8h, 12h
- *   2. 3mo:1d  → native daily
+ * 3 Yahoo API calls per ticker:
+ *   1. 2y:1h   → native 1h, plus session-bucketed 4h
+ *   2. 1y:1d   → native daily
  *   3. 5y:1wk  → native weekly
+ *
+ * 8h and 12h are gone. A US equity RTH session is 6.5 hours, so neither candle
+ * exists without merging bars across days — which is exactly what the old
+ * index-based aggregation did, silently. Dropping them also removes one API
+ * call (the pre/post chart that only fed 12h).
  */
 
 import "server-only";
 
-import { fetchYahooChart, aggregate4hOHLC } from "@/lib/prerun/data";
+import { fetchYahooChart } from "@/lib/prerun/data";
+import { aggregateSessions } from "./aggregate";
 import type { Timeframe } from "./config";
 
 export interface OHLCData {
@@ -28,110 +34,59 @@ export interface MultiTFData {
   currentPrice: number | null;
 }
 
+/** Minimum bars before a timeframe is worth running the state machine on. */
+const MIN_BARS: Record<Timeframe, number> = {
+  "1h": 60,
+  "4h": 30,
+  "1d": 40,
+  "1wk": 30,
+};
+
 /**
- * Fetch OHLC data for all 5 timeframes.
+ * Fetch OHLC data for all timeframes.
  *
- * | Timeframe | Yahoo Call               | Aggregation              |
- * |-----------|--------------------------|--------------------------|
- * | 4h        | fetchYahooChart(t,"2y","1h")    | aggregate4hOHLC(…, 4)    |
- * | 8h        | same 1h chart (shared)          | aggregate4hOHLC(…, 8)    |
- * | 12h       | fetchYahooChart(t,"2y","1h",true)| aggregate4hOHLC(…, 12)  |
- * | 1d        | fetchYahooChart(t,"3mo","1d")   | none (native)            |
- * | 1wk       | fetchYahooChart(t,"5y","1wk")   | none (native)            |
+ * | Timeframe | Yahoo Call                     | Aggregation                  |
+ * |-----------|--------------------------------|------------------------------|
+ * | 1h        | fetchYahooChart(t,"2y","1h")   | none (native)                |
+ * | 4h        | same 1h chart (shared)         | aggregateSessions(…, 4)      |
+ * | 1d        | fetchYahooChart(t,"1y","1d")   | none (native)                |
+ * | 1wk       | fetchYahooChart(t,"5y","1wk")  | none (native)                |
  */
 export async function fetchICTData(ticker: string): Promise<MultiTFData> {
-  // Fire all 3 API calls in parallel
-  const [chart1h, chart1hPre, chart1d, chart1wk] = await Promise.all([
+  const [chart1h, chart1d, chart1wk] = await Promise.all([
     fetchYahooChart(ticker, "2y", "1h"),
-    fetchYahooChart(ticker, "2y", "1h", true),
-    fetchYahooChart(ticker, "3mo", "1d"),
+    // 1y rather than 3mo: the BSL draw scans a 40-bar window and the coherence
+    // budget runs to 45 daily bars, both of which a 63-bar chart truncates.
+    fetchYahooChart(ticker, "1y", "1d"),
     fetchYahooChart(ticker, "5y", "1wk"),
   ]);
 
   const currentPrice = chart1d?.closes?.[chart1d.closes.length - 1] ?? null;
 
-  // ── 4h and 8h from regular 1h chart ──
-  let tf4h: OHLCData | null = null;
-  let tf8h: OHLCData | null = null;
-
-  if (chart1h && chart1h.closes.length >= 8) {
-    const agg4 = aggregate4hOHLC(chart1h.opens, chart1h.highs, chart1h.lows, chart1h.closes, 4);
-    tf4h = {
-      opens: agg4.opens,
-      highs: agg4.highs,
-      lows: agg4.lows,
-      closes: agg4.closes,
-      timestamps: aggregateTimestamps(chart1h.timestamps, 4),
+  const take = (
+    chart: OHLCData | null | undefined,
+    tf: Timeframe,
+  ): OHLCData | null => {
+    if (!chart || chart.closes.length < MIN_BARS[tf]) return null;
+    return {
+      opens: chart.opens,
+      highs: chart.highs,
+      lows: chart.lows,
+      closes: chart.closes,
+      timestamps: chart.timestamps,
     };
+  };
 
-    const agg8 = aggregate4hOHLC(chart1h.opens, chart1h.highs, chart1h.lows, chart1h.closes, 8);
-    tf8h = {
-      opens: agg8.opens,
-      highs: agg8.highs,
-      lows: agg8.lows,
-      closes: agg8.closes,
-      timestamps: aggregateTimestamps(chart1h.timestamps, 8),
-    };
-  }
-
-  // ── 12h from pre/post 1h chart ──
-  let tf12h: OHLCData | null = null;
-  const source12h = chart1hPre ?? chart1h; // fallback to regular if pre/post fails
-  if (source12h && source12h.closes.length >= 12) {
-    const agg12 = aggregate4hOHLC(source12h.opens, source12h.highs, source12h.lows, source12h.closes, 12);
-    tf12h = {
-      opens: agg12.opens,
-      highs: agg12.highs,
-      lows: agg12.lows,
-      closes: agg12.closes,
-      timestamps: aggregateTimestamps(source12h.timestamps, 12),
-    };
-  }
-
-  // ── 1d native ──
-  let tf1d: OHLCData | null = null;
-  if (chart1d && chart1d.closes.length >= 15) {
-    tf1d = {
-      opens: chart1d.opens,
-      highs: chart1d.highs,
-      lows: chart1d.lows,
-      closes: chart1d.closes,
-      timestamps: chart1d.timestamps,
-    };
-  }
-
-  // ── 1wk native ──
-  let tf1wk: OHLCData | null = null;
-  if (chart1wk && chart1wk.closes.length >= 15) {
-    tf1wk = {
-      opens: chart1wk.opens,
-      highs: chart1wk.highs,
-      lows: chart1wk.lows,
-      closes: chart1wk.closes,
-      timestamps: chart1wk.timestamps,
-    };
-  }
+  const tf1h = take(chart1h, "1h");
+  const tf4h = chart1h ? take(aggregateSessions(chart1h, 4), "4h") : null;
 
   return {
     timeframes: {
+      "1h": tf1h,
       "4h": tf4h,
-      "8h": tf8h,
-      "12h": tf12h,
-      "1d": tf1d,
-      "1wk": tf1wk,
+      "1d": take(chart1d, "1d"),
+      "1wk": take(chart1wk, "1wk"),
     },
     currentPrice,
   };
-}
-
-/**
- * Aggregate timestamps by taking the last timestamp in each N-bar group.
- * Mirrors aggregate4hOHLC's close-taking logic.
- */
-function aggregateTimestamps(timestamps: number[], n: number): number[] {
-  const result: number[] = [];
-  for (let i = n - 1; i < timestamps.length; i += n) {
-    result.push(timestamps[i]);
-  }
-  return result;
 }

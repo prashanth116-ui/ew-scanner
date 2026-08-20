@@ -1,50 +1,71 @@
 /**
  * Change in State of Delivery (CISD) detection.
  *
- * Tracks the most recent bearish candle's open as the delivery threshold.
- * A bullish CISD occurs when a bullish candle closes above that threshold.
+ * The delivery threshold is the open of the FIRST candle of the most recent
+ * contiguous bearish run — the candle that started the down leg. A bullish
+ * CISD occurs when a bullish candle closes above that open, i.e. the entire
+ * leg of bearish delivery has been undone in one move.
  *
- * Module structured for swappability — alternative CISD definitions
- * can be plugged in by exporting a function with the same signature.
+ * The earlier implementation used the open of the most recent SINGLE bearish
+ * candle. In any choppy advance that threshold sits one bar behind price, so
+ * essentially the next green candle after ARMED cleared it and TRIGGER fired
+ * almost unconditionally. TRIGGER gates the chase/late flags and the default
+ * backtest cohort, so a permissive definition contaminated all three.
+ *
+ * Module structured for swappability — alternative CISD definitions can be
+ * plugged in by exporting a function with the same signature.
  */
 
 import type { CISDResult } from "./types";
 
+const NO_CISD: CISDResult = {
+  triggered: false,
+  bearishOpen: null,
+  bearishBarIndex: null,
+  runLength: 0,
+};
+
 /**
  * Detect bullish CISD at bar index `i`.
  *
- * Scans backward from `i-1` to find the most recent bearish candle
- * (close < open), then checks if bar `i` is bullish and closes above
- * that bearish candle's open.
+ * Walks back from `i-1` to the most recent bearish candle (close < open), then
+ * extends backwards through every contiguous bearish candle to find the start
+ * of the delivery leg. Bar `i` triggers when it is bullish and closes above
+ * that leg-opening candle's open.
  */
 export function detectBullishCISD(
   opens: number[],
   closes: number[],
   i: number,
 ): CISDResult {
-  // Find most recent bearish candle before current bar
-  let bearishOpen: number | null = null;
-  let bearishBarIndex: number | null = null;
+  if (i <= 0) return NO_CISD;
 
+  const isBearish = (j: number) => closes[j] < opens[j];
+
+  // Most recent bearish candle before the current bar.
+  let last = -1;
   for (let j = i - 1; j >= 0; j--) {
-    if (closes[j] < opens[j]) {
-      bearishOpen = opens[j];
-      bearishBarIndex = j;
+    if (isBearish(j)) {
+      last = j;
       break;
     }
   }
+  if (last < 0) return NO_CISD;
 
-  if (bearishOpen === null) {
-    return { triggered: false, bearishOpen: null, bearishBarIndex: null };
-  }
+  // Extend backwards to the first candle of that contiguous bearish run.
+  let first = last;
+  while (first - 1 >= 0 && isBearish(first - 1)) first--;
 
-  // Bullish CISD: current bar is bullish AND closes above bearish delivery threshold
+  const bearishOpen = opens[first];
+  const runLength = last - first + 1;
+
   const isBullish = closes[i] > opens[i];
   const closesAboveThreshold = closes[i] > bearishOpen;
 
   return {
     triggered: isBullish && closesAboveThreshold,
     bearishOpen,
-    bearishBarIndex,
+    bearishBarIndex: first,
+    runLength,
   };
 }

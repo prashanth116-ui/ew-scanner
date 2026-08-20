@@ -49,8 +49,69 @@ function returnColor(val: number | null): string {
   return "text-red-400";
 }
 
+interface Cohort {
+  key: string;
+  events: number;
+  avgReturn5d: number | null;
+  winRate5d: number | null;
+  avgMfe5d: number | null;
+  avgMae5d: number | null;
+  bslHitRate: number | null;
+}
+
+interface Cohorts {
+  byHtfBias: Cohort[];
+  byTradeable: Cohort[];
+  byEntryLocation: Cohort[];
+  byState: Cohort[];
+  byFreshness: Cohort[];
+}
+
+const COHORT_PANELS: Array<{ key: keyof Cohorts; title: string; blurb: string }> = [
+  { key: "byHtfBias", title: "Higher-timeframe bias", blurb: "Does running with the daily/weekly actually pay?" },
+  { key: "byTradeable", title: "Tradeable gate", blurb: "Rows the gate lets through vs the ones it blocks." },
+  { key: "byEntryLocation", title: "Entry location", blurb: "Inside the OTE band vs outside it." },
+  { key: "byFreshness", title: "State freshness", blurb: "Bars since the state was reached." },
+  { key: "byState", title: "State", blurb: "Where on the ladder the signal fired." },
+];
+
+function CohortTable({ rows }: { rows: Cohort[] }) {
+  if (rows.length === 0) return <div className="px-3 py-2 text-xs text-[#666]">No events.</div>;
+  return (
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="border-b border-[#2a2a2a] text-left text-[#888]">
+          <th className="px-3 py-1.5 font-medium">Cohort</th>
+          <th className="px-3 py-1.5 font-medium">N</th>
+          <th className="px-3 py-1.5 font-medium">5d</th>
+          <th className="px-3 py-1.5 font-medium">Win</th>
+          <th className="px-3 py-1.5 font-medium">MFE</th>
+          <th className="px-3 py-1.5 font-medium">MAE</th>
+          <th className="px-3 py-1.5 font-medium">BSL hit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((c) => (
+          <tr key={c.key} className="border-b border-[#1a1a1a] last:border-0">
+            <td className="px-3 py-1.5 text-white">{c.key}</td>
+            <td className="px-3 py-1.5 font-mono text-[#888]">{c.events}</td>
+            <td className={`px-3 py-1.5 font-mono ${returnColor(c.avgReturn5d)}`}>
+              {c.avgReturn5d !== null ? `${c.avgReturn5d > 0 ? "+" : ""}${fmtNum(c.avgReturn5d, 2)}%` : "—"}
+            </td>
+            <td className="px-3 py-1.5 font-mono text-white">{c.winRate5d !== null ? `${fmtNum(c.winRate5d, 0)}%` : "—"}</td>
+            <td className="px-3 py-1.5 font-mono text-green-400">{c.avgMfe5d !== null ? `+${fmtNum(c.avgMfe5d, 1)}%` : "—"}</td>
+            <td className="px-3 py-1.5 font-mono text-red-400">{c.avgMae5d !== null ? `${fmtNum(c.avgMae5d, 1)}%` : "—"}</td>
+            <td className="px-3 py-1.5 font-mono text-cyan-400">{c.bslHitRate !== null ? `${fmtNum(c.bslHitRate, 0)}%` : "—"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 export default function ICTBacktestPage() {
   const [summary, setSummary] = useState<BacktestSummary | null>(null);
+  const [cohorts, setCohorts] = useState<Cohorts | null>(null);
   const [events, setEvents] = useState<BacktestEvent[]>([]);
   const [daysScanned, setDaysScanned] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -65,6 +126,7 @@ export default function ICTBacktestPage() {
       .then((r) => r.json())
       .then((data) => {
         setSummary(data.summary ?? null);
+        setCohorts(data.cohorts ?? null);
         setEvents(data.events ?? []);
         setDaysScanned(data.daysScanned ?? 0);
       })
@@ -101,9 +163,15 @@ export default function ICTBacktestPage() {
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
       {/* Header */}
       <div className="mb-6">
+        <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
+          <Link href="/prerun/ict-daily" className="text-[#888] hover:text-white">← Scanner</Link>
+          <Link href="/prerun/ict-guide" className="text-[#888] hover:text-white">Guide</Link>
+        </div>
         <h1 className="text-2xl font-bold text-white">ICT Backtest</h1>
         <p className="mt-1 text-sm text-[#888]">
-          Historical ARMED/TRIGGER/IGNITION events with forward returns
+          Historical ARMED/TRIGGER/IGNITION events with forward returns. Scores are read
+          from persisted rows, never recomputed, so there is no lookahead — but the window
+          is bounded by the 14-day table purge.
         </p>
       </div>
 
@@ -243,6 +311,22 @@ export default function ICTBacktestPage() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Cohort breakdowns — the dimensions the engine gained only mean
+              something if they can be measured against outcomes. */}
+          {cohorts && (
+            <div className="mb-6 grid gap-3 lg:grid-cols-2">
+              {COHORT_PANELS.map(({ key, title, blurb }) => (
+                <div key={key} className="overflow-hidden rounded-lg border border-[#2a2a2a] bg-[#0f0f0f]">
+                  <div className="border-b border-[#2a2a2a] bg-[#141414] px-3 py-2">
+                    <div className="text-xs font-semibold text-white">{title}</div>
+                    <div className="text-[10px] text-[#666]">{blurb}</div>
+                  </div>
+                  <CohortTable rows={cohorts[key] ?? []} />
+                </div>
+              ))}
             </div>
           )}
 

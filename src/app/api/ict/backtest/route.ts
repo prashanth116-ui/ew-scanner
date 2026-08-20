@@ -16,6 +16,11 @@ interface BacktestEvent {
   protectedLow: number | null;
   price: number;
   distanceToBslPct: number | null;
+  htfBias: string | null;
+  isTradeable: boolean;
+  inOTE: boolean | null;
+  riskReward: number | null;
+  stateBarsAgo: number | null;
   // Forward returns (computed post-hoc)
   return1d: number | null;
   return3d: number | null;
@@ -39,11 +44,62 @@ interface BacktestSummary {
   bslHitRate: number | null;
 }
 
+/**
+ * A slice of the event set with its own forward-return stats. The engine gained
+ * several dimensions that only mean something if they can be measured against
+ * outcomes — higher-timeframe bias, the tradeable gate, OTE location — so they
+ * are broken out here rather than only rendered on the page.
+ */
+interface Cohort {
+  key: string;
+  events: number;
+  avgReturn5d: number | null;
+  winRate5d: number | null;
+  avgMfe5d: number | null;
+  avgMae5d: number | null;
+  bslHitRate: number | null;
+}
+
+function summariseCohort(key: string, events: BacktestEvent[]): Cohort {
+  const with5d = events.filter((e) => e.return5d !== null);
+  const withTarget = events.filter((e) => e.bslTarget !== null);
+  const mean = (xs: number[]) => (xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+  return {
+    key,
+    events: events.length,
+    avgReturn5d: mean(with5d.map((e) => e.return5d!)),
+    winRate5d: with5d.length > 0
+      ? (with5d.filter((e) => e.return5d! > 0).length / with5d.length) * 100
+      : null,
+    avgMfe5d: mean(events.filter((e) => e.mfe5d !== null).map((e) => e.mfe5d!)),
+    avgMae5d: mean(events.filter((e) => e.mae5d !== null).map((e) => e.mae5d!)),
+    bslHitRate: withTarget.length > 0
+      ? (withTarget.filter((e) => e.hitBsl).length / withTarget.length) * 100
+      : null,
+  };
+}
+
+function groupBy(events: BacktestEvent[], key: (e: BacktestEvent) => string): Cohort[] {
+  const buckets = new Map<string, BacktestEvent[]>();
+  for (const e of events) {
+    const k = key(e);
+    const list = buckets.get(k);
+    if (list) list.push(e);
+    else buckets.set(k, [e]);
+  }
+  return [...buckets.entries()]
+    .map(([k, list]) => summariseCohort(k, list))
+    .sort((a, b) => b.events - a.events);
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const days = parseInt(searchParams.get("days") ?? "14", 10);
   const minState = parseInt(searchParams.get("minState") ?? "9", 10); // default: ARMED+
   const minScore = parseInt(searchParams.get("minScore") ?? "30", 10);
+  const tradeableOnly = searchParams.get("tradeableOnly") === "true";
+  const htfFilter = searchParams.get("htf"); // ALIGNED | NEUTRAL | COUNTER
 
   try {
     // Load scan dates
@@ -59,7 +115,11 @@ export async function GET(request: NextRequest) {
     for (const date of allDates) {
       const results = await loadICTDaily(date);
       const qualifying = results.filter(
-        (r) => r.best_state_order >= minState && r.best_score >= minScore
+        (r) =>
+          r.best_state_order >= minState &&
+          r.best_score >= minScore &&
+          (!tradeableOnly || r.is_tradeable === true) &&
+          (!htfFilter || (r.htf_bias ?? "NEUTRAL") === htfFilter)
       );
 
       for (const r of qualifying) {
@@ -74,6 +134,11 @@ export async function GET(request: NextRequest) {
           protectedLow: r.protected_low,
           price: r.price,
           distanceToBslPct: r.distance_to_bsl_pct,
+          htfBias: r.htf_bias ?? null,
+          isTradeable: r.is_tradeable === true,
+          inOTE: r.in_ote ?? null,
+          riskReward: r.risk_reward ?? null,
+          stateBarsAgo: r.state_bars_ago ?? null,
           return1d: null,
           return3d: null,
           return5d: null,
@@ -196,8 +261,22 @@ export async function GET(request: NextRequest) {
       return b.score - a.score;
     });
 
+    const cohorts = {
+      byHtfBias: groupBy(allEvents, (e) => e.htfBias ?? "UNKNOWN"),
+      byTradeable: groupBy(allEvents, (e) => (e.isTradeable ? "tradeable" : "gated")),
+      byEntryLocation: groupBy(allEvents, (e) =>
+        e.inOTE === null ? "unknown" : e.inOTE ? "in-OTE" : "outside-OTE"
+      ),
+      byState: groupBy(allEvents, (e) => e.state),
+      byFreshness: groupBy(allEvents, (e) =>
+        e.stateBarsAgo === null ? "unknown" : e.stateBarsAgo <= 3 ? "fresh" : e.stateBarsAgo <= 10 ? "recent" : "stale"
+      ),
+    };
+
     return NextResponse.json({
       summary,
+      cohorts,
+      filters: { days, minState, minScore, tradeableOnly, htf: htfFilter },
       events: allEvents,
       daysScanned: allDates.length,
     }, {

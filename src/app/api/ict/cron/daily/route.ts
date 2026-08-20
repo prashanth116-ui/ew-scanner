@@ -3,6 +3,8 @@ import { logError } from "@/lib/error-logger";
 import { buildScanUniverse } from "@/data/index-tiers";
 import { skipAsNonScorer } from "@/lib/prerun/scan-gate";
 import { getSectorForTicker } from "@/data/prerun-universe";
+import { fetchBatchQuotes } from "@/lib/prerun/data";
+import type { BatchQuote } from "@/lib/prerun/data";
 import { fetchICTData } from "@/lib/ict/data";
 import { runMultiTimeframe } from "@/lib/ict/multi-tf";
 import { CRON } from "@/lib/ict/config";
@@ -46,26 +48,36 @@ function resultToRecord(r: ICTMultiTFResult, scanDate: string, companyName: stri
     fvg_upper: r.fvgUpper,
     fvg_lower: r.fvgLower,
     distance_to_bsl_pct: r.distanceToBslPct,
+    risk_reward: r.riskReward,
+    htf_bias: r.htfBias,
+    range_retracement: r.rangeRetracement,
+    in_discount: r.inDiscount,
+    in_ote: r.inOTE,
+    state_bars_ago: r.stateBarsAgo,
+    is_tradeable: r.isTradeable,
+    prior_invalidation_state: r.priorInvalidationState,
+    prior_invalidation_bars_ago: r.priorInvalidationBarsAgo,
+    prior_invalidation_reason: r.priorInvalidationReason,
     is_chasing: r.isChasing,
     is_late_entry: r.isLateEntry,
+    state_1h: tfState("1h"),
     state_4h: tfState("4h"),
-    state_8h: tfState("8h"),
-    state_12h: tfState("12h"),
     state_1d: tfState("1d"),
     state_1wk: tfState("1wk"),
+    score_1h: tfScore("1h"),
     score_4h: tfScore("4h"),
-    score_8h: tfScore("8h"),
-    score_12h: tfScore("12h"),
     score_1d: tfScore("1d"),
     score_1wk: tfScore("1wk"),
     state_score: r.bestScoreDetail.components.stateScore,
     displacement_quality: r.bestScoreDetail.components.displacementQuality,
     fvg_quality: r.bestScoreDetail.components.fvgQuality,
     retracement_depth: r.bestScoreDetail.components.retracementDepth,
+    entry_quality: r.bestScoreDetail.components.entryQuality,
     bsl_quality: r.bestScoreDetail.components.bslQuality,
     compression_quality: r.bestScoreDetail.components.compressionQuality,
     structure_coherence: r.bestScoreDetail.components.structureCoherence,
     invalidation_distance: r.bestScoreDetail.components.invalidationDistance,
+    recency_score: r.bestScoreDetail.components.recency,
     bullish_evidence: r.bullishEvidence,
     caution_evidence: r.cautionEvidence,
   };
@@ -100,6 +112,15 @@ export async function GET(request: NextRequest) {
     const scoredTickers = await loadAllScoredTickers();
     const hasHistory = scoredTickers.size > 50;
 
+    // One batched quote sweep up front. Supplies the company names — which were
+    // previously persisted as "" on every row, leaving the page's name search
+    // permanently matching nothing — and pre-filters sub-$10 names so they never
+    // cost three chart calls each.
+    const quotes: Map<string, BatchQuote> = await fetchBatchQuotes(universe).catch(
+      () => new Map<string, BatchQuote>(),
+    );
+    let priceGated = 0;
+
     const qualifying: ICTMultiTFResult[] = [];
     let pendingRecords: ICTDailyRecord[] = [];
     let totalPersisted = 0;
@@ -116,6 +137,13 @@ export async function GET(request: NextRequest) {
         batch.map(async (ticker) => {
           // Persistent non-scorer gate
           if (skipAsNonScorer(ticker, hasHistory, scoredTickers)) return null;
+
+          // Cheap price gate before spending chart calls
+          const quote = quotes.get(ticker);
+          if (quote && quote.price > 0 && quote.price < CRON.MIN_PRICE) {
+            priceGated++;
+            return null;
+          }
 
           // Fetch all timeframes
           const data = await fetchICTData(ticker);
@@ -142,7 +170,9 @@ export async function GET(request: NextRequest) {
           }
 
           qualifying.push(result);
-          pendingRecords.push(resultToRecord(result, today, ""));
+          pendingRecords.push(
+            resultToRecord(result, today, quotes.get(result.ticker)?.name ?? ""),
+          );
         }
       }
 
@@ -180,21 +210,30 @@ export async function GET(request: NextRequest) {
       stateCounts[label] = (stateCounts[label] ?? 0) + 1;
     }
 
-    // Armed count
+    // HTF bias distribution
+    const biasCounts: Record<string, number> = {};
+    for (const r of qualifying) {
+      biasCounts[r.htfBias] = (biasCounts[r.htfBias] ?? 0) + 1;
+    }
+
     const armedCount = qualifying.filter((r) => r.armedTimeframes.length > 0).length;
+    const tradeableCount = qualifying.filter((r) => r.isTradeable).length;
 
     return NextResponse.json({
       success: true,
       scanDate: today,
       scannedCount: universe.length,
       fetchedCount,
+      priceGated,
       qualifyingCount: qualifying.length,
       skippedCount,
       persistedCount: totalPersisted,
       clearedCount: cleared,
       purgedCount: purged,
       armedCount,
+      tradeableCount,
       stateCounts,
+      biasCounts,
       elapsedMs: Date.now() - startTime,
     });
   } catch (err) {

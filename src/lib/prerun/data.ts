@@ -1103,6 +1103,8 @@ export function calcNdReturn(closes: number[], n: number): number | null {
 
 export interface BatchQuote {
   symbol: string;
+  /** Yahoo shortName/longName. Null when the quote omitted both. */
+  name: string | null;
   price: number;
   sma50: number | null;
   sma200: number | null;
@@ -1186,6 +1188,10 @@ export async function fetchBatchQuotes(
       const symbol = yahooToInternal.get(returned) ?? returned;
       results.set(symbol, {
         symbol,
+        name:
+          (quote.shortName as string | undefined) ??
+          (quote.longName as string | undefined) ??
+          null,
         price: toNum(quote.regularMarketPrice, 0),
         sma50: toNumOrNull(quote.fiftyDayAverage),
         sma200: toNumOrNull(quote.twoHundredDayAverage),
@@ -1216,6 +1222,10 @@ export async function fetchBatchQuotes(
         if (!symbol) continue;
         results.set(symbol, {
           symbol,
+          name:
+            (quote.shortName as string | undefined) ??
+            (quote.longName as string | undefined) ??
+            null,
           price: toNum(quote.regularMarketPrice, 0),
           sma50: toNumOrNull(quote.fiftyDayAverage),
           sma200: toNumOrNull(quote.twoHundredDayAverage),

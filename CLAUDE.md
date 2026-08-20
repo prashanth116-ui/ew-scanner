@@ -46,7 +46,7 @@ Applied in 6 cron routes: PreRun preset/4h, Inflection, Transition, VCP, Institu
 
 ### Scanner Architecture
 
-9 scanners unified via nightly confluence. **5 count for confluence:** Setup, Inflect, Trans, Inst, Rot. **4 badge-only:** QFE (derived from PreRun), Setup4h (same methodology), INF WATCH (low conviction), VCP (overlaps Setup). **2 separate:** Catalyst (different timeframe), Squeeze (niche).
+10 scanners unified via nightly confluence. **5 count for confluence:** Setup, Inflect, Trans, Inst, Rot. **5 badge-only:** QFE (derived from PreRun), Setup4h (same methodology), INF WATCH (low conviction), VCP (overlaps Setup), ICT (separate price-action methodology). **2 separate:** Catalyst (different timeframe), Squeeze (niche).
 
 **Confluence scanners:**
 | Scanner | Label | Detects | Key Files |
@@ -127,6 +127,40 @@ Fields in `PreRunStockData` that scorers must read carefully:
 **Cron:** Fetches 3mo daily chart for OHLC. Skips MARKDOWN state, gate failures, and scores < 25. Supports `?clear=true`. Series under 30 bars are scored with `structure_available = false` and excluded from confluence.
 
 **UI:** Top Picks banner (top 10 TRIGGERED+READY), state distribution bar (clickable filter pills), INF cross-reference badge on overlapping tickers.
+
+### ICT Pre-Expansion Scanner
+Badge-only scanner (`Setup`-independent) at `/prerun/ict-daily`, cron `/api/ict/cron/daily` 02:35 UTC Tue-Sat. Pure OHLC state machine — no MA, RSI, OBV, ATR or volume anywhere in it. Files: `src/lib/ict/{engine,scoring,multi-tf,cisd,data,aggregate,config,types}.ts`.
+
+**Bullish only.** There is no bearish mirror — no buy-side raid, bearish MSS or sell-side draw. In a downtrend it keeps emitting long setups and says nothing about the other side. Stated on the page header, the guide and `config.ts`.
+
+**11-state ladder** (strictly ordered; one candle may satisfy several rungs):
+SSL raid -> structure high -> displacement -> MSS -> FVG -> retrace -> higher low -> BSL built -> armed -> trigger (CISD) -> ignition.
+
+| Construct | Rule |
+|---|---|
+| SSL raid | Sweep + reclaim of a level holding >= `SSL.MIN_CLUSTER_COUNT` (2) roughly equal lows. A pool, not a rolling 10-bar minimum |
+| FVG | 3-candle gap whose **middle candle** clears `FVG.MIN_LEG_BODY_RATIO` — an imbalance matters because displacement left it |
+| Higher low | Pivot-confirmed low above the protected low, reclaimed next bar. **Trails the protected low** to that level |
+| BSL | Nearest **unbroken** pivot-high cluster **above price** in a 40-bar window; falls back to the highest cleared pivot with `unbroken: false` |
+| CISD | Close above the open of the **first candle of the contiguous bearish run**, not the last lone down bar |
+
+**Invalidation** is two-sided: a close at/below the protected low, **and** a close below the FVG floor (an inverted gap is resistance). On a break the engine resets and keeps hunting — it always reports the **live** state and carries the earlier break as `prior_invalidation_*`. It never returns a dead high-water setup.
+
+**Dealing range** = raid low to the running high. Drives premium/discount and the OTE band (0.62-0.79). This is a different scale from FVG retracement depth: a setup can be mid-gap and still in premium.
+
+**Score (100 pts, 10 components):** State 12 · Displacement 14 · Entry (P/D + OTE) 14 · FVG 10 · BSL 10 · Compression 10 · Retrace depth 8 · Coherence 8 · Invalidation 8 · Recency 6. State is deliberately a minority — every other component is already gated on reaching a state, so a tall state weight charges twice and collapses `score` into `state_order`. Invalidation distance is a **band** (1.5-5% ideal), not a ramp: precision is the edge. Coherence and recency budgets are **per-timeframe** (`BAR_BUDGETS`).
+
+**Timeframes: 1h, 4h, 1d, 1wk** in two families — intraday (1h/4h, one shared chart) and swing (1d/1wk). Confluence blends the best member of **each family once** plus a bonus per additional armed family, so one chart cannot be counted three times. 8h/12h were removed: a 6.5h RTH session cannot form either candle.
+
+**Aggregation:** `aggregateSessions()` in `aggregate.ts`, **not** the shared `aggregate4hOHLC`. That helper groups by index from the series start (buckets straddle days) and drops the trailing partial group. Both are fine for the calibrated PreRun 4h scanner it serves and neither is acceptable here, so this is a separate function rather than a change to that one.
+
+**HTF bias** (`computeHTFBias`): ALIGNED (a swing TF past MSS) / NEUTRAL (raided, not flipped) / COUNTER (no bullish structure on either). Applied as a **gate on `is_tradeable` and the nightly badge, never as a score adjustment** — same treatment the regime gate gets in Inflection/Transition, so scores stay comparable across regimes.
+
+**Cron:** one `fetchBatchQuotes(universe)` up front supplies `company_name` and a sub-$10 price pre-gate (saves 3 chart calls per rejected name). Persists state order >= 3 and score >= 15. 14-day retention, `?clear=true`.
+
+**Not in confluence.** ICT is one of the badge-only scanners (`NON_CONFLUENCE` in the nightly summary) — it is a separate methodology, not a fifth confirming vote.
+
+**`src/lib/ict/scored/`** is a second, complete implementation imported by nothing. It grades each ingredient independently rather than laddering. Left in place; it is dead code and will drift.
 
 ### Sector Rotation System
 Scores 39 ETFs across 4 categories via Yahoo Finance chart API.

@@ -4,29 +4,52 @@
  * Pure function: OHLC arrays in, ICTSetup out.
  * Zero lagging indicators — operates exclusively on raw candle relationships.
  * Processes candles sequentially (causal — no look-ahead).
+ *
+ * Bullish only. See config.ts "DIRECTIONAL SCOPE".
+ *
+ * The engine reports the LIVE setup — the state as of the final bar. It never
+ * returns a dead high-water mark: a setup that reached ARMED and then broke is
+ * reported at whatever it has rebuilt to, with the break carried separately as
+ * `priorInvalidation`. Anything else asserts a stop and a target that price has
+ * already taken out.
  */
 
-import { SSL, MSS, DISPLACEMENT, BSL, ARMED } from "./config";
+import { SSL, MSS, DISPLACEMENT, FVG, BSL, ARMED, RANGE } from "./config";
 import { detectBullishCISD } from "./cisd";
 import { ICTState } from "./types";
-import type { ICTSetup, FVGZone, SSLRaidDetail, StateTransition, BSLDetail } from "./types";
+import type {
+  ICTSetup,
+  FVGZone,
+  SSLRaidDetail,
+  StateTransition,
+  BSLDetail,
+  DealingRange,
+} from "./types";
 
 /** Create a fresh ICTSetup with no state. */
 function emptySetup(): ICTSetup {
   return {
     currentState: ICTState.NONE,
     protectedLow: null,
+    originalProtectedLow: null,
+    protectedLowTrailed: false,
     mssLevel: null,
     fvgZone: null,
     bslLevel: null,
     bslClusterCount: 0,
+    bslUnbroken: true,
     sslRaid: null,
     retracementDepth: null,
+    dealingRange: null,
     higherLowBar: null,
-    cisd: { triggered: false, bearishOpen: null, bearishBarIndex: null },
+    cisd: { triggered: false, bearishOpen: null, bearishBarIndex: null, runLength: 0 },
     distanceToBslPct: null,
     invalidated: false,
     invalidationReason: null,
+    priorInvalidation: null,
+    stateBarIndex: null,
+    stateBarsAgo: null,
+    stateTimestamp: null,
     transitions: [],
     bullishEvidence: [],
     cautionEvidence: [],
@@ -35,7 +58,29 @@ function emptySetup(): ICTSetup {
   };
 }
 
-/** Record a state transition. */
+/** Reset the live setup's structural fields, keeping accumulated evidence. */
+function resetSetup(setup: ICTSetup): void {
+  setup.currentState = ICTState.NONE;
+  setup.protectedLow = null;
+  setup.originalProtectedLow = null;
+  setup.protectedLowTrailed = false;
+  setup.mssLevel = null;
+  setup.fvgZone = null;
+  setup.bslLevel = null;
+  setup.bslClusterCount = 0;
+  setup.bslUnbroken = true;
+  setup.sslRaid = null;
+  setup.retracementDepth = null;
+  setup.dealingRange = null;
+  setup.higherLowBar = null;
+  setup.cisd = { triggered: false, bearishOpen: null, bearishBarIndex: null, runLength: 0 };
+  setup.distanceToBslPct = null;
+  setup.stateBarIndex = null;
+  setup.stateTimestamp = null;
+  setup.sslBarIndex = null;
+}
+
+/** Record a state transition and stamp when the new state was reached. */
 function recordTransition(
   setup: ICTSetup,
   from: ICTState,
@@ -46,14 +91,20 @@ function recordTransition(
   evidence: string,
 ): void {
   setup.transitions.push({ fromState: from, toState: to, barIndex, timestamp, price, evidence });
+  setup.stateBarIndex = barIndex;
+  setup.stateTimestamp = timestamp;
 }
 
 // ── State Detection Functions ──
 
 /**
- * State 1 — SSL_RAID: Sweep below prior swing low pool and reclaim.
- * priorSSL = min(lows[i-lookback .. i-1])
- * sslRaid = lows[i] < priorSSL AND closes[i] > priorSSL
+ * State 1 — SSL_RAID: sweep below a pool of sell-side liquidity and reclaim.
+ *
+ * The swept level must be a POOL — at least MIN_CLUSTER_COUNT lows resting
+ * within CLUSTER_TOLERANCE of each other. A rolling 10-bar minimum with a
+ * single low under it is a range break, not a liquidity raid, and it was the
+ * weakest-evidence step in the whole ladder while BSL (the same construct
+ * inverted) demanded a genuine cluster.
  */
 function checkSSLRaid(
   lows: number[],
@@ -64,22 +115,30 @@ function checkSSLRaid(
 ): SSLRaidDetail | null {
   if (i < lookback) return null;
 
-  let priorSSL = lows[i - lookback];
-  for (let j = i - lookback + 1; j < i; j++) {
+  const start = i - lookback;
+  let priorSSL = lows[start];
+  for (let j = start + 1; j < i; j++) {
     if (lows[j] < priorSSL) priorSSL = lows[j];
   }
+  if (!(priorSSL > 0)) return null;
 
   // Sweep below + reclaim above
-  if (lows[i] < priorSSL && closes[i] > priorSSL) {
-    return {
-      sweptPrice: priorSSL,
-      raidBarIndex: i,
-      raidBarLow: lows[i],
-      raidBarTimestamp: timestamps[i],
-    };
-  }
+  if (!(lows[i] < priorSSL && closes[i] > priorSSL)) return null;
 
-  return null;
+  // The swept level must hold a pool of lows, not one isolated low.
+  let poolCount = 0;
+  for (let j = start; j < i; j++) {
+    if (Math.abs(lows[j] - priorSSL) / priorSSL <= SSL.CLUSTER_TOLERANCE) poolCount++;
+  }
+  if (poolCount < SSL.MIN_CLUSTER_COUNT) return null;
+
+  return {
+    sweptPrice: priorSSL,
+    raidBarIndex: i,
+    raidBarLow: lows[i],
+    raidBarTimestamp: timestamps[i],
+    poolCount,
+  };
 }
 
 /**
@@ -150,31 +209,64 @@ function checkMSS(closes: number[], i: number, mssLevel: number): boolean {
 }
 
 /**
- * State 5 — FVG_CONFIRMED: 3-candle bullish fair value gap.
- * Gap between candle C's low and candle A's high.
- * low[i] > high[i-2]
+ * State 5 — FVG_CONFIRMED: 3-candle bullish fair value gap (BISI).
+ *
+ * Gap between candle C's low and candle A's high, where candle B — the middle
+ * one — must itself be an energetic bullish leg. An FVG is a PD array because
+ * displacement left it unfilled; a gap straddling a doji is a data artefact.
  */
 function checkFVG(
+  opens: number[],
   highs: number[],
   lows: number[],
+  closes: number[],
   i: number,
 ): FVGZone | null {
   if (i < 2) return null;
+  if (!(lows[i] > highs[i - 2])) return null;
 
-  if (lows[i] > highs[i - 2]) {
-    return {
-      lower: highs[i - 2],
-      upper: lows[i],
-      barIndex: i,
-    };
+  // Candle B must be the displacement leg that opened the gap.
+  const b = i - 1;
+  if (closes[b] <= opens[b]) return null;
+  const bodyB = closes[b] - opens[b];
+  const rangeB = highs[b] - lows[b];
+  if (rangeB <= 0) return null;
+  if (bodyB / rangeB < FVG.MIN_LEG_BODY_RATIO) return null;
+
+  return {
+    lower: highs[i - 2],
+    upper: lows[i],
+    barIndex: i,
+  };
+}
+
+/**
+ * Find the most recent valid FVG whose closing candle falls in [from, to].
+ *
+ * The gap that matters is the one the displacement leg left behind, and its
+ * third candle usually prints one or two bars BEFORE structure formally
+ * shifts. Searching only the MSS bar missed it whenever MSS lagged
+ * displacement, which is the common case.
+ */
+function findRecentFVG(
+  opens: number[],
+  highs: number[],
+  lows: number[],
+  closes: number[],
+  from: number,
+  to: number,
+): FVGZone | null {
+  for (let k = to; k >= Math.max(2, from); k--) {
+    const fvg = checkFVG(opens, highs, lows, closes, k);
+    if (fvg) return fvg;
   }
   return null;
 }
 
 /**
- * State 6 — FVG_RETRACEMENT: Price touches FVG zone.
- * low[i] <= fvgZone.upper AND high[i] >= fvgZone.lower
- * Protected low must remain intact.
+ * State 6 — FVG_RETRACEMENT: Price returns into the FVG zone.
+ * Must happen on a LATER bar than the one that formed the gap — the forming
+ * bar trivially satisfies the touch test against its own low.
  */
 function checkFVGRetracement(
   highs: number[],
@@ -182,6 +274,7 @@ function checkFVGRetracement(
   i: number,
   fvg: FVGZone,
 ): boolean {
+  if (i <= fvg.barIndex) return false;
   return lows[i] <= fvg.upper && highs[i] >= fvg.lower;
 }
 
@@ -198,8 +291,11 @@ function computeRetracementDepth(low: number, fvg: FVGZone): number {
 
 /**
  * State 7 — HIGHER_LOW / Reaccumulation.
- * low[i-1] > protectedLow, low[i-1] < low[i-2], low[i] > low[i-1],
- * close[i] > high[i-1]
+ *
+ * The pullback low must be a confirmed pivot — the lowest of its immediate
+ * neighbourhood — rather than merely lower than the single bar before it.
+ * The old `low[i-1] < low[i-2]` test demanded one specific two-bar shape and
+ * stalled every setup that reaccumulated in any other pattern.
  */
 function checkHigherLow(
   highs: number[],
@@ -208,52 +304,78 @@ function checkHigherLow(
   i: number,
   protectedLow: number,
 ): boolean {
-  if (i < 2) return false;
+  if (i < 3) return false;
 
-  return (
-    lows[i - 1] > protectedLow &&
-    lows[i - 1] < lows[i - 2] &&
-    lows[i] > lows[i - 1] &&
-    closes[i] > highs[i - 1]
-  );
+  const pivot = lows[i - 1];
+  if (!(pivot > protectedLow)) return false;
+
+  // Pivot low: lowest of the three bars ending at i-1, and reclaimed at i.
+  if (!(pivot <= lows[i - 2] && pivot <= lows[i - 3])) return false;
+  if (!(lows[i] > pivot)) return false;
+  if (!(closes[i] > highs[i - 1])) return false;
+
+  return true;
 }
 
 /**
- * State 8 — BSL_BUILT: Buy-side liquidity cluster.
- * bslLevel = max(highs[i-lookback .. i-1])
- * count >= minCluster highs within tolerance of bslLevel
+ * State 8 — BSL_BUILT: the buy-side draw on liquidity.
+ *
+ * Scans a 40-bar window for confirmed pivot highs carrying a cluster of equal
+ * highs, then takes the NEAREST such level ABOVE the current close — the
+ * objective price still has to travel to. If every pivot has been cleared, the
+ * highest is returned with `unbroken: false`.
+ *
+ * The previous "highest high of the last 8 bars" was roughly a day and a half
+ * of 4h price, which made the target trivially close, the 3% armed threshold
+ * near-automatic, and the backtest's BSL-hit rate tautological.
  */
 function checkBSL(
   highs: number[],
+  closes: number[],
   i: number,
   lookback: number,
   tolerance: number,
   minCluster: number,
+  pivotBars: number,
 ): BSLDetail | null {
-  if (i < lookback) return null;
+  const start = Math.max(0, i - lookback);
+  if (i - start < pivotBars * 2 + 1) return null;
 
-  const start = i - lookback;
-  let bslLevel = highs[start];
-  let bslBar = start;
-  for (let j = start + 1; j < i; j++) {
-    if (highs[j] > bslLevel) {
-      bslLevel = highs[j];
-      bslBar = j;
+  const price = closes[i];
+  const candidates: BSLDetail[] = [];
+
+  for (let k = start + pivotBars; k <= i - pivotBars; k++) {
+    const level = highs[k];
+    if (!(level > 0)) continue;
+
+    // Confirmed pivot high
+    let isPivot = true;
+    for (let d = 1; d <= pivotBars; d++) {
+      if (highs[k - d] > level || highs[k + d] > level) {
+        isPivot = false;
+        break;
+      }
     }
-  }
+    if (!isPivot) continue;
 
-  // Count highs clustered near bslLevel
-  let count = 0;
-  for (let j = start; j < i; j++) {
-    if (Math.abs(highs[j] - bslLevel) / bslLevel <= tolerance) {
-      count++;
+    // Equal highs resting at that level
+    let count = 0;
+    for (let j = start; j <= i; j++) {
+      if (Math.abs(highs[j] - level) / level <= tolerance) count++;
     }
+    if (count < minCluster) continue;
+
+    candidates.push({ level, clusterCount: count, barIndex: k, unbroken: level > price });
   }
 
-  if (count >= minCluster) {
-    return { level: bslLevel, clusterCount: count, barIndex: bslBar };
+  if (candidates.length === 0) return null;
+
+  // Nearest unbroken level above price, else the highest cleared one.
+  const above = candidates.filter((c) => c.unbroken);
+  if (above.length > 0) {
+    return above.reduce((best, c) => (c.level < best.level ? c : best));
   }
-  return null;
+  return candidates.reduce((best, c) => (c.level > best.level ? c : best));
 }
 
 /**
@@ -302,12 +424,35 @@ function checkIgnition(
   return checkDisplacement(opens, highs, lows, closes, i, compBars, minBodyRatio);
 }
 
+/**
+ * Dealing range: raid low to the highest high made since the raid.
+ *
+ * This is what premium/discount and OTE are measured against. Depth into the
+ * FVG is a different, much smaller-scale construct — a setup can sit in the
+ * middle of its gap while the leg as a whole is in premium, which is exactly
+ * the entry ICT tells you not to take.
+ */
+function computeDealingRange(low: number, high: number, close: number): DealingRange | null {
+  if (!(high > low)) return null;
+  const span = high - low;
+  const retracement = Math.max(0, Math.min(1, (high - close) / span));
+  return {
+    low,
+    high,
+    equilibrium: low + span * RANGE.EQUILIBRIUM,
+    retracement,
+    inDiscount: retracement >= RANGE.EQUILIBRIUM,
+    inOTE: retracement >= RANGE.OTE_MIN && retracement <= RANGE.OTE_MAX,
+  };
+}
+
 // ── Main Engine ──
 
 /**
  * Run the ICT state machine on OHLC data.
  * Processes candles sequentially from index 0 to N-1.
- * At each bar, checks for invalidation first, then attempts state advancement.
+ * At each bar: check invalidation, refresh live measurements, then advance as
+ * far up the ladder as that bar's evidence supports.
  */
 export function runICTEngine(
   opens: number[],
@@ -320,221 +465,87 @@ export function runICTEngine(
   if (n < SSL.LOOKBACK + 1) return emptySetup();
 
   const setup = emptySetup();
+  let rangeHigh = -Infinity;
 
-  // Track the best completed setup across potential resets
-  let bestSetup = emptySetup();
+  // The most recent break, tracked by bar index and converted to bars-ago once
+  // the series length is known.
+  let brokenAtBar: number | null = null;
+  let brokenState = ICTState.NONE;
+  let brokenReason = "";
 
   for (let i = 0; i < n; i++) {
-    // ── 1. INVALIDATION CHECK ──
+    // ── 1. INVALIDATION CHECKS ──
+    let invalidationReason: string | null = null;
+
     if (
       setup.protectedLow !== null &&
       setup.currentState >= ICTState.SSL_RAID &&
       closes[i] <= setup.protectedLow
     ) {
-      // Record invalidation
-      const prevState = setup.currentState;
-      if (prevState > bestSetup.currentState) {
-        // Save the furthest state reached before invalidation
-        bestSetup = { ...setup, invalidated: true, invalidationReason: `Close ${closes[i].toFixed(2)} <= protected low ${setup.protectedLow.toFixed(2)} at bar ${i}` };
-        bestSetup.transitions = [...setup.transitions];
-        bestSetup.bullishEvidence = [...setup.bullishEvidence];
-        bestSetup.cautionEvidence = [...setup.cautionEvidence];
-      }
+      invalidationReason =
+        `close ${closes[i].toFixed(2)} <= protected low ${setup.protectedLow.toFixed(2)}`;
+    } else if (
+      setup.fvgZone !== null &&
+      setup.currentState >= ICTState.FVG_CONFIRMED &&
+      closes[i] < setup.fvgZone.lower
+    ) {
+      // A bullish FVG closed through is inverted — it is resistance now, and
+      // the premise the setup was built on is gone. Waiting for the protected
+      // low (often far below) to break kept scoring a dead idea.
+      invalidationReason =
+        `FVG inverted — close ${closes[i].toFixed(2)} below gap floor ${setup.fvgZone.lower.toFixed(2)}`;
+    }
 
-      setup.cautionEvidence.push(`Invalidated at bar ${i}: close ${closes[i].toFixed(2)} <= protected low ${setup.protectedLow!.toFixed(2)}`);
-
-      // Reset state
-      setup.currentState = ICTState.NONE;
-      setup.protectedLow = null;
-      setup.mssLevel = null;
-      setup.fvgZone = null;
-      setup.bslLevel = null;
-      setup.bslClusterCount = 0;
-      setup.sslRaid = null;
-      setup.retracementDepth = null;
-      setup.higherLowBar = null;
-      setup.cisd = { triggered: false, bearishOpen: null, bearishBarIndex: null };
-      setup.distanceToBslPct = null;
-      setup.sslBarIndex = null;
+    if (invalidationReason) {
+      brokenAtBar = i;
+      brokenState = setup.currentState;
+      brokenReason = invalidationReason;
+      setup.cautionEvidence.push(`Invalidated at bar ${i}: ${invalidationReason}`);
+      resetSetup(setup);
+      rangeHigh = -Infinity;
       continue;
     }
 
-    // ── 2. STATE ADVANCEMENT ──
-    const prevState = setup.currentState;
+    // ── 2. LIVE MEASUREMENTS ──
+    if (setup.currentState >= ICTState.SSL_RAID && setup.sslRaid) {
+      if (highs[i] > rangeHigh) rangeHigh = highs[i];
+      setup.dealingRange = computeDealingRange(setup.sslRaid.raidBarLow, rangeHigh, closes[i]);
+    }
 
-    // Try to advance to next state
-    switch (setup.currentState) {
-      case ICTState.NONE: {
-        const raid = checkSSLRaid(lows, closes, timestamps, i, SSL.LOOKBACK);
-        if (raid) {
-          setup.currentState = ICTState.SSL_RAID;
-          setup.sslRaid = raid;
-          setup.protectedLow = raid.raidBarLow;
-          setup.sslBarIndex = i;
+    // Distance to the draw is refreshed on every bar once a BSL exists, not
+    // only while ARMED. It used to freeze the moment a setup advanced to
+    // TRIGGER, so the rows a trader looks at first carried a stale number.
+    if (setup.bslLevel !== null) {
+      setup.distanceToBslPct = ((setup.bslLevel - closes[i]) / setup.bslLevel) * 100;
+    }
 
-          // Immediately compute structure high (State 2 — frozen at SSL moment)
-          const mss = computeStructureHigh(highs, raid.raidBarIndex, MSS.LOOKBACK);
-          if (mss !== null) {
-            setup.mssLevel = mss;
-            setup.currentState = ICTState.STRUCTURE_HIGH;
-            setup.bullishEvidence.push(`SSL raid swept ${raid.sweptPrice.toFixed(2)}, reclaimed at ${closes[i].toFixed(2)}`);
-            setup.bullishEvidence.push(`Structure high frozen at ${mss.toFixed(2)}`);
-            recordTransition(setup, ICTState.NONE, ICTState.STRUCTURE_HIGH, i, timestamps[i], closes[i],
-              `SSL raid swept ${raid.sweptPrice.toFixed(2)}, struct high ${mss.toFixed(2)}`);
-          } else {
-            setup.bullishEvidence.push(`SSL raid swept ${raid.sweptPrice.toFixed(2)}, reclaimed at ${closes[i].toFixed(2)}`);
-            recordTransition(setup, ICTState.NONE, ICTState.SSL_RAID, i, timestamps[i], closes[i],
-              `SSL raid swept ${raid.sweptPrice.toFixed(2)}`);
-          }
-        }
-        break;
-      }
-
-      case ICTState.SSL_RAID: {
-        // Should not normally stay here — structure high is computed at SSL_RAID.
-        // But handle edge case where structure high couldn't be computed.
-        const mss = computeStructureHigh(highs, setup.sslRaid!.raidBarIndex, MSS.LOOKBACK);
-        if (mss !== null) {
-          setup.mssLevel = mss;
-          setup.currentState = ICTState.STRUCTURE_HIGH;
-          setup.bullishEvidence.push(`Structure high frozen at ${mss.toFixed(2)}`);
-          recordTransition(setup, ICTState.SSL_RAID, ICTState.STRUCTURE_HIGH, i, timestamps[i], closes[i],
-            `Structure high ${mss.toFixed(2)}`);
-        }
-        break;
-      }
-
-      case ICTState.STRUCTURE_HIGH: {
-        if (checkDisplacement(opens, highs, lows, closes, i, DISPLACEMENT.COMPARISON_BARS, DISPLACEMENT.MIN_BODY_RATIO)) {
-          setup.currentState = ICTState.BULLISH_DISPLACEMENT;
-          const body = closes[i] - opens[i];
-          const range = highs[i] - lows[i];
-          setup.bullishEvidence.push(`Displacement candle: body ${body.toFixed(2)}, ratio ${(body / range * 100).toFixed(0)}%`);
-          recordTransition(setup, ICTState.STRUCTURE_HIGH, ICTState.BULLISH_DISPLACEMENT, i, timestamps[i], closes[i],
-            `Displacement body/range ${(body / range * 100).toFixed(0)}%`);
-
-          // Check if displacement candle also triggers MSS
-          if (setup.mssLevel !== null && checkMSS(closes, i, setup.mssLevel)) {
-            setup.currentState = ICTState.BULLISH_MSS;
-            setup.bullishEvidence.push(`MSS confirmed: close ${closes[i].toFixed(2)} > structure ${setup.mssLevel.toFixed(2)}`);
-            recordTransition(setup, ICTState.BULLISH_DISPLACEMENT, ICTState.BULLISH_MSS, i, timestamps[i], closes[i],
-              `MSS break ${setup.mssLevel.toFixed(2)}`);
-          }
-        }
-        break;
-      }
-
-      case ICTState.BULLISH_DISPLACEMENT: {
-        if (setup.mssLevel !== null && checkMSS(closes, i, setup.mssLevel)) {
-          setup.currentState = ICTState.BULLISH_MSS;
-          setup.bullishEvidence.push(`MSS confirmed: close ${closes[i].toFixed(2)} > structure ${setup.mssLevel.toFixed(2)}`);
-          recordTransition(setup, ICTState.BULLISH_DISPLACEMENT, ICTState.BULLISH_MSS, i, timestamps[i], closes[i],
-            `MSS break ${setup.mssLevel.toFixed(2)}`);
-        }
-        break;
-      }
-
-      case ICTState.BULLISH_MSS: {
-        const fvg = checkFVG(highs, lows, i);
-        if (fvg) {
-          setup.currentState = ICTState.FVG_CONFIRMED;
-          setup.fvgZone = fvg;
-          setup.bullishEvidence.push(`FVG formed: ${fvg.lower.toFixed(2)} - ${fvg.upper.toFixed(2)}`);
-          recordTransition(setup, ICTState.BULLISH_MSS, ICTState.FVG_CONFIRMED, i, timestamps[i], closes[i],
-            `FVG ${fvg.lower.toFixed(2)}-${fvg.upper.toFixed(2)}`);
-        }
-        break;
-      }
-
-      case ICTState.FVG_CONFIRMED: {
-        if (setup.fvgZone && checkFVGRetracement(highs, lows, i, setup.fvgZone)) {
-          const depth = computeRetracementDepth(lows[i], setup.fvgZone);
-          setup.currentState = ICTState.FVG_RETRACEMENT;
-          setup.retracementDepth = depth;
-          setup.bullishEvidence.push(`FVG retrace: ${(depth * 100).toFixed(0)}% depth`);
-          recordTransition(setup, ICTState.FVG_CONFIRMED, ICTState.FVG_RETRACEMENT, i, timestamps[i], closes[i],
-            `FVG retrace ${(depth * 100).toFixed(0)}%`);
-        }
-        break;
-      }
-
-      case ICTState.FVG_RETRACEMENT: {
-        if (setup.protectedLow !== null && checkHigherLow(highs, lows, closes, i, setup.protectedLow)) {
-          setup.currentState = ICTState.HIGHER_LOW;
-          setup.higherLowBar = i;
-          setup.bullishEvidence.push(`Higher low confirmed at ${lows[i - 1].toFixed(2)}, reclaim ${closes[i].toFixed(2)}`);
-          recordTransition(setup, ICTState.FVG_RETRACEMENT, ICTState.HIGHER_LOW, i, timestamps[i], closes[i],
-            `HL ${lows[i - 1].toFixed(2)}`);
-        }
-        break;
-      }
-
-      case ICTState.HIGHER_LOW: {
-        const bsl = checkBSL(highs, i, BSL.LOOKBACK, BSL.CLUSTER_TOLERANCE, BSL.MIN_CLUSTER_COUNT);
-        if (bsl) {
-          setup.currentState = ICTState.BSL_BUILT;
-          setup.bslLevel = bsl.level;
-          setup.bslClusterCount = bsl.clusterCount;
-          setup.bullishEvidence.push(`BSL built: ${bsl.level.toFixed(2)} (${bsl.clusterCount} clustered highs)`);
-          recordTransition(setup, ICTState.HIGHER_LOW, ICTState.BSL_BUILT, i, timestamps[i], closes[i],
-            `BSL ${bsl.level.toFixed(2)} x${bsl.clusterCount}`);
-        }
-        break;
-      }
-
-      case ICTState.BSL_BUILT: {
-        if (setup.bslLevel !== null && checkArmed(highs, lows, closes, i, setup.bslLevel, ARMED.MAX_DISTANCE_PCT)) {
-          setup.currentState = ICTState.ARMED;
-          const dist = ((setup.bslLevel - closes[i]) / setup.bslLevel) * 100;
-          setup.distanceToBslPct = dist;
-          setup.bullishEvidence.push(`ARMED: compressing within ${dist.toFixed(1)}% of BSL`);
-          recordTransition(setup, ICTState.BSL_BUILT, ICTState.ARMED, i, timestamps[i], closes[i],
-            `Armed ${dist.toFixed(1)}% from BSL`);
-        }
-        break;
-      }
-
-      case ICTState.ARMED: {
-        // Update distance to BSL
-        if (setup.bslLevel !== null) {
-          setup.distanceToBslPct = ((setup.bslLevel - closes[i]) / setup.bslLevel) * 100;
-        }
-
-        // Check for CISD (TRIGGER)
-        const cisd = detectBullishCISD(opens, closes, i);
-        if (cisd.triggered) {
-          setup.currentState = ICTState.TRIGGER;
-          setup.cisd = cisd;
-          setup.bullishEvidence.push(`CISD triggered: close ${closes[i].toFixed(2)} > bearish open ${cisd.bearishOpen!.toFixed(2)}`);
-          recordTransition(setup, ICTState.ARMED, ICTState.TRIGGER, i, timestamps[i], closes[i],
-            `CISD > ${cisd.bearishOpen!.toFixed(2)}`);
-        }
-        break;
-      }
-
-      case ICTState.TRIGGER: {
-        // Check for IGNITION
-        if (
-          setup.bslLevel !== null &&
-          checkIgnition(opens, highs, lows, closes, i, setup.bslLevel, DISPLACEMENT.COMPARISON_BARS, DISPLACEMENT.MIN_BODY_RATIO)
-        ) {
-          setup.currentState = ICTState.IGNITION;
-          setup.bullishEvidence.push(`IGNITION: close ${closes[i].toFixed(2)} broke BSL ${setup.bslLevel.toFixed(2)} with displacement`);
-          recordTransition(setup, ICTState.TRIGGER, ICTState.IGNITION, i, timestamps[i], closes[i],
-            `Ignition through BSL ${setup.bslLevel.toFixed(2)}`);
-        }
-        break;
-      }
-
-      case ICTState.IGNITION: {
-        // Terminal state — no further advancement
-        break;
+    // Deepest penetration of the FVG, not merely the first touch.
+    if (setup.fvgZone && setup.currentState >= ICTState.FVG_RETRACEMENT) {
+      const depth = computeRetracementDepth(lows[i], setup.fvgZone);
+      if (setup.retracementDepth === null || depth > setup.retracementDepth) {
+        setup.retracementDepth = depth;
       }
     }
 
-    // ── 3. CAUTION EVIDENCE ──
+    // ── 3. STATE ADVANCEMENT ──
+    // Loop rather than one step per bar: a single candle can legitimately be
+    // the displacement, the MSS and the third leg of the FVG at once, and
+    // charging a bar apiece for each stalled the cleanest setups.
+    let guard = ICTState.IGNITION + 1;
+    let advanced = true;
+    while (advanced && guard-- > 0) {
+      const before = setup.currentState;
+      advanceOnce(setup, opens, highs, lows, closes, timestamps, i);
+      advanced = setup.currentState !== before;
+
+      if (advanced && setup.currentState >= ICTState.SSL_RAID && setup.sslRaid) {
+        if (highs[i] > rangeHigh) rangeHigh = highs[i];
+        setup.dealingRange = computeDealingRange(setup.sslRaid.raidBarLow, rangeHigh, closes[i]);
+      }
+    }
+
+    // ── 4. CAUTION EVIDENCE ──
     if (setup.currentState >= ICTState.BSL_BUILT && setup.bslLevel !== null) {
-      // Check if already broke BSL but no displacement (wick break)
       if (highs[i] > setup.bslLevel && closes[i] <= setup.bslLevel) {
         setup.cautionEvidence.push(`Wick above BSL at bar ${i} without displacement`);
       }
@@ -542,11 +553,196 @@ export function runICTEngine(
   }
 
   setup.barsProcessed = n;
+  setup.stateBarsAgo =
+    setup.stateBarIndex !== null ? n - 1 - setup.stateBarIndex : null;
 
-  // Return the further-advanced setup
-  if (bestSetup.currentState > setup.currentState) {
-    bestSetup.barsProcessed = n;
-    return bestSetup;
+  if (brokenAtBar !== null) {
+    setup.priorInvalidation = {
+      state: brokenState,
+      barsAgo: n - 1 - brokenAtBar,
+      reason: brokenReason,
+    };
   }
+
   return setup;
+}
+
+/** Attempt exactly one state advancement at bar `i`. */
+function advanceOnce(
+  setup: ICTSetup,
+  opens: number[],
+  highs: number[],
+  lows: number[],
+  closes: number[],
+  timestamps: number[],
+  i: number,
+): void {
+  switch (setup.currentState) {
+    case ICTState.NONE: {
+      const raid = checkSSLRaid(lows, closes, timestamps, i, SSL.LOOKBACK);
+      if (raid) {
+        setup.sslRaid = raid;
+        setup.protectedLow = raid.raidBarLow;
+        setup.originalProtectedLow = raid.raidBarLow;
+        setup.protectedLowTrailed = false;
+        setup.sslBarIndex = i;
+        setup.currentState = ICTState.SSL_RAID;
+        setup.bullishEvidence.push(
+          `SSL raid swept ${raid.sweptPrice.toFixed(2)} (${raid.poolCount} equal lows), reclaimed at ${closes[i].toFixed(2)}`,
+        );
+        recordTransition(setup, ICTState.NONE, ICTState.SSL_RAID, i, timestamps[i], closes[i],
+          `SSL raid swept ${raid.sweptPrice.toFixed(2)}`);
+      }
+      break;
+    }
+
+    case ICTState.SSL_RAID: {
+      const mss = computeStructureHigh(highs, setup.sslRaid!.raidBarIndex, MSS.LOOKBACK);
+      if (mss !== null) {
+        setup.mssLevel = mss;
+        setup.currentState = ICTState.STRUCTURE_HIGH;
+        setup.bullishEvidence.push(`Structure high frozen at ${mss.toFixed(2)}`);
+        recordTransition(setup, ICTState.SSL_RAID, ICTState.STRUCTURE_HIGH, i, timestamps[i], closes[i],
+          `Structure high ${mss.toFixed(2)}`);
+      }
+      break;
+    }
+
+    case ICTState.STRUCTURE_HIGH: {
+      if (checkDisplacement(opens, highs, lows, closes, i, DISPLACEMENT.COMPARISON_BARS, DISPLACEMENT.MIN_BODY_RATIO)) {
+        setup.currentState = ICTState.BULLISH_DISPLACEMENT;
+        const body = closes[i] - opens[i];
+        const range = highs[i] - lows[i];
+        setup.bullishEvidence.push(`Displacement candle: body ${body.toFixed(2)}, ratio ${(body / range * 100).toFixed(0)}%`);
+        recordTransition(setup, ICTState.STRUCTURE_HIGH, ICTState.BULLISH_DISPLACEMENT, i, timestamps[i], closes[i],
+          `Displacement body/range ${(body / range * 100).toFixed(0)}%`);
+      }
+      break;
+    }
+
+    case ICTState.BULLISH_DISPLACEMENT: {
+      if (setup.mssLevel !== null && checkMSS(closes, i, setup.mssLevel)) {
+        setup.currentState = ICTState.BULLISH_MSS;
+        setup.bullishEvidence.push(`MSS confirmed: close ${closes[i].toFixed(2)} > structure ${setup.mssLevel.toFixed(2)}`);
+        recordTransition(setup, ICTState.BULLISH_DISPLACEMENT, ICTState.BULLISH_MSS, i, timestamps[i], closes[i],
+          `MSS break ${setup.mssLevel.toFixed(2)}`);
+      }
+      break;
+    }
+
+    case ICTState.BULLISH_MSS: {
+      // Search back to the displacement bar rather than testing only the
+      // current one. The displacement gap's third candle typically prints
+      // before structure formally shifts, so a search that started on the bar
+      // after MSS stepped straight over it.
+      const dispBar = setup.transitions.find(
+        (t) => t.toState === ICTState.BULLISH_DISPLACEMENT,
+      )?.barIndex ?? i;
+      const fvg = findRecentFVG(opens, highs, lows, closes, dispBar, i);
+      if (fvg) {
+        setup.currentState = ICTState.FVG_CONFIRMED;
+        setup.fvgZone = fvg;
+        setup.bullishEvidence.push(`FVG formed: ${fvg.lower.toFixed(2)} - ${fvg.upper.toFixed(2)}`);
+        recordTransition(setup, ICTState.BULLISH_MSS, ICTState.FVG_CONFIRMED, i, timestamps[i], closes[i],
+          `FVG ${fvg.lower.toFixed(2)}-${fvg.upper.toFixed(2)}`);
+      }
+      break;
+    }
+
+    case ICTState.FVG_CONFIRMED: {
+      if (setup.fvgZone && checkFVGRetracement(highs, lows, i, setup.fvgZone)) {
+        const depth = computeRetracementDepth(lows[i], setup.fvgZone);
+        setup.currentState = ICTState.FVG_RETRACEMENT;
+        setup.retracementDepth = depth;
+        setup.bullishEvidence.push(`FVG retrace: ${(depth * 100).toFixed(0)}% depth`);
+        recordTransition(setup, ICTState.FVG_CONFIRMED, ICTState.FVG_RETRACEMENT, i, timestamps[i], closes[i],
+          `FVG retrace ${(depth * 100).toFixed(0)}%`);
+      }
+      break;
+    }
+
+    case ICTState.FVG_RETRACEMENT: {
+      if (setup.protectedLow !== null && checkHigherLow(highs, lows, closes, i, setup.protectedLow)) {
+        setup.currentState = ICTState.HIGHER_LOW;
+        setup.higherLowBar = i;
+
+        // Risk moves to the reaccumulation low. Leaving it pinned at the raid
+        // low overstated the stop a trader would actually be carrying and paid
+        // the setup for the distance.
+        const trailed = lows[i - 1];
+        setup.protectedLow = trailed;
+        setup.protectedLowTrailed = true;
+
+        setup.bullishEvidence.push(
+          `Higher low confirmed at ${trailed.toFixed(2)}, reclaim ${closes[i].toFixed(2)} — risk trailed`,
+        );
+        recordTransition(setup, ICTState.FVG_RETRACEMENT, ICTState.HIGHER_LOW, i, timestamps[i], closes[i],
+          `HL ${trailed.toFixed(2)}`);
+      }
+      break;
+    }
+
+    case ICTState.HIGHER_LOW: {
+      const bsl = checkBSL(
+        highs, closes, i,
+        BSL.LOOKBACK, BSL.CLUSTER_TOLERANCE, BSL.MIN_CLUSTER_COUNT, BSL.PIVOT_BARS,
+      );
+      if (bsl) {
+        setup.currentState = ICTState.BSL_BUILT;
+        setup.bslLevel = bsl.level;
+        setup.bslClusterCount = bsl.clusterCount;
+        setup.bslUnbroken = bsl.unbroken;
+        setup.distanceToBslPct = ((bsl.level - closes[i]) / bsl.level) * 100;
+        setup.bullishEvidence.push(
+          `BSL draw: ${bsl.level.toFixed(2)} (${bsl.clusterCount} equal highs${bsl.unbroken ? "" : ", already cleared"})`,
+        );
+        recordTransition(setup, ICTState.HIGHER_LOW, ICTState.BSL_BUILT, i, timestamps[i], closes[i],
+          `BSL ${bsl.level.toFixed(2)} x${bsl.clusterCount}`);
+      }
+      break;
+    }
+
+    case ICTState.BSL_BUILT: {
+      if (setup.bslLevel !== null && checkArmed(highs, lows, closes, i, setup.bslLevel, ARMED.MAX_DISTANCE_PCT)) {
+        setup.currentState = ICTState.ARMED;
+        const dist = ((setup.bslLevel - closes[i]) / setup.bslLevel) * 100;
+        setup.distanceToBslPct = dist;
+        setup.bullishEvidence.push(`ARMED: compressing within ${dist.toFixed(1)}% of BSL`);
+        recordTransition(setup, ICTState.BSL_BUILT, ICTState.ARMED, i, timestamps[i], closes[i],
+          `Armed ${dist.toFixed(1)}% from BSL`);
+      }
+      break;
+    }
+
+    case ICTState.ARMED: {
+      const cisd = detectBullishCISD(opens, closes, i);
+      if (cisd.triggered) {
+        setup.currentState = ICTState.TRIGGER;
+        setup.cisd = cisd;
+        setup.bullishEvidence.push(
+          `CISD triggered: close ${closes[i].toFixed(2)} > delivery-leg open ${cisd.bearishOpen!.toFixed(2)} (${cisd.runLength}-bar leg)`,
+        );
+        recordTransition(setup, ICTState.ARMED, ICTState.TRIGGER, i, timestamps[i], closes[i],
+          `CISD > ${cisd.bearishOpen!.toFixed(2)}`);
+      }
+      break;
+    }
+
+    case ICTState.TRIGGER: {
+      if (
+        setup.bslLevel !== null &&
+        checkIgnition(opens, highs, lows, closes, i, setup.bslLevel, DISPLACEMENT.COMPARISON_BARS, DISPLACEMENT.MIN_BODY_RATIO)
+      ) {
+        setup.currentState = ICTState.IGNITION;
+        setup.bullishEvidence.push(`IGNITION: close ${closes[i].toFixed(2)} broke BSL ${setup.bslLevel.toFixed(2)} with displacement`);
+        recordTransition(setup, ICTState.TRIGGER, ICTState.IGNITION, i, timestamps[i], closes[i],
+          `Ignition through BSL ${setup.bslLevel.toFixed(2)}`);
+      }
+      break;
+    }
+
+    case ICTState.IGNITION:
+      // Terminal state — no further advancement
+      break;
+  }
 }
