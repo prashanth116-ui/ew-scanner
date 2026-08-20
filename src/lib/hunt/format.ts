@@ -86,6 +86,18 @@ export function formatHuntReport(r: HuntReport, dateLabel: string): string {
     return lines.join("\n").trimEnd();
   }
 
-  lines.push("<i>Buy COILED · watch READY with real demand · research LOADED · skip what already moved.</i>");
+  // The card goes at the FOOTER, not the header. While reading the rows you need the
+  // symbols; having finished them you need the decision. Repeating it every night is the
+  // point — this is read at 6am on a phone, and anything you have to remember is
+  // something you will not.
+  lines.push("━━━━━━━━━━━━━━━━━━");
+  lines.push("<b>COILED</b> → buy zone");
+  lines.push("<b>READY</b> → only if <b>d</b> is high");
+  lines.push("<b>LOADED</b> → research, never buy");
+  lines.push("");
+  lines.push("<b>R</b> how far it can go");
+  lines.push("<b>se</b> sellers done · <b>d</b> buyers in");
+  lines.push("<b>High R + high d = good</b>");
+  lines.push("<b>High R + low d = trap</b>");
   return lines.join("\n").trimEnd();
 }

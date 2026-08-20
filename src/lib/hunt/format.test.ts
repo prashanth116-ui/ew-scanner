@@ -107,11 +107,11 @@ describe("directive hints", () => {
   it("carries a legend and a closing rule so the message is self-explaining", () => {
     const out = formatHuntReport(report({ coiled: [name()] }), "d");
     expect(out).toContain("R=room to move");
-    expect(out).toContain("Buy COILED");
+    expect(out).toContain("High R + low d = trap");
   });
 
   it("omits the closing rule on an empty night, which has its own message", () => {
     const out = formatHuntReport(report(), "d");
-    expect(out).not.toContain("Buy COILED");
+    expect(out).not.toContain("High R + low d = trap");
   });
 });
