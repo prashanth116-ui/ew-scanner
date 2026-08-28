@@ -107,7 +107,7 @@ export function RotationEntrySignals({
       const lifecycle = computeLifecycleStage(event);
       const conviction = computeConviction(event);
       const alignment = regime ? isRegimeAligned(event.sectorName, regime) : "neutral";
-      const signal = computeActionSignal(lifecycle, conviction, alignment);
+      const signal = computeActionSignal(lifecycle, conviction, alignment, health);
 
       // Filter EXIT rotations
       if (signal.action === "EXIT") { exitingCount++; continue; }

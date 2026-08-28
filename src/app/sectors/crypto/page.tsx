@@ -296,7 +296,7 @@ function EntrySignalsPanel({ trackerData, regime, btcDominance, nativeRegime }: 
         const lifecycle = computeLifecycleStage(event);
         const conviction = computeConviction(event);
         const alignment = isCryptoRegimeAligned(event.sectorName, cryptoRegime);
-        const action = computeActionSignal(lifecycle, conviction, alignment);
+        const action = computeActionSignal(lifecycle, conviction, alignment, getHealth(event));
         return (
           <div key={event.sectorId} className={`rounded-lg border p-3 ${action.borderColor} ${action.bgColor}`}>
             <div className="flex items-center justify-between">

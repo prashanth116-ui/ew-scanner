@@ -103,6 +103,19 @@ export interface ConvictionResult {
   level: ConvictionLevel;
   score: number;
   reason: string;
+  /**
+   * Factors that ADDED points, strongest contribution first.
+   *
+   * Split from `negatives` because the previous single joined string led with
+   * `factors[0]` — always the quadrant, since the quadrant slot is pushed
+   * unconditionally first — and then concatenated everything else after a "+".
+   * A card could therefore read "MODERATE conviction: leading quadrant +
+   * negative acceleration, strong inflow", where a factor that SUBTRACTED a
+   * point scans as supporting evidence.
+   */
+  positives: string[];
+  /** Factors that subtracted points (or contributed none). Render separately. */
+  negatives: string[];
 }
 
 export interface RegimeData {

@@ -17,14 +17,19 @@ import {
   Check,
   FileDown,
   ExternalLink,
+  PauseCircle,
+  LayoutGrid,
+  Rows3,
 } from "lucide-react";
 import Link from "next/link";
 import type {
   RotationTrackerResult,
   ActiveRotationDetail,
   RotationEvent,
+  RotationHealthSignals,
   RotationPatternStats,
   RotationStockPerformance,
+  ConvictionResult,
   RRGQuadrant,
   LifecycleStage,
   ConvictionLevel,
@@ -49,6 +54,7 @@ import { type StockPhase, phaseBadge, PHASE_RANK } from "@/lib/phase-utils";
 // ── localStorage cache (4-hour TTL) ──
 
 const CACHE_KEY = "ew-rotation-tracker-v7";
+const VIEW_MODE_KEY = "ew-rotation-view-v1";
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 const AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -457,6 +463,8 @@ function ActionIcon({ icon, className }: { icon: ActionSignal["icon"]; className
       return <ArrowUpCircle className={className} />;
     case "add":
       return <Plus className={className} />;
+    case "wait":
+      return <PauseCircle className={className} />;
     case "hold":
       return <Shield className={className} />;
     case "exit":
@@ -628,25 +636,278 @@ function ConvictionCell({ level }: { level?: string }) {
   return <span className={`text-[10px] font-semibold ${tone}`}>{level}</span>;
 }
 
+/**
+ * One derived row per active rotation.
+ *
+ * Cards and the comparison table render the same six judgements - lifecycle,
+ * conviction, regime alignment, action, breadth, median - so they are derived once
+ * here. Computing them twice is how two views of the same rotation start disagreeing.
+ */
+interface RotationRow {
+  detail: ActiveRotationDetail;
+  health: RotationHealthSignals;
+  lifecycle: LifecycleStage;
+  conviction: ConvictionResult;
+  regimeAlignment: "aligned" | "headwind" | "neutral";
+  actionSignal: ActionSignal;
+  exitWarnings: string[];
+  breadth: number | null;
+  median: number | null;
+}
+
+function buildRotationRows(
+  rotations: ActiveRotationDetail[],
+  regime: RegimeData | null | undefined,
+  sectorScores: SectorRotationScore[] | null,
+): RotationRow[] {
+  const breadthByEtf = new Map((sectorScores ?? []).map((x) => [x.etf, x.breadthPct]));
+  return rotations.map((detail) => {
+    const health = getHealth(detail.event);
+    const lifecycle = computeLifecycleStage(detail.event);
+    const conviction = computeConviction(detail.event);
+    const regimeAlignment = regime ? isRegimeAligned(detail.event.sectorName, regime) : "neutral";
+    const part = participation(detail.stocks, breadthByEtf.get(detail.event.etf));
+    return {
+      detail,
+      health,
+      lifecycle,
+      conviction,
+      regimeAlignment,
+      actionSignal: computeActionSignal(lifecycle, conviction, regimeAlignment, health),
+      exitWarnings: computeExitWarnings(detail.event),
+      breadth: part.breadth,
+      median: part.median,
+    };
+  });
+}
+
+// -- Comparison table view (same rows as the cards, one line each) --
+
+type RotationSortKey =
+  | "etf" | "sector" | "days" | "perf" | "lifecycle"
+  | "conviction" | "regime" | "action" | "breadth" | "median";
+
+const LIFECYCLE_RANK: Record<LifecycleStage, number> = { EARLY: 0, MATURING: 1, LATE: 2, EXHAUSTING: 3 };
+const ACTION_RANK: Record<ActionSignal["action"], number> = {
+  "ENTER": 0,
+  "ADD ON PULLBACK": 1,
+  "HOLD — TIGHTEN STOPS": 2,
+  "WAIT": 3,
+  "EXIT": 4,
+};
+const REGIME_RANK: Record<string, number> = { aligned: 0, neutral: 1, headwind: 2 };
+
+const ROTATION_COLS: { key: RotationSortKey; label: string; align: string; title: string }[] = [
+  { key: "etf", label: "ETF", align: "text-left", title: "Sector proxy ETF" },
+  { key: "sector", label: "Sector", align: "text-left", title: "Sector or sub-sector basket" },
+  { key: "days", label: "Days", align: "text-right", title: "Trading days since the rotation was detected" },
+  { key: "perf", label: "ETF %", align: "text-right", title: "ETF return since the rotation start date" },
+  { key: "lifecycle", label: "Lifecycle", align: "text-left", title: "EARLY <= 5d, MATURING <= 15d, then LATE, then EXHAUSTING" },
+  { key: "conviction", label: "Conviction", align: "text-left", title: "Quadrant + acceleration + money flow + signal trend. Hover a cell for the factors." },
+  { key: "regime", label: "Regime", align: "text-left", title: "Alignment with the macro regime favoured/avoided sector lists" },
+  { key: "action", label: "Action", align: "text-left", title: "Same banner the card shows" },
+  { key: "breadth", label: "Breadth", align: "text-right", title: "Percentage of sector members trading above their own 50-day SMA" },
+  { key: "median", label: "Median", align: "text-right", title: "Median move of the sector stocks in the latest session" },
+];
+
+function ActiveRotationTable({
+  rows,
+  onExpand,
+  expandedId,
+  hasRegime,
+}: {
+  rows: RotationRow[];
+  onExpand: (id: string | null) => void;
+  expandedId: string | null;
+  hasRegime: boolean;
+}) {
+  // Default order is the API order (strongest first); sorting is opt-in per column.
+  const [sortKey, setSortKey] = useState<RotationSortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return rows;
+    const val = (r: RotationRow): string | number => {
+      switch (sortKey) {
+        case "etf": return r.detail.event.etf;
+        case "sector": return r.detail.event.sectorName;
+        case "days": return r.detail.event.daysActive;
+        case "perf": return r.detail.event.etfPerformancePct;
+        case "lifecycle": return LIFECYCLE_RANK[r.lifecycle];
+        case "conviction": return r.conviction.score;
+        case "regime": return REGIME_RANK[r.regimeAlignment] ?? 1;
+        case "action": return ACTION_RANK[r.actionSignal.action] ?? 9;
+        // Unmeasured breadth sorts to the bottom rather than reading as zero -
+        // "not enough constituents to measure" is not "no breadth".
+        case "breadth": return r.breadth ?? Number.NEGATIVE_INFINITY;
+        case "median": return r.median ?? Number.NEGATIVE_INFINITY;
+      }
+    };
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = val(a);
+      const bv = val(b);
+      if (typeof av === "string" && typeof bv === "string") return av.localeCompare(bv) * dir;
+      return ((av as number) - (bv as number)) * dir;
+    });
+  }, [rows, sortKey, sortDir]);
+
+  function handleSort(key: RotationSortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "etf" || key === "sector" ? "asc" : "desc");
+    }
+  }
+
+  const ariaSort = (k: RotationSortKey): "ascending" | "descending" | "none" =>
+    sortKey !== k ? "none" : sortDir === "asc" ? "ascending" : "descending";
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-8 text-center text-[#888]">
+        No active rotations detected
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-[#2a2a2a] bg-[#111]">
+      <table className="w-full min-w-[900px] text-xs">
+        <thead className="border-b border-[#2a2a2a] text-[10px] uppercase tracking-wider text-[#666]">
+          <tr>
+            {ROTATION_COLS.map((c) => (
+              <th
+                key={c.key}
+                onClick={() => handleSort(c.key)}
+                aria-sort={ariaSort(c.key)}
+                title={c.title}
+                className={`cursor-pointer select-none px-2 py-2 hover:text-white ${c.align}`}
+              >
+                {c.label}
+                {sortKey === c.key && (
+                  <span className="ml-0.5 text-[#5ba3e6]">{sortDir === "asc" ? "↑" : "↓"}</span>
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((row) => {
+            const e = row.detail.event;
+            const isExpanded = expandedId === e.sectorId;
+            const lcBadge = lifecycleBadge(row.lifecycle);
+            return (
+              <tr
+                key={e.sectorId}
+                onClick={() => onExpand(isExpanded ? null : e.sectorId)}
+                className={`cursor-pointer border-b border-[#1f1f1f] transition-colors last:border-0 ${
+                  isExpanded ? "bg-green-500/5 ring-1 ring-inset ring-green-500/30" : "hover:bg-[#181818]"
+                }`}
+              >
+                <td className="px-2 py-2 font-semibold text-[#5ba3e6]">{e.etf}</td>
+                <td className="px-2 py-2 text-[#ddd]">{e.sectorName}</td>
+                <td className="px-2 py-2 text-right text-[#a0a0a0]">{e.daysActive}d</td>
+                <td className={`px-2 py-2 text-right font-semibold ${perfColor(e.etfPerformancePct)}`}>
+                  {e.etfPerformancePct > 0 ? "+" : ""}
+                  {e.etfPerformancePct.toFixed(1)}%
+                </td>
+                <td className="px-2 py-2">
+                  <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${lcBadge.className}`} title={lcBadge.guidance}>
+                    {row.lifecycle}
+                  </span>
+                </td>
+                <td className="px-2 py-2">
+                  <span
+                    className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${convictionBadge(row.conviction.level)}`}
+                    title={row.conviction.reason}
+                  >
+                    {row.conviction.level} ({row.conviction.score})
+                  </span>
+                  {row.conviction.negatives.length > 0 && (
+                    <span className="ml-1 text-[10px] text-amber-400/80" title={`Against: ${row.conviction.negatives.join(", ")}`}>
+                      !{row.conviction.negatives.length}
+                    </span>
+                  )}
+                </td>
+                <td className="px-2 py-2 text-[10px]">
+                  {!hasRegime ? (
+                    <span className="text-[#444]">-</span>
+                  ) : row.regimeAlignment === "aligned" ? (
+                    <span className="text-green-400">Aligned</span>
+                  ) : row.regimeAlignment === "headwind" ? (
+                    <span className="text-red-400">Headwind</span>
+                  ) : (
+                    <span className="text-[#666]">neutral</span>
+                  )}
+                </td>
+                <td className="px-2 py-2">
+                  <span
+                    className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${row.actionSignal.borderColor} ${row.actionSignal.bgColor} ${row.actionSignal.color}`}
+                    title={row.actionSignal.description}
+                  >
+                    <ActionIcon icon={row.actionSignal.icon} className="h-3 w-3 shrink-0" />
+                    {row.actionSignal.action}
+                  </span>
+                  {row.exitWarnings.length > 0 && (
+                    <span className="ml-1 align-middle text-amber-400" title={row.exitWarnings.join("; ")}>
+                      <AlertTriangle className="inline h-3 w-3" />
+                    </span>
+                  )}
+                </td>
+                <td className="px-2 py-2 text-right">
+                  {/* n/a is deliberately distinct from 0%: a basket below the
+                      5-constituent minimum reports null, which is not zero breadth. */}
+                  {row.breadth === null ? (
+                    <span className="text-[#444]" title="Not enough resolvable constituents to measure">n/a</span>
+                  ) : (
+                    <span
+                      className={
+                        row.breadth >= 60
+                          ? "font-semibold text-green-400"
+                          : row.breadth >= 40
+                            ? "font-semibold text-amber-400"
+                            : "font-semibold text-red-400"
+                      }
+                    >
+                      {row.breadth}%
+                    </span>
+                  )}
+                </td>
+                <td className="px-2 py-2 text-right">
+                  {row.median === null ? (
+                    <span className="text-[#444]">n/a</span>
+                  ) : (
+                    <span className={row.median >= 0 ? "text-green-400" : "text-red-400"}>
+                      {row.median > 0 ? "+" : ""}
+                      {row.median.toFixed(2)}%
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ActiveRotationCards({
-  rotations,
+  rows,
   onExpand,
   expandedId,
   regime,
   patternStats,
-  sectorScores,
 }: {
-  rotations: ActiveRotationDetail[];
+  rows: RotationRow[];
   onExpand: (id: string | null) => void;
   expandedId: string | null;
   regime: RegimeData | null | undefined;
   patternStats: RotationPatternStats[];
-  /** Already fetched for the heatmap; carries breadthPct per sector. */
-  sectorScores: SectorRotationScore[] | null;
 }) {
-  const breadthByEtf = new Map((sectorScores ?? []).map((x) => [x.etf, x.breadthPct]));
-
-  if (rotations.length === 0) {
+  if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-8 text-center text-[#888]">
         No active rotations detected
@@ -656,16 +917,11 @@ function ActiveRotationCards({
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {rotations.map((r) => {
+      {rows.map((row) => {
+        const { detail: r, health: h, lifecycle, conviction, regimeAlignment, actionSignal, exitWarnings } = row;
         const isExpanded = expandedId === r.event.sectorId;
-        const h = getHealth(r.event);
-        const lifecycle = computeLifecycleStage(r.event);
         const lcBadge = lifecycleBadge(lifecycle);
-        const conviction = computeConviction(r.event);
-        const exitWarnings = computeExitWarnings(r.event);
-        const regimeAlignment = regime ? isRegimeAligned(r.event.sectorName, regime) : "neutral";
-        const actionSignal = computeActionSignal(lifecycle, conviction, regimeAlignment);
-        const part = participation(r.stocks, breadthByEtf.get(r.event.etf));
+        const part = { breadth: row.breadth, median: row.median };
 
         return (
           <button
@@ -765,8 +1021,13 @@ function ActiveRotationCards({
               <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${convictionBadge(conviction.level)}`}>
                 {conviction.level}
               </span>
-              <span className="text-[10px] text-[#666] leading-tight">
-                {conviction.reason}
+              <span className="text-[10px] leading-tight">
+                <span className="text-[#666]">
+                  {conviction.positives.length ? conviction.positives.join(", ") : "no supporting factors"}
+                </span>
+                {conviction.negatives.length > 0 && (
+                  <span className="text-amber-400/80"> — against: {conviction.negatives.join(", ")}</span>
+                )}
               </span>
             </div>
 
@@ -1382,7 +1643,7 @@ function ExpandedRotationDetail({ detail, regime }: { detail: ActiveRotationDeta
   const lc = computeLifecycleStage(detail.event);
   const conv = computeConviction(detail.event);
   const ra = regime ? isRegimeAligned(detail.event.sectorName, regime) : "neutral";
-  const as_ = computeActionSignal(lc, conv, ra);
+  const as_ = computeActionSignal(lc, conv, ra, getHealth(detail.event));
   return (
     <section className="rounded-lg border border-[#2a2a2a] bg-[#111] overflow-hidden">
       <div className="border-b border-[#2a2a2a] px-4 py-3 flex items-center justify-between">
@@ -2174,7 +2435,18 @@ export default function RotationTrackerPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedSector, setExpandedSector] = useState<string | null>(null);
   const [showAllSectors, setShowAllSectors] = useState(false);
+  // Cards vs one-line comparison table. Read lazily rather than in an effect so the
+  // first paint is already the remembered view instead of flashing the default.
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() => {
+    if (typeof window === "undefined") return "cards";
+    return window.localStorage.getItem(VIEW_MODE_KEY) === "table" ? "table" : "cards";
+  });
   const [heatmapSectors, setHeatmapSectors] = useState<SectorRotationScore[] | null>(null);
+  // Superset of heatmapSectors. An active rotation can be a sub-sector (AIQ), a
+  // cross-asset ETF or a leadership basket, none of which appear in `sectors` — so a
+  // breadth lookup against the GICS list alone silently drops the Breadth chip on
+  // exactly those cards. AIQ has a breadth of 48%; the card was rendering nothing.
+  const [allSectorScores, setAllSectorScores] = useState<SectorRotationScore[] | null>(null);
   const [enrichedStocks, setEnrichedStocks] = useState<{ symbol: string; conviction: string }[]>([]);
   const [prerunServerMap, setPrerunServerMap] = useState<Map<string, { verdict: string; score: number; daysToEarnings: number | null; nextEarningsDate: string | null; rs20d: number | null }>>(new Map());
   const [collapsedPanels, togglePanel] = useCollapsedPanels("ew-rotation-collapsed-v1", ["timeline", "pattern-stats", "recently-ended"]);
@@ -2236,6 +2508,13 @@ export default function RotationTrackerPage() {
       if (!res.ok) return;
       const result = await res.json();
       if (result.sectors) setHeatmapSectors(result.sectors);
+      const merged: SectorRotationScore[] = [
+        ...(result.sectors ?? []),
+        ...(result.subSectorScores ?? []),
+        ...(result.crossAssetScores ?? []),
+        ...(result.leadershipBasketScores ?? []),
+      ];
+      if (merged.length) setAllSectorScores(merged);
       // The same response already carries enrichment. Keeping it costs nothing and
       // saves a second request for the conviction column.
       if (result.enrichedStocks?.passed) {
@@ -2347,6 +2626,20 @@ export default function RotationTrackerPage() {
     setExpandedSector(sectorId);
     setShowAllSectors(false);
   }, []);
+
+  const setView = useCallback((mode: "cards" | "table") => {
+    setViewMode(mode);
+    try {
+      window.localStorage.setItem(VIEW_MODE_KEY, mode);
+    } catch {
+      // Private mode / quota - the toggle still works for this session.
+    }
+  }, []);
+
+  const rotationRows = useMemo(
+    () => (data ? buildRotationRows(data.activeRotations, data.regime, allSectorScores ?? heatmapSectors) : []),
+    [data, allSectorScores, heatmapSectors],
+  );
 
   const handleShowAllSectors = useCallback(() => {
     setShowAllSectors((prev) => !prev);
@@ -2463,15 +2756,39 @@ export default function RotationTrackerPage() {
                   All Sectors
                 </button>
               )}
+              <div className="ml-auto flex items-center gap-0.5 rounded-md border border-[#333] bg-[#1a1a1a] p-0.5">
+                {([["cards", "Cards"], ["table", "Table"]] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    onClick={() => setView(mode)}
+                    aria-pressed={viewMode === mode}
+                    title={mode === "cards" ? "Detail cards" : "One line per rotation - sortable"}
+                    className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                      viewMode === mode ? "bg-[#2a2a2a] text-white" : "text-[#888] hover:text-[#ccc]"
+                    }`}
+                  >
+                    {mode === "cards" ? <LayoutGrid className="h-3.5 w-3.5" /> : <Rows3 className="h-3.5 w-3.5" />}
+                    {label}
+                  </button>
+                ))}
+              </div>
             </h2>
-            <ActiveRotationCards
-              rotations={data.activeRotations}
-              onExpand={handleExpandSector}
-              expandedId={expandedSector}
-              regime={data.regime}
-              patternStats={data.patternStats}
-              sectorScores={heatmapSectors}
-            />
+            {viewMode === "cards" ? (
+              <ActiveRotationCards
+                rows={rotationRows}
+                onExpand={handleExpandSector}
+                expandedId={expandedSector}
+                regime={data.regime}
+                patternStats={data.patternStats}
+              />
+            ) : (
+              <ActiveRotationTable
+                rows={rotationRows}
+                onExpand={handleExpandSector}
+                expandedId={expandedSector}
+                hasRegime={Boolean(data.regime)}
+              />
+            )}
           </section>
 
           {/* Section 2a: All Sectors aggregate view */}

@@ -14,6 +14,7 @@ import {
   computeConviction,
   computeActionSignal,
   isRegimeAligned,
+  getHealth,
 } from "@/lib/sector-rotation/rotation-helpers";
 import type { ActionSignal } from "@/lib/sector-rotation/rotation-helpers";
 import { computeLeadershipHealth } from "@/lib/sector-rotation/leadership-health";
@@ -620,7 +621,7 @@ export async function GET(request: NextRequest) {
         const alignment = regimeData
           ? isRegimeAligned(r.event.sectorName, regimeData)
           : "neutral" as const;
-        const action = computeActionSignal(lifecycle, conviction, alignment);
+        const action = computeActionSignal(lifecycle, conviction, alignment, getHealth(r.event));
         rotationAnalyses.push({
           sectorName: r.event.sectorName,
           etf: r.event.etf,
@@ -635,7 +636,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Sort rotations: ENTER first, then by conviction score desc
-    const actionOrder: Record<string, number> = { "ENTER": 0, "ADD ON PULLBACK": 1, "HOLD \u2014 TIGHTEN STOPS": 2, "EXIT": 3 };
+    const actionOrder: Record<string, number> = { "ENTER": 0, "ADD ON PULLBACK": 1, "HOLD \u2014 TIGHTEN STOPS": 2, "WAIT": 3, "EXIT": 4 };
     rotationAnalyses.sort((a, b) => {
       const aOrder = actionOrder[a.action.action] ?? 99;
       const bOrder = actionOrder[b.action.action] ?? 99;
