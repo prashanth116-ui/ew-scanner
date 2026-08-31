@@ -73,6 +73,10 @@
       "schedule": "2 3 * * 2-6"
     },
     {
+      "path": "/api/rotation/screen-log",
+      "schedule": "10 3 * * 2-6"
+    },
+    {
       "path": "/api/daily-briefing/cron",
       "schedule": "0 13 * * 1-5"
     }

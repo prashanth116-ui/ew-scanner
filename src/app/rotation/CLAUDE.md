@@ -50,3 +50,27 @@ A missing gate input is never a pass - sub-sector and cross-asset baskets legiti
 - **Sector RS** on the card is `mansfieldRS` - % deviation of the sector/SPY ratio from its own 200d average, zero-centred, so it measures out-performance rather than direction.
 
 ⚠️ The older `SecRS` column is RS **acceleration** (5d vs 20d), a different thing. It scored a consistently **negative** IC in the entry study (-0.095, stable train to test): names already bursting against their own sector underperformed over the next 20 days. Its tooltip says so. Read a high value as caution, not confirmation.
+
+## Forward log (`/api/rotation/screen-log`, cron 03:10 UTC Tue-Sat)
+
+Records each active rotation's screen verdict and symbol list, then scores it once 20 trading days have elapsed. Rows are **inserted, never updated** — the recorded verdict is a pre-registration, and revising it after the outcome is visible would destroy the only thing the table is for. Identity is `(etf, rotation_start)`, so re-running while a rotation is still active is a no-op.
+
+`is_forward` marks rows logged within 4 days of the rotation start. Rotations already running when the log was switched on are backfills; **exclude them from any real-time hit-rate claim** or the number flatters itself.
+
+This exists because the screen's thresholds were fitted on 8 firing rotations after trying ~15 configurations, in a window where only 8 of 78 rotations had a negative 20-day ETF return. That is a calibration, not evidence. At ~5-6 firings a year the elapsed time matters more than the code.
+
+Backtest that produced the thresholds: `scripts/rotation-backtest/` (four numbered stages, README records the rejected variants).
+
+## The gate is the least-proven part of the rule
+
+Ablation over the 78-rotation panel:
+
+| | Rotations | Names | Positive | Non-tech |
+|---|---|---|---|---|
+| baseline, every member | 78 | 2226 | 68.7% | 65.3% |
+| gate only | 24 | 755 | **65.8%** | 62.7% |
+| screen + veto, no gate | 20 | 133 | 85.7% | 82.9% |
+| gate + screen, no veto | 19 | 73 | 82.2% | 67.9% |
+| shipped (all three) | 8 | 57 | 89.5% | 83.3% |
+
+**The gate alone scores below the baseline.** The veto carries the rule — removing it drops non-tech from 83.3% to 67.9%. And the gate's last 3.8pp costs 12 of 20 rotations: screen+veto alone fires 20 times at 85.7% (19/20 profitable) against the shipped 8 times at 89.5%. Whether that trade is worth it is an open question, not a settled one; the forward log is what will answer it.

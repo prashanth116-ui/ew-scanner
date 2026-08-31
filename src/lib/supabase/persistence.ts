@@ -2429,3 +2429,140 @@ export async function loadICTDailyMulti(
     return [];
   }
 }
+
+
+// ── Rotation screen forward log (migration 032) ──
+
+/**
+ * A pre-registered pick from the rotation entry screen.
+ *
+ * Written when a rotation is first seen, scored 20 trading days later. The point
+ * is that `symbols` is committed to before the outcome exists — the screen's
+ * thresholds were fitted on 8 firing rotations after trying ~15 configurations, so
+ * only out-of-sample observations can tell you whether it works.
+ */
+export interface RotationScreenLogRecord {
+  etf: string;
+  sector: string;
+  rotation_start: string;
+  logged_at: string;
+  is_forward: boolean;
+  verdict: string;
+  qualifying: number;
+  symbols: string[];
+  gate_breadth: number | null;
+  gate_cmf: number | null;
+  gate_accel: number | null;
+  gate_pass: boolean;
+  etf_price_at_start: number | null;
+}
+
+export interface RotationScreenLogRow extends RotationScreenLogRecord {
+  id: string;
+  scored_at: string | null;
+  etf_fwd_pct: number | null;
+  basket_fwd_pct: number | null;
+  names_positive: number | null;
+  names_scored: number | null;
+  outcomes: Record<string, number> | null;
+}
+
+/**
+ * Insert rotations not already logged. Deliberately NEVER updates an existing row:
+ * the recorded verdict and symbol list are the pre-registration, and revising them
+ * once the outcome is visible would quietly destroy the only thing this table is for.
+ */
+export async function insertRotationScreenLogs(records: RotationScreenLogRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      console.error("[persistence] insertRotationScreenLogs: no admin client");
+      return 0;
+    }
+    const { data, error } = await supabase
+      .from("rotation_screen_log")
+      .upsert(records, { onConflict: "etf,rotation_start", ignoreDuplicates: true })
+      .select("id");
+    if (error) {
+      console.error("[persistence] insertRotationScreenLogs:", error.message);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[persistence] insertRotationScreenLogs threw:", err);
+    return 0;
+  }
+}
+
+/** Rows whose holding window has elapsed and which have not been scored yet. */
+export async function loadUnscoredRotationScreenLogs(onOrBefore: string): Promise<RotationScreenLogRow[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+    const { data, error } = await supabase
+      .from("rotation_screen_log")
+      .select("*")
+      .is("scored_at", null)
+      .lte("rotation_start", onOrBefore)
+      .order("rotation_start", { ascending: true });
+    if (error) {
+      console.error("[persistence] loadUnscoredRotationScreenLogs:", error.message);
+      return [];
+    }
+    return (data ?? []) as RotationScreenLogRow[];
+  } catch (err) {
+    console.error("[persistence] loadUnscoredRotationScreenLogs threw:", err);
+    return [];
+  }
+}
+
+export async function scoreRotationScreenLog(
+  id: string,
+  outcome: {
+    scored_at: string;
+    etf_fwd_pct: number | null;
+    basket_fwd_pct: number | null;
+    names_positive: number | null;
+    names_scored: number | null;
+    outcomes: Record<string, number>;
+  },
+): Promise<boolean> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return false;
+    const { error } = await supabase
+      .from("rotation_screen_log")
+      .update({ ...outcome, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) {
+      console.error("[persistence] scoreRotationScreenLog:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[persistence] scoreRotationScreenLog threw:", err);
+    return false;
+  }
+}
+
+/** Everything logged, newest first — for the results readout. */
+export async function loadRotationScreenLogs(limit = 200): Promise<RotationScreenLogRow[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+    const { data, error } = await supabase
+      .from("rotation_screen_log")
+      .select("*")
+      .order("rotation_start", { ascending: false })
+      .limit(limit);
+    if (error) {
+      console.error("[persistence] loadRotationScreenLogs:", error.message);
+      return [];
+    }
+    return (data ?? []) as RotationScreenLogRow[];
+  } catch (err) {
+    console.error("[persistence] loadRotationScreenLogs threw:", err);
+    return [];
+  }
+}
