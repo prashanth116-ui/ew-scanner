@@ -69,6 +69,29 @@ export interface RotationStockPerformance {
   volumeConsistency: number; // days in last 5 with vol > 10d avg (0-5 scale)
   verdict: string | null;       // prerun verdict: "PRIORITY" | "KEEP" | "WATCH" | null
   finalScore: number | null;    // prerun final score (0-41)
+
+  /**
+   * Entry-screen inputs measured AT the rotation start date, not today.
+   *
+   * The selection study validated this screen applied on the day the rotation
+   * printed. Re-running it against today's bars is a different, untested signal,
+   * so these are deliberately as-of-start and labelled that way in the UI.
+   * Null when the 6mo chart does not reach 21 bars before the start date.
+   */
+  atrPctAtStart: number | null;
+  ret20AtStart: number | null;
+  breakout20AtStart: boolean | null;
+
+  /**
+   * Stock 20d return minus the sector ETF's over the same window (current).
+   *
+   * Measured against the SECTOR, not SPY, on purpose: inside a single basket on a
+   * single date, subtracting an index return is the same constant for every member,
+   * so RS-vs-SPY ranks identically to raw return and adds no information. RS vs the
+   * sector answers a question the return column cannot - is this name leading or
+   * lagging the rotation you are buying it for.
+   */
+  rsVsSector20: number | null;
 }
 
 export interface ActiveRotationDetail {

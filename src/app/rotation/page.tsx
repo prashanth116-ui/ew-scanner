@@ -39,6 +39,12 @@ import type {
 } from "@/lib/sector-rotation/rotation-types";
 import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 import {
+  evaluateEntryScreen,
+  entryScreenReason,
+  type EntryScreenResult,
+} from "@/lib/sector-rotation/entry-screen";
+import { ENTRY_SCREEN } from "@/lib/sector-rotation/config";
+import {
   getHealth,
   computeLifecycleStage,
   computeConviction,
@@ -653,6 +659,12 @@ interface RotationRow {
   exitWarnings: string[];
   breadth: number | null;
   median: number | null;
+  /** Two-stage entry screen: is this rotation tradeable, and which names. */
+  screen: EntryScreenResult;
+  /** Sector Mansfield RS - % deviation of the sector/SPY ratio from its own
+   *  200d average. Zero-centred, so positive means the sector is outperforming
+   *  its own relative trend, not merely rising. */
+  sectorRs: number | null;
 }
 
 function buildRotationRows(
@@ -661,6 +673,7 @@ function buildRotationRows(
   sectorScores: SectorRotationScore[] | null,
 ): RotationRow[] {
   const breadthByEtf = new Map((sectorScores ?? []).map((x) => [x.etf, x.breadthPct]));
+  const scoreByEtf = new Map((sectorScores ?? []).map((x) => [x.etf, x]));
   return rotations.map((detail) => {
     const health = getHealth(detail.event);
     const lifecycle = computeLifecycleStage(detail.event);
@@ -677,15 +690,86 @@ function buildRotationRows(
       exitWarnings: computeExitWarnings(detail.event),
       breadth: part.breadth,
       median: part.median,
+      screen: evaluateEntryScreen(detail, scoreByEtf.get(detail.event.etf)),
+      sectorRs: scoreByEtf.get(detail.event.etf)?.mansfieldRS ?? null,
     };
   });
+}
+
+/**
+ * The entry-screen verdict. The qualifying-name count is the interface: it is
+ * simultaneously the position list and the breadth confirmation, because a sector
+ * where only one or two names can post a breakout with above-median strength is
+ * drifting rather than rotating.
+ */
+function screenTone(v: EntryScreenResult["verdict"]): string {
+  switch (v) {
+    case "TRADE": return "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
+    case "SKIP_THIN": return "bg-amber-500/10 text-amber-400/90 border-amber-500/30";
+    case "SKIP_GATE": return "bg-red-500/10 text-red-400/80 border-red-500/30";
+    default: return "bg-[#1a1a1a] text-[#666] border-[#333]";
+  }
+}
+
+function screenLabel(r: EntryScreenResult): string {
+  switch (r.verdict) {
+    case "TRADE": return `${r.qualifying} QUALIFY — TRADE`;
+    case "SKIP_THIN": return `${r.qualifying} QUALIFY — TOO THIN`;
+    case "SKIP_GATE": return "GATE FAILED";
+    default: return "NOT SCREENABLE";
+  }
+}
+
+function GateTicks({ gate }: { gate: EntryScreenResult["gate"] }) {
+  const item = (label: string, ok: boolean, val: string) => (
+    <span className={ok ? "text-green-400/90" : "text-red-400/90"} title={`${label}: ${val}`}>
+      {ok ? "✓" : "✗"} {label}
+    </span>
+  );
+  if (gate.breadth === null) return null;
+  return (
+    <span className="flex flex-wrap items-center gap-2 text-[10px]">
+      {item("breadth", gate.breadthPass, `${gate.breadth.toFixed(0)}% (need >= ${ENTRY_SCREEN.MIN_BREADTH_PCT}%)`)}
+      {item("flow", gate.cmfPass, `CMF ${gate.cmf?.toFixed(3)} (need > 0)`)}
+      {item("accel", gate.accelPass, `${gate.accel?.toFixed(1)} (need > 0)`)}
+    </span>
+  );
+}
+
+function EntryScreenPanel({ screen }: { screen: EntryScreenResult }) {
+  return (
+    <div className="mt-2 rounded-md border border-[#2a2a2a] bg-[#131313] px-2 py-1.5">
+      <div className="flex items-center gap-2">
+        <span
+          className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${screenTone(screen.verdict)}`}
+          title={entryScreenReason(screen)}
+        >
+          {screenLabel(screen)}
+        </span>
+        <GateTicks gate={screen.gate} />
+      </div>
+      {screen.verdict === "TRADE" && (
+        <div className="mt-1 truncate text-[10px] text-[#888]" title={screen.picks.map((p) => p.symbol).join(", ")}>
+          {screen.picks.map((p) => p.symbol).join(" ")}
+        </div>
+      )}
+      {screen.verdict === "SKIP_THIN" && screen.qualifying > 0 && (
+        <div className="mt-1 text-[10px] text-[#666]">
+          would have been {screen.picks.map((p) => p.symbol).join(", ")}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // -- Comparison table view (same rows as the cards, one line each) --
 
 type RotationSortKey =
   | "etf" | "sector" | "days" | "perf" | "lifecycle"
-  | "conviction" | "regime" | "action" | "breadth" | "median";
+  | "conviction" | "regime" | "action" | "breadth" | "median" | "sectorRs" | "screen";
+
+// TRADE first, then near-misses, then hard rejects.
+const SCREEN_RANK: Record<string, number> = { TRADE: 0, SKIP_THIN: 1, SKIP_GATE: 2, NO_DATA: 3 };
 
 const LIFECYCLE_RANK: Record<LifecycleStage, number> = { EARLY: 0, MATURING: 1, LATE: 2, EXHAUSTING: 3 };
 const ACTION_RANK: Record<ActionSignal["action"], number> = {
@@ -708,6 +792,8 @@ const ROTATION_COLS: { key: RotationSortKey; label: string; align: string; title
   { key: "action", label: "Action", align: "text-left", title: "Same banner the card shows" },
   { key: "breadth", label: "Breadth", align: "text-right", title: "Percentage of sector members trading above their own 50-day SMA" },
   { key: "median", label: "Median", align: "text-right", title: "Median move of the sector stocks in the latest session" },
+  { key: "sectorRs", label: "Sec RS", align: "text-right", title: "Sector relative strength vs SPY (Mansfield) — % deviation of the sector/SPY ratio from its own 200-day average" },
+  { key: "screen", label: "Screen", align: "text-left", title: "Entry screen: how many members clear breakout + top-half basket strength + ATR, and whether the rotation gate passed" },
 ];
 
 function ActiveRotationTable({
@@ -741,6 +827,9 @@ function ActiveRotationTable({
         // "not enough constituents to measure" is not "no breadth".
         case "breadth": return r.breadth ?? Number.NEGATIVE_INFINITY;
         case "median": return r.median ?? Number.NEGATIVE_INFINITY;
+        case "sectorRs": return r.sectorRs ?? Number.NEGATIVE_INFINITY;
+        // Sort by verdict first so TRADE rows group, then by how many qualified.
+        case "screen": return -(SCREEN_RANK[r.screen.verdict] ?? 9) * 1000 + r.screen.qualifying;
       }
     };
     const dir = sortDir === "asc" ? 1 : -1;
@@ -885,6 +974,24 @@ function ActiveRotationTable({
                     </span>
                   )}
                 </td>
+                <td className="px-2 py-2 text-right">
+                  {row.sectorRs === null ? (
+                    <span className="text-[#444]">n/a</span>
+                  ) : (
+                    <span className={row.sectorRs >= 0 ? "text-green-400" : "text-red-400"}>
+                      {row.sectorRs >= 0 ? "+" : ""}
+                      {row.sectorRs.toFixed(1)}
+                    </span>
+                  )}
+                </td>
+                <td className="px-2 py-2">
+                  <span
+                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${screenTone(row.screen.verdict)}`}
+                    title={entryScreenReason(row.screen)}
+                  >
+                    {screenLabel(row.screen)}
+                  </span>
+                </td>
               </tr>
             );
           })}
@@ -959,6 +1066,14 @@ function ActiveRotationCards({
                   >
                     {r.event.etf}
                   </Link>
+                  {row.sectorRs !== null && (
+                    <span
+                      className={`text-[10px] font-medium ${row.sectorRs >= 0 ? "text-green-400/90" : "text-red-400/90"}`}
+                      title={`Sector relative strength vs SPY (Mansfield): the sector/SPY ratio is ${Math.abs(row.sectorRs).toFixed(1)}% ${row.sectorRs >= 0 ? "above" : "below"} its own 200-day average. Zero-centred, so this measures out-performance, not just price direction.`}
+                    >
+                      RS {row.sectorRs >= 0 ? "+" : ""}{row.sectorRs.toFixed(1)}
+                    </span>
+                  )}
                   <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${quadrantBadge(h.quadrant).className}`}>
                     {quadrantBadge(h.quadrant).label}
                   </span>
@@ -1030,6 +1145,8 @@ function ActiveRotationCards({
                 )}
               </span>
             </div>
+
+            <EntryScreenPanel screen={row.screen} />
 
             {/* Health signals */}
             <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
@@ -1116,18 +1233,21 @@ function actionChipColors(label: string): { bg: string; text: string; border: st
   }
 }
 
-type StockSortKey = "symbol" | "name" | "action" | "phase" | "sector" | "priceAtRotationStart" | "priceNow" | "dailyChangePct" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rs20d" | "trendAccel" | "rsAcceleration" | "earnings" | "verdict" | "finalScore";
+type StockSortKey = "symbol" | "name" | "action" | "phase" | "sector" | "priceAtRotationStart" | "priceNow" | "dailyChangePct" | "performancePct" | "vsEtf" | "aboveSma50" | "volumeVsAvg" | "rs20d" | "trendAccel" | "rsAcceleration" | "earnings" | "verdict" | "finalScore" | "rsVsSector20";
 
 function StockPerformanceTable({
   detail,
   lifecycle,
   sectorMap,
   lifecycleMap,
+  screenPicks,
 }: {
   detail: ActiveRotationDetail;
   lifecycle: LifecycleStage;
   sectorMap?: Map<string, string>;
   lifecycleMap?: Map<string, LifecycleStage>;
+  /** Symbols that cleared the entry screen at the rotation start, for marking. */
+  screenPicks?: Set<string>;
 }) {
   const [sortKey, setSortKey] = useState<StockSortKey>("performancePct");
   const [sortAsc, setSortAsc] = useState(false);
@@ -1479,6 +1599,14 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-1.5 py-1.5 select-none hover:text-white" onClick={() => handleSort("symbol")} aria-sort={stockAriaSort("symbol")}>
               Symbol<SortArrow col="symbol" />
             </th>
+            <th
+              className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white"
+              onClick={() => handleSort("rsVsSector20")}
+              aria-sort={stockAriaSort("rsVsSector20")}
+              title="20-day return minus the sector ETF's over the same window. Measured against the SECTOR, not SPY — inside one basket, subtracting an index return is the same constant for everyone, so RS-vs-SPY would rank identically to the raw return column. Positive = leading its own rotation."
+            >
+              RS/Sec<SortArrow col="rsVsSector20" />
+            </th>
             {sectorMap && (
               <th className="cursor-pointer px-1.5 py-1.5 select-none hover:text-white" onClick={() => handleSort("sector")} aria-sort={stockAriaSort("sector")}>
                 Sector<SortArrow col="sector" />
@@ -1520,7 +1648,7 @@ function StockPerformanceTable({
             <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("trendAccel")} aria-sort={stockAriaSort("trendAccel")} title="Short-term trend vs long-term trend (% from 50MA minus % from 200MA). Positive = accelerating uptrend.">
               TrAcc<SortArrow col="trendAccel" />
             </th>
-            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("rsAcceleration")} aria-sort={stockAriaSort("rsAcceleration")} title="Relative strength acceleration vs sector ETF (5d vs 20d). Positive = gaining ground vs sector recently.">
+            <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("rsAcceleration")} aria-sort={stockAriaSort("rsAcceleration")} title="Relative strength ACCELERATION vs the sector ETF (5d vs 20d) — a short-term burst, not a level. Note: in the rotation entry study this scored a consistently NEGATIVE information coefficient (-0.095, stable train to test), meaning names already bursting against their own sector tended to underperform over the next 20 days. Read a high value as caution, not confirmation.">
               SecRS<SortArrow col="rsAcceleration" />
             </th>
             <th className="cursor-pointer px-1.5 py-1.5 text-right select-none hover:text-white" onClick={() => handleSort("earnings")} aria-sort={stockAriaSort("earnings")}>
@@ -1556,6 +1684,20 @@ function StockPerformanceTable({
                       TA
                     </span>
                   )}
+                  {screenPicks?.has(s.symbol) && (
+                    <span
+                      className="ml-1 inline-flex items-center rounded bg-emerald-500/15 px-1 py-0.5 text-[9px] font-medium text-emerald-300"
+                      title="Cleared the entry screen on the rotation start bar: breakout above the 20-day high, 20-day return in the top half of the basket, ATR >= 3%"
+                    >
+                      ✓
+                    </span>
+                  )}
+                </td>
+                <td className={`px-1.5 py-1.5 text-right font-mono ${
+                  s.rsVsSector20 == null ? "text-[#444]"
+                    : s.rsVsSector20 > 0 ? "text-green-400" : "text-red-400"
+                }`}>
+                  {s.rsVsSector20 == null ? "—" : `${s.rsVsSector20 > 0 ? "+" : ""}${s.rsVsSector20.toFixed(1)}`}
                 </td>
                 {sectorMap && (
                   <td className="px-1.5 py-1.5 text-[#a0a0a0] truncate max-w-[80px]">{sectorMap.get(s.symbol) ?? ""}</td>
@@ -1639,7 +1781,7 @@ function StockPerformanceTable({
 
 // ── Expanded Rotation Detail (extracted from IIFE) ──
 
-function ExpandedRotationDetail({ detail, regime }: { detail: ActiveRotationDetail; regime: RegimeData | null | undefined }) {
+function ExpandedRotationDetail({ detail, regime, screen }: { detail: ActiveRotationDetail; regime: RegimeData | null | undefined; screen?: EntryScreenResult }) {
   const lc = computeLifecycleStage(detail.event);
   const conv = computeConviction(detail.event);
   const ra = regime ? isRegimeAligned(detail.event.sectorName, regime) : "neutral";
@@ -1662,7 +1804,16 @@ function ExpandedRotationDetail({ detail, regime }: { detail: ActiveRotationDeta
         <CopyExportBar stocks={detail.stocks} sectorName={detail.event.sectorName} />
       </div>
       <StrategySummaryBar detail={detail} lifecycle={lc} actionSignal={as_} />
-      <StockPerformanceTable detail={detail} lifecycle={lc} />
+      {screen && (
+        <div className="border-b border-[#2a2a2a] px-4 py-2">
+          <EntryScreenPanel screen={screen} />
+        </div>
+      )}
+      <StockPerformanceTable
+        detail={detail}
+        lifecycle={lc}
+        screenPicks={screen ? new Set(screen.picks.map((x) => x.symbol)) : undefined}
+      />
     </section>
   );
 }
@@ -2815,7 +2966,13 @@ export default function RotationTrackerPage() {
           )}
 
           {/* Section 2b: Stock Performance (expanded) */}
-          {expandedDetail && <ExpandedRotationDetail detail={expandedDetail} regime={data.regime} />}
+          {expandedDetail && (
+            <ExpandedRotationDetail
+              detail={expandedDetail}
+              regime={data.regime}
+              screen={rotationRows.find((r) => r.detail.event.sectorId === expandedSector)?.screen}
+            />
+          )}
 
           {/* Recently Ended */}
           {data.recentlyEndedRotations.length > 0 && (

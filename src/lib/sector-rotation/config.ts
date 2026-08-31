@@ -608,3 +608,37 @@ export const PREMARKET_SCORING = {
   AVOID_MIN_DEVIATION: 0.15,
 } as const;
 
+// -- Rotation Entry Screen --
+
+/**
+ * Thresholds for the two-stage rotation entry screen (see entry-screen.ts).
+ *
+ * Calibrated over 78 rotation events across 18 sector ETFs, Mar 2025 - Jul 2026,
+ * with a 20 trading-day hold. Result at these settings: fires on 8 of 78
+ * rotations, 57 names, 89.5% positive, 8 of 8 rotations profitable, mean +17.0%.
+ *
+ * MIN_QUALIFYING is the load-bearing one: 1 qualifying name ran 57% positive and
+ * 2 ran 30%, against 87% for 3 or more.
+ *
+ * MIN_ATR_PCT is deliberately ABSOLUTE, not a basket rank. A rank forces the same
+ * fraction on every sector - 40% of IGV and 40% of XLU - when IGV has ~46 members
+ * clearing 3% ATR and XLU has ~4. The absolute floor lets the position count scale
+ * with the sector's real opportunity set, and MIN_QUALIFYING removes the low-vol
+ * baskets rather than letting them contribute their two most erratic names.
+ */
+export const ENTRY_SCREEN = {
+  /** Rotation gate: % of sector members above their own 50d SMA */
+  MIN_BREADTH_PCT: 60,
+  /** Rotation gate: ETF Chaikin Money Flow (20) must exceed this */
+  MIN_CMF: 0,
+  /** Rotation gate: ETF 20d acceleration must exceed this */
+  MIN_ACCEL: 0,
+  /** Stock screen: minimum ATR as % of price. Below ~3% a swing does not clear its own slippage. */
+  MIN_ATR_PCT: 3.0,
+  /** Stock screen: keep names in the top this fraction of the basket by 20d return */
+  RET20_TOP_FRACTION: 0.5,
+  /** Veto: skip the rotation entirely below this many qualifying names */
+  MIN_QUALIFYING: 3,
+  /** Validated holding period, in trading days */
+  HOLD_DAYS: 20,
+} as const;

@@ -23,3 +23,24 @@ Breadth comes from `/api/sector-rotation` and must be looked up against **all fo
 ## Volume surge is calibrated, not broken
 
 `signals.volumeSurge` fires on 2 of the last 5 sessions above 1.5x the 20d average volume (`ROTATION.VOLUME_TREND_*`). Measured over 2y across 20 sector ETFs it is on 11.3% of ETF-days and is the decisive second vote on 3.1% - which is why it reads as false on nearly every card. That is the conjunction, not the multiplier: single days above 1.5x occur on 10.6% of ETF-days. Loosening to 2-in-10 doubles the on-rate to 24.7% but *reduces* detected rotation starts (167 vs 174), because a more persistent volume signal stops the "prior 5 days all weak" precondition from ever being met. Leave it alone; changing it recalibrates every historical event.
+
+## Entry screen (`entry-screen.ts`)
+
+Two decisions then a veto. Gate the rotation on breadth >= 60% / CMF(20) > 0 / 20d acceleration > 0; screen members on close above the prior 20-day high + 20d return in the top half of the basket + ATR% >= 3.0; then **skip the rotation entirely if fewer than 3 names qualify**. Thresholds live in `ENTRY_SCREEN` in `config.ts`. Hold is 20 trading days.
+
+**The veto is the load-bearing part, and the qualifying count is the UI.** Over 78 rotations across 18 sector ETFs (Mar 2025 - Jul 2026): 1 qualifying name ran 57% positive, 2 ran 30%, 3+ ran 87%. The number of members able to post a breakout with above-median strength *is* a breadth reading. At these settings the screen fires on 8 of 78 rotations, 57 names, 89.5% positive, 8 of 8 rotations profitable, mean +17.0%.
+
+**`MIN_ATR_PCT` is absolute, not a basket rank, and that is deliberate.** A rank forces the same fraction on every sector - 40% of IGV and 40% of XLU - when IGV carries ~46 members clearing 3% ATR and XLU carries ~4. The absolute floor lets the position count scale with the sector's real opportunity set (IGV 2026-07-28 yields 20 names; a top-50% ATR rank yields 4), and `MIN_QUALIFYING` removes the low-vol baskets rather than letting them contribute their two most erratic names. An earlier rank-based version scored 63% on non-tech names against a 65% non-tech baseline - it was a software rule in disguise.
+
+**Screen inputs are as-of the rotation start bar, never today.** `atrPctAtStart` / `ret20AtStart` / `breakout20AtStart` are computed in `fetchStockPerformance()` on the bar matching `startDate`, because that is where the study validated them; re-running the screen against today's bars is a different, untested signal. They cost no extra API calls - the 6mo chart is already fetched per stock.
+
+**`topFractionCut()` has an inclusive boundary on purpose.** Index `floor(n * keepTop)` is itself returned and callers compare with `>=`, so six names at keepTop 0.5 admit four, not three. This reproduces the calibration cut-off; `entry-screen.test.ts` asserts it so a later "off-by-one fix" cannot silently recalibrate the rule.
+
+A missing gate input is never a pass - sub-sector and cross-asset baskets legitimately report null breadth, and those rotations return `NO_DATA`.
+
+## Relative strength: two levels, two denominators
+
+- **Stock RS (`rsVsSector20`, the `RS/Sec` column)** is 20d return minus the **sector ETF's** over the same window. Deliberately not vs SPY: inside one basket on one date, subtracting an index return is the same constant for every member, so RS-vs-SPY ranks *identically* to the raw return column and adds nothing. Confirmed in the study - `ret20`, `rs20_spy` and `rs20_etf` produced identical ICs to three decimals.
+- **Sector RS** on the card is `mansfieldRS` - % deviation of the sector/SPY ratio from its own 200d average, zero-centred, so it measures out-performance rather than direction.
+
+⚠️ The older `SecRS` column is RS **acceleration** (5d vs 20d), a different thing. It scored a consistently **negative** IC in the entry study (-0.095, stable train to test): names already bursting against their own sector underperformed over the next 20 days. Its tooltip says so. Read a high value as caution, not confirmation.

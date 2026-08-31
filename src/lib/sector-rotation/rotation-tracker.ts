@@ -357,6 +357,50 @@ function buildEvent(
   };
 }
 
+/**
+ * Entry-screen inputs on a specific bar: 14-bar ATR as a percentage of price,
+ * the trailing 20-bar return, and whether the close cleared the highest high of
+ * the PRIOR 20 bars (today excluded, so the breakout is a real break).
+ */
+function computeEntryScreen(
+  chart: { closes: number[]; highs: number[]; lows: number[] },
+  i: number,
+): { atrPct: number | null; ret20: number | null; breakout20: boolean | null } {
+  const { closes, highs, lows } = chart;
+  if (i < 21 || i >= closes.length) return { atrPct: null, ret20: null, breakout20: null };
+
+  let trSum = 0;
+  for (let k = i - 13; k <= i; k++) {
+    trSum += Math.max(
+      highs[k] - lows[k],
+      Math.abs(highs[k] - closes[k - 1]),
+      Math.abs(lows[k] - closes[k - 1]),
+    );
+  }
+  const atrPct = closes[i] > 0 ? (trSum / 14 / closes[i]) * 100 : null;
+
+  const ret20 = closes[i - 20] > 0 ? (closes[i] / closes[i - 20] - 1) * 100 : null;
+
+  let priorHigh = -Infinity;
+  for (let k = i - 20; k < i; k++) priorHigh = Math.max(priorHigh, highs[k]);
+
+  return {
+    atrPct: atrPct != null ? Math.round(atrPct * 100) / 100 : null,
+    ret20: ret20 != null ? Math.round(ret20 * 100) / 100 : null,
+    breakout20: Number.isFinite(priorHigh) ? closes[i] > priorHigh : null,
+  };
+}
+
+/** Stock 20d return minus the sector ETF's, on the aligned series (current bar). */
+function computeRsVsSector20(stock: number[], etf: number[]): number | null {
+  const n = stock.length;
+  if (n < 21 || etf.length < 21) return null;
+  if (stock[n - 21] <= 0 || etf[n - 21] <= 0) return null;
+  const s = (stock[n - 1] / stock[n - 21] - 1) * 100;
+  const e = (etf[n - 1] / etf[n - 21] - 1) * 100;
+  return Math.round((s - e) * 100) / 100;
+}
+
 // ── RS Acceleration (stock vs sector ETF) ──
 
 /**
@@ -494,15 +538,20 @@ async function fetchStockPerformance(
 
       // Find closest trading day at or before rotation start date
       let priceAtStart: number | null = null;
+      let startIdx = -1;
       for (let k = chart.timestamps.length - 1; k >= 0; k--) {
         if (chart.timestamps[k] <= startTs + 86400) {
           // +1 day tolerance for timezone
           priceAtStart = chart.closes[k];
+          startIdx = k;
           break;
         }
       }
 
       if (priceAtStart === null || priceAtStart <= 0) continue;
+
+      // Entry-screen inputs, evaluated on the rotation start bar.
+      const screen = computeEntryScreen(chart, startIdx);
 
       const perfPct = ((quote.price - priceAtStart) / priceAtStart) * 100;
       const aboveSma50 = quote.sma50 !== null ? quote.price > quote.sma50 : false;
@@ -559,6 +608,10 @@ async function fetchStockPerformance(
         volumeConsistency: volConsistency,
         verdict: null, // enriched client-side from prerun scan
         finalScore: null, // enriched client-side from prerun scan
+        atrPctAtStart: screen.atrPct,
+        ret20AtStart: screen.ret20,
+        breakout20AtStart: screen.breakout20,
+        rsVsSector20: computeRsVsSector20(alignedStockCloses, alignedEtfCloses),
       });
     }
 
