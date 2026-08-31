@@ -743,6 +743,28 @@ function GateTicks({ gate, dim }: { gate: GateReading; dim?: boolean }) {
   );
 }
 
+/** Copies just the screened names, so the qualifying list can leave the page
+ *  without dragging the other 25 basket members along with it. */
+function CopyTickers({ symbols }: { symbols: string[] }) {
+  const [done, setDone] = useState(false);
+  if (!symbols.length) return null;
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(symbols.join(", ")).then(() => {
+          setDone(true);
+          setTimeout(() => setDone(false), 2000);
+        });
+      }}
+      className="shrink-0 rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 text-[9px] text-[#888] transition-colors hover:text-white"
+      title={`Copy these ${symbols.length} tickers`}
+    >
+      {done ? <Check className="h-3 w-3 text-green-400" /> : `Copy ${symbols.length}`}
+    </button>
+  );
+}
+
 function EntryScreenPanel({ screen }: { screen: EntryScreenResult }) {
   const drift = liveGateDrift(screen);
   return (
@@ -778,13 +800,20 @@ function EntryScreenPanel({ screen }: { screen: EntryScreenResult }) {
         </div>
       )}
       {screen.verdict === "TRADE" && (
-        <div className="mt-1 truncate text-[10px] text-[#888]" title={screen.picks.map((p) => p.symbol).join(", ")}>
-          {screen.picks.map((p) => p.symbol).join(" ")}
+        <div className="mt-1 flex items-start gap-1.5">
+          {/* Wraps rather than truncates: a 16-name list behind a tooltip is not
+              a list you can act on. */}
+          <div className="flex flex-1 flex-wrap gap-x-1.5 gap-y-0.5 text-[10px] font-mono text-[#999]">
+            {screen.picks.map((x) => (
+              <span key={x.symbol}>{x.symbol}</span>
+            ))}
+          </div>
+          <CopyTickers symbols={screen.picks.map((x) => x.symbol)} />
         </div>
       )}
       {screen.verdict === "SKIP_THIN" && screen.qualifying > 0 && (
         <div className="mt-1 text-[10px] text-[#666]">
-          would have been {screen.picks.map((p) => p.symbol).join(", ")}
+          would have been {screen.picks.map((x) => x.symbol).join(", ")}
         </div>
       )}
     </div>
@@ -1280,6 +1309,7 @@ function StockPerformanceTable({
 }) {
   const [sortKey, setSortKey] = useState<StockSortKey>("performancePct");
   const [sortAsc, setSortAsc] = useState(false);
+  const [screenedOnly, setScreenedOnly] = useState(false);
   const [actionFilter, setActionFilter] = useState<Set<string>>(new Set());
   const [sma50Filter, setSma50Filter] = useState<"all" | "above" | "below">("all");
   const [rsAccelFilter, setRsAccelFilter] = useState<"all" | "positive" | "negative">("all");
@@ -1309,7 +1339,7 @@ function StockPerformanceTable({
     return ORDER.filter(a => actions.has(a));
   }, [detail.stocks, sectorAvgPct, lifecycle, lifecycleMap]);
 
-  const hasActiveFilter = actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all" || phaseFilter !== "all" || trendAccelFilter !== "all" || rs20dFilter !== "all" || qualityFilter !== "all" || verdictFilter !== "all";
+  const hasActiveFilter = screenedOnly || actionFilter.size > 0 || sma50Filter !== "all" || rsAccelFilter !== "all" || volFilter !== "all" || phaseFilter !== "all" || trendAccelFilter !== "all" || rs20dFilter !== "all" || qualityFilter !== "all" || verdictFilter !== "all";
 
   const earlyStrengthActive = phaseFilter === "turnaround" && qualityFilter === "high" && trendAccelFilter === "positive";
 
@@ -1335,6 +1365,7 @@ function StockPerformanceTable({
   }
 
   function resetFilters() {
+    setScreenedOnly(false);
     setActionFilter(new Set());
     setSma50Filter("all");
     setRsAccelFilter("all");
@@ -1361,6 +1392,7 @@ function StockPerformanceTable({
     }
     if (sma50Filter === "above") copy = copy.filter(item => item.stock.aboveSma50);
     else if (sma50Filter === "below") copy = copy.filter(item => !item.stock.aboveSma50);
+    if (screenedOnly && screenPicks) copy = copy.filter(item => screenPicks.has(item.stock.symbol));
     if (rsAccelFilter === "positive") copy = copy.filter(item => (item.stock.rsAcceleration ?? 0) > 0);
     else if (rsAccelFilter === "negative") copy = copy.filter(item => (item.stock.rsAcceleration ?? 0) < 0);
     if (volFilter === "above") copy = copy.filter(item => item.stock.volumeVsAvg >= 1.2);
@@ -1425,7 +1457,7 @@ function StockPerformanceTable({
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
     return copy;
-  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, lifecycleMap, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter, qualityFilter, verdictFilter, sectorMap]);
+  }, [detail.stocks, sectorAvgPct, sortKey, sortAsc, lifecycle, lifecycleMap, etfPerfPct, actionFilter, sma50Filter, rsAccelFilter, volFilter, phaseFilter, trendAccelFilter, rs20dFilter, qualityFilter, verdictFilter, sectorMap, screenedOnly, screenPicks]);
 
   if (detail.stocks.length === 0) {
     return (
@@ -1498,6 +1530,22 @@ function StockPerformanceTable({
             );
           })}
         </div>
+        {screenPicks && screenPicks.size > 0 && (
+          <>
+            <div className="h-4 w-px bg-[#333]" />
+            <button
+              onClick={() => setScreenedOnly((v) => !v)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                screenedOnly
+                  ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40"
+                  : "bg-[#1a1a1a] text-[#888] ring-1 ring-[#333] hover:text-[#ccc]"
+              }`}
+              title="Show only the names that cleared the entry screen on the rotation start bar"
+            >
+              Screened ({screenPicks.size})
+            </button>
+          </>
+        )}
         <div className="h-4 w-px bg-[#333]" />
         <button
           onClick={toggleEarlyStrength}
