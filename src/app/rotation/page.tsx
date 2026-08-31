@@ -41,7 +41,9 @@ import type { SectorRotationScore } from "@/lib/sector-rotation/types";
 import {
   evaluateEntryScreen,
   entryScreenReason,
+  liveGateDrift,
   type EntryScreenResult,
+  type GateReading,
 } from "@/lib/sector-rotation/entry-screen";
 import { ENTRY_SCREEN } from "@/lib/sector-rotation/config";
 import {
@@ -690,7 +692,7 @@ function buildRotationRows(
       exitWarnings: computeExitWarnings(detail.event),
       breadth: part.breadth,
       median: part.median,
-      screen: evaluateEntryScreen(detail, scoreByEtf.get(detail.event.etf)),
+      screen: evaluateEntryScreen(detail),
       sectorRs: scoreByEtf.get(detail.event.etf)?.mansfieldRS ?? null,
     };
   });
@@ -720,16 +722,21 @@ function screenLabel(r: EntryScreenResult): string {
   }
 }
 
-function GateTicks({ gate }: { gate: EntryScreenResult["gate"] }) {
+function GateTicks({ gate, dim }: { gate: GateReading; dim?: boolean }) {
+  if (!gate.complete) return <span className="text-[10px] text-[#555]">gate inputs unavailable</span>;
   const item = (label: string, ok: boolean, val: string) => (
-    <span className={ok ? "text-green-400/90" : "text-red-400/90"} title={`${label}: ${val}`}>
+    <span
+      className={dim
+        ? (ok ? "text-green-400/50" : "text-red-400/50")
+        : (ok ? "text-green-400/90" : "text-red-400/90")}
+      title={`${label}: ${val}`}
+    >
       {ok ? "✓" : "✗"} {label}
     </span>
   );
-  if (gate.breadth === null) return null;
   return (
     <span className="flex flex-wrap items-center gap-2 text-[10px]">
-      {item("breadth", gate.breadthPass, `${gate.breadth.toFixed(0)}% (need >= ${ENTRY_SCREEN.MIN_BREADTH_PCT}%)`)}
+      {item("breadth", gate.breadthPass, `${gate.breadth?.toFixed(0)}% (need >= ${ENTRY_SCREEN.MIN_BREADTH_PCT}%)`)}
       {item("flow", gate.cmfPass, `CMF ${gate.cmf?.toFixed(3)} (need > 0)`)}
       {item("accel", gate.accelPass, `${gate.accel?.toFixed(1)} (need > 0)`)}
     </span>
@@ -737,6 +744,7 @@ function GateTicks({ gate }: { gate: EntryScreenResult["gate"] }) {
 }
 
 function EntryScreenPanel({ screen }: { screen: EntryScreenResult }) {
+  const drift = liveGateDrift(screen);
   return (
     <div className="mt-2 rounded-md border border-[#2a2a2a] bg-[#131313] px-2 py-1.5">
       <div className="flex items-center gap-2">
@@ -748,6 +756,27 @@ function EntryScreenPanel({ screen }: { screen: EntryScreenResult }) {
         </span>
         <GateTicks gate={screen.gate} />
       </div>
+
+      {/* Live gate is a health read, never a verdict input. Shown dimmed and
+          labelled so it cannot be mistaken for the gate that decided the trade. */}
+      {screen.live.complete && (
+        <div className="mt-1 flex items-center gap-2">
+          <span className="text-[9px] uppercase tracking-wider text-[#555]" title="Rotation gate re-read on the latest bar. Does not affect the verdict above, which is measured on the rotation start bar.">
+            now
+          </span>
+          <GateTicks gate={screen.live} dim />
+          {drift === "faded" && (
+            <span className="rounded bg-amber-500/10 px-1 py-0.5 text-[9px] font-medium text-amber-400/90" title="This rotation passed the gate at entry and no longer does. The names above were valid at the start bar; conditions have since decayed.">
+              faded
+            </span>
+          )}
+          {drift === "recovered" && (
+            <span className="rounded bg-sky-500/10 px-1 py-0.5 text-[9px] font-medium text-sky-400/80" title="The gate failed at the rotation start but passes now. Not a validated entry - the study only tested entering at the start bar.">
+              recovered
+            </span>
+          )}
+        </div>
+      )}
       {screen.verdict === "TRADE" && (
         <div className="mt-1 truncate text-[10px] text-[#888]" title={screen.picks.map((p) => p.symbol).join(", ")}>
           {screen.picks.map((p) => p.symbol).join(" ")}

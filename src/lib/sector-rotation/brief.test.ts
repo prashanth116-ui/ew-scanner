@@ -86,6 +86,10 @@ const baseRotation = (overrides: Partial<RotationTrackerResult> = {}): RotationT
 
 const makeRotation = (etf: string, daysActive = 10, signalCount = 3): NonNullable<RotationTrackerResult["activeRotations"][number]> => ({
   event: {
+    cmfAtStart: null,
+    accelAtStart: null,
+    cmfNow: null,
+    accelNow: null,
     sectorId: etf,
     etf,
     sectorName: etf,

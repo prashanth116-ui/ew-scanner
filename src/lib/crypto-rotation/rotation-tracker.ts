@@ -293,7 +293,14 @@ function buildEvent(
     close: d.close,
   }));
 
+  // Entry-gate readings are equity-only: the rotation entry screen was calibrated
+  // on sector ETFs and is not applied to crypto baskets, so these stay null rather
+  // than carrying a number nothing consumes.
   return {
+    cmfAtStart: null,
+    accelAtStart: null,
+    cmfNow: null,
+    accelNow: null,
     sectorId,
     sectorName,
     etf,

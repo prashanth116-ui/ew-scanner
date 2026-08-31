@@ -32,6 +32,25 @@ export interface RotationEvent {
   signals: RotationSignalState; // current signal state
   health: RotationHealthSignals; // rotation conviction signals
   signalHistory?: { date: string; signalCount: number; close: number }[];
+
+  /**
+   * Entry-gate inputs, measured twice: on the rotation start bar and on the
+   * latest bar. The screen gates on the AT-START pair because that is what the
+   * selection study validated; the NOW pair is a health read only and never
+   * decides the verdict.
+   *
+   * Both use the same formulas so the two readings are comparable:
+   *   cmf   - Chaikin Money Flow(20) on the ETF
+   *   accel - 20d rate of change minus the 20d rate of change 20 bars earlier.
+   *
+   * `accel` deliberately does NOT match `health.acceleration`, which is
+   * calcAcceleration() and differences the ROC over 5 bars rather than 20. The
+   * 20-bar version is the one the study calibrated the "> 0" threshold against.
+   */
+  cmfAtStart: number | null;
+  accelAtStart: number | null;
+  cmfNow: number | null;
+  accelNow: number | null;
 }
 
 export interface RotationStockPerformance {
@@ -81,6 +100,10 @@ export interface RotationStockPerformance {
   atrPctAtStart: number | null;
   ret20AtStart: number | null;
   breakout20AtStart: boolean | null;
+  /** Was this member above its own 50d SMA on the rotation start bar? Aggregated
+   *  client-side into the at-start breadth reading, over the same member set the
+   *  screen runs on — a denominator the sector-level breadthPct does not share. */
+  aboveSma50AtStart: boolean | null;
 
   /**
    * Stock 20d return minus the sector ETF's over the same window (current).

@@ -13,9 +13,17 @@
  * count of names able to post a breakout with above-median strength IS a breadth
  * reading - a sector where only one name can manage it is drifting, not rotating.
  *
- * Screen inputs are measured on the ROTATION START BAR, not today, because that
- * is where the study validated them. `ret20AtStart` / `atrPctAtStart` /
- * `breakout20AtStart` come from the tracker already carrying that as-of date.
+ * EVERYTHING THAT DECIDES THE VERDICT IS MEASURED ON THE ROTATION START BAR.
+ * That is where the study validated it. A second `live` gate is computed on the
+ * latest bar and returned alongside, but it is a health read only and never
+ * changes the verdict - mixing a live gate with an as-of-start stock screen would
+ * be a combination nothing was tested on.
+ *
+ * Breadth for BOTH gates is computed from this rotation's own member rows rather
+ * than from SectorRotationScore.breadthPct, so that the breadth denominator is
+ * the same set the screen runs on. It also means sub-sector and cross-asset
+ * baskets, which frequently report a null sector-level breadthPct, are still
+ * screenable.
  *
  * Liquidity is not re-checked here: fetchStockPerformance() already gates the
  * universe at QUALITY_GATES.MIN_DOLLAR_VOLUME ($200M/day), far above the $50M
@@ -23,10 +31,22 @@
  */
 
 import type { ActiveRotationDetail, RotationStockPerformance } from "./rotation-types";
-import type { SectorRotationScore } from "./types";
 import { ENTRY_SCREEN } from "./config";
 
 export type EntryVerdict = "TRADE" | "SKIP_THIN" | "SKIP_GATE" | "NO_DATA";
+
+export interface GateReading {
+  breadth: number | null;
+  cmf: number | null;
+  accel: number | null;
+  breadthPass: boolean;
+  cmfPass: boolean;
+  accelPass: boolean;
+  /** False whenever any input is missing — an unmeasured gate is never a pass. */
+  pass: boolean;
+  /** True when every input was available, so `pass` reflects real evidence. */
+  complete: boolean;
+}
 
 export interface EntryScreenResult {
   verdict: EntryVerdict;
@@ -34,23 +54,39 @@ export interface EntryScreenResult {
   picks: RotationStockPerformance[];
   /** How many cleared it — the number the card renders, and the veto input. */
   qualifying: number;
-  gate: {
-    breadth: number | null;
-    cmf: number | null;
-    accel: number | null;
-    breadthPass: boolean;
-    cmfPass: boolean;
-    accelPass: boolean;
-    pass: boolean;
-  };
+  /** As-of the rotation start bar. This is the gate that decides the verdict. */
+  gate: GateReading;
+  /** As-of the latest bar. Health read only — deliberately never gates. */
+  live: GateReading;
   /** The basket-relative 20d return cut-off actually applied, for display. */
   ret20Cut: number | null;
 }
 
-const EMPTY_GATE = {
-  breadth: null, cmf: null, accel: null,
-  breadthPass: false, cmfPass: false, accelPass: false, pass: false,
-};
+function readGate(breadth: number | null, cmf: number | null, accel: number | null): GateReading {
+  const complete = breadth !== null && cmf !== null && accel !== null;
+  const breadthPass = breadth !== null && breadth >= ENTRY_SCREEN.MIN_BREADTH_PCT;
+  const cmfPass = cmf !== null && cmf > ENTRY_SCREEN.MIN_CMF;
+  const accelPass = accel !== null && accel > ENTRY_SCREEN.MIN_ACCEL;
+  return {
+    breadth, cmf, accel, breadthPass, cmfPass, accelPass,
+    pass: complete && breadthPass && cmfPass && accelPass,
+    complete,
+  };
+}
+
+/** Share of members with a resolvable answer that were above their own 50d SMA. */
+function breadthFrom(stocks: RotationStockPerformance[], pick: (s: RotationStockPerformance) => boolean | null): number | null {
+  let above = 0;
+  let seen = 0;
+  for (const s of stocks) {
+    const v = pick(s);
+    if (v === null || v === undefined) continue;
+    seen++;
+    if (v) above++;
+  }
+  // Below a handful of members the percentage is noise, not breadth.
+  return seen >= 5 ? (above / seen) * 100 : null;
+}
 
 /**
  * Value at the `keepTop` fraction of a descending sort — the threshold a member
@@ -70,34 +106,28 @@ function topFractionCut(values: number[], keepTop: number): number | null {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * keepTop))];
 }
 
-export function evaluateEntryScreen(
-  detail: ActiveRotationDetail,
-  score: SectorRotationScore | null | undefined,
-): EntryScreenResult {
-  const breadth = score?.breadthPct ?? null;
-  const cmf = score?.cmf20 ?? null;
-  const accel = score?.acceleration ?? null;
+export function evaluateEntryScreen(detail: ActiveRotationDetail): EntryScreenResult {
+  const { event, stocks } = detail;
 
-  // A missing input is not a pass. Sub-sector and cross-asset baskets can report
-  // null breadth by design, and those rotations are simply not screenable.
-  if (breadth === null || cmf === null || accel === null) {
-    return { verdict: "NO_DATA", picks: [], qualifying: 0, gate: EMPTY_GATE, ret20Cut: null };
-  }
+  const gate = readGate(
+    breadthFrom(stocks, (s) => s.aboveSma50AtStart),
+    event.cmfAtStart ?? null,
+    event.accelAtStart ?? null,
+  );
+  const live = readGate(
+    breadthFrom(stocks, (s) => s.aboveSma50),
+    event.cmfNow ?? null,
+    event.accelNow ?? null,
+  );
 
-  const breadthPass = breadth >= ENTRY_SCREEN.MIN_BREADTH_PCT;
-  const cmfPass = cmf > ENTRY_SCREEN.MIN_CMF;
-  const accelPass = accel > ENTRY_SCREEN.MIN_ACCEL;
-  const gate = { breadth, cmf, accel, breadthPass, cmfPass, accelPass, pass: breadthPass && cmfPass && accelPass };
+  const base = { picks: [] as RotationStockPerformance[], qualifying: 0, gate, live, ret20Cut: null };
 
-  if (!gate.pass) {
-    return { verdict: "SKIP_GATE", picks: [], qualifying: 0, gate, ret20Cut: null };
-  }
+  if (!gate.complete) return { verdict: "NO_DATA", ...base };
+  if (!gate.pass) return { verdict: "SKIP_GATE", ...base };
 
-  const scorable = detail.stocks.filter((s) => s.ret20AtStart != null && s.atrPctAtStart != null);
+  const scorable = stocks.filter((s) => s.ret20AtStart != null && s.atrPctAtStart != null);
   const ret20Cut = topFractionCut(scorable.map((s) => s.ret20AtStart as number), ENTRY_SCREEN.RET20_TOP_FRACTION);
-  if (ret20Cut === null) {
-    return { verdict: "NO_DATA", picks: [], qualifying: 0, gate, ret20Cut: null };
-  }
+  if (ret20Cut === null) return { verdict: "NO_DATA", ...base };
 
   const picks = scorable.filter(
     (s) =>
@@ -112,6 +142,7 @@ export function evaluateEntryScreen(
     picks,
     qualifying: picks.length,
     gate,
+    live,
     ret20Cut,
   };
 }
@@ -120,17 +151,28 @@ export function evaluateEntryScreen(
 export function entryScreenReason(r: EntryScreenResult): string {
   switch (r.verdict) {
     case "TRADE":
-      return `${r.qualifying} names clear the entry screen`;
+      return `${r.qualifying} names cleared the entry screen on the rotation start bar`;
     case "SKIP_THIN":
-      return `Only ${r.qualifying} name${r.qualifying === 1 ? "" : "s"} clear the screen — fewer than ${ENTRY_SCREEN.MIN_QUALIFYING} means a narrow rotation`;
+      return `Only ${r.qualifying} name${r.qualifying === 1 ? "" : "s"} cleared the screen — fewer than ${ENTRY_SCREEN.MIN_QUALIFYING} means a narrow rotation`;
     case "SKIP_GATE": {
       const failed: string[] = [];
       if (!r.gate.breadthPass) failed.push(`breadth ${r.gate.breadth?.toFixed(0)}% < ${ENTRY_SCREEN.MIN_BREADTH_PCT}%`);
       if (!r.gate.cmfPass) failed.push(`money flow ${r.gate.cmf?.toFixed(3)} not positive`);
       if (!r.gate.accelPass) failed.push(`acceleration ${r.gate.accel?.toFixed(1)} not positive`);
-      return `Rotation gate failed: ${failed.join(", ")}`;
+      return `Rotation gate failed at the start bar: ${failed.join(", ")}`;
     }
     default:
-      return "Not screenable — breadth or flow unavailable for this basket";
+      return "Not screenable — gate inputs unavailable at the rotation start bar";
   }
+}
+
+/**
+ * How the live gate compares with the one that decided the verdict.
+ * "faded" is the case worth surfacing: it entered clean and has since decayed.
+ */
+export function liveGateDrift(r: EntryScreenResult): "faded" | "recovered" | "unchanged" | "unknown" {
+  if (!r.gate.complete || !r.live.complete) return "unknown";
+  if (r.gate.pass && !r.live.pass) return "faded";
+  if (!r.gate.pass && r.live.pass) return "recovered";
+  return "unchanged";
 }

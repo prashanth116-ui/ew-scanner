@@ -124,6 +124,10 @@ interface DailySignal {
   date: string;
   close: number;
   signals: RotationSignalState;
+  /** Entry-gate inputs on this bar. See RotationEvent.cmfAtStart for why these
+   *  are computed here rather than reused from health.acceleration. */
+  cmf: number | null;
+  accel: number | null;
 }
 
 function computeDailySignals(aligned: AlignedBar[], currentQuadrant?: RRGQuadrant): DailySignal[] {
@@ -172,10 +176,34 @@ function computeDailySignals(aligned: AlignedBar[], currentQuadrant?: RRGQuadran
       (volumeSurge ? 1 : 0) +
       (priceAbove50MA ? 1 : 0);
 
+    // Chaikin Money Flow(20) on this bar.
+    let cmf: number | null = null;
+    if (i >= 19) {
+      let mfv = 0;
+      let vol = 0;
+      for (let k = i - 19; k <= i; k++) {
+        const rng = aligned[k].etfHigh - aligned[k].etfLow;
+        const mfm = rng !== 0
+          ? ((aligned[k].etfClose - aligned[k].etfLow) - (aligned[k].etfHigh - aligned[k].etfClose)) / rng
+          : 0;
+        mfv += mfm * aligned[k].etfVolume;
+        vol += aligned[k].etfVolume;
+      }
+      cmf = vol !== 0 ? mfv / vol : null;
+    }
+
+    // 20d ROC now minus 20d ROC twenty bars ago.
+    let accel: number | null = null;
+    if (i >= 40 && closes[i - 20] > 0 && closes[i - 40] > 0) {
+      accel = ((closes[i] / closes[i - 20] - 1) * 100) - ((closes[i - 20] / closes[i - 40] - 1) * 100);
+    }
+
     results.push({
       date: aligned[i].date,
       close: closes[i],
       signals: { rsGoldenCross, volumeSurge, priceAbove50MA, signalCount },
+      cmf,
+      accel,
     });
   }
 
@@ -354,6 +382,12 @@ function buildEvent(
     signals: endDay.signals,
     health,
     signalHistory: history,
+    cmfAtStart: round3(startDay.cmf),
+    accelAtStart: round2(startDay.accel),
+    // "Now" is always the newest bar available, not the event's end bar — a live
+    // health read on an ended rotation would otherwise be frozen at its end date.
+    cmfNow: round3(dailySignals[dailySignals.length - 1].cmf),
+    accelNow: round2(dailySignals[dailySignals.length - 1].accel),
   };
 }
 
@@ -365,9 +399,9 @@ function buildEvent(
 function computeEntryScreen(
   chart: { closes: number[]; highs: number[]; lows: number[] },
   i: number,
-): { atrPct: number | null; ret20: number | null; breakout20: boolean | null } {
+): { atrPct: number | null; ret20: number | null; breakout20: boolean | null; aboveSma50: boolean | null } {
   const { closes, highs, lows } = chart;
-  if (i < 21 || i >= closes.length) return { atrPct: null, ret20: null, breakout20: null };
+  if (i < 21 || i >= closes.length) return { atrPct: null, ret20: null, breakout20: null, aboveSma50: null };
 
   let trSum = 0;
   for (let k = i - 13; k <= i; k++) {
@@ -384,10 +418,18 @@ function computeEntryScreen(
   let priorHigh = -Infinity;
   for (let k = i - 20; k < i; k++) priorHigh = Math.max(priorHigh, highs[k]);
 
+  let sma50AtStart: number | null = null;
+  if (i >= 49) {
+    let sum = 0;
+    for (let k = i - 49; k <= i; k++) sum += closes[k];
+    sma50AtStart = sum / 50;
+  }
+
   return {
     atrPct: atrPct != null ? Math.round(atrPct * 100) / 100 : null,
     ret20: ret20 != null ? Math.round(ret20 * 100) / 100 : null,
     breakout20: Number.isFinite(priorHigh) ? closes[i] > priorHigh : null,
+    aboveSma50: sma50AtStart != null ? closes[i] > sma50AtStart : null,
   };
 }
 
@@ -400,6 +442,9 @@ function computeRsVsSector20(stock: number[], etf: number[]): number | null {
   const e = (etf[n - 1] / etf[n - 21] - 1) * 100;
   return Math.round((s - e) * 100) / 100;
 }
+
+const round2 = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
+const round3 = (v: number | null) => (v === null ? null : Math.round(v * 1000) / 1000);
 
 // ── RS Acceleration (stock vs sector ETF) ──
 
@@ -611,6 +656,7 @@ async function fetchStockPerformance(
         atrPctAtStart: screen.atrPct,
         ret20AtStart: screen.ret20,
         breakout20AtStart: screen.breakout20,
+        aboveSma50AtStart: screen.aboveSma50,
         rsVsSector20: computeRsVsSector20(alignedStockCloses, alignedEtfCloses),
       });
     }
