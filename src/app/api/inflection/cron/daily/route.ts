@@ -12,6 +12,8 @@ import { getSectorForTicker } from "@/data/prerun-universe";
 import {
   upsertInflectionDaily,
   purgeOldInflectionDaily,
+  upsertComponentHistory,
+  type ComponentHistoryRecord,
   clearInflectionDaily,
   loadAllScoredTickers,
 } from "@/lib/supabase/persistence";
@@ -168,6 +170,35 @@ export async function GET(request: NextRequest) {
     // 90 days, not 14. At 14 the table held ~10 scan dates on a Tue-Sat schedule and the
     // window slid forward daily, so the backtest could never accumulate a sample no matter
     // how long it ran. 90 days is ~65 scan dates at ~200 rows: trivial for Postgres.
+    // Archive the component scores before the purge window can ever reach them. The scan
+    // table keeps 90 days, which is plenty for the pages; this keeps the score series
+    // permanently, because the trend of a component is the thing a single scan cannot
+    // show. Best-effort by design — upsertComponentHistory swallows its own errors, so a
+    // missing table or a transient failure cannot cost us the scan we just ran.
+    const archived = await upsertComponentHistory(
+      qualifying.map((r): ComponentHistoryRecord => ({
+        scan_date: today,
+        engine: "inflection",
+        ticker: r.data.ticker,
+        sector: getSectorForTicker(r.data.ticker),
+        price: r.data.currentPrice ?? 0,
+        se_score: r.scores.supplyExhaustion,
+        demand_score: r.scores.demandEmergence,
+        compression_score: r.scores.compression,
+        runner_score: r.scores.runnerPotential,
+        rs_score: r.scores.rsTrajectory,
+        overall_score: r.scores.overallScore,
+        structure_score: null,
+        label: r.stage,
+        read_label: r.tradeRead,
+        is_coiled: r.isCoiledSignal,
+        is_primary: r.isPrimarySignal,
+        is_stronger: r.isStrongerSignal,
+        extension_risk: r.extensionRisk,
+        scanner_version: 3,
+      })),
+    );
+
     const purged = await purgeOldInflectionDaily(RETENTION_DAYS).catch(() => 0);
 
     // Determine "new today" — tickers not in yesterday's results
@@ -201,6 +232,7 @@ export async function GET(request: NextRequest) {
       fetchedCount,
       qualifyingCount: qualifying.length,
       persistedCount: totalPersisted,
+      archivedCount: archived,
       purgedCount: purged,
       newTodayCount: newTickers.length,
       timedOut,

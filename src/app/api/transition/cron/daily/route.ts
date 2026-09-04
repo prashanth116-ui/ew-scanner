@@ -12,6 +12,8 @@ import { getSectorForTicker } from "@/data/prerun-universe";
 import {
   upsertTransitionDaily,
   purgeOldTransitionDaily,
+  upsertComponentHistory,
+  type ComponentHistoryRecord,
   clearTransitionDaily,
   loadAllScoredTickers,
 } from "@/lib/supabase/persistence";
@@ -178,6 +180,32 @@ export async function GET(request: NextRequest) {
     qualifying.sort((a, b) => b.scores.overallScore - a.scores.overallScore);
 
     // Purge old data
+    // See the matching note in the Inflection cron: permanent, narrow score archive,
+    // best-effort so it can never cost us the scan.
+    const archived = await upsertComponentHistory(
+      qualifying.map((r): ComponentHistoryRecord => ({
+        scan_date: today,
+        engine: "transition",
+        ticker: r.data.ticker,
+        sector: getSectorForTicker(r.data.ticker),
+        price: r.data.currentPrice ?? 0,
+        se_score: r.scores.supplyExhaustion,
+        demand_score: r.scores.demandEmergence,
+        compression_score: r.scores.compression,
+        runner_score: r.scores.runnerPotential,
+        rs_score: r.scores.rsTrajectory,
+        overall_score: r.scores.overallScore,
+        structure_score: r.scores.structure,
+        label: r.state,
+        read_label: r.alertState,
+        is_coiled: r.isCoiledSignal,
+        is_primary: r.isPrimarySignal,
+        is_stronger: r.isStrongerSignal,
+        extension_risk: r.extensionRisk,
+        scanner_version: 3,
+      })),
+    );
+
     const purged = await purgeOldTransitionDaily(RETENTION_DAYS).catch(() => 0);
 
     // Determine "new today"
@@ -218,6 +246,7 @@ export async function GET(request: NextRequest) {
       fetchedCount,
       qualifyingCount: qualifying.length,
       persistedCount: totalPersisted,
+      archivedCount: archived,
       purgedCount: purged,
       newTodayCount: newTickers.length,
       elapsedMs: Date.now() - startTime,

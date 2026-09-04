@@ -10,6 +10,7 @@ import { isFocusTicker } from "@/data/focus-list";
 // ── Types ──
 
 interface Cell {
+  px: number;
   se: number;
   dmd: number;
   cmp: number;
@@ -111,6 +112,44 @@ function bothRising(row: TrendRow, dates: string[]): { se: number; dmd: number }
   return { se, dmd };
 }
 
+/** Percent price change between the first and last scans that carry a row, so it spans
+ *  the same days the component change does and the two stay comparable. */
+function priceChangePct(row: TrendRow, dates: string[]): number | null {
+  const present: number[] = [];
+  for (const d of dates) {
+    const c = row.byDate[d];
+    if (c && c.px > 0) present.push(c.px);
+  }
+  if (present.length < 2) return null;
+  return ((present[present.length - 1] - present[0]) / present[0]) * 100;
+}
+
+/**
+ * The component trend and the price trend pointing opposite ways.
+ *
+ * "Price up, component down" is the one worth catching — NVDA rose to $228 across the
+ * window while Seller Exhaustion fell 45 to 21, so the tape improved while the evidence
+ * behind it decayed. The mirror ("price down, component up") is the constructive case:
+ * accumulation showing up under a falling price.
+ *
+ * Both legs need a real move or every flat row qualifies. A component is chunky and
+ * slot-driven so a single step is meaningful; price needs a wider band than noise.
+ */
+const DIVERGENCE_MIN_SCORE = 5;
+const DIVERGENCE_MIN_PRICE_PCT = 3;
+
+type Divergence = { kind: "bearish" | "bullish"; score: number; price: number } | null;
+
+function divergence(row: TrendRow, dates: string[], metric: Metric): Divergence {
+  const s = windowChange(row, dates, metric);
+  const p = priceChangePct(row, dates);
+  if (s === null || p === null) return null;
+  if (Math.abs(s) < DIVERGENCE_MIN_SCORE || Math.abs(p) < DIVERGENCE_MIN_PRICE_PCT) return null;
+  if (p > 0 && s < 0) return { kind: "bearish", score: s, price: p };
+  if (p < 0 && s > 0) return { kind: "bullish", score: s, price: p };
+  return null;
+}
+
 const FLAGS = [
   { key: "isCoiled" as const,      label: "Coiled",    title: "Supply exhausted, compressed, real Runner Potential, not yet moving" },
   { key: "isPrimary" as const,     label: "Primary",   title: "Primary signal on the latest scan" },
@@ -141,6 +180,7 @@ export default function TrendPage() {
   const [read, setRead] = useState("");
   const [minScore, setMinScore] = useState(0);
   const [risingOnly, setRisingOnly] = useState(false);
+  const [divergeOnly, setDivergeOnly] = useState("");
   const [fullOnly, setFullOnly] = useState(false);
   const [flags, setFlags] = useState<Record<string, boolean>>({});
 
@@ -216,11 +256,12 @@ export default function TrendPage() {
 
   const activeFilters =
     (sector ? 1 : 0) + (stage ? 1 : 0) + (read ? 1 : 0) + (minScore ? 1 : 0) +
-    (risingOnly ? 1 : 0) + (fullOnly ? 1 : 0) + Object.values(flags).filter(Boolean).length;
+    (risingOnly ? 1 : 0) + (divergeOnly ? 1 : 0) + (fullOnly ? 1 : 0) +
+    Object.values(flags).filter(Boolean).length;
 
   const clearFilters = useCallback(() => {
     setSector(""); setStage(""); setRead(""); setMinScore(0);
-    setRisingOnly(false); setFullOnly(false); setFlags({});
+    setRisingOnly(false); setDivergeOnly(""); setFullOnly(false); setFlags({});
   }, []);
 
   const visible = useMemo(() => {
@@ -233,6 +274,10 @@ export default function TrendPage() {
       if (read && r.read !== read) return false;
       if (fullOnly && r.present !== dates.length) return false;
       if (risingOnly && !bothRising(r, dates)) return false;
+      if (divergeOnly) {
+        const d = divergence(r, dates, metric);
+        if (!d || d.kind !== divergeOnly) return false;
+      }
       for (const f of FLAGS) if (flags[f.key] && !r[f.key]) return false;
       if (minScore) {
         const v = latestValue(r, dates, metric);
@@ -252,14 +297,15 @@ export default function TrendPage() {
     return [...filtered].sort((a, b) => {
       if (sortField === "ticker") return dir * a.ticker.localeCompare(b.ticker);
       if (sortField === "present") return dir * (a.present - b.present);
+      if (sortField === "price") return nullsLast(priceChangePct(a, dates), priceChangePct(b, dates));
       if (sortField === "change") return nullsLast(windowChange(a, dates, metric), windowChange(b, dates, metric));
       if (sortField === "latest") return nullsLast(latestValue(a, dates, metric), latestValue(b, dates, metric));
       // Any date column: sortField is the scan_date itself.
       const ca = a.byDate[sortField], cb = b.byDate[sortField];
       return nullsLast(ca ? ca[metric] : null, cb ? cb[metric] : null);
     });
-  }, [rows, scope, search, sector, stage, read, minScore, risingOnly, fullOnly, flags,
-      sortField, sortAsc, dates, metric]);
+  }, [rows, scope, search, sector, stage, read, minScore, risingOnly, divergeOnly, fullOnly,
+      flags, sortField, sortAsc, dates, metric]);
 
   const handleSort = useCallback((f: SortField) => {
     setSortField((prev) => {
@@ -272,7 +318,7 @@ export default function TrendPage() {
   const handleExport = useCallback(() => {
     const active = metrics.find((m) => m.key === metric)!;
     const headers = ["Ticker", "Sector", "Price", "Stage", "Read", "Days",
-      ...dates.map(formatDatePill), "Change", "BothRising"];
+      ...dates.map(formatDatePill), "Change", "PricePct", "BothRising", "Divergence"];
     const lines = visible.map((r) => {
       const br = bothRising(r, dates);
       return [
@@ -288,7 +334,9 @@ export default function TrendPage() {
           return v === null || v === undefined ? "" : String(v);
         }),
         windowChange(r, dates, metric) ?? "",
+        priceChangePct(r, dates)?.toFixed(2) ?? "",
         br ? `SE+${br.se} Dmd+${br.dmd}` : "",
+        divergence(r, dates, metric)?.kind ?? "",
       ].join(",");
     });
     downloadCSV(
@@ -342,7 +390,7 @@ export default function TrendPage() {
           onChange={(v) => setScope(v as Scope)}
         />
         <Toggle
-          options={[["7", "7d"], ["14", "14d"]]}
+          options={[["7", "7d"], ["14", "14d"], ["30", "30d"], ["90", "90d"]]}
           value={String(days)}
           onChange={(v) => setDays(Number(v))}
         />
@@ -375,6 +423,20 @@ export default function TrendPage() {
 
         <Chip on={risingOnly} onClick={() => setRisingOnly((v) => !v)} title="Both Seller Exhaustion and Buyer Demand improved across the window">
           ◉ Both rising
+        </Chip>
+        <Chip
+          on={divergeOnly === "bearish"}
+          onClick={() => setDivergeOnly((v) => (v === "bearish" ? "" : "bearish"))}
+          title={`Price rose but ${activeMetric?.label} fell across the window — the tape improved while the evidence behind it decayed`}
+        >
+          ⚠ Price up, score down
+        </Chip>
+        <Chip
+          on={divergeOnly === "bullish"}
+          onClick={() => setDivergeOnly((v) => (v === "bullish" ? "" : "bullish"))}
+          title={`Price fell but ${activeMetric?.label} rose across the window — accumulation showing up under a falling price`}
+        >
+          ◈ Price down, score up
         </Chip>
         <Chip on={fullOnly} onClick={() => setFullOnly((v) => !v)} title="Only tickers scored on every scan in the window">
           No gaps
@@ -437,6 +499,7 @@ export default function TrendPage() {
                     </Th>
                   ))}
                   <Th onClick={() => handleSort("change")} active={sortField === "change"} asc={sortAsc}>Chg</Th>
+                  <Th onClick={() => handleSort("price")} active={sortField === "price"} asc={sortAsc}>Price</Th>
                   <Th onClick={() => handleSort("present")} active={sortField === "present"} asc={sortAsc}>Days</Th>
                 </tr>
               </thead>
@@ -444,6 +507,8 @@ export default function TrendPage() {
                 {visible.map((r) => {
                   const chg = windowChange(r, dates, metric);
                   const rising = bothRising(r, dates);
+                  const div = divergence(r, dates, metric);
+                  const pxChg = priceChangePct(r, dates);
                   return (
                     <tr
                       key={r.ticker}
@@ -461,6 +526,14 @@ export default function TrendPage() {
                               title={`Seller Exhaustion +${rising.se} and Buyer Demand +${rising.dmd} across the window`}
                             >
                               ◉ RISING
+                            </span>
+                          )}
+                          {div && (
+                            <span
+                              className={`rounded-sm px-1 py-px text-[9px] font-semibold ${div.kind === "bearish" ? "bg-red-500/15 text-red-400" : "bg-sky-500/15 text-sky-400"}`}
+                              title={`Price ${div.price > 0 ? "+" : ""}${div.price.toFixed(1)}% while ${activeMetric?.short} ${div.score > 0 ? "+" : ""}${div.score} across the window`}
+                            >
+                              {div.kind === "bearish" ? "⚠ DIVERGING" : "◈ ACCUM"}
                             </span>
                           )}
                           {r.isCoiled && (
@@ -493,6 +566,18 @@ export default function TrendPage() {
                           }`}>
                             {chg > 0 ? <TrendingUp className="h-3 w-3" /> : chg < 0 ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
                             {chg > 0 ? `+${chg}` : chg}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center tabular-nums">
+                        {pxChg === null ? (
+                          <span className="text-[#3a3a3a]">—</span>
+                        ) : (
+                          <span
+                            className={`text-xs font-medium ${pxChg > 0 ? "text-emerald-400/80" : pxChg < 0 ? "text-red-400/80" : "text-[#888]"}`}
+                            title={`$${r.price.toFixed(2)} — ${pxChg > 0 ? "+" : ""}${pxChg.toFixed(1)}% across the window`}
+                          >
+                            {pxChg > 0 ? "+" : ""}{pxChg.toFixed(1)}%
                           </span>
                         )}
                       </td>

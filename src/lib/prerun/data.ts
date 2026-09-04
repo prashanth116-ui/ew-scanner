@@ -2266,7 +2266,7 @@ export async function fetchPreRunData(
 
     const n = closes.length;
     const stockRetNow = calcReturnAt(closes, n - 1, 20 * bm);
-    const stockRetPrev = calcReturnAt(closes, n - 1 - 6 * bm, 20 * bm); // 5 sessions ago (scaled)
+    const stockRetPrev = calcReturnAt(closes, n - 1 - 6 * bm, 20 * bm); // 6 sessions back (scaled)
 
     // Fetch SPY/QQQ closes from sector cache for acceleration
     const spyCache = sectorChartCache.get("SPY");
@@ -2277,8 +2277,12 @@ export async function fetchPreRunData(
     if (stockRetNow !== null && stockRetPrev !== null && spyCloses) {
       const spyN = spyCloses.length;
       if (spyN >= 25) {
+        // spyN - 1 - 6, not spyN - 6. The stock's prior window sits 6 bars behind its
+        // last bar; SPY's sat 5, so the two legs of the comparison were a session apart
+        // and every reading carried whatever SPY did on that extra day. On DELL at the
+        // 2026-09-04 scan the misalignment was worth 1.64 RS points.
         const spyRetNow = calcReturnAt(spyCloses, spyN - 1, 20);
-        const spyRetPrev = calcReturnAt(spyCloses, spyN - 6, 20);
+        const spyRetPrev = calcReturnAt(spyCloses, spyN - 1 - 6, 20);
         if (spyRetNow !== null && spyRetPrev !== null) {
           const rsNow = stockRetNow - spyRetNow;
           const rsPrev = stockRetPrev - spyRetPrev;
@@ -2292,7 +2296,7 @@ export async function fetchPreRunData(
           const sRetNow = calcReturnAt(closes, n - 1 - offset * bm, 20 * bm);
           const sRetPrev = calcReturnAt(closes, n - 1 - (6 + offset) * bm, 20 * bm);
           const spRetNow = calcReturnAt(spyCloses, spyN - 1 - offset, 20);
-          const spRetPrev = calcReturnAt(spyCloses, spyN - 6 - offset, 20);
+          const spRetPrev = calcReturnAt(spyCloses, spyN - 1 - (6 + offset), 20); // same alignment fix
           if (sRetNow !== null && sRetPrev !== null && spRetNow !== null && spRetPrev !== null) {
             const rsN = sRetNow - spRetNow;
             const rsP = sRetPrev - spRetPrev;

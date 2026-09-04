@@ -2075,6 +2075,166 @@ export interface TrendRow {
   scanner_version: number | null;
 }
 
+// ── Component history archive (migration 033) ──
+//
+// The scan tables purge at 14 days, which is right for them but caps the component trend
+// at a fortnight — and the trend is exactly what a single scan cannot tell you. This is a
+// narrow, append-only, never-purged copy of just the scores and labels. See the migration
+// for why it is deliberately not a superset of the scan tables.
+
+export interface ComponentHistoryRecord {
+  scan_date: string;
+  engine: "inflection" | "transition";
+  ticker: string;
+  sector: string | null;
+  price: number;
+  se_score: number;
+  demand_score: number;
+  compression_score: number;
+  runner_score: number;
+  rs_score: number;
+  overall_score: number;
+  structure_score: number | null;
+  label: string;
+  read_label: string;
+  is_coiled: boolean;
+  is_primary: boolean;
+  is_stronger: boolean;
+  extension_risk: boolean;
+  scanner_version: number | null;
+}
+
+/**
+ * Upsert archive rows. Returns the number written, or 0 on any failure.
+ *
+ * Deliberately swallows errors: this runs at the end of a scan cron whose real job is the
+ * 14-day table, and the archive is a convenience on top. A missing table (migration not yet
+ * applied) or a transient write failure must not fail the scan or lose the primary result.
+ */
+export async function upsertComponentHistory(records: ComponentHistoryRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return 0;
+
+    let written = 0;
+    // Chunked so one oversized batch cannot reject the whole night's archive.
+    for (let i = 0; i < records.length; i += 500) {
+      const chunk = records.slice(i, i + 500);
+      const { error } = await supabase
+        .from("component_history")
+        .upsert(chunk, { onConflict: "scan_date,engine,ticker" });
+      if (error) {
+        console.error("[persistence] upsertComponentHistory error:", error.message);
+        continue;
+      }
+      written += chunk.length;
+    }
+    return written;
+  } catch (err) {
+    console.error("[persistence] upsertComponentHistory exception:", err);
+    return 0;
+  }
+}
+
+/** Distinct scan dates present in the archive for one engine, newest first. */
+export async function loadComponentHistoryDates(
+  engine: "inflection" | "transition",
+  limit: number,
+): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const seen: string[] = [];
+    const unique = new Set<string>();
+    for (let page = 0; page < 32; page++) {
+      const from = page * SCAN_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from("component_history")
+        .select("scan_date")
+        .eq("engine", engine)
+        .order("scan_date", { ascending: false })
+        .range(from, from + SCAN_PAGE_SIZE - 1);
+      if (error) {
+        console.error("[persistence] loadComponentHistoryDates error:", error.message);
+        break;
+      }
+      const rows = data ?? [];
+      for (const r of rows) {
+        const d = r.scan_date as string;
+        if (!unique.has(d)) {
+          unique.add(d);
+          seen.push(d);
+          if (seen.length >= limit) return seen;
+        }
+      }
+      if (rows.length < SCAN_PAGE_SIZE) break;
+    }
+    return seen;
+  } catch (err) {
+    console.error("[persistence] loadComponentHistoryDates exception:", err);
+    return [];
+  }
+}
+
+/** Archive rows for a set of dates, shaped like loadComponentTrend so the two are
+ *  interchangeable at the call site. Paged for the same 1000-row reason. */
+export async function loadComponentHistory(
+  engine: "inflection" | "transition",
+  dates: string[],
+): Promise<TrendRow[]> {
+  if (dates.length === 0) return [];
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const out: TrendRow[] = [];
+    for (let page = 0; page < 64; page++) {
+      const from = page * SCAN_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from("component_history")
+        .select("*")
+        .eq("engine", engine)
+        .in("scan_date", dates)
+        .order("scan_date", { ascending: false })
+        .range(from, from + SCAN_PAGE_SIZE - 1);
+      if (error) {
+        console.error("[persistence] loadComponentHistory error:", error.message);
+        break;
+      }
+      const rows = (data ?? []) as unknown as Record<string, unknown>[];
+      for (const row of rows) {
+        out.push({
+          scan_date: row.scan_date as string,
+          ticker: row.ticker as string,
+          sector: (row.sector as string | null) ?? null,
+          price: Number(row.price ?? 0),
+          se_score: (row.se_score as number) ?? 0,
+          demand_score: (row.demand_score as number) ?? 0,
+          compression_score: (row.compression_score as number) ?? 0,
+          runner_score: (row.runner_score as number) ?? 0,
+          rs_score: (row.rs_score as number) ?? 0,
+          overall_score: (row.overall_score as number) ?? 0,
+          structure_score: (row.structure_score as number | null) ?? null,
+          label: (row.label as string) ?? "",
+          read: (row.read_label as string) ?? "",
+          is_coiled: row.is_coiled === true,
+          is_primary: row.is_primary === true,
+          is_stronger: row.is_stronger === true,
+          extension_risk: row.extension_risk === true,
+          scanner_version: (row.scanner_version as number | null) ?? null,
+        });
+      }
+      if (rows.length < SCAN_PAGE_SIZE) break;
+    }
+    return out;
+  } catch (err) {
+    console.error("[persistence] loadComponentHistory exception:", err);
+    return [];
+  }
+}
+
 export async function loadComponentTrend(
   engine: "inflection" | "transition",
   dates: string[],

@@ -1,18 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   loadComponentTrend,
+  loadComponentHistory,
+  loadComponentHistoryDates,
   loadInflectionDailyDates,
   loadTransitionDailyDates,
   type TrendRow,
 } from "@/lib/supabase/persistence";
 
-/** Upper bound on the window. The scan tables purge at 14 days, so asking for more
- *  returns the same rows while widening the query for nothing. */
-const MAX_DAYS = 14;
+/**
+ * Upper bound on the window.
+ *
+ * Matches RETENTION_DAYS in the Inflection and Transition crons, which is 90 — not the
+ * `retentionDays = 14` default on purgeOld*Daily, which no caller uses. This was capped at
+ * 14 on the mistaken reading of that default, which hid a month of retained history behind
+ * a limit the data never had.
+ *
+ * Past 90 days the scan tables really are purged, and the request falls through to the
+ * never-purged component_history archive instead.
+ */
+const MAX_DAYS = 90;
+const SCAN_RETENTION_DAYS = 90;
 
 /** One scan's components for one ticker. Keys are short because this object repeats
  *  per ticker per date and the payload is already dates x universe. */
 export interface TrendCell {
+  /** Close the scan was computed from, so price can be trended alongside the scores. */
+  px: number;
   se: number;
   dmd: number;
   cmp: number;
@@ -62,19 +76,27 @@ export async function GET(request: NextRequest) {
     ? Math.min(Math.max(Math.trunc(rawDays), 2), MAX_DAYS)
     : 7;
 
-  const allDates =
-    engine === "inflection"
-      ? await loadInflectionDailyDates(MAX_DAYS)
-      : await loadTransitionDailyDates(MAX_DAYS);
+  // Inside retention the scan tables are authoritative and always current. Beyond it they
+  // are empty, so the archive is the only source. Choosing per-request keeps one source per
+  // response rather than stitching two together and having to reconcile disagreements.
+  const fromArchive = days > SCAN_RETENTION_DAYS;
+
+  const allDates = fromArchive
+    ? await loadComponentHistoryDates(engine, days)
+    : engine === "inflection"
+      ? await loadInflectionDailyDates(days)
+      : await loadTransitionDailyDates(days);
 
   // loadDates returns newest-first. Take the most recent `days`, then present
   // oldest-first so the matrix reads left-to-right in time.
   const dates = allDates.slice(0, days).reverse();
   if (dates.length === 0) {
-    return NextResponse.json({ engine, dates: [], rows: [] });
+    return NextResponse.json({ engine, dates: [], rows: [], source: fromArchive ? "archive" : "scan" });
   }
 
-  const rows: TrendRow[] = await loadComponentTrend(engine, dates);
+  const rows: TrendRow[] = fromArchive
+    ? await loadComponentHistory(engine, dates)
+    : await loadComponentTrend(engine, dates);
 
   // loadComponentTrend orders scan_date descending, so the first row seen for a ticker
   // is its most recent — which is the price, sector and flag set worth keeping.
@@ -98,6 +120,7 @@ export async function GET(request: NextRequest) {
       byTicker.set(r.ticker, entry);
     }
     entry.byDate[r.scan_date] = {
+      px: r.price,
       se: r.se_score,
       dmd: r.demand_score,
       cmp: r.compression_score,
@@ -116,6 +139,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     engine,
+    source: fromArchive ? "archive" : "scan",
     dates,
     rows: [...byTicker.values()].sort((a, b) => a.ticker.localeCompare(b.ticker)),
   });
