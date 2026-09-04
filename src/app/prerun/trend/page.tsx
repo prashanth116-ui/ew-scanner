@@ -390,7 +390,7 @@ export default function TrendPage() {
           onChange={(v) => setScope(v as Scope)}
         />
         <Toggle
-          options={[["7", "7d"], ["14", "14d"], ["30", "30d"], ["90", "90d"]]}
+          options={[["7", "7d"], ["14", "14d"], ["30", "30d"], ["90", "90d"], ["365", "All"]]}
           value={String(days)}
           onChange={(v) => setDays(Number(v))}
         />

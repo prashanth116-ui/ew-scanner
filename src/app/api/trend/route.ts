@@ -19,8 +19,15 @@ import {
  * Past 90 days the scan tables really are purged, and the request falls through to the
  * never-purged component_history archive instead.
  */
-const MAX_DAYS = 90;
 const SCAN_RETENTION_DAYS = 90;
+
+/**
+ * The archive is unbounded, so the ceiling has to sit above retention or the branch below
+ * is unreachable and the archive is dead code — which is exactly what MAX_DAYS = 90 made
+ * it, since `days` is clamped to MAX_DAYS before being compared against retention.
+ * Two years is well past anything the page will ask for and bounds the query regardless.
+ */
+const MAX_DAYS = 730;
 
 /** One scan's components for one ticker. Keys are short because this object repeats
  *  per ticker per date and the payload is already dates x universe. */
