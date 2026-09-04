@@ -2075,6 +2075,56 @@ export interface TrendRow {
   scanner_version: number | null;
 }
 
+/**
+ * Current RRG quadrant per sector, from the newest sector_snapshots date.
+ *
+ * Keyed by the snapshot's `sector` display name, which is the same string
+ * getSectorForTicker() puts on every scan row — 17 of the 18 sectors carrying stocks join
+ * cleanly. The exception is "Other", the bucket for tickers in no basket at all (CRCL and
+ * friends); those have no quadrant because there is no basket to have one.
+ *
+ * Deliberately the LATEST quadrant rather than a per-scan-date series. This answers "which
+ * sectors are working now", which is how you would use it to narrow a watchlist. A
+ * historical join would show a name as LEADING on a day the sector has since left, which
+ * is a different and much easier question to misread.
+ */
+export async function loadLatestSectorQuadrants(): Promise<Record<string, string>> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return {};
+
+    const { data: latest, error: dErr } = await supabase
+      .from("sector_snapshots")
+      .select("snapshot_date")
+      .order("snapshot_date", { ascending: false })
+      .limit(1);
+    if (dErr || !latest?.length) {
+      if (dErr) console.error("[persistence] loadLatestSectorQuadrants date error:", dErr.message);
+      return {};
+    }
+
+    const { data, error } = await supabase
+      .from("sector_snapshots")
+      .select("sector, quadrant")
+      .eq("snapshot_date", latest[0].snapshot_date as string);
+    if (error) {
+      console.error("[persistence] loadLatestSectorQuadrants error:", error.message);
+      return {};
+    }
+
+    const out: Record<string, string> = {};
+    for (const r of data ?? []) {
+      const sector = r.sector as string;
+      const quadrant = r.quadrant as string;
+      if (sector && quadrant) out[sector] = quadrant;
+    }
+    return out;
+  } catch (err) {
+    console.error("[persistence] loadLatestSectorQuadrants exception:", err);
+    return {};
+  }
+}
+
 // ── Component history archive (migration 033) ──
 //
 // The scan tables purge at 14 days, which is right for them but caps the component trend

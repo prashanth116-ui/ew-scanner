@@ -157,6 +157,27 @@ const FLAGS = [
   { key: "extensionRisk" as const, label: "Extended",  title: "Extension risk flagged — near highs or far from EMA" },
 ];
 
+/**
+ * RRG quadrant of the stock's SECTOR, from the newest sector_snapshots row — not a
+ * property of the stock. LEADING+IMPROVING is offered as one choice because that pair is
+ * the actual "rotation is with me" question: IMPROVING is where a sector turns and LEADING
+ * is where it is already working, and narrowing to either alone splits that in half.
+ */
+const QUADRANTS = [
+  { key: "LEADING",   label: "Leading",   match: ["LEADING"] },
+  { key: "IMPROVING", label: "Improving", match: ["IMPROVING"] },
+  { key: "LEAD_IMP",  label: "Lead+Imp",  match: ["LEADING", "IMPROVING"] },
+  { key: "WEAKENING", label: "Weakening", match: ["WEAKENING"] },
+  { key: "LAGGING",   label: "Lagging",   match: ["LAGGING"] },
+];
+
+const QUADRANT_STYLE: Record<string, string> = {
+  LEADING:   "bg-emerald-500/15 text-emerald-400",
+  IMPROVING: "bg-cyan-500/15 text-cyan-400",
+  WEAKENING: "bg-amber-500/15 text-amber-400",
+  LAGGING:   "bg-red-500/15 text-red-400",
+};
+
 const SCORE_TIERS = [
   { label: "Top 50%", q: 0.5 },
   { label: "Top 25%", q: 0.75 },
@@ -180,12 +201,14 @@ export default function TrendPage() {
   const [read, setRead] = useState("");
   const [minScore, setMinScore] = useState(0);
   const [risingOnly, setRisingOnly] = useState(false);
+  const [quadrant, setQuadrant] = useState("");
   const [divergeOnly, setDivergeOnly] = useState("");
   const [fullOnly, setFullOnly] = useState(false);
   const [flags, setFlags] = useState<Record<string, boolean>>({});
 
   const [dates, setDates] = useState<string[]>([]);
   const [rows, setRows] = useState<TrendRow[]>([]);
+  const [quadrants, setQuadrants] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -197,10 +220,15 @@ export default function TrendPage() {
       try {
         const res = await fetch(`/api/trend?engine=${engine}&days=${days}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const d = (await res.json()) as { dates: string[]; rows: TrendRow[] };
+        const d = (await res.json()) as {
+          dates: string[];
+          rows: TrendRow[];
+          quadrants?: Record<string, string>;
+        };
         if (cancelled) return;
         setDates(d.dates ?? []);
         setRows(d.rows ?? []);
+        setQuadrants(d.quadrants ?? {});
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -256,12 +284,12 @@ export default function TrendPage() {
 
   const activeFilters =
     (sector ? 1 : 0) + (stage ? 1 : 0) + (read ? 1 : 0) + (minScore ? 1 : 0) +
-    (risingOnly ? 1 : 0) + (divergeOnly ? 1 : 0) + (fullOnly ? 1 : 0) +
+    (risingOnly ? 1 : 0) + (divergeOnly ? 1 : 0) + (fullOnly ? 1 : 0) + (quadrant ? 1 : 0) +
     Object.values(flags).filter(Boolean).length;
 
   const clearFilters = useCallback(() => {
     setSector(""); setStage(""); setRead(""); setMinScore(0);
-    setRisingOnly(false); setDivergeOnly(""); setFullOnly(false); setFlags({});
+    setRisingOnly(false); setDivergeOnly(""); setFullOnly(false); setQuadrant(""); setFlags({});
   }, []);
 
   const visible = useMemo(() => {
@@ -270,6 +298,14 @@ export default function TrendPage() {
       if (scope === "focus" && !isFocusTicker(r.ticker)) return false;
       if (q && !r.ticker.includes(q) && !(r.sector ?? "").toUpperCase().includes(q)) return false;
       if (sector && r.sector !== sector) return false;
+      if (quadrant) {
+        // A sector with no snapshot (the "Other" bucket) has no quadrant to match, so it
+        // drops out whenever a quadrant is selected. That is the honest reading: the
+        // filter asks about rotation, and those names are in no basket to rotate.
+        const q = r.sector ? quadrants[r.sector] : undefined;
+        const want = QUADRANTS.find((x) => x.key === quadrant);
+        if (!q || !want || !want.match.includes(q)) return false;
+      }
       if (stage && r.stage !== stage) return false;
       if (read && r.read !== read) return false;
       if (fullOnly && r.present !== dates.length) return false;
@@ -305,7 +341,7 @@ export default function TrendPage() {
       return nullsLast(ca ? ca[metric] : null, cb ? cb[metric] : null);
     });
   }, [rows, scope, search, sector, stage, read, minScore, risingOnly, divergeOnly, fullOnly,
-      flags, sortField, sortAsc, dates, metric]);
+      quadrant, quadrants, flags, sortField, sortAsc, dates, metric]);
 
   const handleSort = useCallback((f: SortField) => {
     setSortField((prev) => {
@@ -317,13 +353,14 @@ export default function TrendPage() {
 
   const handleExport = useCallback(() => {
     const active = metrics.find((m) => m.key === metric)!;
-    const headers = ["Ticker", "Sector", "Price", "Stage", "Read", "Days",
+    const headers = ["Ticker", "Sector", "Quadrant", "Price", "Stage", "Read", "Days",
       ...dates.map(formatDatePill), "Change", "PricePct", "BothRising", "Divergence"];
     const lines = visible.map((r) => {
       const br = bothRising(r, dates);
       return [
         r.ticker,
         `"${(r.sector ?? "").replace(/"/g, '""')}"`,
+        (r.sector && quadrants[r.sector]) || "",
         r.price,
         r.stage,
         r.read,
@@ -343,7 +380,7 @@ export default function TrendPage() {
       [headers.join(","), ...lines].join("\n"),
       `trend-${engine}-${active.short.toLowerCase()}-${dates[dates.length - 1] ?? "latest"}.csv`,
     );
-  }, [visible, dates, metric, engine, metrics]);
+  }, [visible, dates, metric, engine, metrics, quadrants]);
 
   const activeMetric = metrics.find((m) => m.key === metric) ?? metrics[0];
   const risingCount = useMemo(
@@ -398,6 +435,30 @@ export default function TrendPage() {
 
       {/* Row 2 — narrowing */}
       <div className="mb-5 flex flex-wrap items-center gap-2 rounded-md border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2">
+        <label className="flex items-center gap-1" title="RRG quadrant of the ticker's sector, from the latest sector snapshot">
+          <span className={`text-[10px] font-medium ${quadrant ? "text-white" : "text-[#666]"}`}>Rotation</span>
+          <div className="flex rounded border border-[#2a2a2a] bg-[#111] p-0.5">
+            <button
+              onClick={() => setQuadrant("")}
+              aria-pressed={!quadrant}
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${!quadrant ? "bg-[#185FA5]/25 text-[#5ba3e6]" : "text-[#666] hover:text-white"}`}
+            >
+              Any
+            </button>
+            {QUADRANTS.map((q) => (
+              <button
+                key={q.key}
+                onClick={() => setQuadrant((v) => (v === q.key ? "" : q.key))}
+                aria-pressed={quadrant === q.key}
+                title={`Sectors currently ${q.match.join(" or ").toLowerCase()}`}
+                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${quadrant === q.key ? "bg-[#185FA5]/25 text-[#5ba3e6]" : "text-[#666] hover:text-white"}`}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </label>
+
         <Select value={sector} onChange={setSector} label="Sector" options={sectors} />
         <Select value={stage} onChange={setStage} label={engine === "inflection" ? "Stage" : "State"} options={stages} />
         <Select value={read} onChange={setRead} label={engine === "inflection" ? "Read" : "Alert"} options={reads} />
@@ -542,7 +603,17 @@ export default function TrendPage() {
                             </span>
                           )}
                         </div>
-                        <div className="text-[10px] text-[#666]">{r.sector ?? "—"}</div>
+                        <div className="flex items-center gap-1 text-[10px] text-[#666]">
+                          <span>{r.sector ?? "—"}</span>
+                          {r.sector && quadrants[r.sector] && (
+                            <span
+                              className={`rounded-sm px-1 text-[9px] font-semibold ${QUADRANT_STYLE[quadrants[r.sector]] ?? "bg-[#1a1a1a] text-[#888]"}`}
+                              title={`Sector is ${quadrants[r.sector]} on the RRG`}
+                            >
+                              {quadrants[r.sector].slice(0, 4)}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       {dates.map((d) => {
                         const c = r.byDate[d];

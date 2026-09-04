@@ -3,6 +3,7 @@ import {
   loadComponentTrend,
   loadComponentHistory,
   loadComponentHistoryDates,
+  loadLatestSectorQuadrants,
   loadInflectionDailyDates,
   loadTransitionDailyDates,
   type TrendRow,
@@ -101,9 +102,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ engine, dates: [], rows: [], source: fromArchive ? "archive" : "scan" });
   }
 
-  const rows: TrendRow[] = fromArchive
-    ? await loadComponentHistory(engine, dates)
-    : await loadComponentTrend(engine, dates);
+  const [rows, quadrants]: [TrendRow[], Record<string, string>] = await Promise.all([
+    fromArchive ? loadComponentHistory(engine, dates) : loadComponentTrend(engine, dates),
+    loadLatestSectorQuadrants(),
+  ]);
 
   // loadComponentTrend orders scan_date descending, so the first row seen for a ticker
   // is its most recent — which is the price, sector and flag set worth keeping.
@@ -147,6 +149,9 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     engine,
     source: fromArchive ? "archive" : "scan",
+    // Current RRG quadrant per sector name, so the page can group stocks by where their
+    // sector sits without every row carrying a duplicate of it.
+    quadrants,
     dates,
     rows: [...byTicker.values()].sort((a, b) => a.ticker.localeCompare(b.ticker)),
   });
