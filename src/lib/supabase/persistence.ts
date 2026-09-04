@@ -607,28 +607,55 @@ export async function loadInflectionDaily(date: string): Promise<InflectionDaily
 }
 
 /** Load available scan dates (up to limit, most recent first). */
-export async function loadInflectionDailyDates(limit = 14): Promise<string[]> {
+/**
+ * PostgREST caps a single select at 1000 rows no matter what .limit() asks for, so any
+ * query that scans a whole scan table has to page. The date helpers below select only
+ * scan_date and dedupe, but at ~350 rows per scan a single page covers under three days
+ * — which silently truncated every date picker in the app to the last few scans.
+ */
+const SCAN_PAGE_SIZE = 1000;
+
+async function loadDistinctScanDates(table: string, limit: number): Promise<string[]> {
   try {
     const supabase = createAdminClient();
     if (!supabase) return [];
 
-    const { data, error } = await supabase
-      .from("inflection_daily")
-      .select("scan_date")
-      .order("scan_date", { ascending: false });
+    const seen: string[] = [];
+    const unique = new Set<string>();
 
-    if (error) {
-      console.error("[persistence] loadInflectionDailyDates error:", error.message);
-      return [];
+    for (let page = 0; page < 32; page++) {
+      const from = page * SCAN_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from(table)
+        .select("scan_date")
+        .order("scan_date", { ascending: false })
+        .range(from, from + SCAN_PAGE_SIZE - 1);
+
+      if (error) {
+        console.error(`[persistence] loadDistinctScanDates(${table}) error:`, error.message);
+        break;
+      }
+      const rows = data ?? [];
+      for (const r of rows) {
+        const d = r.scan_date as string;
+        if (!unique.has(d)) {
+          unique.add(d);
+          seen.push(d);
+          if (seen.length >= limit) return seen;
+        }
+      }
+      // A short page is the last page.
+      if (rows.length < SCAN_PAGE_SIZE) break;
     }
-
-    // Dedupe and limit
-    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
-    return unique.slice(0, limit);
+    return seen;
   } catch (err) {
-    console.error("[persistence] loadInflectionDailyDates exception:", err);
+    console.error(`[persistence] loadDistinctScanDates(${table}) exception:`, err);
     return [];
   }
+}
+
+export async function loadInflectionDailyDates(limit = 14): Promise<string[]> {
+  return loadDistinctScanDates("inflection_daily", limit);
 }
 
 /** Load inflection daily results for multiple dates (for streak/delta computation).
@@ -2009,29 +2036,89 @@ export async function loadTransitionDaily(date: string): Promise<TransitionDaily
 
 /** Load available scan dates (up to limit, most recent first). */
 export async function loadTransitionDailyDates(limit = 14): Promise<string[]> {
+  return loadDistinctScanDates("transition_daily", limit);
+}
+
+/** Load transition daily results for multiple dates (for streak/delta). */
+/**
+ * Per-day component series for the trend matrix.
+ *
+ * The existing load*Multi helpers select only `overall_score`, because their one caller
+ * collapses the window into a streak count and a single delta. A trend view needs the
+ * components themselves, so this reads them directly rather than widening those helpers
+ * and making every daily-page request carry columns it does not render.
+ *
+ * `stage` on inflection_daily and `state` on transition_daily hold different taxonomies;
+ * both are returned as `label` so the caller can render one column either way.
+ */
+export interface TrendRow {
+  scan_date: string;
+  ticker: string;
+  sector: string | null;
+  price: number;
+  se_score: number;
+  demand_score: number;
+  overall_score: number;
+  label: string;
+  scanner_version: number | null;
+}
+
+export async function loadComponentTrend(
+  engine: "inflection" | "transition",
+  dates: string[],
+): Promise<TrendRow[]> {
+  if (dates.length === 0) return [];
+
+  const table = engine === "inflection" ? "inflection_daily" : "transition_daily";
+  const labelCol = engine === "inflection" ? "stage" : "state";
+
   try {
     const supabase = createAdminClient();
     if (!supabase) return [];
 
-    const { data, error } = await supabase
-      .from("transition_daily")
-      .select("scan_date")
-      .order("scan_date", { ascending: false });
+    // A full window is dates x universe — 14 scans of ~350 rows is well past the 1000-row
+    // cap, and an unpaged read silently drops the oldest dates. That is the worst possible
+    // failure here: the matrix renders a dash, which this view defines to mean "the scanner
+    // did not score it", so truncation would read as a scanner gap rather than a fetch bug.
+    const raw: Record<string, unknown>[] = [];
+    for (let page = 0; page < 32; page++) {
+      const from = page * SCAN_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from(table)
+        .select(`scan_date, ticker, sector, price, se_score, demand_score, overall_score, scanner_version, ${labelCol}`)
+        .in("scan_date", dates)
+        .order("scan_date", { ascending: false })
+        .range(from, from + SCAN_PAGE_SIZE - 1);
 
-    if (error) {
-      console.error("[persistence] loadTransitionDailyDates error:", error.message);
-      return [];
+      if (error) {
+        console.error(`[persistence] loadComponentTrend(${engine}) error:`, error.message);
+        break;
+      }
+      const rows = (data ?? []) as Record<string, unknown>[];
+      raw.push(...rows);
+      if (rows.length < SCAN_PAGE_SIZE) break;
     }
 
-    const unique = [...new Set((data ?? []).map((r) => r.scan_date as string))];
-    return unique.slice(0, limit);
+    return raw.map((r) => {
+      const row = r as Record<string, unknown>;
+      return {
+        scan_date: row.scan_date as string,
+        ticker: row.ticker as string,
+        sector: (row.sector as string | null) ?? null,
+        price: (row.price as number) ?? 0,
+        se_score: (row.se_score as number) ?? 0,
+        demand_score: (row.demand_score as number) ?? 0,
+        overall_score: (row.overall_score as number) ?? 0,
+        label: (row[labelCol] as string) ?? "",
+        scanner_version: (row.scanner_version as number | null) ?? null,
+      };
+    });
   } catch (err) {
-    console.error("[persistence] loadTransitionDailyDates exception:", err);
+    console.error(`[persistence] loadComponentTrend(${engine}) exception:`, err);
     return [];
   }
 }
 
-/** Load transition daily results for multiple dates (for streak/delta). */
 export async function loadTransitionDailyMulti(
   dates: string[]
 ): Promise<Array<{ scan_date: string; ticker: string; overall_score: number; scanner_version: number }>> {

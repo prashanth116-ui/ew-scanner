@@ -43,6 +43,7 @@ const subPages: Record<string, { href: string; label: string }[]> = {
     { href: "/prerun/institutional-daily", label: "Institutional" },
     { href: "/prerun/qfe-daily", label: "QFE" },
     { href: "/prerun/transition-daily", label: "Transition" },
+    { href: "/prerun/trend", label: "Trend" },
     { href: "/prerun/ict-daily", label: "ICT" },
     { href: "/prerun/ict-guide", label: "ICT Guide" },
     { href: "/prerun/ict-backtest", label: "ICT Backtest" },
