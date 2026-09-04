@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Loader2, Download, Search, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Loader2, Download, Search, TrendingUp, TrendingDown, Minus, X } from "lucide-react";
 import Link from "next/link";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
-import { formatDatePill, scoreColor, downloadCSV } from "@/lib/daily-page-utils";
+import { formatDatePill, downloadCSV } from "@/lib/daily-page-utils";
 import { isFocusTicker } from "@/data/focus-list";
 
 // ── Types ──
@@ -12,7 +12,11 @@ import { isFocusTicker } from "@/data/focus-list";
 interface Cell {
   se: number;
   dmd: number;
+  cmp: number;
+  run: number;
+  rs: number;
   ovr: number;
+  str: number | null;
   label: string;
 }
 
@@ -21,73 +25,124 @@ interface TrendRow {
   sector: string | null;
   price: number;
   present: number;
+  read: string;
+  stage: string;
+  isCoiled: boolean;
+  isPrimary: boolean;
+  isStronger: boolean;
+  extensionRisk: boolean;
   byDate: Record<string, Cell>;
 }
 
 type Engine = "inflection" | "transition";
-type Metric = "se" | "dmd" | "ovr";
+type Metric = "se" | "dmd" | "cmp" | "run" | "rs" | "ovr" | "str";
 type Scope = "focus" | "all";
-type SortField = "ticker" | "latest" | "change" | "present";
+type SortField = "ticker" | "latest" | "change" | "present" | string;
 
-const METRICS: { key: Metric; label: string; title: string }[] = [
-  {
-    key: "se",
-    label: "Seller Exhaustion",
-    title: "Supply Exhaustion — absorption, structural spring, range asymmetry, down-body contraction, distribution days",
-  },
-  {
-    key: "dmd",
-    label: "Buyer Demand",
-    title: "Demand Emergence — close location, pocket pivots, RVOL trajectory, OBV divergence, money flow, distance to breakout",
-  },
-  {
-    key: "ovr",
-    label: "Overall",
-    title: "Weighted composite across all components",
-  },
+const METRICS: { key: Metric; label: string; short: string; title: string; engine?: Engine }[] = [
+  { key: "se",  label: "Seller Exhaustion", short: "SE",  title: "Supply Exhaustion — absorption, structural spring, range asymmetry, down-body contraction, distribution days" },
+  { key: "dmd", label: "Buyer Demand",      short: "Dmd", title: "Demand Emergence — close location, pocket pivots, RVOL trajectory, OBV divergence, money flow, distance to breakout" },
+  { key: "cmp", label: "Compression",       short: "Cmp", title: "Compression — ATR contraction, nested ranges, inside bars, tight closes, dry volume" },
+  { key: "run", label: "Runner",            short: "Run", title: "Runner Potential — overhead supply, ATR%, base energy, float rotation, insider conviction, risk distance" },
+  { key: "rs",  label: "RS",                short: "RS",  title: "RS Trajectory — acceleration vs SPY and the trend of that acceleration" },
+  { key: "str", label: "Structure",         short: "Str", title: "Market structure — ChoCH and BOS quality. Transition only.", engine: "transition" },
+  { key: "ovr", label: "Overall",           short: "Ovr", title: "Weighted composite across all components" },
 ];
 
 /**
- * Component scores run 0-100 but sit far below that in practice — a strong Seller
- * Exhaustion read is around 50, not 80. The default 80/65/50 thresholds would paint the
- * whole matrix red and destroy the contrast this view exists for.
+ * Colour thresholds are PERCENTILES OF THE LOADED WINDOW, computed per metric, not one
+ * shared ramp. The components sit on very different scales — on a recent scan RS had a
+ * median of 66 against Seller Exhaustion's 32 — so a fixed ramp would render RS uniformly
+ * green and SE uniformly amber, encoding scale rather than strength. Percentiles also
+ * survive recalibration, which fixed cutoffs do not; this matches the reasoning already
+ * used by ComponentFilterBar on the daily pages.
  */
-const COMPONENT_THRESHOLDS: [number, number, number] = [50, 35, 20];
-const OVERALL_THRESHOLDS: [number, number, number] = [65, 50, 35];
+function quantile(sorted: number[], q: number): number {
+  if (!sorted.length) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))];
+}
 
-function thresholdsFor(metric: Metric): [number, number, number] {
-  return metric === "ovr" ? OVERALL_THRESHOLDS : COMPONENT_THRESHOLDS;
+function valueClass(v: number, t: [number, number, number]): string {
+  if (v >= t[0]) return "text-emerald-400";
+  if (v >= t[1]) return "text-cyan-400";
+  if (v >= t[2]) return "text-amber-400";
+  return "text-red-400";
 }
 
 /**
- * Change across the window, measured between the first and last days that actually
- * carry a row. Missing days are skipped rather than read as zero — a gap means "not
- * scored", and treating it as a collapse to 0 would invent a move that never happened.
+ * Change across the window, measured between the first and last days that actually carry
+ * a row. Missing days are skipped rather than read as zero — a gap means "not scored",
+ * and treating it as a collapse to 0 would invent a move that never happened.
  */
 function windowChange(row: TrendRow, dates: string[], metric: Metric): number | null {
-  const present = dates.map((d) => row.byDate[d]).filter(Boolean) as Cell[];
+  const present: number[] = [];
+  for (const d of dates) {
+    const c = row.byDate[d];
+    if (c) {
+      const v = c[metric];
+      if (v !== null) present.push(v);
+    }
+  }
   if (present.length < 2) return null;
-  return present[present.length - 1][metric] - present[0][metric];
+  return present[present.length - 1] - present[0];
 }
 
 function latestValue(row: TrendRow, dates: string[], metric: Metric): number | null {
   for (let i = dates.length - 1; i >= 0; i--) {
     const c = row.byDate[dates[i]];
-    if (c) return c[metric];
+    if (c) {
+      const v = c[metric];
+      if (v !== null) return v;
+    }
   }
   return null;
 }
+
+/**
+ * Supply exhausting while demand builds is the accumulation signature — either component
+ * moving alone is ordinary noise. Deliberately a plain "both improved across the window"
+ * with no magnitude floor: any cutoff here would be invented rather than calibrated, and
+ * the two deltas are shown on hover so the size of the move stays visible.
+ */
+function bothRising(row: TrendRow, dates: string[]): { se: number; dmd: number } | null {
+  const se = windowChange(row, dates, "se");
+  const dmd = windowChange(row, dates, "dmd");
+  if (se === null || dmd === null || se <= 0 || dmd <= 0) return null;
+  return { se, dmd };
+}
+
+const FLAGS = [
+  { key: "isCoiled" as const,      label: "Coiled",    title: "Supply exhausted, compressed, real Runner Potential, not yet moving" },
+  { key: "isPrimary" as const,     label: "Primary",   title: "Primary signal on the latest scan" },
+  { key: "isStronger" as const,    label: "Stronger",  title: "Stronger signal — the higher conviction tier" },
+  { key: "extensionRisk" as const, label: "Extended",  title: "Extension risk flagged — near highs or far from EMA" },
+];
+
+const SCORE_TIERS = [
+  { label: "Top 50%", q: 0.5 },
+  { label: "Top 25%", q: 0.75 },
+  { label: "Top 10%", q: 0.9 },
+];
 
 // ── Page ──
 
 export default function TrendPage() {
   const [engine, setEngine] = useState<Engine>("inflection");
-  const [metric, setMetric] = useState<Metric>("se");
+  const [metricChoice, setMetric] = useState<Metric>("se");
   const [scope, setScope] = useState<Scope>("focus");
   const [days, setDays] = useState(7);
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("latest");
   const [sortAsc, setSortAsc] = useState(false);
+
+  // Filters
+  const [sector, setSector] = useState("");
+  const [stage, setStage] = useState("");
+  const [read, setRead] = useState("");
+  const [minScore, setMinScore] = useState(0);
+  const [risingOnly, setRisingOnly] = useState(false);
+  const [fullOnly, setFullOnly] = useState(false);
+  const [flags, setFlags] = useState<Record<string, boolean>>({});
 
   const [dates, setDates] = useState<string[]>([]);
   const [rows, setRows] = useState<TrendRow[]>([]);
@@ -96,7 +151,6 @@ export default function TrendPage() {
 
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
       setLoading(true);
       setError(null);
@@ -113,85 +167,149 @@ export default function TrendPage() {
         if (!cancelled) setLoading(false);
       }
     }
-
     load();
     return () => {
       cancelled = true;
     };
   }, [engine, days]);
 
+  const metrics = useMemo(
+    () => METRICS.filter((m) => !m.engine || m.engine === engine),
+    [engine],
+  );
+
+  // Structure exists only on Transition. Derive the effective metric rather than
+  // correcting state in an effect — switching to Inflection while Structure is selected
+  // falls back on the next render, with no extra pass and nothing to keep in sync.
+  const metric: Metric = metrics.some((m) => m.key === metricChoice) ? metricChoice : "se";
+
+  /** Percentile thresholds for the active metric, from every loaded row's latest value.
+   *  Computed before user filtering so narrowing the table does not move the colours. */
+  const thresholds = useMemo<[number, number, number]>(() => {
+    const vals = rows
+      .map((r) => latestValue(r, dates, metric))
+      .filter((v): v is number => v !== null)
+      .sort((a, b) => a - b);
+    return [quantile(vals, 0.75), quantile(vals, 0.5), quantile(vals, 0.25)];
+  }, [rows, dates, metric]);
+
+  const scoreOptions = useMemo(() => {
+    const vals = rows
+      .map((r) => latestValue(r, dates, metric))
+      .filter((v): v is number => v !== null)
+      .sort((a, b) => a - b);
+    return SCORE_TIERS.map((t) => ({ label: `${t.label} (≥${quantile(vals, t.q)})`, min: quantile(vals, t.q) }));
+  }, [rows, dates, metric]);
+
+  const sectors = useMemo(
+    () => [...new Set(rows.map((r) => r.sector).filter(Boolean))].sort() as string[],
+    [rows],
+  );
+  const stages = useMemo(
+    () => [...new Set(rows.map((r) => r.stage).filter(Boolean))].sort(),
+    [rows],
+  );
+  const reads = useMemo(
+    () => [...new Set(rows.map((r) => r.read).filter(Boolean))].sort(),
+    [rows],
+  );
+
+  const activeFilters =
+    (sector ? 1 : 0) + (stage ? 1 : 0) + (read ? 1 : 0) + (minScore ? 1 : 0) +
+    (risingOnly ? 1 : 0) + (fullOnly ? 1 : 0) + Object.values(flags).filter(Boolean).length;
+
+  const clearFilters = useCallback(() => {
+    setSector(""); setStage(""); setRead(""); setMinScore(0);
+    setRisingOnly(false); setFullOnly(false); setFlags({});
+  }, []);
+
   const visible = useMemo(() => {
     const q = search.trim().toUpperCase();
     const filtered = rows.filter((r) => {
       if (scope === "focus" && !isFocusTicker(r.ticker)) return false;
       if (q && !r.ticker.includes(q) && !(r.sector ?? "").toUpperCase().includes(q)) return false;
+      if (sector && r.sector !== sector) return false;
+      if (stage && r.stage !== stage) return false;
+      if (read && r.read !== read) return false;
+      if (fullOnly && r.present !== dates.length) return false;
+      if (risingOnly && !bothRising(r, dates)) return false;
+      for (const f of FLAGS) if (flags[f.key] && !r[f.key]) return false;
+      if (minScore) {
+        const v = latestValue(r, dates, metric);
+        if (v === null || v < minScore) return false;
+      }
       return true;
     });
+
     const dir = sortAsc ? 1 : -1;
+    const nullsLast = (a: number | null, b: number | null) => {
+      if (a === null && b === null) return 0;
+      if (a === null) return 1;
+      if (b === null) return -1;
+      return dir * (a - b);
+    };
+
     return [...filtered].sort((a, b) => {
-      switch (sortField) {
-        case "ticker":
-          return dir * a.ticker.localeCompare(b.ticker);
-        case "present":
-          return dir * (a.present - b.present);
-        case "change": {
-          const ca = windowChange(a, dates, metric);
-          const cb = windowChange(b, dates, metric);
-          if (ca === null && cb === null) return 0;
-          if (ca === null) return 1; // nulls last regardless of sort direction
-          if (cb === null) return -1;
-          return dir * (ca - cb);
-        }
-        default: {
-          const la = latestValue(a, dates, metric);
-          const lb = latestValue(b, dates, metric);
-          if (la === null && lb === null) return 0;
-          if (la === null) return 1;
-          if (lb === null) return -1;
-          return dir * (la - lb);
-        }
-      }
+      if (sortField === "ticker") return dir * a.ticker.localeCompare(b.ticker);
+      if (sortField === "present") return dir * (a.present - b.present);
+      if (sortField === "change") return nullsLast(windowChange(a, dates, metric), windowChange(b, dates, metric));
+      if (sortField === "latest") return nullsLast(latestValue(a, dates, metric), latestValue(b, dates, metric));
+      // Any date column: sortField is the scan_date itself.
+      const ca = a.byDate[sortField], cb = b.byDate[sortField];
+      return nullsLast(ca ? ca[metric] : null, cb ? cb[metric] : null);
     });
-  }, [rows, scope, search, sortField, sortAsc, dates, metric]);
+  }, [rows, scope, search, sector, stage, read, minScore, risingOnly, fullOnly, flags,
+      sortField, sortAsc, dates, metric]);
 
   const handleSort = useCallback((f: SortField) => {
     setSortField((prev) => {
-      if (prev === f) {
-        setSortAsc((a) => !a);
-        return prev;
-      }
+      if (prev === f) { setSortAsc((a) => !a); return prev; }
       setSortAsc(false);
       return f;
     });
   }, []);
 
   const handleExport = useCallback(() => {
-    const headers = ["Ticker", "Sector", "Price", "Days", ...dates.map(formatDatePill), "Change"];
-    const lines = visible.map((r) =>
-      [
+    const active = metrics.find((m) => m.key === metric)!;
+    const headers = ["Ticker", "Sector", "Price", "Stage", "Read", "Days",
+      ...dates.map(formatDatePill), "Change", "BothRising"];
+    const lines = visible.map((r) => {
+      const br = bothRising(r, dates);
+      return [
         r.ticker,
-        r.sector ?? "",
+        `"${(r.sector ?? "").replace(/"/g, '""')}"`,
         r.price,
+        r.stage,
+        r.read,
         `${r.present}/${dates.length}`,
-        ...dates.map((d) => (r.byDate[d] ? String(r.byDate[d][metric]) : "")),
+        ...dates.map((d) => {
+          const c = r.byDate[d];
+          const v = c ? c[metric] : null;
+          return v === null || v === undefined ? "" : String(v);
+        }),
         windowChange(r, dates, metric) ?? "",
-      ].join(",")
-    );
+        br ? `SE+${br.se} Dmd+${br.dmd}` : "",
+      ].join(",");
+    });
     downloadCSV(
       [headers.join(","), ...lines].join("\n"),
-      `trend-${engine}-${metric}-${dates[dates.length - 1] ?? "latest"}.csv`
+      `trend-${engine}-${active.short.toLowerCase()}-${dates[dates.length - 1] ?? "latest"}.csv`,
     );
-  }, [visible, dates, metric, engine]);
+  }, [visible, dates, metric, engine, metrics]);
 
-  const activeMetric = METRICS.find((m) => m.key === metric)!;
+  const activeMetric = metrics.find((m) => m.key === metric) ?? metrics[0];
+  const risingCount = useMemo(
+    () => visible.filter((r) => bothRising(r, dates)).length,
+    [visible, dates],
+  );
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="mx-auto max-w-[1400px] px-6 py-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Component Trend</h1>
           <p className="mt-1 max-w-2xl text-sm text-[#a0a0a0]">
-            {activeMetric.label} by day — one row per ticker, one column per scan. A dash
+            {activeMetric?.label} by day — one row per ticker, one column per scan. A dash
             means the scanner produced no row that day, which is not the same as a low score.
           </p>
         </div>
@@ -203,40 +321,78 @@ export default function TrendPage() {
         </Link>
       </div>
 
-      {/* Controls */}
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+      {/* Row 1 — what is being shown */}
+      <div className="mb-2.5 flex flex-wrap items-center gap-2">
         <Toggle
-          options={[
-            ["inflection", "Inflection"],
-            ["transition", "Transition"],
-          ]}
+          options={[["inflection", "Inflection"], ["transition", "Transition"]]}
           value={engine}
           onChange={(v) => setEngine(v as Engine)}
         />
         <span className="mx-1 h-5 w-px bg-[#2a2a2a]" />
         <Toggle
-          options={METRICS.map((m) => [m.key, m.label] as [string, string])}
+          options={metrics.map((m) => [m.key, m.label] as [string, string])}
           value={metric}
           onChange={(v) => setMetric(v as Metric)}
-          titles={Object.fromEntries(METRICS.map((m) => [m.key, m.title]))}
+          titles={Object.fromEntries(metrics.map((m) => [m.key, m.title]))}
         />
         <span className="mx-1 h-5 w-px bg-[#2a2a2a]" />
         <Toggle
-          options={[
-            ["focus", "Focus"],
-            ["all", "All"],
-          ]}
+          options={[["focus", "Focus"], ["all", "All"]]}
           value={scope}
           onChange={(v) => setScope(v as Scope)}
         />
         <Toggle
-          options={[
-            ["7", "7d"],
-            ["14", "14d"],
-          ]}
+          options={[["7", "7d"], ["14", "14d"]]}
           value={String(days)}
           onChange={(v) => setDays(Number(v))}
         />
+      </div>
+
+      {/* Row 2 — narrowing */}
+      <div className="mb-5 flex flex-wrap items-center gap-2 rounded-md border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2">
+        <Select value={sector} onChange={setSector} label="Sector" options={sectors} />
+        <Select value={stage} onChange={setStage} label={engine === "inflection" ? "Stage" : "State"} options={stages} />
+        <Select value={read} onChange={setRead} label={engine === "inflection" ? "Read" : "Alert"} options={reads} />
+
+        <label className="flex items-center gap-1" title={`Minimum ${activeMetric?.label} on the latest scan`}>
+          <span className={`text-[10px] font-medium ${minScore ? "text-white" : "text-[#666]"}`}>
+            {activeMetric?.short} min
+          </span>
+          <select
+            aria-label={`Minimum ${activeMetric?.label}`}
+            value={minScore}
+            onChange={(e) => setMinScore(Number(e.target.value))}
+            className={`rounded border bg-[#111] px-1.5 py-1 text-[10px] focus:outline-none focus:ring-1 focus:ring-white/30 ${
+              minScore ? "border-white/20 text-white" : "border-[#2a2a2a] text-[#666] hover:text-white"
+            }`}
+          >
+            <option value={0}>Any</option>
+            {scoreOptions.map((o) => (
+              <option key={o.label} value={o.min}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <Chip on={risingOnly} onClick={() => setRisingOnly((v) => !v)} title="Both Seller Exhaustion and Buyer Demand improved across the window">
+          ◉ Both rising
+        </Chip>
+        <Chip on={fullOnly} onClick={() => setFullOnly((v) => !v)} title="Only tickers scored on every scan in the window">
+          No gaps
+        </Chip>
+        {FLAGS.map((f) => (
+          <Chip key={f.key} on={!!flags[f.key]} onClick={() => setFlags((p) => ({ ...p, [f.key]: !p[f.key] }))} title={f.title}>
+            {f.label}
+          </Chip>
+        ))}
+
+        {activeFilters > 0 && (
+          <button
+            onClick={clearFilters}
+            className="flex items-center gap-0.5 rounded border border-amber-500/40 px-1.5 py-1 text-[10px] text-amber-400 hover:border-amber-400 hover:text-amber-300"
+          >
+            <X className="h-2.5 w-2.5" /> Clear {activeFilters}
+          </button>
+        )}
 
         <div className="relative ml-auto">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#666]" />
@@ -244,7 +400,7 @@ export default function TrendPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Ticker or sector"
-            className="w-48 rounded-md border border-[#2a2a2a] bg-[#111] py-1.5 pl-8 pr-3 text-sm text-white placeholder:text-[#555] focus:border-[#185FA5] focus:outline-none"
+            className="w-44 rounded-md border border-[#2a2a2a] bg-[#111] py-1.5 pl-8 pr-3 text-sm text-white placeholder:text-[#555] focus:border-[#185FA5] focus:outline-none"
           />
         </div>
         <button
@@ -271,56 +427,59 @@ export default function TrendPage() {
       {!loading && !error && (
         <TableErrorBoundary>
           <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[860px] text-sm">
               <thead className="bg-[#111] text-[11px] uppercase tracking-wide text-[#888]">
                 <tr>
-                  <Th onClick={() => handleSort("ticker")} active={sortField === "ticker"} asc={sortAsc} align="left">
-                    Ticker
-                  </Th>
+                  <Th onClick={() => handleSort("ticker")} active={sortField === "ticker"} asc={sortAsc} align="left">Ticker</Th>
                   {dates.map((d) => (
-                    <th key={d} className="px-3 py-2.5 text-center font-medium tabular-nums">
+                    <Th key={d} onClick={() => handleSort(d)} active={sortField === d} asc={sortAsc}>
                       {formatDatePill(d)}
-                    </th>
+                    </Th>
                   ))}
-                  <Th onClick={() => handleSort("change")} active={sortField === "change"} asc={sortAsc}>
-                    Chg
-                  </Th>
-                  <Th onClick={() => handleSort("present")} active={sortField === "present"} asc={sortAsc}>
-                    Days
-                  </Th>
+                  <Th onClick={() => handleSort("change")} active={sortField === "change"} asc={sortAsc}>Chg</Th>
+                  <Th onClick={() => handleSort("present")} active={sortField === "present"} asc={sortAsc}>Days</Th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((r) => {
                   const chg = windowChange(r, dates, metric);
+                  const rising = bothRising(r, dates);
                   return (
-                    <tr key={r.ticker} className="border-t border-[#1e1e1e] hover:bg-[#141414]">
+                    <tr
+                      key={r.ticker}
+                      className={`border-t border-[#1e1e1e] hover:bg-[#141414] ${
+                        rising ? "bg-emerald-500/[0.06]" : ""
+                      }`}
+                    >
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1.5">
-                          {isFocusTicker(r.ticker) && (
-                            <span className="text-amber-400" title="Focus list">
-                              ★
+                          {isFocusTicker(r.ticker) && <span className="text-amber-400" title="Focus list">★</span>}
+                          <span className="font-medium text-white">{r.ticker}</span>
+                          {rising && (
+                            <span
+                              className="rounded-sm bg-emerald-500/15 px-1 py-px text-[9px] font-semibold text-emerald-400"
+                              title={`Seller Exhaustion +${rising.se} and Buyer Demand +${rising.dmd} across the window`}
+                            >
+                              ◉ RISING
                             </span>
                           )}
-                          <span className="font-medium text-white">{r.ticker}</span>
+                          {r.isCoiled && (
+                            <span className="rounded-sm bg-cyan-500/15 px-1 py-px text-[9px] font-semibold text-cyan-400" title="Coiled — supply exhausted, compressed, not yet moving">
+                              COILED
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-[#666]">{r.sector ?? "—"}</div>
                       </td>
                       {dates.map((d) => {
                         const c = r.byDate[d];
+                        const v = c ? c[metric] : null;
                         return (
                           <td key={d} className="px-3 py-2 text-center tabular-nums">
-                            {c ? (
-                              <span
-                                className={`font-medium ${scoreColor(c[metric], thresholdsFor(metric))}`}
-                                title={c.label}
-                              >
-                                {c[metric]}
-                              </span>
+                            {v === null || v === undefined ? (
+                              <span className="text-[#3a3a3a]" title="No row — not scored this day">—</span>
                             ) : (
-                              <span className="text-[#3a3a3a]" title="No row — not scored this day">
-                                —
-                              </span>
+                              <span className={`font-medium ${valueClass(v, thresholds)}`} title={c!.label}>{v}</span>
                             )}
                           </td>
                         );
@@ -329,28 +488,16 @@ export default function TrendPage() {
                         {chg === null ? (
                           <span className="text-[#3a3a3a]">—</span>
                         ) : (
-                          <span
-                            className={`inline-flex items-center gap-0.5 text-xs font-medium ${
-                              chg > 0 ? "text-emerald-400" : chg < 0 ? "text-red-400" : "text-[#888]"
-                            }`}
-                          >
-                            {chg > 0 ? (
-                              <TrendingUp className="h-3 w-3" />
-                            ) : chg < 0 ? (
-                              <TrendingDown className="h-3 w-3" />
-                            ) : (
-                              <Minus className="h-3 w-3" />
-                            )}
+                          <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${
+                            chg > 0 ? "text-emerald-400" : chg < 0 ? "text-red-400" : "text-[#888]"
+                          }`}>
+                            {chg > 0 ? <TrendingUp className="h-3 w-3" /> : chg < 0 ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
                             {chg > 0 ? `+${chg}` : chg}
                           </span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <span
-                          className={`text-xs tabular-nums ${
-                            r.present === dates.length ? "text-[#888]" : "text-amber-400/80"
-                          }`}
-                        >
+                        <span className={`text-xs tabular-nums ${r.present === dates.length ? "text-[#888]" : "text-amber-400/80"}`}>
                           {r.present}/{dates.length}
                         </span>
                       </td>
@@ -363,15 +510,15 @@ export default function TrendPage() {
 
           {!visible.length && (
             <p className="py-12 text-center text-sm text-[#666]">
-              No tickers match.{scope === "focus" ? " Try switching to All." : ""}
+              No tickers match.{activeFilters > 0 ? " Try clearing filters." : scope === "focus" ? " Try switching to All." : ""}
             </p>
           )}
 
           <p className="mt-3 text-xs text-[#666]">
             {visible.length} tickers · {dates.length} scans
-            {dates.length > 0
-              ? ` · ${formatDatePill(dates[0])} to ${formatDatePill(dates[dates.length - 1])}`
-              : ""}
+            {dates.length > 0 ? ` · ${formatDatePill(dates[0])} to ${formatDatePill(dates[dates.length - 1])}` : ""}
+            {risingCount > 0 ? ` · ${risingCount} with SE and Demand both rising` : ""}
+            {" · "}colours are percentiles of {activeMetric?.short} across the loaded window
             {" · "}scan date reflects the prior session&apos;s close
           </p>
         </TableErrorBoundary>
@@ -383,10 +530,7 @@ export default function TrendPage() {
 // ── Small UI helpers ──
 
 function Toggle({
-  options,
-  value,
-  onChange,
-  titles,
+  options, value, onChange, titles,
 }: {
   options: [string, string][];
   value: string;
@@ -411,12 +555,58 @@ function Toggle({
   );
 }
 
+function Select({
+  value, onChange, label, options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  options: string[];
+}) {
+  return (
+    <label className="flex items-center gap-1">
+      <span className={`text-[10px] font-medium ${value ? "text-white" : "text-[#666]"}`}>{label}</span>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`max-w-[150px] rounded border bg-[#111] px-1.5 py-1 text-[10px] focus:outline-none focus:ring-1 focus:ring-white/30 ${
+          value ? "border-white/20 text-white" : "border-[#2a2a2a] text-[#666] hover:text-white"
+        }`}
+      >
+        <option value="">Any</option>
+        {options.map((o) => (
+          <option key={o} value={o}>{o.replace(/_/g, " ")}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function Chip({
+  on, onClick, title, children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-pressed={on}
+      className={`rounded border px-1.5 py-1 text-[10px] font-medium transition-colors ${
+        on ? "border-[#5ba3e6]/50 bg-[#185FA5]/25 text-[#5ba3e6]" : "border-[#2a2a2a] text-[#666] hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Th({
-  children,
-  onClick,
-  active,
-  asc,
-  align = "center",
+  children, onClick, active, asc, align = "center",
 }: {
   children: React.ReactNode;
   onClick: () => void;

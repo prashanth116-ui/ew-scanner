@@ -2058,8 +2058,20 @@ export interface TrendRow {
   price: number;
   se_score: number;
   demand_score: number;
+  compression_score: number;
+  runner_score: number;
+  rs_score: number;
   overall_score: number;
+  /** Transition only — Inflection has no Structure component. Null there. */
+  structure_score: number | null;
+  /** stage (inflection) or state (transition). */
   label: string;
+  /** trade_read (inflection) or alert_state (transition). */
+  read: string;
+  is_coiled: boolean;
+  is_primary: boolean;
+  is_stronger: boolean;
+  extension_risk: boolean;
   scanner_version: number | null;
 }
 
@@ -2069,8 +2081,15 @@ export async function loadComponentTrend(
 ): Promise<TrendRow[]> {
   if (dates.length === 0) return [];
 
-  const table = engine === "inflection" ? "inflection_daily" : "transition_daily";
-  const labelCol = engine === "inflection" ? "stage" : "state";
+  // The two tables name three of these columns differently: Inflection stores compression
+  // as vc_score and its read as trade_read, Transition uses compression_score/alert_state
+  // and adds structure_score, which has no Inflection equivalent.
+  const inflection = engine === "inflection";
+  const table = inflection ? "inflection_daily" : "transition_daily";
+  const labelCol = inflection ? "stage" : "state";
+  const readCol = inflection ? "trade_read" : "alert_state";
+  const compressionCol = inflection ? "vc_score" : "compression_score";
+  const structureCol = inflection ? "" : ", structure_score";
 
   try {
     const supabase = createAdminClient();
@@ -2085,7 +2104,11 @@ export async function loadComponentTrend(
       const from = page * SCAN_PAGE_SIZE;
       const { data, error } = await supabase
         .from(table)
-        .select(`scan_date, ticker, sector, price, se_score, demand_score, overall_score, scanner_version, ${labelCol}`)
+        .select(
+          `scan_date, ticker, sector, price, se_score, demand_score, overall_score, ` +
+          `runner_score, rs_score, is_coiled, is_primary, is_stronger, extension_risk, ` +
+          `scanner_version, ${compressionCol}, ${labelCol}, ${readCol}${structureCol}`
+        )
         .in("scan_date", dates)
         .order("scan_date", { ascending: false })
         .range(from, from + SCAN_PAGE_SIZE - 1);
@@ -2094,7 +2117,9 @@ export async function loadComponentTrend(
         console.error(`[persistence] loadComponentTrend(${engine}) error:`, error.message);
         break;
       }
-      const rows = (data ?? []) as Record<string, unknown>[];
+      // The select list is built at runtime, so Supabase cannot infer a row shape and
+      // widens to GenericStringError[]. Columns are read defensively below.
+      const rows = (data ?? []) as unknown as Record<string, unknown>[];
       raw.push(...rows);
       if (rows.length < SCAN_PAGE_SIZE) break;
     }
@@ -2108,8 +2133,17 @@ export async function loadComponentTrend(
         price: (row.price as number) ?? 0,
         se_score: (row.se_score as number) ?? 0,
         demand_score: (row.demand_score as number) ?? 0,
+        compression_score: (row[compressionCol] as number) ?? 0,
+        runner_score: (row.runner_score as number) ?? 0,
+        rs_score: (row.rs_score as number) ?? 0,
         overall_score: (row.overall_score as number) ?? 0,
+        structure_score: inflection ? null : ((row.structure_score as number) ?? 0),
         label: (row[labelCol] as string) ?? "",
+        read: (row[readCol] as string) ?? "",
+        is_coiled: row.is_coiled === true,
+        is_primary: row.is_primary === true,
+        is_stronger: row.is_stronger === true,
+        extension_risk: row.extension_risk === true,
         scanner_version: (row.scanner_version as number | null) ?? null,
       };
     });

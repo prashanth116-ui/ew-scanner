@@ -10,6 +10,21 @@ import {
  *  returns the same rows while widening the query for nothing. */
 const MAX_DAYS = 14;
 
+/** One scan's components for one ticker. Keys are short because this object repeats
+ *  per ticker per date and the payload is already dates x universe. */
+export interface TrendCell {
+  se: number;
+  dmd: number;
+  cmp: number;
+  run: number;
+  rs: number;
+  ovr: number;
+  /** Transition only. Null on Inflection, which has no Structure component. */
+  str: number | null;
+  /** stage (inflection) or state (transition). */
+  label: string;
+}
+
 export interface TrendMatrixRow {
   ticker: string;
   sector: string | null;
@@ -17,8 +32,17 @@ export interface TrendMatrixRow {
   price: number;
   /** How many of the window's dates carry a row. Absence is data, so it is reported. */
   present: number;
+  /** Flags from the most recent row in the window. These describe a moment, not a
+   *  window, so exposing a series of them would invite averaging something that
+   *  cannot be averaged — they are filters, not trends. */
+  read: string;
+  stage: string;
+  isCoiled: boolean;
+  isPrimary: boolean;
+  isStronger: boolean;
+  extensionRisk: boolean;
   /** Keyed by scan_date. A missing key means the scanner produced no row that day. */
-  byDate: Record<string, { se: number; dmd: number; ovr: number; label: string }>;
+  byDate: Record<string, TrendCell>;
 }
 
 export async function GET(request: NextRequest) {
@@ -53,7 +77,7 @@ export async function GET(request: NextRequest) {
   const rows: TrendRow[] = await loadComponentTrend(engine, dates);
 
   // loadComponentTrend orders scan_date descending, so the first row seen for a ticker
-  // is its most recent — which is the price and sector worth keeping.
+  // is its most recent — which is the price, sector and flag set worth keeping.
   const byTicker = new Map<string, TrendMatrixRow>();
   for (const r of rows) {
     let entry = byTicker.get(r.ticker);
@@ -63,6 +87,12 @@ export async function GET(request: NextRequest) {
         sector: r.sector,
         price: r.price,
         present: 0,
+        read: r.read,
+        stage: r.label,
+        isCoiled: r.is_coiled,
+        isPrimary: r.is_primary,
+        isStronger: r.is_stronger,
+        extensionRisk: r.extension_risk,
         byDate: {},
       };
       byTicker.set(r.ticker, entry);
@@ -70,7 +100,11 @@ export async function GET(request: NextRequest) {
     entry.byDate[r.scan_date] = {
       se: r.se_score,
       dmd: r.demand_score,
+      cmp: r.compression_score,
+      run: r.runner_score,
+      rs: r.rs_score,
       ovr: r.overall_score,
+      str: r.structure_score,
       label: r.label,
     };
     if (r.sector && !entry.sector) entry.sector = r.sector;
