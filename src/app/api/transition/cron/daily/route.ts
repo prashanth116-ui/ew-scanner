@@ -138,9 +138,11 @@ export async function GET(request: NextRequest) {
           fetchedCount++;
           const result = r.value;
 
-          // Skip gate failures, MARKDOWN (no signal), and low scores
+          // Skip gate failures and low scores. MARKDOWN is NOT skipped — see the matching
+          // note in the Inflection cron. classifyAlertState already maps MARKDOWN to
+          // INVALIDATED, a state this table stores in quantity, and the nightly summary
+          // only counts TRIGGERED/READY/coiled, so persisting it changes no alert.
           if (!result.gates.allPass) continue;
-          if (result.state === "MARKDOWN") continue;
           if (result.scores.overallScore < 25) continue;
 
           qualifying.push(result);

@@ -122,8 +122,14 @@ export async function GET(request: NextRequest) {
           fetchedCount++;
           const result = r.value;
 
-          // Skip gate failures, DISTRIBUTION (negative signal), and low scores
-          if (!result.gates.allPass || result.stage === "DISTRIBUTION") continue;
+          // Skip gate failures and low scores. DISTRIBUTION is NOT skipped: the stage is
+          // the answer, not a reason to discard the row. Dropping it made "no row" mean
+          // both "never evaluated" and "evaluated and bearish", and it deleted the SE and
+          // Demand series for exactly the phase that precedes seller exhaustion — so a
+          // name only became visible after it had already left the bottom. The row is
+          // labelled trade_read=AVOID by determineTradeRead and the nightly summary
+          // already filters those out of confluence, so nothing downstream is polluted.
+          if (!result.gates.allPass) continue;
           if (result.scores.overallScore < MIN_OVERALL_SCORE) continue;
 
           qualifying.push(result);

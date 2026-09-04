@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 // Mock server-only so we can import pure functions from data.ts in tests
 vi.mock("server-only", () => ({}));
 
-import { scoreA, scoreB, scoreD, scoreE, scoreF, scoreH, scoreI, scoreJ, scoreK, scoreL, scoreM, scoreM2, scoreN, scoreO, scoreP, scoreQ, calcSectorModifier, scorePreRun, autoScorePreRun } from "./scoring";
+import { scoreA, scoreB, scoreD, scoreE, scoreF, scoreH, scoreI, scoreJ, scoreK, scoreL, scoreM, scoreM2, scoreN, scoreO, scoreP, scoreQ, calcSectorModifier, scorePreRun, autoScorePreRun, passesMarketCapFloor } from "./scoring";
 import { calcDisplacementAndFVG } from "./data";
 import type { PreRunStockData } from "./types";
 
@@ -912,5 +912,38 @@ describe("calcDisplacementAndFVG", () => {
 
     const result = calcDisplacementAndFVG(opens, highs, lows, closes, 0);
     expect(result.displacementNearCross).toBe(true);
+  });
+});
+
+describe("passesMarketCapFloor — null means UNKNOWN, not zero", () => {
+  // The engine gates each wrote `(data.marketCap ?? 0) >= floor`, which silently rejects
+  // any name whose quote omitted the field. MU cleared every real threshold while trading
+  // $42B/day and was dropped from Inflection and Transition anyway.
+  it("accepts a known cap at or above the floor", () => {
+    expect(passesMarketCapFloor(makeData({ ticker: "MU", marketCap: 1_000_000_000 }), 500_000_000)).toBe(true);
+    expect(passesMarketCapFloor(makeData({ ticker: "MU", marketCap: 500_000_000 }), 500_000_000)).toBe(true);
+  });
+
+  it("rejects a known cap below the floor — known-small is still small", () => {
+    expect(passesMarketCapFloor(makeData({ ticker: "MU", marketCap: 499_999_999 }), 500_000_000)).toBe(false);
+  });
+
+  it("accepts a null cap when index membership vouches for size", () => {
+    expect(passesMarketCapFloor(makeData({ ticker: "MU", marketCap: null }), 500_000_000)).toBe(true);
+  });
+
+  it("rejects a null cap with no membership to vouch for it", () => {
+    expect(passesMarketCapFloor(makeData({ ticker: "ZZZZ", marketCap: null }), 500_000_000)).toBe(false);
+  });
+
+  it("exempts hand-curated ADDITIONAL_MEMBERS outright", () => {
+    expect(passesMarketCapFloor(makeData({ ticker: "SNOW", marketCap: null }), 20_000_000_000)).toBe(true);
+    expect(passesMarketCapFloor(makeData({ ticker: "SNOW", marketCap: 1 }), 20_000_000_000)).toBe(true);
+  });
+
+  it("applies the caller's floor, not a fixed one", () => {
+    const d = makeData({ ticker: "MU", marketCap: 1_000_000_000 });
+    expect(passesMarketCapFloor(d, 500_000_000)).toBe(true);
+    expect(passesMarketCapFloor(d, 20_000_000_000)).toBe(false);
   });
 });

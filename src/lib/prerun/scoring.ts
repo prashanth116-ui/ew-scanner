@@ -45,6 +45,22 @@ export function passesUniverseQualityGates(data: PreRunStockData, ticker: string
   return true;
 }
 
+/**
+ * Market-cap floor that treats null as UNKNOWN rather than zero.
+ *
+ * The engine gates each wrote `(data.marketCap ?? 0) >= floor`, which rejects any name
+ * whose quote happened to omit the field. That is the same failure the gate above was
+ * fixed for — MU cleared every real threshold while trading $42B/day and was dropped
+ * anyway. Index membership already establishes size, so an unknown cap is not grounds
+ * for rejection there; a known-small one still is.
+ */
+export function passesMarketCapFloor(data: PreRunStockData, floor: number): boolean {
+  if (ADDITIONAL_MEMBERS.has(data.ticker)) return true; // hand-curated names are exempt
+  const mcap = data.marketCap;
+  if (mcap === null) return isIndexMember(data.ticker);
+  return mcap >= floor;
+}
+
 /** Gate 1: Has the run already happened? */
 export function evaluateGate1(data: PreRunStockData, threshold = 20): boolean {
   if (data.pctFromAth === null) return false;

@@ -41,6 +41,7 @@ import { scoreSupplyExhaustion, type ComponentResult } from "./supply-exhaustion
 import { scoreDemandEmergence } from "./demand-emergence";
 import { scoreRSTrajectory } from "./rs-trajectory";
 import { NEUTRAL_GATE, type RegimeGate } from "./regime-gate";
+import { passesMarketCapFloor } from "./scoring";
 
 // ── Gates (lighter than institutional — targets inflection points, not leaders) ──
 
@@ -48,7 +49,7 @@ function evaluateGates(data: PreRunStockData): InflectionGates {
   const price = data.currentPrice ?? 0;
   const priceAbove5 = price >= 5;
   const avgDollarVolAbove10m = (data.vcpAvgDollarVolume ?? 0) >= 10_000_000;
-  const mktCapAbove500m = (data.marketCap ?? 0) >= 500_000_000;
+  const mktCapAbove500m = passesMarketCapFloor(data, 500_000_000);
   const allPass = priceAbove5 && avgDollarVolAbove10m && mktCapAbove500m;
   return { priceAbove5, avgDollarVolAbove10m, mktCapAbove500m, allPass };
 }

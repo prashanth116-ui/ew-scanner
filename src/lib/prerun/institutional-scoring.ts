@@ -18,6 +18,7 @@ import type {
   InstitutionalResult,
 } from "./types";
 import { computeTier } from "./tier";
+import { passesMarketCapFloor } from "./scoring";
 
 // ── Utility ──
 
@@ -30,7 +31,7 @@ function clamp(val: number, min: number, max: number): number {
 export function evaluateInstitutionalGates(data: PreRunStockData): InstitutionalGates {
   const price = data.currentPrice ?? 0;
   const priceAbove20 = price >= 20;
-  const mktCapAbove20b = (data.marketCap ?? 0) >= 20_000_000_000;
+  const mktCapAbove20b = passesMarketCapFloor(data, 20_000_000_000);
   const avgDollarVolAbove100m = (data.vcpAvgDollarVolume ?? 0) >= 100_000_000;
   const avgShareVolAbove1_5m = (data.vcpAvgVolume50d ?? 0) >= 1_500_000;
   const allPass = priceAbove20 && mktCapAbove20b && avgDollarVolAbove100m && avgShareVolAbove1_5m;
