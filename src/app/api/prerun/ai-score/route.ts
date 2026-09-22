@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { rateLimit, getClientKey } from "@/lib/rate-limit";
+import { checkAiBudget } from "@/lib/ai-budget";
 import { logError } from "@/lib/error-logger";
 import { validateTicker, sanitizeForPrompt, checkOriginAuth } from "@/lib/api-utils";
 import { checkFeatureGate, incrementUsage } from "@/lib/auth-gate";
@@ -27,12 +27,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Rate limit: 5 req/min per IP (AI endpoint — costs money)
-  const rl = rateLimit(`prerun-ai:${getClientKey(request)}`, 5, 60_000);
-  if (!rl.allowed) {
+  // Per-client rate limit plus the global daily AI ceiling.
+  const budget = await checkAiBudget(request, {
+    route: "prerun-ai",
+    perMinute: 5,
+    identified: false,
+  });
+  if (!budget.allowed) {
     return NextResponse.json(
-      { error: "Rate limit exceeded" },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+      { error: budget.reason ?? "Rate limit exceeded" },
+      {
+        status: budget.status,
+        headers: budget.retryAfter ? { "Retry-After": String(budget.retryAfter) } : undefined,
+      }
     );
   }
 

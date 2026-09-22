@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { rateLimit, getClientKey } from "@/lib/rate-limit";
+import { checkAiBudget } from "@/lib/ai-budget";
 import { logError } from "@/lib/error-logger";
 import { validateTicker, sanitizeForPrompt, checkOriginAuth } from "@/lib/api-utils";
 import { checkFeatureGate, incrementUsage } from "@/lib/auth-gate";
@@ -86,12 +86,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Rate limit: 10 req/min per IP (AI endpoint — costs money)
-  const rl = rateLimit(`deep:${getClientKey(request)}`, 10, 60_000);
-  if (!rl.allowed) {
+  // Per-client rate limit AND a global daily ceiling. The tier gate above only binds
+  // signed-in users (it returns allowed with no userId otherwise), so anonymous callers
+  // are held by the anonymous day budget rather than by nothing.
+  const budget = await checkAiBudget(request, {
+    route: "deep",
+    perMinute: 10,
+    identified: Boolean(gate.userId),
+  });
+  if (!budget.allowed) {
     return NextResponse.json(
-      { error: "Rate limit exceeded" },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+      { error: budget.reason ?? "Rate limit exceeded" },
+      {
+        status: budget.status,
+        headers: budget.retryAfter ? { "Retry-After": String(budget.retryAfter) } : undefined,
+      }
     );
   }
 
@@ -103,6 +112,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid ticker" }, { status: 400 });
   }
   data.ticker = validTicker;
+
+  // Prompt construction calls .toFixed() on these unconditionally, so a request missing any
+  // of them threw and returned an unhandled 500. It failed before the Anthropic call, so it
+  // never cost anything — but a public route should answer 400, not crash.
+  const required = [
+    "ath",
+    "low",
+    "current",
+    "declinePct",
+    "durationMonths",
+    "recoveryPct",
+  ] as const;
+  const missing = required.filter((k) => typeof data[k] !== "number" || !Number.isFinite(data[k]));
+  if (missing.length) {
+    return NextResponse.json(
+      { error: `Missing or non-numeric field(s): ${missing.join(", ")}` },
+      { status: 400 }
+    );
+  }
+
   // Sanitize free-text fields to prevent prompt injection
   if (data.name) data.name = sanitizeForPrompt(data.name, 100);
   if (data.label) data.label = sanitizeForPrompt(data.label, 100);

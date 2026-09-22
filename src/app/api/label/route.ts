@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { rateLimit, getClientKey } from "@/lib/rate-limit";
+import { checkAiBudget } from "@/lib/ai-budget";
 import { logError } from "@/lib/error-logger";
 import { validateTicker, sanitizeForPrompt, checkOriginAuth } from "@/lib/api-utils";
 import { checkFeatureGate, incrementUsage } from "@/lib/auth-gate";
@@ -19,6 +19,12 @@ interface CandidateInput {
   structure?: string;
   scannerMode?: string;
 }
+
+/**
+ * Candidates per Haiku call. One HTTP request fans out to ceil(n / CHUNK_SIZE) billable
+ * calls, so the budget must be charged in chunks — counting requests undercounts spend.
+ */
+const CHUNK_SIZE = 25;
 
 export async function POST(request: NextRequest) {
   // Origin check — AI endpoints only accept same-origin or API key
@@ -42,15 +48,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Rate limit: 5 req/min per IP (AI endpoint — costs money)
-  const rl = rateLimit(`label:${getClientKey(request)}`, 5, 60_000);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "Rate limit exceeded" },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
-    );
-  }
-
   const { candidates, htf, ltf } = (await request.json()) as {
     candidates: CandidateInput[];
     htf: string;
@@ -69,6 +66,23 @@ export async function POST(request: NextRequest) {
     if (c.scannerMode) c.scannerMode = sanitizeForPrompt(c.scannerMode, 50);
   }
 
+  // Charged AFTER parsing, because the cost is chunks-of-25, not requests.
+  const budget = await checkAiBudget(request, {
+    route: "label",
+    perMinute: 5,
+    identified: false,
+    units: Math.ceil(candidates.length / CHUNK_SIZE),
+  });
+  if (!budget.allowed) {
+    return NextResponse.json(
+      { error: budget.reason ?? "Rate limit exceeded" },
+      {
+        status: budget.status,
+        headers: budget.retryAfter ? { "Retry-After": String(budget.retryAfter) } : undefined,
+      }
+    );
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -85,8 +99,6 @@ export async function POST(request: NextRequest) {
     const client = new Anthropic();
     const allLabels: Record<string, string> = {};
 
-    // Chunk into batches of 25 to stay within token limits
-    const CHUNK_SIZE = 25;
     const CONCURRENCY = 2;
 
     const chunks: CandidateInput[][] = [];

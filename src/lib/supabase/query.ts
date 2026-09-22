@@ -20,6 +20,17 @@ export interface HitRateData {
   avg_return_pct: number;
   avg_max_drawdown_pct: number;
   computed_at: string;
+  /** Benchmark-relative fields — populated on source='daily_table' rows only (migration 034). */
+  median_return_pct: number | null;
+  benchmark_return_pct: number | null;
+  avg_excess_return_pct: number | null;
+  win_rate_vs_benchmark: number | null;
+  sample_start_date: string | null;
+  sample_end_date: string | null;
+  source: string | null;
+  /** Migration 035: EPISODES behind total_signals, and the engine version measured. */
+  distinct_tickers: number | null;
+  scanner_version: number | null;
 }
 
 export interface SITrendPoint {
@@ -89,6 +100,36 @@ export async function fetchHitRates(
     return (data ?? []) as HitRateData[];
   } catch (err) {
     console.error("[query] fetchHitRates exception:", err);
+    return [];
+  }
+}
+
+/**
+ * Fetch the forward-return hit rates for the daily scanners (Inflection / Transition).
+ *
+ * Only `source = 'daily_table'` rows. The legacy ew/squeeze rows use a different definition
+ * of hit_rate (target hits, not forward returns) and carry no benchmark, so mixing them
+ * into one table view would invite exactly the comparison that is invalid.
+ */
+export async function fetchDailyHitRates(): Promise<HitRateData[]> {
+  try {
+    const supabase = await createClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("scanner_hit_rates")
+      .select("*")
+      .eq("source", "daily_table")
+      .order("scanner", { ascending: true })
+      .order("period_days", { ascending: true });
+
+    if (error) {
+      console.error("[query] fetchDailyHitRates error:", error.message);
+      return [];
+    }
+    return (data ?? []) as HitRateData[];
+  } catch (err) {
+    console.error("[query] fetchDailyHitRates exception:", err);
     return [];
   }
 }
