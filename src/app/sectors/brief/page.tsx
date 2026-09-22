@@ -23,6 +23,9 @@ import {
   computeSectorTiers,
   computeRiskFlags,
   computeWhatChanged,
+  type BriefRsTurn,
+  computeBriefRsTurns,
+  rsTurnEtfs,
   savePosture,
   loadPreviousPosture,
   type MarketPosture,
@@ -148,6 +151,11 @@ export default function DailyBriefPage() {
 
   // Load yesterday's posture from localStorage
   const previousPosture = useMemo(() => loadPreviousPosture(), []);
+
+  // RS turns. Deliberately NOT inside computeWhatChanged: that diffs against the previous
+  // snapshot and blanks out when there isn't one, while a turn is self-dated and is most
+  // valuable to a reader who has been away.
+  const rsTurns = useMemo<BriefRsTurn[]>(() => (data ? computeBriefRsTurns(data) : []), [data]);
 
   // Compute what changed
   const whatChanged = useMemo<WhatChangedResult | null>(
@@ -296,7 +304,7 @@ export default function DailyBriefPage() {
             )
           }
         >
-          <WhatChangedPanel whatChanged={whatChanged} />
+          <WhatChangedPanel whatChanged={whatChanged} rsTurns={rsTurns} />
         </CollapsiblePanel>
       )}
 
@@ -908,12 +916,70 @@ const TRANSITION_LABELS: Record<string, { label: string; color: string }> = {
   other: { label: "Quadrant Shift", color: "text-[#ccc]" },
 };
 
-function WhatChangedPanel({ whatChanged }: { whatChanged: WhatChangedResult }) {
+/**
+ * RS turns, above the quadrant transitions because it is the earlier read of the same
+ * thing. The quadrant trails the RS line by 3-5 sessions by construction, so on the
+ * mornings that matter this block is the only one with anything to say: for SMH it would
+ * have carried "forming 2026-09-16" on the 09-17 brief and "turned 09-17" on the 09-18
+ * brief, while Quadrant Transitions stayed empty until 09-21.
+ */
+function RsTurnsBlock({ turns }: { turns: BriefRsTurn[] }) {
+  const ago = (n: number) => (n === 0 ? "at yesterday's close" : n === 1 ? "1 session ago" : `${n} sessions ago`);
+  return (
+    <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-3">
+      <div className="text-xs text-[#888] mb-2">
+        RS Turns <span className="text-[#555]">— the relative-strength line, ahead of the quadrant</span>
+      </div>
+      <div className="space-y-1.5">
+        {turns.map((t) => (
+          <div key={`${t.etf}-${t.kind}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+            <span className={`rounded-full border px-1.5 py-0 text-[9px] font-medium ${
+              t.kind === "forming"
+                ? "border-dashed border-sky-400/25 bg-sky-400/5 text-sky-300/80"
+                : t.alreadyAligned
+                  ? "border-[#333] bg-[#1a1a1a] text-[#888]"
+                  : "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+            }`}>
+              {t.kind === "forming" ? "FORMING" : t.alreadyAligned ? "RE-ENTRY" : "TURNED"}
+            </span>
+            <span className="text-white">{t.sector}</span>
+            <span className="text-[#666]">({t.etf})</span>
+            <span className="text-[#888]">{t.date}</span>
+            <span className="text-[#555]">{ago(t.barsAgo)}</span>
+            <span className={quadrantColor(t.quadrant) + " rounded-full border px-1.5 py-0 text-[9px]"}>{t.quadrant}</span>
+            {t.kind === "turned" && !t.alreadyAligned && (
+              <span className="text-[10px] text-[#666]">
+                {t.quadrantLagBars != null
+                  ? `quadrant agreed ${t.quadrantLagBars}d later`
+                  : "quadrant has not caught up"}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+      {turns.some((t) => t.kind === "forming") && (
+        <p className="mt-1.5 text-[10px] leading-snug text-sky-300/60">
+          FORMING is a watchlist state — the RS line is rising into its 20d average but has not
+          reclaimed it. Measured across 37 ETFs and 3 years it carries no edge over a random
+          session. Act on the reclaim, not on this.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function WhatChangedPanel({ whatChanged, rsTurns }: { whatChanged: WhatChangedResult; rsTurns: BriefRsTurn[] }) {
+  // Turns render even with no snapshot history — see computeBriefRsTurns.
+  const turnBlock = rsTurns.length > 0 ? <RsTurnsBlock turns={rsTurns} /> : null;
+
   if (whatChanged.noHistory) {
     return (
-      <p className="text-sm text-[#666]">
-        History builds automatically. Check back tomorrow for daily changes.
-      </p>
+      <div className="space-y-3">
+        {turnBlock}
+        <p className="text-sm text-[#666]">
+          History builds automatically. Check back tomorrow for daily changes.
+        </p>
+      </div>
     );
   }
 
@@ -927,13 +993,22 @@ function WhatChangedPanel({ whatChanged }: { whatChanged: WhatChangedResult }) {
 
   if (totalChanges === 0) {
     return (
-      <p className="text-sm text-[#666]">No meaningful changes since last snapshot.</p>
+      <div className="space-y-3">
+        {turnBlock}
+        <p className="text-sm text-[#666]">No meaningful changes since last snapshot.</p>
+      </div>
     );
   }
 
+  // A sector reported as a turn is not also listed as a quadrant transition. They are one
+  // event seen by two constructs at different speeds, and printing both reads as two
+  // separate things having happened.
+  const reportedAsTurn = rsTurnEtfs(rsTurns);
+  const quadrantOnly = whatChanged.quadrantTransitions.filter((t) => !reportedAsTurn.has(t.etf));
+
   // Group quadrant transitions by category
   const transitionsByCategory = new Map<string, WhatChangedResult["quadrantTransitions"]>();
-  for (const t of whatChanged.quadrantTransitions) {
+  for (const t of quadrantOnly) {
     const list = transitionsByCategory.get(t.category) ?? [];
     list.push(t);
     transitionsByCategory.set(t.category, list);
@@ -957,8 +1032,10 @@ function WhatChangedPanel({ whatChanged }: { whatChanged: WhatChangedResult }) {
         </div>
       )}
 
+      {turnBlock}
+
       {/* Quadrant transitions */}
-      {whatChanged.quadrantTransitions.length > 0 && (
+      {quadrantOnly.length > 0 && (
         <div className="rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-3">
           <div className="text-xs text-[#888] mb-2">Quadrant Transitions</div>
           <div className="space-y-1.5">

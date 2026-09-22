@@ -615,3 +615,95 @@ export function computeWhatChanged(
     noHistory: false,
   };
 }
+
+// ── RS turns for the brief ──────────────────────────────────────────────────────────────
+
+/** How far back a turn stays worth reporting on the morning brief. */
+const RS_TURN_WINDOW_SESSIONS = 3;
+/** Most turns listed, so a broad session cannot push the rest of the brief off the page. */
+const MAX_RS_TURNS = 5;
+
+export interface BriefRsTurn {
+  sector: string;
+  etf: string;
+  /** "forming" has no measured edge and must never be rendered as a signal. */
+  kind: "forming" | "turned";
+  /** The actionable date: the reclaim, or the start of the forming run. */
+  date: string;
+  /** Sessions since that date. 0 = it happened on the close this brief is reading. */
+  barsAgo: number;
+  /** Retrospective RS low the move came off. Context, never an entry. */
+  rsLowDate: string | null;
+  /** Null until the quadrant agrees — which is the interesting state, not a missing value. */
+  quadrantLagBars: number | null;
+  /** The quadrant never left the bucket: a dip-and-recover, not a new rotation. */
+  alreadyAligned: boolean;
+  /** Current quadrant, so a turn reads against where the sector actually stands. */
+  quadrant: RRGQuadrant;
+}
+
+/**
+ * Sector RS turns recent enough to matter on a morning brief.
+ *
+ * SEPARATE FROM computeWhatChanged ON PURPOSE. That function diffs against the previous
+ * localStorage snapshot and early-returns `noHistory: true` when there isn't one — a first
+ * visit, cleared storage, or a snapshot past the 3-day staleness guard. A turn needs no
+ * diff: `turnDate` and `formingDate` come from the price series and carry their own dates.
+ * Computing it inside that function would blank it exactly when a reader has been away and
+ * the catch-up value is highest.
+ *
+ * Windowed rather than same-session (unlike the Telegram block, which fires once and must
+ * not repeat nightly). The brief is a daily read, so a turn from Monday is still news on
+ * Wednesday if that is the first morning you opened it.
+ *
+ * ETF-level only, matching the rest of the page — members are one click away on /picks.
+ */
+export function computeBriefRsTurns(data: SectorRotationResult): BriefRsTurn[] {
+  const all = [
+    ...data.sectors,
+    ...(data.subSectorScores ?? []),
+    ...(data.crossAssetScores ?? []),
+    ...(data.leadershipBasketScores ?? []),
+  ];
+
+  const out: BriefRsTurn[] = [];
+  for (const s of all) {
+    const t = s.rotationTurn;
+    if (!t || t.direction !== "UP") continue;
+
+    if (t.turnDate && t.barsSinceTurn != null && t.barsSinceTurn <= RS_TURN_WINDOW_SESSIONS) {
+      out.push({
+        sector: s.sector, etf: s.etf, kind: "turned", date: t.turnDate,
+        barsAgo: t.barsSinceTurn, rsLowDate: t.rsLowDate,
+        quadrantLagBars: t.quadrantLagBars, alreadyAligned: t.quadrantAlreadyAligned,
+        quadrant: s.quadrant,
+      });
+    } else if (t.stage === "TURN_FORMING" && t.formingDate && t.barsSinceForming != null && t.barsSinceForming <= RS_TURN_WINDOW_SESSIONS) {
+      out.push({
+        sector: s.sector, etf: s.etf, kind: "forming", date: t.formingDate,
+        barsAgo: t.barsSinceForming, rsLowDate: t.rsLowDate,
+        quadrantLagBars: null, alreadyAligned: false,
+        quadrant: s.quadrant,
+      });
+    }
+  }
+
+  // Lead first, then freshness. A turn the quadrant has not caught up with is the only
+  // thing here the 6 PM alert has not already told you; an already-aligned one is a
+  // dip-and-recover inside a trend and ranks last however recent it is.
+  const rank = (x: BriefRsTurn) => (x.alreadyAligned ? 2 : x.kind === "turned" ? 0 : 1);
+  out.sort((a, b) => rank(a) - rank(b) || a.barsAgo - b.barsAgo);
+  return out.slice(0, MAX_RS_TURNS);
+}
+
+/**
+ * ETFs whose RS turn is already reported by `computeBriefRsTurns`, so the quadrant
+ * transition list can drop them.
+ *
+ * Without this the brief says the same thing twice in one section: "SMH turned 09-17" and
+ * then "SMH WEAKENING -> LEADING". They are one event seen by two constructs at different
+ * speeds, and printing both invites the reading that two separate things happened.
+ */
+export function rsTurnEtfs(turns: BriefRsTurn[]): Set<string> {
+  return new Set(turns.map((t) => t.etf));
+}
