@@ -8,7 +8,8 @@ import type {
   RRGQuadrant,
   EnrichedStock,
 } from "@/lib/sector-rotation/types";
-import type { RotationTrackerResult, ActiveRotationDetail, RotationPatternStats, LifecycleStage, ConvictionResult } from "@/lib/sector-rotation/rotation-types";
+import type { RotationTrackerResult, ActiveRotationDetail, RotationPatternStats, LifecycleStage, ConvictionResult, RotationTurn } from "@/lib/sector-rotation/rotation-types";
+import { RotationTurnBadge } from "./turn-badge";
 import {
   getHealth,
   computeLifecycleStage,
@@ -230,7 +231,7 @@ export function RotationEntrySignals({
 
               <div className="space-y-3">
                 {group.items.map((entry) => (
-                  <SignalCard key={entry.rotation.event.etf} entry={entry} sectors={sectors} inflectionMap={inflectionMap} transitionMap={transitionMap} onSectorClick={onSectorClick} />
+                  <SignalCard key={entry.rotation.event.etf} entry={entry} sectors={sectors} inflectionMap={inflectionMap} transitionMap={transitionMap} onSectorClick={onSectorClick} turn={rotationData.rotationTurns?.[entry.rotation.event.sectorId]} />
                 ))}
               </div>
             </div>
@@ -243,7 +244,7 @@ export function RotationEntrySignals({
 
 // ── Signal Card ──
 
-function SignalCard({ entry, sectors, inflectionMap, transitionMap, onSectorClick }: { entry: EntrySignalSector; sectors: SectorRotationScore[]; inflectionMap?: Map<string, { trade_read: string; score: number }>; transitionMap?: Map<string, { alert_state: string; state: string; score: number }>; onSectorClick?: (sectorName: string) => void }) {
+function SignalCard({ entry, sectors, inflectionMap, transitionMap, onSectorClick, turn }: { entry: EntrySignalSector; sectors: SectorRotationScore[]; inflectionMap?: Map<string, { trade_read: string; score: number }>; transitionMap?: Map<string, { alert_state: string; state: string; score: number }>; onSectorClick?: (sectorName: string) => void; turn?: RotationTurn }) {
   const { rotation, signal, lifecycle, conviction, regimeAlignment, health, patternStats, topStocks, timing } = entry;
   const event = rotation.event;
   const sectorScore = sectors.find((s) => s.sector === event.sectorName);
@@ -306,10 +307,12 @@ function SignalCard({ entry, sectors, inflectionMap, transitionMap, onSectorClic
 
       <p className="mb-2 text-xs text-[#a0a0a0]">{signal.description}</p>
 
-      {/* Stage + Day info */}
-      <div className="mb-2 flex flex-wrap gap-3 text-xs">
+      {/* Stage + Day info. `Day N` counts from the signalCount start date; the turn
+          badge dates the RS line itself, which is usually the earlier of the two. */}
+      <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
         <span className="text-[#666]">Stage: <span className="text-white">{lifecycle}</span></span>
         <span className="text-[#666]">Day {event.daysActive}{patternStats ? ` / avg ${Math.round(patternStats.avgDurationDays)}d` : ""}</span>
+        <RotationTurnBadge turn={turn} compact />
       </div>
 
       {/* Health indicator badges */}

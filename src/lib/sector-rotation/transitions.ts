@@ -6,6 +6,7 @@
 import "server-only";
 
 import type { SectorRotationResult, RRGQuadrant } from "./types";
+import type { RotationTurn } from "./rotation-turn";
 import type { DailySnapshot, SectorSnapshot } from "./history";
 
 export interface QuadrantTransition {
@@ -514,11 +515,35 @@ interface ConfluenceEntry {
  *
  * Returns null if no scanner-confirmed stocks found (no message sent).
  */
+/**
+ * "Day N" on a confluence line counts from `RotationEvent.startDate`, which is where
+ * `signalCount` first reached 2 — and that clock is not the RS clock. On 2026-09-22 SMH
+ * read Day 1 from a 09-21 start while its RS line had turned on 09-17, four sessions
+ * earlier; XLE read Day 45 while its RS had turned that very session. The signal clock
+ * runs late or early depending on when a 10d/30d SMA cross happens to fire, so neither
+ * number alone says how old a rotation is.
+ *
+ * `startDate` is deliberately NOT changed to the turn date: ENTRY_SCREEN measures breadth,
+ * CMF and acceleration on the start bar, and its thresholds were fitted over 78 rotations
+ * using signal-count start bars. Moving the bar voids that calibration. So both clocks are
+ * shown instead, each labelled, and the reader decides.
+ */
+function turnAnnotation(etf: string, turns?: Map<string, RotationTurn>): string {
+  const t = turns?.get(etf);
+  const date = t?.turnDate ?? t?.formingDate;
+  if (!date) return "";
+  const age = t?.turnDate ? t.barsSinceTurn : t?.barsSinceForming;
+  const label = t?.turnDate ? "RS turned" : "RS forming since";
+  return age == null ? ` · ${label} ${date}` : ` · ${label} ${date} (${age}d)`;
+}
+
 export function formatRotationConfluence(
   currentRotations: RotationSnapshot[],
   stockMap: Map<string, RotationTopStock[]>,
   calculatedAt: string,
-  previousTickers?: string[]
+  previousTickers?: string[],
+  /** Dated RS turns by ETF. Absent is fine — the annotation simply does not render. */
+  turnsByEtf?: Map<string, RotationTurn>,
 ): string | null {
   const prevSet = new Set(previousTickers ?? []);
   // Build entries: rotations with scanner-hit stocks
@@ -592,7 +617,7 @@ export function formatRotationConfluence(
 
       if (tier === "focus") {
         // Full detail for actionable rotations
-        lines.push(`  <b>${rot.sectorName}</b> (${rot.etf}) \u2014 Day ${rot.daysActive} | ${rot.lifecycle} | ${rot.conviction}`);
+        lines.push(`  <b>${rot.sectorName}</b> (${rot.etf}) \u2014 Day ${rot.daysActive} | ${rot.lifecycle} | ${rot.conviction}${turnAnnotation(rot.etf, turnsByEtf)}`);
         for (const s of stocks) {
           const perf = s.performancePct >= 0 ? `+${s.performancePct.toFixed(1)}%` : `${s.performancePct.toFixed(1)}%`;
           const isMulti = (s.scannerHits?.length ?? 0) >= 2;
@@ -607,7 +632,7 @@ export function formatRotationConfluence(
         }
       } else {
         // Compact for late/exhausting — just sector header + ticker list
-        lines.push(`  <b>${rot.sectorName}</b> (${rot.etf}) \u00B7 Day ${rot.daysActive} | ${rot.lifecycle}`);
+        lines.push(`  <b>${rot.sectorName}</b> (${rot.etf}) \u00B7 Day ${rot.daysActive} | ${rot.lifecycle}${turnAnnotation(rot.etf, turnsByEtf)}`);
         const monitorTickers = stocks.map((s) => {
           const isNew = prevSet.size > 0 && !prevSet.has(s.symbol) ? " \uD83C\uDD95" : "";
           return `${s.symbol}${isNew}`;
@@ -628,6 +653,255 @@ export function formatRotationConfluence(
   for (const entry of entries) {
     const tickers = entry.stocks.map((s) => s.symbol).join(", ");
     lines.push(`<code>${entry.rotation.etf}: ${tickers}</code>`);
+  }
+
+  return lines.join("\n").trim();
+}
+
+// ── RS turn alert (focus-scoped) ──
+
+/** Sessions a forming/turned event stays alert-worthy. 0 = it happened on this close. */
+const TURN_ALERT_MAX_AGE = 0;
+/** Focus members named per sector. Enough to act on, short enough to read on a phone. */
+const MAX_TURN_MEMBERS = 6;
+
+/**
+ * One focus-list name inside a turning basket, measured by distance above its own 50d SMA.
+ *
+ * NOT `rsAccel`. That metric is `pctFrom50 - pctFrom200`, which the root CLAUDE.md flags
+ * as "naturally deeply negative for healthy uptrends" — sorting it descending ranks the
+ * most broken names first. The first live send did exactly that, listing INTU at +19.6
+ * above names actually trending, because INTU was far enough below its 200d to score well
+ * on a spread that rewards damage. Distance above the 50d has no such inversion.
+ */
+export interface TurnMember {
+  symbol: string;
+  /** % above (positive) or below (negative) its own 50d SMA. Null = not measurable. */
+  pctFromSma50: number | null;
+}
+
+export interface TurnSectorInput {
+  sector: string;
+  etf: string;
+  quadrant: RRGQuadrant;
+  /** Mansfield RS vs SPY. Drives the standing-leadership footer, not the alert itself. */
+  mansfieldRS?: number;
+  rotationTurn?: RotationTurn | null;
+  /** Focus-list members of THIS basket. Empty is legitimate (sub-sector baskets). */
+  focusMembers?: TurnMember[];
+}
+
+/**
+ * Focus-list members of each basket, with their current trend state.
+ *
+ * Reads `SectorRotationResult.stockQuotes`, which the rotation pipeline already builds —
+ * no extra fetch. A symbol missing from quotes yields nulls rather than being dropped:
+ * "we could not measure this name" and "this name is weak" must not render the same.
+ */
+export function buildTurnMembers(
+  universe: { etf: string; stocks: { symbol: string }[] }[],
+  focusList: Set<string>,
+  stockQuotes: Record<string, { pctFromSma50: number | null }>,
+): Map<string, TurnMember[]> {
+  const out = new Map<string, TurnMember[]>();
+  for (const basket of universe) {
+    const members: TurnMember[] = [];
+    for (const st of basket.stocks) {
+      if (!focusList.has(st.symbol)) continue;
+      members.push({ symbol: st.symbol, pctFromSma50: stockQuotes[st.symbol]?.pctFromSma50 ?? null });
+    }
+    // Strongest first, and unmeasurable names last rather than sorted as if they were the
+    // weakest — a name we could not read is not a name that failed.
+    members.sort((a, b) => (b.pctFromSma50 ?? -Infinity) - (a.pctFromSma50 ?? -Infinity));
+    out.set(basket.etf, members);
+  }
+  return out;
+}
+
+/** Named members, strongest first, each with its distance from its own 50d SMA. */
+function renderMembers(members: TurnMember[] | undefined): string[] {
+  if (!members || members.length === 0) return [];
+  const measured = members.filter((m) => m.pctFromSma50 !== null);
+  const above = measured.filter((m) => (m.pctFromSma50 as number) > 0).length;
+  const named = members.slice(0, MAX_TURN_MEMBERS).map((m) => {
+    if (m.pctFromSma50 === null) return `?${m.symbol}`;
+    const tick = m.pctFromSma50 > 0 ? "✓" : "·";
+    return `${tick}${m.symbol} ${m.pctFromSma50 >= 0 ? "+" : ""}${m.pctFromSma50.toFixed(1)}%`;
+  });
+  const more = members.length > MAX_TURN_MEMBERS ? ` +${members.length - MAX_TURN_MEMBERS} more` : "";
+  const headline = measured.length > 0
+    ? `Your names — ${above}/${measured.length} above their 50d, furthest above first:`
+    : `Your names — trend state unavailable tonight:`;
+  return [`     ${headline}`, `     ${named.join("  ")}${more}`];
+}
+
+/**
+ * Tonight's new RS turns, scoped to the baskets holding names you actually trade.
+ *
+ * WHY THIS IS SEPARATE FROM THE QUADRANT TRANSITION ALERT
+ *
+ * The 6 PM alert fires on RRG quadrant changes, and the quadrant runs 3-5 sessions behind
+ * the RS line by construction. SMH is the case that prompted this: the quadrant alert
+ * would have fired on 2026-09-21, by which point entering returned 0.00% against SPY.
+ * Entering on the 09-16 forming print returned +6.67% and on the 09-17 reclaim +4.89%.
+ *
+ * LEAD IS THE HEADLINE, AND IT IS NOT UNIFORM
+ *
+ * The first cut of this message listed every turn identically, and the first live send
+ * went out on IGV and XLC — both `quadrantAlreadyAligned`, meaning the quadrant never
+ * left the bullish bucket and the 6 PM alert already covered them. Those carry NO lead;
+ * they are dip-and-recover re-entries inside an existing uptrend. Presenting them the
+ * same way as an SMH-style turn that beats the quadrant by four sessions is the one
+ * mistake that makes the whole section untrustworthy, so lead is now the sort key, it is
+ * stated in words on every line, and no-lead turns are demoted below a divider.
+ *
+ * TWO STAGES:
+ *   TURNED  — the RS line closed back above its fast SMA today. A completed event.
+ *   FORMING — still BELOW that average but risen two sessions with the gap closing.
+ *             Measured over 37 ETFs and 3 years this carries NO forward edge over a
+ *             random session and under half are followed by a reclaim within five
+ *             sessions. Where to look tomorrow, not what to buy tonight.
+ *
+ * Only events dated to THIS session are listed (`TURN_ALERT_MAX_AGE`) — a forming run can
+ * persist for a week, and re-sending the same names nightly is how a useful alert becomes
+ * one you stop reading.
+ *
+ * Returns null when nothing new fired, so the caller can skip the send entirely.
+ */
+export function formatRotationTurns(
+  sectors: TurnSectorInput[],
+  focusEtfs: Set<string>,
+  calculatedAt: string,
+): string | null {
+  const scoped = sectors.filter((s) => focusEtfs.has(s.etf) && s.rotationTurn);
+
+  const turned = scoped.filter(
+    (s) =>
+      s.rotationTurn!.direction === "UP" &&
+      s.rotationTurn!.turnDate != null &&
+      s.rotationTurn!.barsSinceTurn != null &&
+      s.rotationTurn!.barsSinceTurn <= TURN_ALERT_MAX_AGE,
+  );
+  const formingNew = scoped.filter(
+    (s) =>
+      s.rotationTurn!.stage === "TURN_FORMING" &&
+      s.rotationTurn!.barsSinceForming != null &&
+      s.rotationTurn!.barsSinceForming <= TURN_ALERT_MAX_AGE,
+  );
+  const formingStanding = scoped.filter((s) => s.rotationTurn!.stage === "TURN_FORMING").length;
+
+  if (turned.length === 0 && formingNew.length === 0) return null;
+
+  const hasLead = (s: TurnSectorInput) => !s.rotationTurn!.quadrantAlreadyAligned;
+  const withLead = turned.filter(hasLead);
+  const noLead = turned.filter((s) => !hasLead(s));
+
+  const date = new Date(calculatedAt).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  const lines: string[] = [];
+  lines.push("↻ <b>RS Turns</b> — focus sectors");
+  lines.push(date);
+
+  /**
+   * Detail budget scales with lead, because attention should.
+   *
+   * A lead-bearing turn is the only thing here you cannot get from the 6 PM alert, so it
+   * earns the RS distance, the failure count and the member list. A re-entry earns one
+   * line: the section header already says it has no lead, and repeating "the sector never
+   * left it · already covered by the 6 PM alert" under every entry spent six lines each
+   * restating the heading. The count of members above their 50d is the only part of that
+   * block worth keeping, and their tickers are in the confluence body below anyway.
+   */
+  const detailLines = (s: TurnSectorInput): string[] => {
+    const t = s.rotationTurn!;
+    const out: string[] = [];
+    const dist = `${t.distanceFromFastPct >= 0 ? "+" : ""}${t.distanceFromFastPct.toFixed(1)}%`;
+    const rel = t.stage === "TURN_FORMING" ? "below" : "above";
+    const bits = [`RS ${dist} ${rel} 20d`, `low ${t.rsLowDate ?? "?"}`];
+    if (t.priorFailedAttempts > 0) bits.push(`${t.priorFailedAttempts} prior reclaims failed`);
+    out.push(`     ${bits.join(" · ")}`);
+    out.push(...renderMembers(s.focusMembers));
+    return out;
+  };
+
+  /** One line, count only — enough to know whether your names are participating. */
+  const compactLine = (s: TurnSectorInput): string => {
+    const t = s.rotationTurn!;
+    const measured = (s.focusMembers ?? []).filter((m) => m.pctFromSma50 !== null);
+    const above = measured.filter((m) => (m.pctFromSma50 as number) > 0).length;
+    const names = measured.length > 0 ? ` · ${above}/${measured.length} names above their 50d` : "";
+    return `  <b>${s.sector}</b> (${s.etf}) — reclaimed ${t.turnDate}${names}`;
+  };
+
+  if (withLead.length > 0) {
+    lines.push("");
+    lines.push("★ <b>TURNED TONIGHT — ahead of the quadrant</b>");
+    for (const s of withLead) {
+      const t = s.rotationTurn!;
+      lines.push("");
+      lines.push(`  <b>${s.sector}</b> (${s.etf}) — reclaimed ${t.turnDate}, quadrant still ${s.quadrant}`);
+      lines.push(...detailLines(s));
+    }
+  }
+
+  if (formingNew.length > 0) {
+    lines.push("");
+    lines.push("~ <b>FORMING — rising into its 20d, no reclaim yet</b>");
+    for (const s of formingNew) {
+      lines.push("");
+      lines.push(`  <b>${s.sector}</b> (${s.etf}) — rising since ${s.rotationTurn!.formingDate}`);
+      lines.push(...detailLines(s));
+    }
+    lines.push("");
+    lines.push("  <i>Watchlist — no measured edge until the reclaim.</i>");
+  }
+
+  if (noLead.length > 0) {
+    lines.push("");
+    // The divider separates re-entries from the sections above. On a night when every
+    // turn is a re-entry there is nothing above it, and a rule with nothing on one side
+    // reads like a rendering fault.
+    if (withLead.length > 0 || formingNew.length > 0) lines.push("────────────────────");
+    lines.push("↺ <b>RE-ENTRIES</b> — quadrant never left the bucket, already in the 6 PM alert");
+    for (const s of noLead) lines.push(compactLine(s));
+  }
+
+  if (formingStanding > formingNew.length) {
+    const rest = formingStanding - formingNew.length;
+    lines.push("");
+    lines.push(
+      `<i>${rest} other basket${rest === 1 ? "" : "s"} still forming from earlier sessions — not repeated here.</i>`,
+    );
+  }
+
+  // Standing leadership, always, even though it is not "news".
+  //
+  // Everything above is a list of CHANGES dated to tonight, and a change list reads as a
+  // strength ranking unless something says otherwise. On 2026-09-21 the only fires were
+  // IGV and XLC — both no-lead re-entries sitting 6th and 9th of 12 on relative strength,
+  // both NEGATIVE against SPY over five sessions — while SMH, which turned on 09-17 and
+  // led the board at +8.4%, was absent because its turn was no longer new. Read without
+  // this footer the message says money rotated out of semis into software, which is the
+  // opposite of what happened.
+  const ranked = scoped
+    .filter((s) => typeof s.mansfieldRS === "number")
+    .sort((a, b) => (b.mansfieldRS as number) - (a.mansfieldRS as number));
+  if (ranked.length >= 3) {
+    const top = ranked.slice(0, 3).map((s) => {
+      const v = s.mansfieldRS as number;
+      return `${s.etf} ${v >= 0 ? "+" : ""}${v.toFixed(1)}`;
+    });
+    lines.push("");
+    lines.push("────────────────────");
+    lines.push(`<b>Standing leaders</b> (RS vs SPY): ${top.join(" · ")}`);
+    lines.push(
+      "<i>Above is what changed tonight, not where the money is.</i>",
+    );
   }
 
   return lines.join("\n").trim();

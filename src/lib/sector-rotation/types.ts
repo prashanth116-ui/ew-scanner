@@ -1,6 +1,9 @@
 /** Sector Rotation Tracker types. */
 
 import type { SectorCategory } from "@/data/sector-universe";
+// Type-only, and rotation-turn.ts imports RRGQuadrant back from here. Both sides are
+// erased at compile time, so the cycle never reaches the emitted JS.
+import type { RotationTurn } from "./rotation-turn";
 
 export type RRGQuadrant = "LEADING" | "WEAKENING" | "LAGGING" | "IMPROVING";
 
@@ -36,6 +39,13 @@ export interface SectorRotationScore {
   rsRatio: number;
   rsMomentum: number;
   quadrant: RRGQuadrant;
+  /**
+   * Dated RS inflection, reported beside the quadrant rather than folded into it.
+   * The quadrant runs 3-5 sessions behind the RS line by construction; this says when
+   * the line actually turned and how late the label was. Null when the series is too
+   * short to date one. See `rotation-turn.ts`.
+   */
+  rotationTurn?: RotationTurn | null;
 
   // Composite
   compositeScore: number;

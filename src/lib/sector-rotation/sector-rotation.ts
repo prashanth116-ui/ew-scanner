@@ -44,6 +44,7 @@ import {
   clampNormalize,
   stddev,
 } from "./math";
+import { computeRotationTurn, type RotationTurn } from "./rotation-turn";
 import { COMPOSITE, ROTATION, SMART_MONEY, TOP_STOCK_WEIGHTS, SCORING_SIGNALS, QUALITY_GATES } from "./config";
 import { SCAN_EXCLUSIONS } from "@/data/index-tiers";
 
@@ -203,6 +204,7 @@ export async function calculateSectorRotation(
     rsMomentum: number;
     quadrant: RRGQuadrant;
     rrgTrail: { rsRatio: number; rsMomentum: number }[];
+    rotationTurn: RotationTurn;
     breadthPct: number | null;
     breadthEstimated: boolean;
     roc20d: number;
@@ -219,6 +221,34 @@ export async function calculateSectorRotation(
 
   const rawScores: RawScore[] = [];
 
+  /**
+   * Timestamp-aligned (dates, etfCloses, spyCloses) for the turn detector.
+   *
+   * calcRRG and calcMansfieldRS align by array length, which is fine for them because
+   * they read aggregate shape. The turn detector emits DATES, so a one-bar offset would
+   * mislabel the session a rotation started — hence the explicit alignment here, same
+   * approach as pairAnalysis() below.
+   */
+  const spyCloseByTs = new Map<number, number>();
+  for (let i = 0; i < spyChart.timestamps.length; i++) {
+    spyCloseByTs.set(spyChart.timestamps[i], spyChart.closes[i]);
+  }
+
+  function alignedForTurn(chart: ChartData): { dates: string[]; etf: number[]; spy: number[] } {
+    const spyMap = spyCloseByTs;
+    const dates: string[] = [];
+    const etf: number[] = [];
+    const spy: number[] = [];
+    for (let i = 0; i < chart.timestamps.length; i++) {
+      const b = spyMap.get(chart.timestamps[i]);
+      if (b === undefined || b === 0) continue;
+      dates.push(new Date(chart.timestamps[i] * 1000).toISOString().slice(0, 10));
+      etf.push(chart.closes[i]);
+      spy.push(b);
+    }
+    return { dates, etf, spy };
+  }
+
   for (const group of sectorGroups) {
     const chart = charts.get(group.etf);
     if (!chart) continue;
@@ -233,6 +263,8 @@ export async function calculateSectorRotation(
     const obv = calcOBVSlope(chart.closes, chart.volumes, 20);
     const rrg = calcRRG(chart.closes, spyChart.closes);
     const roc20d = calcROC(chart.closes, 20);
+    const turnBars = alignedForTurn(chart);
+    const rotationTurn = computeRotationTurn(turnBars.dates, turnBars.etf, turnBars.spy, rrg.quadrant);
 
     // Breadth: 3-tier cascade — batch quotes (best), pre-run (good), ETF sigmoid (fallback)
     let breadthPct: number | null = null;
@@ -365,6 +397,7 @@ export async function calculateSectorRotation(
       rsMomentum: rrg.rsMomentum,
       quadrant: rrg.quadrant,
       rrgTrail: rrg.trail,
+      rotationTurn,
       breadthPct,
       breadthEstimated,
       roc20d,
@@ -447,6 +480,7 @@ export async function calculateSectorRotation(
       rsRatio: Math.round(raw.rsRatio * 100) / 100,
       rsMomentum: Math.round(raw.rsMomentum * 100) / 100,
       quadrant: raw.quadrant,
+      rotationTurn: raw.rotationTurn,
       compositeScore,
       dataQuality,
       dataQualityBreakdown: breakdown,

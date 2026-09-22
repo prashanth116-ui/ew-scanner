@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateSectorRotation } from "@/lib/sector-rotation/sector-rotation";
 import { calculateRotationTracker } from "@/lib/sector-rotation/rotation-tracker";
-import { formatRotationConfluence } from "@/lib/sector-rotation/transitions";
+import { formatRotationConfluence, formatRotationTurns, buildTurnMembers } from "@/lib/sector-rotation/transitions";
 import type { RotationSnapshot } from "@/lib/sector-rotation/transitions";
 import {
   buildScannerHitMap,
@@ -11,6 +11,8 @@ import {
   computeConfluenceTickers,
 } from "@/lib/sector-rotation/confluence";
 import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
+import { SECTOR_UNIVERSE } from "@/data/sector-universe";
+import { focusSectorEtfs, FOCUS_LIST } from "@/data/focus-list";
 import { logError } from "@/lib/error-logger";
 import {
   loadPreRunDaily,
@@ -102,12 +104,66 @@ export async function GET(request: NextRequest) {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = getTelegramChatId("SECTOR");
 
+    // Tonight's new RS turns, scoped to baskets holding names on the focus list.
+    //
+    // Sent with the confluence message rather than as its own alert: the turn says WHERE
+    // money started moving and the confluence below says WHICH of your names are in it,
+    // and splitting them across two notifications means reading one without the other.
+    // It leads because it is the earlier signal — the quadrant transition alert at 6 PM
+    // fires 3-5 sessions after this does, which is the whole reason the section exists.
+    //
+    // Built even when the confluence body is null, because a night with no scanner-hit
+    // rotations is exactly a night when a forming turn is the only thing worth saying.
+    // Focus members come from stockQuotes, which the rotation pipeline already built —
+    // naming them is what turns "Semiconductors turned" into something you can act on.
+    const turnMembers = buildTurnMembers(SECTOR_UNIVERSE, FOCUS_LIST, sectorResult.stockQuotes);
+    // ALL basket categories, not just `sectors`.
+    //
+    // `sectorResult.sectors` holds only the 14 GICS baskets; sub-sectors, cross-asset and
+    // leadership baskets live in their own arrays. Passing `sectors` alone silently
+    // dropped AIQ, ARKX and ITA — 3 of the 12 focus-scoped baskets — so they could never
+    // fire, and it mis-ranked the standing-leaders footer by leaving AIQ (+8.7) out while
+    // showing XBI (+7.0). The focus scope filters this list anyway, so including every
+    // category costs nothing and is the only way the scope means what it says.
+    const allScores = [
+      ...sectorResult.sectors,
+      ...(sectorResult.subSectorScores ?? []),
+      ...(sectorResult.crossAssetScores ?? []),
+      ...(sectorResult.leadershipBasketScores ?? []),
+    ];
+    const turnsMsg = formatRotationTurns(
+      allScores.map((s) => ({
+        sector: s.sector,
+        etf: s.etf,
+        quadrant: s.quadrant,
+        mansfieldRS: s.mansfieldRS,
+        rotationTurn: s.rotationTurn,
+        focusMembers: turnMembers.get(s.etf),
+      })),
+      focusSectorEtfs(SECTOR_UNIVERSE),
+      sectorResult.calculatedAt,
+    );
+
     if (botToken && chatId) {
-      const confluenceMsg = formatRotationConfluence(
-        currentRotations, stockMap, sectorResult.calculatedAt, previousTickers,
+      // Both clocks on the same line: "Day N" counts from the signal-count start bar,
+      // the annotation from the RS turn. They diverge in both directions — SMH read Day 1
+      // with an RS turn four sessions old, XLE read Day 45 with an RS turn that session.
+      const turnsByEtf = new Map(
+        allScores.filter((s) => s.rotationTurn).map((s) => [s.etf, s.rotationTurn!]),
       );
+      const confluenceBody = formatRotationConfluence(
+        currentRotations, stockMap, sectorResult.calculatedAt, previousTickers, turnsByEtf,
+      );
+      const confluenceMsg = turnsMsg
+        ? (confluenceBody ? `${turnsMsg}
+
+────────────────────
+
+${confluenceBody}` : turnsMsg)
+        : confluenceBody;
       if (confluenceMsg) {
-        // Count unique stocks with scanner hits
+        // Count unique stocks with scanner hits (from the confluence body — the turns
+        // section carries no stocks, so folding it in would inflate the reported count)
         const seenTickers = new Set<string>();
         for (const [sectorId, stocks] of stockMap) {
           if (!currentRotations.some((r) => r.sectorId === sectorId)) continue;
@@ -135,6 +191,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       confluenceSent,
       confluenceStockCount,
+      turnsIncluded: turnsMsg != null,
       scannerDate: today,
       activeRotations: currentRotations.length,
       scannerCounts: {

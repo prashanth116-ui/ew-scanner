@@ -74,6 +74,47 @@ export const COMPOSITE = {
   ACCEL_NORM_CEILING: 10,
 } as const;
 
+// ── Rotation Turn (dated RS inflection, separate from the RRG quadrant) ──
+
+/**
+ * Thresholds for `computeRotationTurn()`. These date a turn; they do NOT score or gate
+ * anything, and the quadrant is deliberately left alone — see the header of
+ * `rotation-turn.ts` for the measurement that settled that.
+ *
+ * FAST_SMA 20 / SLOW_SMA 50 were picked from the eleven-rule sweep as the pair with the
+ * least-bad whipsaw profile among triggers fast enough to be useful: the 50d confirmation
+ * cut 5-session reverts from 60.5% (20d alone) to 57.1% and dated SMH at 09-18 rather
+ * than 09-04, which was a false start. Raising MIN_HOLD_SESSIONS to 3 cuts reverts
+ * further (33.9%) at the cost of pushing SMH out to 09-09 on a failed reclaim, so the
+ * hold is left at 1 and the failures are reported instead via `priorFailedAttempts`.
+ */
+export const ROTATION_TURN = {
+  /** RS-line SMA whose reclaim dates the turn. */
+  FAST_SMA: 20,
+  /** RS-line SMA whose reclaim confirms it. */
+  SLOW_SMA: 50,
+  /** Window for the RS extreme and the failed-attempt count. */
+  LOOKBACK_BARS: 60,
+  /** Sessions the reclaim must hold to be reported. 1 = reported on the reclaim session. */
+  MIN_HOLD_SESSIONS: 1,
+  /** How far back to date the quadrant's agreement. Older than this reads as not caught up. */
+  QUADRANT_SCAN_BARS: 40,
+  /** Beyond this age a turn is no longer news — flagged `stale`. */
+  MAX_TURN_AGE_BARS: 30,
+  /**
+   * Consecutive rising sessions (with the gap to FAST_SMA narrowing on each) required for
+   * TURN_FORMING — the pre-reclaim anticipation stage.
+   *
+   * 2 is what was measured, and it is what fires SMH on 2026-09-16 rather than 09-17.
+   * The cost, board-wide: 12.7 alerts/week, under half followed by an actual reclaim
+   * within 5 sessions, forward returns at or fractionally below an unconditional control
+   * on every horizon from 3 to 20 days. Raising it to 3 cuts volume to 4.0/week but stops
+   * firing on 09-16 at all, which defeats the purpose. So: 2, shipped as a watchlist
+   * stage and never as a position signal.
+   */
+  FORMING_RISING_SESSIONS: 2,
+} as const;
+
 // ── Rotation Detection ──
 
 export const ROTATION = {
@@ -121,6 +162,17 @@ export const ROTATION = {
   SLOW_BURN_MIN_DAYS: 10,
   /** Days to suppress RS golden cross when RRG quadrant disagrees */
   QUADRANT_GUARD_DAYS: 5,
+  /**
+   * Lift the quadrant guard when the dated RS turn is UP and confirmed.
+   *
+   * The guard treats RS strength that disagrees with the quadrant as noise, but the
+   * quadrant trails the RS line by 3-5 sessions by construction, so it suppresses the
+   * true signal during precisely the window a rotation starts. Only the last
+   * QUADRANT_GUARD_DAYS bars are affected, so this changes how soon a live rotation is
+   * recognised and not the start date any event is eventually dated from — ENTRY_SCREEN
+   * still measures on the same bar the calibration study used.
+   */
+  QUADRANT_GUARD_RESPECTS_TURN: true,
   /** Max active rotations returned */
   MAX_ACTIVE_ROTATIONS: 15,
   /** Days above which timing is MATURE (beyond DELAYED) */

@@ -29,6 +29,7 @@ import type {
   RotationHealthSignals,
   RotationPatternStats,
   RotationStockPerformance,
+  RotationTurn,
   ConvictionResult,
   RRGQuadrant,
   LifecycleStage,
@@ -56,7 +57,7 @@ import {
 } from "@/lib/sector-rotation/rotation-helpers";
 import { loadScanResults } from "@/lib/prerun/storage";
 import { DataAgeBadge } from "@/components/data-age-badge";
-import { CollapsiblePanel, useCollapsedPanels } from "@/app/sectors/_components";
+import { CollapsiblePanel, useCollapsedPanels, RotationTurnBadge } from "@/app/sectors/_components";
 import { type StockPhase, phaseBadge, PHASE_RANK } from "@/lib/phase-utils";
 
 // ── localStorage cache (4-hour TTL) ──
@@ -1065,12 +1066,16 @@ function ActiveRotationCards({
   expandedId,
   regime,
   patternStats,
+  rotationTurns,
 }: {
   rows: RotationRow[];
   onExpand: (id: string | null) => void;
   expandedId: string | null;
   regime: RegimeData | null | undefined;
   patternStats: RotationPatternStats[];
+  /** Dated RS turns by sector id. Absent on a cached response from before the field
+   *  existed, which is why every read below is optional rather than asserted. */
+  rotationTurns: Record<string, RotationTurn> | undefined;
 }) {
   if (rows.length === 0) {
     return (
@@ -1240,6 +1245,13 @@ function ActiveRotationCards({
               <span>Started {r.event.startDate}</span>
               <span className="text-[#555]">|</span>
               <span>{r.event.daysActive}d active</span>
+            </div>
+
+            {/* Dated RS turn. `startDate` is where the calibrated entry screen measures;
+                this is the session the RS line turned, which is usually earlier — on
+                2026-09-21 SMH read 09-17 here against a 09-21 start. */}
+            <div className="mt-1">
+              <RotationTurnBadge turn={rotationTurns?.[r.event.sectorId]} />
             </div>
 
             <div className="mt-2 flex flex-wrap gap-1">
@@ -3008,6 +3020,7 @@ export default function RotationTrackerPage() {
                 expandedId={expandedSector}
                 regime={data.regime}
                 patternStats={data.patternStats}
+                rotationTurns={data.rotationTurns}
               />
             ) : (
               <ActiveRotationTable

@@ -12,6 +12,8 @@ export interface RotationSignalState {
 
 export type { RRGQuadrant } from "./types";
 import type { RRGQuadrant } from "./types";
+export type { RotationTurn } from "./rotation-turn";
+import type { RotationTurn } from "./rotation-turn";
 
 export interface RotationHealthSignals {
   acceleration: number; // change in 20d ROC — positive = gaining steam, negative = fading
@@ -186,6 +188,19 @@ export interface PairSignalData {
 
 export interface RotationTrackerResult {
   calculatedAt: string;
+  /**
+   * Current dated RS turn per sector id.
+   *
+   * Keyed by sector rather than attached to RotationEvent on purpose: an event is a
+   * closed period, the turn is a live read, and stamping a 2025 event with today's turn
+   * would read as history that never happened. Consumers look up the sectors they are
+   * showing.
+   *
+   * Worth reading beside `startDate`, which is dated off signalCount and is slower than
+   * it looks: the RS golden cross is a 10d-vs-30d SMA cross, so on 2026-09-21 it fired
+   * for SMH on the same session the RRG quadrant did, while the turn had it on 09-17.
+   */
+  rotationTurns?: Record<string, RotationTurn>;
   activeRotations: ActiveRotationDetail[];
   recentlyEndedRotations: RotationEvent[]; // ended within last 10 trading days
   patternStats: RotationPatternStats[];

@@ -12,6 +12,7 @@ import { quadrantColor, getTradingAction, actionBorderColor, getStockPhase, rsCo
 import { TradingActionBadge, ComparisonDelta } from "./comparison-delta";
 import { EtfSparkline } from "./shared";
 import { InfoTip } from "./info-tip";
+import { RotationTurnBadge, RotationTurnTimeline } from "./turn-badge";
 import type { TradingAction } from "./types";
 
 // ── Score Sparkline (composite score over history) ──
@@ -203,8 +204,13 @@ export function SectorCard({
           </div>
           <div className="flex items-center gap-1">
             <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${quadrantColor(sector.quadrant)}`}>{sector.quadrant}</span>
-            <InfoTip text="RRG position \u2014 LEADING (strong), IMPROVING (gaining), WEAKENING (fading), LAGGING (weak)" />
+            <InfoTip text="RRG position \u2014 LEADING (strong), IMPROVING (gaining), WEAKENING (fading), LAGGING (weak). Runs 3-5 sessions behind the RS line by construction; the turn badge below dates the line itself." />
           </div>
+        </div>
+        {/* Dated RS turn. Sits under the quadrant because it is the earlier, faster read
+            of the same rotation \u2014 not a competing classification. */}
+        <div className="mt-1.5 flex justify-end">
+          <RotationTurnBadge turn={sector.rotationTurn} />
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 text-[10px] text-[#888] font-mono">
           <span className="flex items-center gap-0.5">RS {sector.rsRatio.toFixed(1)} <InfoTip text="Relative strength vs SPY \u2014 positive means outperforming the market" /></span>
@@ -269,14 +275,22 @@ export function ExpandedStockTable({ stocks, sector }: { stocks: StockInSector[]
 
   const visible = showAll ? rankedStocks : rankedStocks.slice(0, 10);
 
+  // The turn timeline is sector-level, not stock-level, so a basket with no resolvable
+  // members (UFO, ARKX and the theme ETFs routinely have none) must still show it.
   if (stocks.length === 0) {
-    return <p className="text-xs text-[#555] py-2 text-center">No stock data available for this sector.</p>;
+    return (
+      <div className="col-span-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
+        <RotationTurnTimeline turn={sector?.rotationTurn} />
+        <p className="text-xs text-[#555] py-2 text-center">No stock data available for this sector.</p>
+      </div>
+    );
   }
 
   const guidanceBullets = sector ? getGuidanceBullets(sector, stocks) : [];
 
   return (
     <div className="col-span-full rounded-lg border border-[#2a2a2a] bg-[#0f0f0f] p-4">
+      <RotationTurnTimeline turn={sector?.rotationTurn} />
       {guidanceBullets.length > 0 && (
         <div className="mb-3 rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-2.5">
           <div className="text-[11px] font-semibold text-[#aaa] mb-1.5">What to do with {sector!.sector}:</div>

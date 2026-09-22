@@ -230,3 +230,33 @@ export const FOCUS_LIST: Set<string> = new Set([
 export function isFocusTicker(ticker: string): boolean {
   return FOCUS_LIST.has(ticker);
 }
+
+/** How many focus names a basket must list before its rotation is worth alerting on. */
+export const MIN_FOCUS_MEMBERS = 4;
+
+/**
+ * Baskets worth alerting on, by ETF — those listing at least `MIN_FOCUS_MEMBERS` focus
+ * names. Used to scope the nightly rotation-turn section.
+ *
+ * The obvious rule, "any basket holding a focus name", does not filter: 17 of 22 qualify,
+ * several on one or two names (XLB 1, XRT 1, XLP 2). A rotation in a basket where you
+ * trade a single member is not a rotation you can act on, and the whole reason for
+ * scoping is that TURN_FORMING fires ~12.7 times a week across the full board. At 4 the
+ * list is roughly a third of the board, so about 4 alerts a week.
+ *
+ * Membership, deliberately, not canonical ownership: NVDA sits in SMH, XLK and AIQ, and a
+ * turn in any of the three is a turn in something you hold. `PRIMARY_SECTOR` answers a
+ * different question — which single row a scanner hit belongs to.
+ */
+export function focusSectorEtfs(
+  universe: { etf: string; stocks: { symbol: string }[] }[],
+  minMembers: number = MIN_FOCUS_MEMBERS,
+): Set<string> {
+  const out = new Set<string>();
+  for (const basket of universe) {
+    let n = 0;
+    for (const s of basket.stocks) if (FOCUS_LIST.has(s.symbol)) n++;
+    if (n >= minMembers) out.add(basket.etf);
+  }
+  return out;
+}

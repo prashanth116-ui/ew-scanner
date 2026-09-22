@@ -23,6 +23,7 @@ import type {
   ActiveRotationDetail,
   RotationPatternStats,
   RotationTrackerResult,
+  RotationTurn,
   RegimeData,
   PairSignalData,
 } from "./rotation-types";
@@ -31,6 +32,7 @@ import { SECTOR_UNIVERSE, getSectorsWithStocks } from "@/data/sector-universe";
 import { fetchMacroRegime } from "./regime";
 import { computePairZScore } from "./pairs";
 import { calcAcceleration, calcCMF, calcRRG } from "./math";
+import { computeRotationTurn } from "./rotation-turn";
 import { ROTATION, ROTATION_CONVICTION, ROTATION_LIFECYCLE, QUALITY_GATES } from "./config";
 import { SCAN_EXCLUSIONS } from "@/data/index-tiers";
 
@@ -130,7 +132,7 @@ interface DailySignal {
   accel: number | null;
 }
 
-function computeDailySignals(aligned: AlignedBar[], currentQuadrant?: RRGQuadrant): DailySignal[] {
+function computeDailySignals(aligned: AlignedBar[], currentQuadrant?: RRGQuadrant, turn?: RotationTurn): DailySignal[] {
   if (aligned.length < ROTATION.MIN_ALIGNED_BARS) return [];
 
   // Compute RS ratio series (ETF close / SPY close)
@@ -210,9 +212,27 @@ function computeDailySignals(aligned: AlignedBar[], currentQuadrant?: RRGQuadran
   // Quadrant guard: when RRG says WEAKENING/LAGGING, suppress RS golden cross
   // on the most recent N days to prevent tracker from counting RS strength
   // that contradicts the EMA-smoothed RRG classification.
+  //
+  // Lifted when the dated RS turn is UP and past its slow-SMA confirmation. The guard's
+  // premise is that RS strength contradicting the quadrant is noise, but the quadrant
+  // runs 3-5 sessions behind the RS line by construction, so during exactly the window a
+  // new rotation starts the guard suppresses the true signal and calls the late label the
+  // authority. On the 2026-09-21 board it was suppressing XBI, XLV and XLE.
+  //
+  // This changes RECOGNITION, not history: the window is only the last
+  // QUADRANT_GUARD_DAYS bars, so a suppressed bar is unsuppressed once it ages out of the
+  // window and `detectRotationEvents` then dates the event from that same bar. Start dates
+  // — and therefore the bar the calibrated ENTRY_SCREEN measures on — are unchanged. All
+  // the relaxation buys is seeing a live rotation up to 5 sessions sooner.
+  const turnOverridesGuard =
+    ROTATION.QUADRANT_GUARD_RESPECTS_TURN &&
+    turn?.direction === "UP" &&
+    (turn.stage === "TURN_CONFIRMED" || turn.stage === "QUADRANT_CONFIRMED");
+
   if (
     currentQuadrant &&
     (currentQuadrant === "WEAKENING" || currentQuadrant === "LAGGING") &&
+    !turnOverridesGuard &&
     results.length > 0
   ) {
     const guardStart = Math.max(0, results.length - ROTATION.QUADRANT_GUARD_DAYS);
@@ -753,6 +773,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
   // 3. For each sector, compute signals and detect events
   const allEvents: RotationEvent[] = [];
   const patternStats: RotationPatternStats[] = [];
+  const rotationTurns: Record<string, RotationTurn> = {};
 
   for (const sector of sectorsForTracking) {
     const chartEntry = etfCharts.find((c) => c.sectorId === sector.id);
@@ -776,8 +797,19 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
     // Compute health first so quadrant is available for daily signal guard
     const health = computeHealthSignals(aligned);
 
+    // Dated RS turn. Read beside the event's startDate, not instead of it: startDate is
+    // where the calibrated entry screen measures, while this is the earlier session the
+    // RS line actually turned on. `aligned` is already timestamp-matched to SPY, so the
+    // dates it yields are the real trading sessions.
+    rotationTurns[sector.id] = computeRotationTurn(
+      aligned.map((b) => b.date),
+      aligned.map((b) => b.etfClose),
+      aligned.map((b) => b.spyClose),
+      health.quadrant,
+    );
+
     // Compute daily signals (quadrant guard suppresses RS golden cross when RRG disagrees)
-    const dailySignals = computeDailySignals(aligned, health.quadrant);
+    const dailySignals = computeDailySignals(aligned, health.quadrant, rotationTurns[sector.id]);
     if (dailySignals.length < 6) continue;
 
     // Detect rotation events
@@ -903,6 +935,7 @@ export async function calculateRotationTracker(): Promise<RotationTrackerResult>
 
   const result: RotationTrackerResult = {
     calculatedAt: new Date().toISOString(),
+    rotationTurns,
     activeRotations,
     recentlyEndedRotations,
     patternStats: patternStats.sort((a, b) => b.totalRotations - a.totalRotations),
