@@ -46,9 +46,22 @@ function classifyTiming(daysActive: number, health: { acceleration: number; cmf2
   return "MATURE";
 }
 
-/** Use trailing 20-day window (or full history if shorter) for sustained signal check. */
-function isSignalSustained(signalHistory: { date: string; signalCount: number; close: number }[]): boolean {
-  if (signalHistory.length < 3) return false;
+/**
+ * Trailing 20-day (or shorter) average signal count against MIN_AVG_SIGNAL_COUNT.
+ *
+ * Returns **null** when there is not enough history to judge, rather than false. The
+ * distinction is the one the root CLAUDE.md draws for every shared feature: null means the
+ * test does not apply, false means it was measured and failed. Collapsing them here meant
+ * a rotation the tracker had only just noticed was rejected as "unsustained" — SMH on
+ * 2026-09-22 carried one bar of history (its own Day 1) and one signalCount of 3, so the
+ * average passed easily and the length guard vetoed it anyway.
+ *
+ * That guard is not wrong: three bars really is too few to call a signal sustained. It is
+ * the wrong question when the history is short only because the detector was late, which
+ * is why the caller treats null as "needs corroboration" instead of "fails".
+ */
+function isSignalSustained(signalHistory: { date: string; signalCount: number; close: number }[]): boolean | null {
+  if (signalHistory.length < 3) return null;
   const window = signalHistory.slice(-20);
   const avgSignal = window.reduce((sum, h) => sum + h.signalCount, 0) / window.length;
   return avgSignal >= ROTATION.MIN_AVG_SIGNAL_COUNT;
@@ -141,7 +154,15 @@ export function RotationEntrySignals({
       }
 
       // Filter unsustained signals
-      if (!isSignalSustained(event.signalHistory ?? [])) { unsustainedCount++; continue; }
+      // Unsustained signals. `null` means too little history to judge - a confirmed RS
+      // turn stands in for it, exactly as it does for the age filter above. A measured
+      // `false` is real negative evidence and is never waived.
+      const sustained = isSignalSustained(event.signalHistory ?? []);
+      if (sustained === false || (sustained === null && !turnCorroboratesRotation(turn))) {
+        unsustainedCount++;
+        emergingList.push({ event, health });
+        continue;
+      }
 
       const timing = classifyTiming(event.daysActive, health);
 
@@ -248,7 +269,7 @@ export function RotationEntrySignals({
         {emergingList.length > 0 && (
           <div className="rounded border border-dashed border-[#2a2a2a] bg-[#121212] px-2.5 py-2">
             <div className="text-[10px] uppercase tracking-wider text-[#666]">
-              Too young to qualify — under {ROTATION.MIN_ROTATION_DAYS} sessions
+              Below the noise filters — too young, or too little history to judge
             </div>
             <div className="mt-1 space-y-0.5">
               {emergingList.map(({ event }) => (
@@ -261,7 +282,7 @@ export function RotationEntrySignals({
               ))}
             </div>
             <p className="mt-1 text-[10px] leading-snug text-[#555]">
-              Not signals — a rotation this young has not shown sustained strength. Check the{" "}
+              Not signals — these have not cleared the age or sustained-signal filters. Check the{" "}
               <a href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</a> before acting.
             </p>
           </div>
