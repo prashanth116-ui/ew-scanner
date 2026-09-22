@@ -60,6 +60,16 @@ export interface EntryScreenResult {
   live: GateReading;
   /** The basket-relative 20d return cut-off actually applied, for display. */
   ret20Cut: number | null;
+  /**
+   * The same stock screen re-run on the LATEST bar. Display only — it never touches
+   * `verdict`, exactly like `live` never touches it.
+   *
+   * Exists to answer "is this rotation building or decaying", which is the only question
+   * stage 6 found any separation on: at day +3 a qualifying count that was >= 3 AND rising
+   * ran 58% against 47%. That was n=50 with a 44-71% interval, so it is context for a
+   * reader, never a gate. Null when the latest-bar inputs are unavailable.
+   */
+  liveQualifying: number | null;
 }
 
 function readGate(breadth: number | null, cmf: number | null, accel: number | null): GateReading {
@@ -120,7 +130,19 @@ export function evaluateEntryScreen(detail: ActiveRotationDetail): EntryScreenRe
     event.accelNow ?? null,
   );
 
-  const base = { picks: [] as RotationStockPerformance[], qualifying: 0, gate, live, ret20Cut: null };
+  // Latest-bar qualifying count, computed the same way but never allowed to decide.
+  const scorableNow = stocks.filter((s) => s.ret20Now != null && s.atrPctNow != null);
+  const ret20CutNow = topFractionCut(scorableNow.map((s) => s.ret20Now as number), ENTRY_SCREEN.RET20_TOP_FRACTION);
+  const liveQualifying = ret20CutNow === null
+    ? null
+    : scorableNow.filter(
+        (s) =>
+          s.breakout20Now === true &&
+          (s.ret20Now as number) >= ret20CutNow &&
+          (s.atrPctNow as number) >= ENTRY_SCREEN.MIN_ATR_PCT,
+      ).length;
+
+  const base = { picks: [] as RotationStockPerformance[], qualifying: 0, gate, live, ret20Cut: null, liveQualifying };
 
   if (!gate.complete) return { verdict: "NO_DATA", ...base };
   if (!gate.pass) return { verdict: "SKIP_GATE", ...base };
@@ -144,6 +166,7 @@ export function evaluateEntryScreen(detail: ActiveRotationDetail): EntryScreenRe
     gate,
     live,
     ret20Cut,
+    liveQualifying,
   };
 }
 

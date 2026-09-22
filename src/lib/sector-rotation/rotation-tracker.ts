@@ -617,6 +617,8 @@ async function fetchStockPerformance(
 
       // Entry-screen inputs, evaluated on the rotation start bar.
       const screen = computeEntryScreen(chart, startIdx);
+      // ...and again on the latest bar, for the trajectory read only. Same chart, no fetch.
+      const screenNow = computeEntryScreen(chart, chart.closes.length - 1);
 
       const perfPct = ((quote.price - priceAtStart) / priceAtStart) * 100;
       const aboveSma50 = quote.sma50 !== null ? quote.price > quote.sma50 : false;
@@ -677,6 +679,9 @@ async function fetchStockPerformance(
         ret20AtStart: screen.ret20,
         breakout20AtStart: screen.breakout20,
         aboveSma50AtStart: screen.aboveSma50,
+        atrPctNow: screenNow.atrPct,
+        ret20Now: screenNow.ret20,
+        breakout20Now: screenNow.breakout20,
         rsVsSector20: computeRsVsSector20(alignedStockCloses, alignedEtfCloses),
       });
     }

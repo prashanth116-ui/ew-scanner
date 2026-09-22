@@ -11,10 +11,17 @@ function stock(
     breakout?: boolean | null;
     aboveAtStart?: boolean | null;
     aboveNow?: boolean;
+    /** Latest-bar screen inputs. Display-only, so they default to the at-start values. */
+    atrNow?: number | null;
+    ret20Now?: number | null;
+    breakoutNow?: boolean | null;
   } = {},
 ): RotationStockPerformance {
   return {
     symbol, name: symbol,
+    atrPctNow: o.atrNow !== undefined ? o.atrNow : (o.atr ?? null),
+    ret20Now: o.ret20Now !== undefined ? o.ret20Now : (o.ret20 ?? null),
+    breakout20Now: o.breakoutNow !== undefined ? o.breakoutNow : (o.breakout ?? null),
     priceAtRotationStart: 100, priceNow: 100, performancePct: 0,
     aboveSma50: o.aboveNow === undefined ? true : o.aboveNow,
     volumeVsAvg: 1, rsAcceleration: 0, trendAccel: 0,
@@ -168,5 +175,35 @@ describe("rotation entry screen", () => {
     const r = evaluateEntryScreen(detail(stocks));
     const rets = r.picks.map((p) => p.ret20AtStart as number);
     expect(rets).toEqual([...rets].sort((a, b) => b - a));
+  });
+});
+
+describe("liveQualifying", () => {
+  it("counts the latest bar without touching the verdict", () => {
+    // Three names clear at start; only one still clears now. The verdict must stay TRADE,
+    // because it is decided on the start bar where the study validated it.
+    const stocks = [
+      stock("AAA", { ret20: 10, atr: 5, breakout: true, breakoutNow: true, ret20Now: 10, atrNow: 5 }),
+      stock("BBB", { ret20: 9, atr: 5, breakout: true, breakoutNow: false, ret20Now: 9, atrNow: 5 }),
+      stock("CCC", { ret20: 8, atr: 5, breakout: true, breakoutNow: false, ret20Now: 8, atrNow: 5 }),
+      stock("DDD", { ret20: -5, atr: 1, breakout: false, breakoutNow: false, ret20Now: -5, atrNow: 1 }),
+      stock("EEE", { ret20: -6, atr: 1, breakout: false, breakoutNow: false, ret20Now: -6, atrNow: 1 }),
+    ];
+    const r = evaluateEntryScreen(detail(stocks, { cmfAtStart: 0.1, accelAtStart: 1, cmfNow: 0.1, accelNow: 1 }));
+    expect(r.verdict).toBe("TRADE");
+    expect(r.qualifying).toBe(3);
+    expect(r.liveQualifying).toBe(1);
+  });
+
+  it("is null when the latest-bar inputs are unavailable", () => {
+    const stocks = [
+      stock("AAA", { ret20: 10, atr: 5, breakout: true, atrNow: null, ret20Now: null }),
+      stock("BBB", { ret20: 9, atr: 5, breakout: true, atrNow: null, ret20Now: null }),
+      stock("CCC", { ret20: 8, atr: 5, breakout: true, atrNow: null, ret20Now: null }),
+      stock("DDD", { ret20: -5, atr: 1, breakout: false, atrNow: null, ret20Now: null }),
+      stock("EEE", { ret20: -6, atr: 1, breakout: false, atrNow: null, ret20Now: null }),
+    ];
+    const r = evaluateEntryScreen(detail(stocks, { cmfAtStart: 0.1, accelAtStart: 1 }));
+    expect(r.liveQualifying).toBeNull();
   });
 });

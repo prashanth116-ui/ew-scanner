@@ -108,6 +108,23 @@ export interface RotationStockPerformance {
   aboveSma50AtStart: boolean | null;
 
   /**
+   * The same three screen inputs re-measured on the LATEST bar.
+   *
+   * Display only, exactly like `EntryScreenResult.live`: the verdict is decided on the
+   * start bar because that is where the 78-rotation study validated it, and re-running the
+   * screen against today is a different, untested signal. These exist so the card can show
+   * whether the qualifying count is climbing or decaying since the rotation started, which
+   * stage 6 found to be the one trajectory metric with any separation — and even that was
+   * n=50 with a confidence interval spanning chance, so it informs, never gates.
+   *
+   * Free: fetchStockPerformance already holds the 6mo chart, so this is a second call to
+   * computeEntryScreen on the last index.
+   */
+  atrPctNow: number | null;
+  ret20Now: number | null;
+  breakout20Now: boolean | null;
+
+  /**
    * Stock 20d return minus the sector ETF's over the same window (current).
    *
    * Measured against the SECTOR, not SPY, on purpose: inside a single basket on a

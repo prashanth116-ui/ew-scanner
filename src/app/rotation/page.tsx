@@ -735,6 +735,43 @@ function screenLabel(r: EntryScreenResult): string {
   }
 }
 
+/**
+ * Qualifying-count trajectory: how many members clear the entry screen NOW versus on the
+ * rotation start bar.
+ *
+ * The count itself is the load-bearing number in the whole system — stage 4 measured 1
+ * name at 57% positive, 2 at 30%, 3 or more at 87%, which is why MIN_QUALIFYING is 3. This
+ * shows whether it is building or decaying since the start.
+ *
+ * Direction only, never a verdict. The verdict stays on the start bar where the study
+ * validated it, and stage 6 put the trajectory read at n=50 with a 44-71% confidence
+ * interval — real enough to show a reader, nowhere near enough to gate on.
+ */
+function QualifyingTrend({ screen }: { screen: EntryScreenResult }) {
+  const now = screen.liveQualifying;
+  if (now == null) return null;
+  const start = screen.qualifying;
+  const delta = now - start;
+  const tone =
+    delta > 0 ? "text-emerald-400" : delta < 0 ? "text-red-400/80" : "text-[#777]";
+  const arrow = delta > 0 ? "↑" : delta < 0 ? "↓" : "→";
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] text-[#777]"
+      title={
+        `Members clearing the entry screen: ${start} on the rotation start bar, ${now} now. ` +
+        `Three or more is the threshold that measured 87% positive; one name measured 57% and two measured 30%. ` +
+        `The verdict is always decided on the start bar — this is trajectory only.`
+      }
+    >
+      <span>screen {start}</span>
+      <span className={tone}>{arrow} {now}</span>
+      {now >= 3 && delta > 0 && <span className="text-emerald-400/80">building</span>}
+      {now < 3 && delta < 0 && <span className="text-red-400/70">decaying</span>}
+    </span>
+  );
+}
+
 function GateTicks({ gate, dim }: { gate: GateReading; dim?: boolean }) {
   if (!gate.complete) return <span className="text-[10px] text-[#555]">gate inputs unavailable</span>;
   const item = (label: string, ok: boolean, val: string) => (
@@ -789,6 +826,7 @@ function EntryScreenPanel({ screen }: { screen: EntryScreenResult }) {
         >
           {screenLabel(screen)}
         </span>
+        <QualifyingTrend screen={screen} />
         <GateTicks gate={screen.gate} />
       </div>
 
@@ -1066,6 +1104,9 @@ function ActiveRotationTable({
                   >
                     {screenLabel(row.screen)}
                   </span>
+                  {/* Both views must show the same judgement — see the one-row-model rule
+                      in this page's CLAUDE.md. */}
+                  <div className="mt-0.5"><QualifyingTrend screen={row.screen} /></div>
                 </td>
                 <td className="px-2 py-2 text-[10px] whitespace-nowrap">
                   <RotationTurnBadge turn={row.turn} compact />
