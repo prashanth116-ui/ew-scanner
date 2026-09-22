@@ -302,6 +302,47 @@ describe("formatRotationTurns", () => {
     expect(msg).not.toContain("Day ");
   });
 
+  it("promotes and marks scanner-flagged names so the two lists agree", () => {
+    // The confusion this fixes: the turn block ranked IGV by 50d distance
+    // (TEAM/OKTA/ZS/TWLO/NET/CRWD) while the confluence body below listed only
+    // scanner-flagged names (SHOP/PLTR/SNOW/WDAY/DDOG). All ten were focus names; the
+    // lists just answered different questions and said so nowhere.
+    const msg = formatRotationTurns(
+      [{
+        sector: "Software & Cloud", etf: "IGV", quadrant: "LEADING" as const,
+        rotationTurn: { ...base, stage: "TURN_DETECTED", turnDate: "2026-09-21", barsSinceTurn: 0 },
+        focusMembers: [
+          { symbol: "TEAM", pctFromSma50: 33.6 },
+          { symbol: "OKTA", pctFromSma50: 24.3 },
+          { symbol: "PLTR", pctFromSma50: 4.0 },
+        ],
+      }],
+      focus,
+      AT,
+      new Set(["PLTR"]),
+    ) as string;
+
+    // PLTR is weakest on trend but carries a scanner hit, so it leads and is marked.
+    const row = msg.split("\n").find((l) => l.includes("PLTR")) as string;
+    expect(row.indexOf("PLTR")).toBeLessThan(row.indexOf("TEAM"));
+    expect(msg).toContain("PLTR +4.0%⚡");
+    expect(msg).toContain("also flagged by a scanner tonight");
+  });
+
+  it("marks nothing and prints no legend when no scanner hits are supplied", () => {
+    const msg = formatRotationTurns(
+      [{
+        sector: "Software & Cloud", etf: "IGV", quadrant: "LEADING" as const,
+        rotationTurn: { ...base, stage: "TURN_DETECTED", turnDate: "2026-09-21", barsSinceTurn: 0 },
+        focusMembers: [{ symbol: "TEAM", pctFromSma50: 33.6 }],
+      }],
+      focus,
+      AT,
+    ) as string;
+    expect(msg).not.toContain("⚡");
+    expect(msg).not.toContain("also flagged by a scanner");
+  });
+
   it("names the focus members inside a turning basket", () => {
     const msg = formatRotationTurns(
       [{

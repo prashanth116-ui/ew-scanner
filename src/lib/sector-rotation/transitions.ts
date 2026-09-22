@@ -752,24 +752,42 @@ function memberSummary(members: TurnMember[] | undefined): string | null {
  * basket reclaimed its 20d is not a decision; knowing TEAM is 33.6% above its 50d and MU
  * is below it, is.
  */
-function memberTickers(members: TurnMember[] | undefined): string | null {
+function memberTickers(members: TurnMember[] | undefined, scannerTickers?: Set<string>): string | null {
   if (!members || members.length === 0) return null;
-  const named = members.slice(0, MAX_TURN_MEMBERS).map((m) => {
-    if (m.pctFromSma50 === null) return `?${m.symbol}`;
-    const tick = m.pctFromSma50 > 0 ? "✓" : "·";
-    return `${tick}${m.symbol} ${m.pctFromSma50 >= 0 ? "+" : ""}${m.pctFromSma50.toFixed(1)}%`;
+
+  // Scanner-flagged names are promoted ahead of the pure trend ranking.
+  //
+  // This block and the confluence body below it list the same basket from two different
+  // lenses: here it is every focus member ranked by distance above its own 50d, there it
+  // is only the names a scanner flagged tonight, ranked by scanner agreement. Both are
+  // right and they routinely share no tickers — IGV showed TEAM/OKTA/ZS/TWLO/NET/CRWD up
+  // top and SHOP/PLTR/SNOW/WDAY/DDOG below, all ten focus names — which reads as the
+  // message contradicting itself. Sorting the confirmed names first and marking them ⚡
+  // makes one list carry both facts.
+  const ranked = [...members].sort((a, b) => {
+    const aHit = scannerTickers?.has(a.symbol) ? 1 : 0;
+    const bHit = scannerTickers?.has(b.symbol) ? 1 : 0;
+    if (aHit !== bHit) return bHit - aHit;
+    return (b.pctFromSma50 ?? -Infinity) - (a.pctFromSma50 ?? -Infinity);
   });
-  const more = members.length > MAX_TURN_MEMBERS ? ` +${members.length - MAX_TURN_MEMBERS} more` : "";
+
+  const named = ranked.slice(0, MAX_TURN_MEMBERS).map((m) => {
+    const flag = scannerTickers?.has(m.symbol) ? "⚡" : "";
+    if (m.pctFromSma50 === null) return `?${m.symbol}${flag}`;
+    const tick = m.pctFromSma50 > 0 ? "✓" : "·";
+    return `${tick}${m.symbol} ${m.pctFromSma50 >= 0 ? "+" : ""}${m.pctFromSma50.toFixed(1)}%${flag}`;
+  });
+  const more = ranked.length > MAX_TURN_MEMBERS ? ` +${ranked.length - MAX_TURN_MEMBERS} more` : "";
   return `${named.join("  ")}${more}`;
 }
 
 /** Summary line plus ticker row, for the stages that earn the full block. */
-function renderMembers(members: TurnMember[] | undefined): string[] {
-  const tickers = memberTickers(members);
+function renderMembers(members: TurnMember[] | undefined, scannerTickers?: Set<string>): string[] {
+  const tickers = memberTickers(members, scannerTickers);
   if (!tickers) return [];
   const summary = memberSummary(members);
   const headline = summary
-    ? `Your names — ${summary}, furthest above first:`
+    ? `Your names — ${summary}, scanner-flagged first then furthest above:`
     : `Your names — trend state unavailable tonight:`;
   return [`     ${headline}`, `     ${tickers}`];
 }
@@ -811,6 +829,8 @@ export function formatRotationTurns(
   sectors: TurnSectorInput[],
   focusEtfs: Set<string>,
   calculatedAt: string,
+  /** Tickers any scanner flagged tonight. Marks and promotes them in the member rows. */
+  scannerTickers?: Set<string>,
 ): string | null {
   const scoped = sectors.filter((s) => focusEtfs.has(s.etf) && s.rotationTurn);
 
@@ -864,7 +884,7 @@ export function formatRotationTurns(
     const bits = [`RS ${dist} ${rel} 20d`, `low ${t.rsLowDate ?? "?"}`];
     if (t.priorFailedAttempts > 0) bits.push(`${t.priorFailedAttempts} prior reclaims failed`);
     out.push(`     ${bits.join(" · ")}`);
-    out.push(...renderMembers(s.focusMembers));
+    out.push(...renderMembers(s.focusMembers, scannerTickers));
     return out;
   };
 
@@ -881,7 +901,7 @@ export function formatRotationTurns(
     const t = s.rotationTurn!;
     const summary = memberSummary(s.focusMembers);
     const out = [`  <b>${s.sector}</b> (${s.etf}) — reclaimed ${t.turnDate}${lifecycleTag(s)}${summary ? ` · ${summary}` : ""}`];
-    const tickers = memberTickers(s.focusMembers);
+    const tickers = memberTickers(s.focusMembers, scannerTickers);
     if (tickers) out.push(`     ${tickers}`);
     return out;
   };
@@ -925,6 +945,11 @@ export function formatRotationTurns(
     lines.push(
       `<i>${rest} other basket${rest === 1 ? "" : "s"} still forming from earlier sessions — not repeated here.</i>`,
     );
+  }
+
+  if (scannerTickers && scannerTickers.size > 0 && lines.some((l) => l.includes("⚡"))) {
+    lines.push("");
+    lines.push("<i>⚡ = also flagged by a scanner tonight (see the confluence detail below).</i>");
   }
 
   // Standing leadership, always, even though it is not "news".

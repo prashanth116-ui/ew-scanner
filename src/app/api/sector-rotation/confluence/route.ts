@@ -149,6 +149,7 @@ export async function GET(request: NextRequest) {
       })),
       focusSectorEtfs(SECTOR_UNIVERSE),
       sectorResult.calculatedAt,
+      new Set(scannerHitMap.keys()),
     );
 
     if (botToken && chatId) {
