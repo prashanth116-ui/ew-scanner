@@ -91,3 +91,34 @@ describe("rsTurnEtfs", () => {
     expect(rsTurnEtfs(turns).has("XLU")).toBe(false);
   });
 });
+
+describe("weak-basket suppression", () => {
+  it("drops baskets measured never to lead anywhere", () => {
+    // XLP produced ZERO turns with 3+ qualifying names in two years, across 17 turn
+    // events. XLRE the same. The alert fires there and nothing ever comes of it.
+    const out = computeBriefRsTurns(result([
+      sector("XLP", "Consumer Staples", turn({ stage: "TURN_DETECTED", turnDate: "2026-09-17", barsSinceTurn: 0 })),
+      sector("XLRE", "Real Estate", turn({ stage: "TURN_DETECTED", turnDate: "2026-09-17", barsSinceTurn: 0 })),
+      sector("SMH", "Semiconductors", turn({ stage: "TURN_DETECTED", turnDate: "2026-09-17", barsSinceTurn: 0 })),
+    ]));
+    expect(out.map((x) => x.etf)).toEqual(["SMH"]);
+  });
+
+  it("keeps a basket that was never measured, since that is not evidence of failure", () => {
+    // ARKX is absent from the stage-11 study (too few events), so it keeps its alert.
+    const out = computeBriefRsTurns(result([], {
+      subSectorScores: [sector("ARKX", "Space & Defense", turn({ stage: "TURN_DETECTED", turnDate: "2026-09-17", barsSinceTurn: 0 }))],
+    }));
+    expect(out.map((x) => x.etf)).toEqual(["ARKX"]);
+  });
+
+  it("suppresses the marginal baskets too, not just the dead ones", () => {
+    // XLV 17%, XBI 14%, ITA 11%, IYT 16% — measured below the 20% bar.
+    const out = computeBriefRsTurns(result([
+      sector("XLV", "Health Care", turn({ stage: "TURN_DETECTED", turnDate: "2026-09-17", barsSinceTurn: 0 })),
+      sector("XBI", "Biotech", turn({ stage: "TURN_DETECTED", turnDate: "2026-09-17", barsSinceTurn: 0 })),
+      sector("IGV", "Software", turn({ stage: "TURN_DETECTED", turnDate: "2026-09-17", barsSinceTurn: 0 })),
+    ]));
+    expect(out.map((x) => x.etf)).toEqual(["IGV"]);
+  });
+});

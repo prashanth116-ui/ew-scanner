@@ -115,6 +115,36 @@ export const ROTATION_TURN = {
   FORMING_RISING_SESSIONS: 2,
 } as const;
 
+/**
+ * Baskets where an RS turn has been MEASURED not to lead anywhere. Suppressed from turn
+ * alerts.
+ *
+ * `scripts/rotation-backtest/11-per-sector.mjs`, 18 baskets, ~2 years to 2026-08-27. The
+ * maturation rate — the share of turns reaching a full gate+screen TRADE within 10
+ * sessions — ranges from 39% to 0%, and the pooled results of stages 5-10 hid it entirely:
+ *
+ *   works    AIQ 39 · SMH 38 · XLY 32 · IGV 30 · XLI 27 · XLF 22 · XLK 20
+ *   weak     XLV 17 · IYT 16 · XBI 14 · ITA 11
+ *   dead     XLC 5 · XLU 5 · XLB 5 · XLE 4 · XRT 4 · XLP 0 · XLRE 0
+ *
+ * XLP, XLRE, XLE, XLU and ITA produced ZERO turns with 3+ qualifying names in two years,
+ * across 17-24 turn events each. The alert fires there and nothing ever comes of it.
+ *
+ * The cause is MIN_ATR_PCT doing what the entry screen intends — staples, utilities,
+ * REITs, materials, energy and retail do not hold enough 3%-ATR names to ever field three
+ * qualifying members. Correct for the screen, and it makes the turn alert noise in those
+ * sectors.
+ *
+ * This suppresses only baskets MEASURED to fail, never merely unmeasured ones: a thin
+ * sub-sector basket absent from the study (ARKX, UFO, the theme ETFs) keeps its alert,
+ * because "we did not measure it" is not evidence of failure. Re-run stage 11 before
+ * editing this list.
+ */
+export const TURN_WEAK_BASKETS: ReadonlySet<string> = new Set([
+  "XLV", "IYT", "XBI", "ITA",                       // 11-17% — marginal
+  "XLC", "XLU", "XLB", "XLE", "XRT", "XLP", "XLRE", // 0-5% — dead
+]);
+
 // ── Rotation Detection ──
 
 export const ROTATION = {

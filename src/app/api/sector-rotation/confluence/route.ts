@@ -12,6 +12,7 @@ import {
 } from "@/lib/sector-rotation/confluence";
 import { sendTelegramMessage, getTelegramChatId } from "@/lib/ew-wave/telegram";
 import { SECTOR_UNIVERSE } from "@/data/sector-universe";
+import { TURN_WEAK_BASKETS } from "@/lib/sector-rotation/config";
 import { focusSectorEtfs, FOCUS_LIST } from "@/data/focus-list";
 import { logError } from "@/lib/error-logger";
 import {
@@ -117,6 +118,18 @@ export async function GET(request: NextRequest) {
     // Focus members come from stockQuotes, which the rotation pipeline already built —
     // naming them is what turns "Semiconductors turned" into something you can act on.
     const turnMembers = buildTurnMembers(SECTOR_UNIVERSE, FOCUS_LIST, sectorResult.stockQuotes);
+
+    // Alert scope is BOTH conditions: a basket you trade, AND one where a turn has been
+    // measured to lead somewhere. Focus scoping alone kept XLC, ITA, XBI and XLV, which
+    // between them produced 7 turns with 3+ qualifying names in two years — see
+    // TURN_WEAK_BASKETS and scripts/rotation-backtest/11-per-sector.mjs.
+    const turnAlertScope = () => {
+      const scope = new Set<string>();
+      for (const etf of focusSectorEtfs(SECTOR_UNIVERSE)) {
+        if (!TURN_WEAK_BASKETS.has(etf)) scope.add(etf);
+      }
+      return scope;
+    };
     // ALL basket categories, not just `sectors`.
     //
     // `sectorResult.sectors` holds only the 14 GICS baskets; sub-sectors, cross-asset and
@@ -147,7 +160,7 @@ export async function GET(request: NextRequest) {
         rotationTurn: s.rotationTurn,
         focusMembers: turnMembers.get(s.etf),
       })),
-      focusSectorEtfs(SECTOR_UNIVERSE),
+      turnAlertScope(),
       sectorResult.calculatedAt,
       new Set(scannerHitMap.keys()),
     );

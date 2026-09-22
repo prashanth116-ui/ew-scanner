@@ -14,7 +14,7 @@ import { getTradingAction } from "@/app/sectors/_components";
 import type { DailySnapshot, SectorSnapshot } from "./history";
 import { computeLeadershipHealth } from "./leadership-health";
 import type { LeadershipHealth } from "./leadership-health";
-import { COMPOSITE, POSTURE, REGIME as REGIME_CFG, RISK_FLAGS, ROTATION } from "./config";
+import { COMPOSITE, POSTURE, REGIME as REGIME_CFG, RISK_FLAGS, ROTATION, TURN_WEAK_BASKETS } from "./config";
 
 // ── Types ──
 
@@ -670,6 +670,8 @@ export function computeBriefRsTurns(data: SectorRotationResult): BriefRsTurn[] {
   for (const s of all) {
     const t = s.rotationTurn;
     if (!t || t.direction !== "UP") continue;
+    // Measured never to lead anywhere — see TURN_WEAK_BASKETS.
+    if (TURN_WEAK_BASKETS.has(s.etf)) continue;
 
     if (t.turnDate && t.barsSinceTurn != null && t.barsSinceTurn <= RS_TURN_WINDOW_SESSIONS) {
       out.push({
