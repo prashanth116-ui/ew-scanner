@@ -131,12 +131,19 @@ export async function GET(request: NextRequest) {
       ...(sectorResult.crossAssetScores ?? []),
       ...(sectorResult.leadershipBasketScores ?? []),
     ];
+    // Lifecycle by ETF, so a turn line can say "Day 39 LATE" beside its reclaim date
+    // instead of leaving the reader to reconcile it with the Monitor section below.
+    const lifecycleByEtf = new Map(
+      currentRotations.map((r) => [r.etf, { lifecycle: r.lifecycle, daysActive: r.daysActive }]),
+    );
     const turnsMsg = formatRotationTurns(
       allScores.map((s) => ({
         sector: s.sector,
         etf: s.etf,
         quadrant: s.quadrant,
         mansfieldRS: s.mansfieldRS,
+        lifecycle: lifecycleByEtf.get(s.etf)?.lifecycle,
+        daysActive: lifecycleByEtf.get(s.etf)?.daysActive,
         rotationTurn: s.rotationTurn,
         focusMembers: turnMembers.get(s.etf),
       })),

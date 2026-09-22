@@ -238,7 +238,7 @@ describe("formatRotationTurns", () => {
     expect(msg).not.toContain("Standing leaders");
   });
 
-  it("gives a re-entry exactly one line", () => {
+  it("gives a re-entry a header plus the ticker row, and no prose", () => {
     // Detail budget scales with lead. A re-entry has none, the header already says so, and
     // the first cut spent six lines per entry restating the heading.
     const msg = formatRotationTurns(
@@ -255,14 +255,51 @@ describe("formatRotationTurns", () => {
       AT,
     ) as string;
 
-    const body = msg.split("\n").filter((l) => l.includes("IGV"));
-    expect(body).toHaveLength(1);
-    expect(body[0]).toContain("reclaimed 2026-09-21");
-    expect(body[0]).toContain("2/3 names above their 50d");
-    // The things a re-entry does NOT earn.
-    expect(msg).not.toContain("TEAM");
+    const header = msg.split("\n").filter((l) => l.includes("IGV"));
+    expect(header).toHaveLength(1);
+    expect(header[0]).toContain("reclaimed 2026-09-21");
+    expect(header[0]).toContain("2/3 above their 50d");
+
+    // The tickers stay. They are the only actionable part of a re-entry: "IGV reclaimed
+    // its 20d" is not a decision, "TEAM +33.6% and ZS below its 50d" is.
+    expect(msg).toContain("✓TEAM +33.6%");
+    expect(msg).toContain("·ZS -2.0%");
+
+    // The prose does not — every line below restated the section heading.
     expect(msg).not.toContain("prior reclaims failed");
-    expect(msg).not.toContain("50d average cleared");
+    expect(msg).not.toContain("A dip inside an existing trend");
+    expect(msg).not.toContain("Your names —");
+  });
+
+  it("puts the rotation lifecycle on the turn line so it cannot read as a contradiction", () => {
+    // The message showed IGV as a fresh reclaim at the top and "Day 39 | LATE" forty lines
+    // below in the confluence body. Both are true - an old rotation dipped and bounced -
+    // but split apart they read as two opposing claims about the same basket.
+    const msg = formatRotationTurns(
+      [{
+        sector: "Software & Cloud", etf: "IGV", quadrant: "LEADING" as const, mansfieldRS: 5.9,
+        lifecycle: "LATE", daysActive: 39,
+        rotationTurn: { ...base, stage: "TURN_CONFIRMED", turnDate: "2026-09-21", barsSinceTurn: 0, quadrantAlreadyAligned: true, quadrantDate: "2026-07-27" },
+        focusMembers: [{ symbol: "TEAM", pctFromSma50: 33.6 }],
+      }],
+      focus,
+      AT,
+    ) as string;
+    const header = msg.split("\n").find((l) => l.includes("IGV")) as string;
+    expect(header).toContain("reclaimed 2026-09-21");
+    expect(header).toContain("Day 39 LATE");
+  });
+
+  it("omits the lifecycle tag when the basket has no tracked rotation", () => {
+    const msg = formatRotationTurns(
+      [{
+        sector: "Semiconductors", etf: "SMH", quadrant: "WEAKENING" as const,
+        rotationTurn: { ...base, stage: "TURN_DETECTED", turnDate: "2026-09-17", barsSinceTurn: 0 },
+      }],
+      focus,
+      AT,
+    ) as string;
+    expect(msg).not.toContain("Day ");
   });
 
   it("names the focus members inside a turning basket", () => {

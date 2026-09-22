@@ -686,6 +686,18 @@ export interface TurnSectorInput {
   quadrant: RRGQuadrant;
   /** Mansfield RS vs SPY. Drives the standing-leadership footer, not the alert itself. */
   mansfieldRS?: number;
+  /**
+   * Rotation-tracker lifecycle and age, when this basket has an active rotation.
+   *
+   * Carried so the turn line can say "Day 39 LATE" next to "reclaimed 2026-09-21". The
+   * two are not contradictory — an old rotation dipped and bounced — but a message that
+   * shows a fresh reclaim at the top and `Day 39 | LATE` in the confluence body forty
+   * lines below reads as two opposing claims. Stating both on one line makes it a single
+   * fact: a late-stage rotation had a bounce, which is a reason to be careful, not a
+   * reason to buy.
+   */
+  lifecycle?: string;
+  daysActive?: number;
   rotationTurn?: RotationTurn | null;
   /** Focus-list members of THIS basket. Empty is legitimate (sub-sector baskets). */
   focusMembers?: TurnMember[];
@@ -718,21 +730,48 @@ export function buildTurnMembers(
   return out;
 }
 
-/** Named members, strongest first, each with its distance from its own 50d SMA. */
-function renderMembers(members: TurnMember[] | undefined): string[] {
-  if (!members || members.length === 0) return [];
-  const measured = members.filter((m) => m.pctFromSma50 !== null);
+/** "Day 39 LATE", or empty when this basket has no active tracked rotation. */
+function lifecycleTag(s: TurnSectorInput): string {
+  if (!s.lifecycle) return "";
+  return s.daysActive != null ? ` · Day ${s.daysActive} ${s.lifecycle}` : ` · ${s.lifecycle}`;
+}
+
+/** "19/23 above their 50d", or null when nothing in the basket could be measured. */
+function memberSummary(members: TurnMember[] | undefined): string | null {
+  const measured = (members ?? []).filter((m) => m.pctFromSma50 !== null);
+  if (measured.length === 0) return null;
   const above = measured.filter((m) => (m.pctFromSma50 as number) > 0).length;
+  return `${above}/${measured.length} above their 50d`;
+}
+
+/**
+ * The ticker row: strongest first, each with its distance from its own 50d SMA.
+ *
+ * This is the part of the block that is actually actionable, so it survives the trim
+ * everywhere — including on re-entries, where the surrounding prose does not. Knowing a
+ * basket reclaimed its 20d is not a decision; knowing TEAM is 33.6% above its 50d and MU
+ * is below it, is.
+ */
+function memberTickers(members: TurnMember[] | undefined): string | null {
+  if (!members || members.length === 0) return null;
   const named = members.slice(0, MAX_TURN_MEMBERS).map((m) => {
     if (m.pctFromSma50 === null) return `?${m.symbol}`;
     const tick = m.pctFromSma50 > 0 ? "✓" : "·";
     return `${tick}${m.symbol} ${m.pctFromSma50 >= 0 ? "+" : ""}${m.pctFromSma50.toFixed(1)}%`;
   });
   const more = members.length > MAX_TURN_MEMBERS ? ` +${members.length - MAX_TURN_MEMBERS} more` : "";
-  const headline = measured.length > 0
-    ? `Your names — ${above}/${measured.length} above their 50d, furthest above first:`
+  return `${named.join("  ")}${more}`;
+}
+
+/** Summary line plus ticker row, for the stages that earn the full block. */
+function renderMembers(members: TurnMember[] | undefined): string[] {
+  const tickers = memberTickers(members);
+  if (!tickers) return [];
+  const summary = memberSummary(members);
+  const headline = summary
+    ? `Your names — ${summary}, furthest above first:`
     : `Your names — trend state unavailable tonight:`;
-  return [`     ${headline}`, `     ${named.join("  ")}${more}`];
+  return [`     ${headline}`, `     ${tickers}`];
 }
 
 /**
@@ -829,13 +868,22 @@ export function formatRotationTurns(
     return out;
   };
 
-  /** One line, count only — enough to know whether your names are participating. */
-  const compactLine = (s: TurnSectorInput): string => {
+  /**
+   * Re-entry: header plus the ticker row, and nothing else.
+   *
+   * Two lines rather than the seven the first cut used. What goes is the prose — the
+   * quadrant history, the RS distance, the failure count — all of which restate the
+   * section heading for a setup that by definition carries no lead. What stays is the
+   * names, because "IGV reclaimed its 20d" is not a decision and "TEAM +33.6%, MU below"
+   * is.
+   */
+  const compactLines = (s: TurnSectorInput): string[] => {
     const t = s.rotationTurn!;
-    const measured = (s.focusMembers ?? []).filter((m) => m.pctFromSma50 !== null);
-    const above = measured.filter((m) => (m.pctFromSma50 as number) > 0).length;
-    const names = measured.length > 0 ? ` · ${above}/${measured.length} names above their 50d` : "";
-    return `  <b>${s.sector}</b> (${s.etf}) — reclaimed ${t.turnDate}${names}`;
+    const summary = memberSummary(s.focusMembers);
+    const out = [`  <b>${s.sector}</b> (${s.etf}) — reclaimed ${t.turnDate}${lifecycleTag(s)}${summary ? ` · ${summary}` : ""}`];
+    const tickers = memberTickers(s.focusMembers);
+    if (tickers) out.push(`     ${tickers}`);
+    return out;
   };
 
   if (withLead.length > 0) {
@@ -844,7 +892,7 @@ export function formatRotationTurns(
     for (const s of withLead) {
       const t = s.rotationTurn!;
       lines.push("");
-      lines.push(`  <b>${s.sector}</b> (${s.etf}) — reclaimed ${t.turnDate}, quadrant still ${s.quadrant}`);
+      lines.push(`  <b>${s.sector}</b> (${s.etf}) — reclaimed ${t.turnDate}, quadrant still ${s.quadrant}${lifecycleTag(s)}`);
       lines.push(...detailLines(s));
     }
   }
@@ -854,7 +902,7 @@ export function formatRotationTurns(
     lines.push("~ <b>FORMING — rising into its 20d, no reclaim yet</b>");
     for (const s of formingNew) {
       lines.push("");
-      lines.push(`  <b>${s.sector}</b> (${s.etf}) — rising since ${s.rotationTurn!.formingDate}`);
+      lines.push(`  <b>${s.sector}</b> (${s.etf}) — rising since ${s.rotationTurn!.formingDate}${lifecycleTag(s)}`);
       lines.push(...detailLines(s));
     }
     lines.push("");
@@ -868,7 +916,7 @@ export function formatRotationTurns(
     // reads like a rendering fault.
     if (withLead.length > 0 || formingNew.length > 0) lines.push("────────────────────");
     lines.push("↺ <b>RE-ENTRIES</b> — quadrant never left the bucket, already in the 6 PM alert");
-    for (const s of noLead) lines.push(compactLine(s));
+    for (const s of noLead) lines.push(...compactLines(s));
   }
 
   if (formingStanding > formingNew.length) {
