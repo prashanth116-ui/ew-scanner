@@ -7,7 +7,15 @@
  * `calcRRG` stacks four transforms: a 10-period EMA of the raw RS line, a 200-bar
  * rolling z-score of that, a 10-period ROC of the z-score, then a second 200-bar
  * z-score. RS-Momentum therefore cannot cross 100 until a turn has been underway for
- * weeks. SMH is the motivating case: the RS line bottomed 2026-09-14, reclaimed its
+ * weeks — WHEN the sector has actually left the bullish bucket.
+ *
+ * That qualifier is load-bearing and was missing from earlier drafts of this comment.
+ * Measured across 1,979 episodes and 37 baskets, the MEDIAN quadrant lag behind a turn is
+ * **0 sessions** (mean 2.6). Most turns are dip-and-recover inside an existing trend,
+ * where the quadrant never left and there is no lead to gain — the `quadrantAlreadyAligned`
+ * case, which is the majority rather than the exception. The multi-session lead is real
+ * when a sector genuinely re-enters the bucket, and SMH in September 2026 was that case.
+ * Do not generalise it to every turn. SMH is the motivating case: the RS line bottomed 2026-09-14, reclaimed its
  * 20d SMA on 09-17 and its 50d on 09-18, and ran +8.4% against SPY in five sessions —
  * but the quadrant only printed LEADING on 09-21, by which point most member names
  * had already made their move.

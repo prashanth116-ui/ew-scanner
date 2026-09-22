@@ -398,6 +398,52 @@ focus scoping (12 baskets, >= 4 focus names) includes XLC, ITA, XBI and XLV, whi
 them produced 7 q3 events in two years. The baskets that earn an alert are **SMH, AIQ, IGV,
 XLY, XLI, XLK, XLF** — everything above 20% maturation.
 
+## Stage 12 — the shipped ladder across all 37 baskets
+
+Run via the shipped `computeRotationTurn` rather than a reimplementation, over 5 years of
+ETF bars. Two corrections came out of it.
+
+### The quadrant does NOT reliably lag by 3-5 sessions
+
+**Median lag across 1,979 episodes is 0 sessions.** Mean 2.6. The claim repeated throughout
+this work — and written into `rotation-turn.ts` — was generalised from the SMH September
+case, where the lag was 2. In the typical turn the quadrant is *already* bullish, because
+most turns are dip-and-recover inside an existing trend rather than a genuine re-entry to
+the bucket. That is exactly the `quadrantAlreadyAligned` case, and it is the **majority**,
+not the exception. The lead is real when the sector actually left the bucket and absent
+otherwise.
+
+### The ladder does not order
+
+| stage | n | win | mean |
+|---|---|---|---|
+| TURNED | 2213 | 46% | −0.04% |
+| CONFIRMED | 1818 | 48% | +0.14% |
+| QUADRANT | 1979 | 47% | +0.24% |
+
+Indistinguishable. Waiting for slow-SMA confirmation or quadrant agreement buys nothing
+measurable at ETF level, which is consistent with stage 6 finding that waiting alone does
+nothing.
+
+⚠️ **The FORMING row from that run was discarded as biased and must not be quoted.** It
+showed 59% / +1.55%, which is wrong: forming bars were only collected for episodes that went
+on to reclaim, so every observation was conditioned on the outcome. The unbiased measure —
+every forming fire regardless of what followed — is the one in `rotation-turn.ts`: −0.04%
+over 20 days. Lookahead is easy to reintroduce when walking backwards from an event.
+
+### Per basket, the turn's own forward return is mostly weak
+
+Forward 20d vs SPY entering at the turn ranges +3.19% (WGMI) to −2.72% (TLT), positive in
+roughly 17 of 37. Best: WGMI +3.19, QTUM +1.89, SMH +1.54, UFO +1.48, XBI +1.11.
+Worst: TLT −2.72, XLP −1.70, XLRE −1.23, XHB −1.23, UUP −1.21.
+
+⚠️ **This does not align with `TURN_WEAK_BASKETS`, and the tension is real.** That list was
+built on *maturation* — whether the member screen ever fires — which is the right outcome
+for the entry-screen workflow. ETF forward return is a different question, and by that
+measure XBI (+1.11%) and ITA (+0.87%) are suppressed while XLY (−0.88%) and XLI (−0.40%)
+are not. If the intent were ever to trade the ETF rather than its members, the suppression
+list would need rebuilding on that outcome.
+
 ## Rejected — do not re-propose without new evidence
 
 - **ATR as a basket rank instead of an absolute floor.** A rank forces the same
