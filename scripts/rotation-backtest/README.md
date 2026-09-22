@@ -55,6 +55,57 @@ Sample caveats that matter more than the headline: 8 rotations is small (rotatio
 78 rotations had a negative 20-day ETF return, and ~27 delisted or acquired symbols
 could not be fetched.
 
+## Stage 5 — entering at the RS turn instead of the rotation start
+
+```bash
+node 5-turn-vs-start.mjs
+```
+
+Answers the question that was blocking two changes: should `RotationEvent.startDate` move
+onto the RS turn date, and should the turn drive the timing tiers? **Measured, and the
+answer is no.** Same rotations, same members, same gate and screen, same 20-day hold —
+only the entry bar differs.
+
+87 rotations examined, 64 where an RS turn precedes the tracker start. Lead time is real:
+**median 5 sessions**, mean 4.9, max 12.
+
+| Entry bar | Rotations | TRADE | Names | Win | Mean | ETF fwd |
+|---|---|---|---|---|---|---|
+| START | 64 | 7 | 141 | **77%** | **+13.39%** | +4.71% |
+| TURN | 64 | 4 | 95 | 68% | +12.04% | **+6.59%** |
+
+**The ETF captures more from the turn; the stocks capture less.** The sector return improves
+(+6.59% vs +4.71%) exactly as you would expect from entering five sessions earlier — and the
+member stocks get *worse*, 68% vs 77% and −1.35pp of mean return.
+
+The reason is in the gate:
+
+| | START | TURN |
+|---|---|---|
+| Gate passes | 22/64 | **7/64** |
+| Mean breadth | 62.8% | **49.7%** |
+| Mean qualifying names | 2.2 | 1.5 |
+
+At the turn bar the members have not confirmed. Breadth averages 49.7%, below the 60% gate,
+and fewer names can post a breakout with above-median strength. This is the SMH 2026-09-16
+member reading (31% above their 50d, zero breakouts, median member 3.79% behind SPY)
+generalised across the sample.
+
+**So the turn is early for the sector and too early for its members.** It is a notification
+device — know sooner, prepare, pick names, set levels — not an entry device. The entry
+screen is doing real work by rejecting the turn bar, and when it *does* pass there (4
+rotations, +19.69%) the result is fine, which is the point: let the screen decide rather
+than forcing the earlier entry.
+
+This is consistent with what the picks panel does with `turnCorroboratesRotation()` — a
+confirmed turn lets a young rotation be **shown**, while the entry screen still verdicts on
+the start bar. Showing earlier is supported; entering earlier is not.
+
+Caveats that matter: only **2** rotations have both bars saying TRADE, so the like-for-like
+paired comparison is nearly empty and the headline rows force entry regardless of verdict,
+which is not how you would trade. The cached bars end 2026-08-27, so the SMH September
+rotation that prompted this is out of sample.
+
 ## Rejected — do not re-propose without new evidence
 
 - **ATR as a basket rank instead of an absolute floor.** A rank forces the same
