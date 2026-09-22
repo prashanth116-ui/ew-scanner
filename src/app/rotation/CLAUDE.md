@@ -8,6 +8,10 @@ Active rotation tracker with stock performance tables. Collapsible panels: Recen
 
 Cards and the sortable comparison table both render `RotationRow[]` from `buildRotationRows()`. Derive any new per-rotation judgement there, not inside a view - the two views showing different verdicts for the same rotation is the failure this prevents. Toggle persists in `localStorage` under `ew-rotation-view-v1`.
 
+`RotationRow.turn` is the dated RS turn, from `RotationTrackerResult.rotationTurns` keyed by sector id. It was first wired as a prop on `ActiveRotationCards` alone and disappeared when you toggled to the table - the exact failure this section exists to prevent. Rendered as a badge in both views, as a sortable `RS Turn` column (nulls sort last in both directions, since a 0 would read as "turned today"), and as the full `RotationTurnTimeline` on the expanded detail.
+
+**`Days` and `RS Turn` are different clocks and will disagree.** `daysActive` counts from the signal-count start bar; the turn dates the RS line. On 2026-09-22 SMH read Day 1 against an RS turn four sessions old, and XLE read Day 45 against an RS turn that same session. Both columns are correct; neither is a substitute for the other. `startDate` is deliberately not changed to the turn date - `ENTRY_SCREEN` measures on that bar and its thresholds were fitted there.
+
 Breadth comes from `/api/sector-rotation` and must be looked up against **all four** score groups (`sectors` + `subSectorScores` + `crossAssetScores` + `leadershipBasketScores`), held in `allSectorScores`. An active rotation is frequently a sub-sector - AIQ, ITA, KRE - and none of those appear in `sectors`, so a GICS-only map silently renders the card with no Breadth chip rather than failing. `heatmapSectors` stays GICS-only because it feeds the heatmap strip.
 
 ## Action signal: momentum gate + WAIT

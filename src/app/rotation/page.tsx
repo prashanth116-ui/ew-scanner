@@ -57,7 +57,7 @@ import {
 } from "@/lib/sector-rotation/rotation-helpers";
 import { loadScanResults } from "@/lib/prerun/storage";
 import { DataAgeBadge } from "@/components/data-age-badge";
-import { CollapsiblePanel, useCollapsedPanels, RotationTurnBadge } from "@/app/sectors/_components";
+import { CollapsiblePanel, useCollapsedPanels, RotationTurnBadge, RotationTurnTimeline } from "@/app/sectors/_components";
 import { type StockPhase, phaseBadge, PHASE_RANK } from "@/lib/phase-utils";
 
 // ── localStorage cache (4-hour TTL) ──
@@ -668,12 +668,23 @@ interface RotationRow {
    *  200d average. Zero-centred, so positive means the sector is outperforming
    *  its own relative trend, not merely rising. */
   sectorRs: number | null;
+  /**
+   * Dated RS turn. Lives on the row, not on a view, because both views must agree -
+   * it was first wired as a prop on the cards alone and vanished when you toggled to
+   * the table, which is the exact failure the one-row-model rule exists to prevent.
+   *
+   * Read it against `event.daysActive`, which counts from the signal-count start bar and
+   * is a different clock: SMH read Day 1 on 2026-09-22 with an RS turn four sessions old,
+   * XLE read Day 45 with an RS turn that same session.
+   */
+  turn: RotationTurn | null;
 }
 
 function buildRotationRows(
   rotations: ActiveRotationDetail[],
   regime: RegimeData | null | undefined,
   sectorScores: SectorRotationScore[] | null,
+  rotationTurns: Record<string, RotationTurn> | undefined,
 ): RotationRow[] {
   const breadthByEtf = new Map((sectorScores ?? []).map((x) => [x.etf, x.breadthPct]));
   const scoreByEtf = new Map((sectorScores ?? []).map((x) => [x.etf, x]));
@@ -695,6 +706,7 @@ function buildRotationRows(
       median: part.median,
       screen: evaluateEntryScreen(detail),
       sectorRs: scoreByEtf.get(detail.event.etf)?.mansfieldRS ?? null,
+      turn: rotationTurns?.[detail.event.sectorId] ?? null,
     };
   });
 }
@@ -825,7 +837,7 @@ function EntryScreenPanel({ screen }: { screen: EntryScreenResult }) {
 
 type RotationSortKey =
   | "etf" | "sector" | "days" | "perf" | "lifecycle"
-  | "conviction" | "regime" | "action" | "breadth" | "median" | "sectorRs" | "screen";
+  | "conviction" | "regime" | "action" | "breadth" | "median" | "sectorRs" | "screen" | "turn";
 
 // TRADE first, then near-misses, then hard rejects.
 const SCREEN_RANK: Record<string, number> = { TRADE: 0, SKIP_THIN: 1, SKIP_GATE: 2, NO_DATA: 3 };
@@ -853,6 +865,7 @@ const ROTATION_COLS: { key: RotationSortKey; label: string; align: string; title
   { key: "median", label: "Median", align: "text-right", title: "Median move of the sector stocks in the latest session" },
   { key: "sectorRs", label: "Sec RS", align: "text-right", title: "Sector relative strength vs SPY (Mansfield) — % deviation of the sector/SPY ratio from its own 200-day average" },
   { key: "screen", label: "Screen", align: "text-left", title: "Entry screen: how many members clear breakout + top-half basket strength + ATR, and whether the rotation gate passed" },
+  { key: "turn", label: "RS Turn", align: "text-left", title: "Session the RS line reclaimed its 20d average, and how many sessions the RRG quadrant took to agree. A different clock from Days, which counts from the signal-count start bar." },
 ];
 
 function ActiveRotationTable({
@@ -877,6 +890,9 @@ function ActiveRotationTable({
         case "etf": return r.detail.event.etf;
         case "sector": return r.detail.event.sectorName;
         case "days": return r.detail.event.daysActive;
+        // Age of the turn. Nulls sort last in both directions rather than reading as
+        // "turned today", which is what a 0 would do here.
+        case "turn": return r.turn?.barsSinceTurn ?? r.turn?.barsSinceForming ?? Number.MAX_SAFE_INTEGER;
         case "perf": return r.detail.event.etfPerformancePct;
         case "lifecycle": return LIFECYCLE_RANK[r.lifecycle];
         case "conviction": return r.conviction.score;
@@ -1051,6 +1067,9 @@ function ActiveRotationTable({
                     {screenLabel(row.screen)}
                   </span>
                 </td>
+                <td className="px-2 py-2 text-[10px] whitespace-nowrap">
+                  <RotationTurnBadge turn={row.turn} compact />
+                </td>
               </tr>
             );
           })}
@@ -1066,16 +1085,12 @@ function ActiveRotationCards({
   expandedId,
   regime,
   patternStats,
-  rotationTurns,
 }: {
   rows: RotationRow[];
   onExpand: (id: string | null) => void;
   expandedId: string | null;
   regime: RegimeData | null | undefined;
   patternStats: RotationPatternStats[];
-  /** Dated RS turns by sector id. Absent on a cached response from before the field
-   *  existed, which is why every read below is optional rather than asserted. */
-  rotationTurns: Record<string, RotationTurn> | undefined;
 }) {
   if (rows.length === 0) {
     return (
@@ -1251,7 +1266,7 @@ function ActiveRotationCards({
                 this is the session the RS line turned, which is usually earlier — on
                 2026-09-21 SMH read 09-17 here against a 09-21 start. */}
             <div className="mt-1">
-              <RotationTurnBadge turn={rotationTurns?.[r.event.sectorId]} />
+              <RotationTurnBadge turn={row.turn} />
             </div>
 
             <div className="mt-2 flex flex-wrap gap-1">
@@ -1870,7 +1885,7 @@ function StockPerformanceTable({
 
 // ── Expanded Rotation Detail (extracted from IIFE) ──
 
-function ExpandedRotationDetail({ detail, regime, screen }: { detail: ActiveRotationDetail; regime: RegimeData | null | undefined; screen?: EntryScreenResult }) {
+function ExpandedRotationDetail({ detail, regime, screen, turn }: { detail: ActiveRotationDetail; regime: RegimeData | null | undefined; screen?: EntryScreenResult; turn?: RotationTurn | null }) {
   const lc = computeLifecycleStage(detail.event);
   const conv = computeConviction(detail.event);
   const ra = regime ? isRegimeAligned(detail.event.sectorName, regime) : "neutral";
@@ -1893,6 +1908,14 @@ function ExpandedRotationDetail({ detail, regime, screen }: { detail: ActiveRota
         <CopyExportBar stocks={detail.stocks} sectorName={detail.event.sectorName} />
       </div>
       <StrategySummaryBar detail={detail} lifecycle={lc} actionSignal={as_} />
+      {/* Same dated timeline /sectors shows on an expanded card. Sits above the entry
+          screen because it answers "when did this actually start" - the header above
+          reads the signal-count start date, which is a different clock. */}
+      {turn && (
+        <div className="border-b border-[#2a2a2a] px-4 py-2">
+          <RotationTurnTimeline turn={turn} />
+        </div>
+      )}
       {screen && (
         <div className="border-b border-[#2a2a2a] px-4 py-2">
           <EntryScreenPanel screen={screen} />
@@ -2877,7 +2900,7 @@ export default function RotationTrackerPage() {
   }, []);
 
   const rotationRows = useMemo(
-    () => (data ? buildRotationRows(data.activeRotations, data.regime, allSectorScores ?? heatmapSectors) : []),
+    () => (data ? buildRotationRows(data.activeRotations, data.regime, allSectorScores ?? heatmapSectors, data.rotationTurns) : []),
     [data, allSectorScores, heatmapSectors],
   );
 
@@ -3020,7 +3043,6 @@ export default function RotationTrackerPage() {
                 expandedId={expandedSector}
                 regime={data.regime}
                 patternStats={data.patternStats}
-                rotationTurns={data.rotationTurns}
               />
             ) : (
               <ActiveRotationTable
@@ -3061,6 +3083,7 @@ export default function RotationTrackerPage() {
               detail={expandedDetail}
               regime={data.regime}
               screen={rotationRows.find((r) => r.detail.event.sectorId === expandedSector)?.screen}
+              turn={rotationRows.find((r) => r.detail.event.sectorId === expandedSector)?.turn}
             />
           )}
 
