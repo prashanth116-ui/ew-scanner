@@ -93,7 +93,9 @@ describe("formatRotationTurns", () => {
     expect(msg).toContain("FORMING");
     expect(msg).toContain("Semiconductors");
     expect(msg).toContain("2026-09-14");
-    expect(msg).toContain("4 prior reclaims failed");
+    // priorFailedAttempts must NOT appear: stage 8 measured it at -2pp on whether a turn
+    // matures, so it no longer leads an alert line. It survives only as UI tooltip texture.
+    expect(msg).not.toContain("prior reclaims failed");
     // The caveat is not decoration — the measurement says this stage has no edge.
     expect(msg).toContain("Watchlist — no measured edge until the reclaim");
   });

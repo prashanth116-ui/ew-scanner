@@ -135,6 +135,12 @@ export const ROTATION_TURN = {
  * qualifying members. Correct for the screen, and it makes the turn alert noise in those
  * sectors.
  *
+ * RESOLVED — maturation is the right outcome here, because the members are what gets
+ * traded, never the ETF. Stage 12 measured that this list disagrees with ETF forward
+ * return (XBI +1.11% and ITA +0.87% are suppressed; XLY -0.88% and XLI -0.40% are not),
+ * which would matter if the basket itself were ever the position. It is not. Do not
+ * rebuild this list on ETF return without that changing first.
+ *
  * This suppresses only baskets MEASURED to fail, never merely unmeasured ones: a thin
  * sub-sector basket absent from the study (ARKX, UFO, the theme ETFs) keeps its alert,
  * because "we did not measure it" is not evidence of failure. Re-run stage 11 before

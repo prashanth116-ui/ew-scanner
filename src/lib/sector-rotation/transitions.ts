@@ -882,7 +882,9 @@ export function formatRotationTurns(
     const dist = `${t.distanceFromFastPct >= 0 ? "+" : ""}${t.distanceFromFastPct.toFixed(1)}%`;
     const rel = t.stage === "TURN_FORMING" ? "below" : "above";
     const bits = [`RS ${dist} ${rel} 20d`, `low ${t.rsLowDate ?? "?"}`];
-    if (t.priorFailedAttempts > 0) bits.push(`${t.priorFailedAttempts} prior reclaims failed`);
+    // priorFailedAttempts is deliberately NOT here. Stage 8 measured it at -2pp on
+    // whether a turn matures — non-predictive, and mildly the wrong way round. It led the
+    // alert line on intuition alone. Kept in the UI tooltip as texture, never as a headline.
     out.push(`     ${bits.join(" · ")}`);
     out.push(...renderMembers(s.focusMembers, scannerTickers));
     return out;

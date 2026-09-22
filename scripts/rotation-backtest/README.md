@@ -437,12 +437,11 @@ Forward 20d vs SPY entering at the turn ranges +3.19% (WGMI) to −2.72% (TLT), 
 roughly 17 of 37. Best: WGMI +3.19, QTUM +1.89, SMH +1.54, UFO +1.48, XBI +1.11.
 Worst: TLT −2.72, XLP −1.70, XLRE −1.23, XHB −1.23, UUP −1.21.
 
-⚠️ **This does not align with `TURN_WEAK_BASKETS`, and the tension is real.** That list was
-built on *maturation* — whether the member screen ever fires — which is the right outcome
-for the entry-screen workflow. ETF forward return is a different question, and by that
-measure XBI (+1.11%) and ITA (+0.87%) are suppressed while XLY (−0.88%) and XLI (−0.40%)
-are not. If the intent were ever to trade the ETF rather than its members, the suppression
-list would need rebuilding on that outcome.
+**This does not align with `TURN_WEAK_BASKETS`, and that is correct.** That list is built on
+*maturation* — whether the member screen ever fires — because the members are what gets
+traded and the ETF never is. By ETF return XBI (+1.11%) and ITA (+0.87%) are suppressed
+while XLY (−0.88%) and XLI (−0.40%) are not, which would be a defect if the basket itself
+were ever the position. It is not. **Resolved: do not rebuild the list on ETF return.**
 
 ## Rejected — do not re-propose without new evidence
 

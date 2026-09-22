@@ -120,8 +120,13 @@ export interface RotationTurn {
   /** Consecutive sessions held on the right side of the fast SMA. */
   heldSessions: number;
   /**
-   * Reclaims within the lookback that failed before this one. The noise count: four
-   * prior failures means this rule fired four times on nothing before it fired on this.
+   * Reclaims within the lookback that failed before this one.
+   *
+   * NOT PREDICTIVE. Stage 8 measured it at -2pp on whether a turn matures into a tradeable
+   * rotation, and 3+ failures scored mildly BETTER than 1-2 — the opposite of the intuition
+   * it was built on. It survives as tooltip texture because "this basket has been choppy"
+   * is worth knowing, but it must never lead a line or carry a warning colour, and nothing
+   * should gate on it.
    */
   priorFailedAttempts: number;
   /** True once the turn is older than MAX_TURN_AGE_BARS — no longer news. */

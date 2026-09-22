@@ -94,8 +94,14 @@ export function RotationTurnTimeline({ turn }: { turn: RotationTurn | null | und
       <div className="mt-1.5 flex flex-wrap gap-x-3 text-[10px] text-[#777] font-mono">
         <span>held {turn.heldSessions}d</span>
         {turn.quadrantLagBars !== null && <span>label lag {turn.quadrantLagBars}d</span>}
+        {/* Muted, not amber. Stage 8 measured this at -2pp on whether a turn matures, so
+            it is texture rather than a warning — an amber highlight claimed a significance
+            it does not have. */}
         {turn.priorFailedAttempts > 0 && (
-          <span className="text-amber-400/70" title="Earlier reclaims of the fast SMA that failed before this one">
+          <span
+            className="text-[#666]"
+            title="Earlier reclaims of the fast SMA that failed before this one. Measured non-predictive (-2pp on whether a turn matures) — context, not a signal."
+          >
             {turn.priorFailedAttempts} failed {turn.priorFailedAttempts === 1 ? "attempt" : "attempts"} first
           </span>
         )}
