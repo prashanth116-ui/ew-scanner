@@ -354,6 +354,50 @@ the turn buys preparation time (three sessions on SMH, worth +6.67% against SPY 
 The one genuinely leading source left is information price cannot contain — a dated
 catalyst. `catalyst_tags` already exists for exactly that.
 
+## Stage 11 — the signal is NOT universal across sectors
+
+```bash
+node 11-per-sector.mjs
+```
+
+Stages 5-10 pooled every basket. That hid the thing that matters most for a live board.
+Maturation rate — the share of turns reaching a full gate+screen TRADE — **ranges from 39%
+to 0%**:
+
+| Works | Marginal | Dead |
+|---|---|---|
+| AIQ 39%, SMH 38%, XLY 32%, IGV 30%, XLI 27%, XLF 22%, XLK 20% | XLV 17%, IYT 16%, XBI 14%, ITA 11% | **XLC 5%, XLU 5%, XLB 5%, XLE 4%, XRT 4%, XLP 0%, XLRE 0%** |
+
+**In seven of eighteen baskets a turn has essentially never produced a tradeable rotation.**
+XLP, XLRE, XLE, XLU and ITA recorded **zero** turns with 3+ qualifying names in two years,
+across 17-24 turn events each. The alert fires and nothing ever comes of it.
+
+The cause is `MIN_ATR_PCT = 3.0` doing exactly what the entry-screen section says it does —
+"MIN_QUALIFYING removes the low-vol baskets rather than letting them contribute their two
+most erratic names". Staples, utilities, REITs, materials, energy and retail simply do not
+hold enough 3%-ATR names. That is correct behaviour for the screen and it makes the turn
+alert noise in those sectors.
+
+**The q3 lift generalises weakly.** Measurable in only 6 of 18 baskets (the rest lack
+enough events), positive in 4:
+
+| | lift |
+|---|---|
+| IGV | +20pp |
+| XLI | +13pp |
+| XLY | +11pp |
+| AIQ | +8pp |
+| SMH | **−4pp** |
+| XLK | **−6pp** |
+
+Median +9.2pp. The pooled +19pp of stage 9 was carried by the baskets with enough events —
+and notably the two most obvious tech baskets are the negative ones, on n=6 and n=7.
+
+**So scope the alert by where the signal works, not only by where you trade.** The current
+focus scoping (12 baskets, >= 4 focus names) includes XLC, ITA, XBI and XLV, which between
+them produced 7 q3 events in two years. The baskets that earn an alert are **SMH, AIQ, IGV,
+XLY, XLI, XLK, XLF** — everything above 20% maturation.
+
 ## Rejected — do not re-propose without new evidence
 
 - **ATR as a basket rank instead of an absolute floor.** A rank forces the same
