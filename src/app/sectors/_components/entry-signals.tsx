@@ -8,7 +8,7 @@ import type {
   RRGQuadrant,
   EnrichedStock,
 } from "@/lib/sector-rotation/types";
-import type { RotationTrackerResult, ActiveRotationDetail, RotationPatternStats, LifecycleStage, ConvictionResult, RotationTurn } from "@/lib/sector-rotation/rotation-types";
+import type { RotationTrackerResult, ActiveRotationDetail, RotationPatternStats, LifecycleStage, ConvictionResult, RotationTurn, RotationEvent, RotationHealthSignals } from "@/lib/sector-rotation/rotation-types";
 import { RotationTurnBadge } from "./turn-badge";
 import {
   getHealth,
@@ -19,6 +19,7 @@ import {
   type ActionSignal,
 } from "@/lib/sector-rotation/rotation-helpers";
 import { ROTATION } from "@/lib/sector-rotation/config";
+import { rotationAgeSessions, turnCorroboratesRotation } from "@/lib/sector-rotation/rotation-turn-view";
 import { quadrantColor } from "./helpers";
 import { CollapsiblePanel } from "./shared";
 
@@ -63,6 +64,9 @@ function trailingAvgSignalCount(signalHistory: { date: string; signalCount: numb
 // ── Types ──
 
 interface EntrySignalSector {
+  /** Age on the longer of the two clocks — see rotationAgeSessions. Shown beside the raw
+   *  Day N so a late detector is visible rather than silently understating the age. */
+  ageSessions: number;
   rotation: ActiveRotationDetail;
   signal: ActionSignal;
   lifecycle: LifecycleStage;
@@ -95,10 +99,11 @@ export function RotationEntrySignals({
   transitionMap?: Map<string, { alert_state: string; state: string; score: number }>;
   onSectorClick?: (sectorName: string) => void;
 }) {
-  const { entries, emerging, exiting, unsustained } = useMemo(() => {
+  const { entries, emerging, emergingList, exiting, unsustained } = useMemo(() => {
     const results: EntrySignalSector[] = [];
     const regime = rotationData.regime;
     let emergingCount = 0;
+    const emergingList: { event: RotationEvent; health: RotationHealthSignals }[] = [];
     let exitingCount = 0;
     let unsustainedCount = 0;
 
@@ -113,8 +118,27 @@ export function RotationEntrySignals({
       // Filter EXIT rotations
       if (signal.action === "EXIT") { exitingCount++; continue; }
 
-      // Filter blips (< MIN_ROTATION_DAYS)
-      if (event.daysActive < ROTATION.MIN_ROTATION_DAYS) { emergingCount++; continue; }
+      // Blip filter, measured on the LONGER of the two clocks and waived when the RS turn
+      // confirms the move independently.
+      //
+      // `daysActive` counts from the signal-count start bar, and that detector can be
+      // badly late — SMH on 2026-09-22 read Day 1 against an RS line that reclaimed its
+      // 20d on 09-17 and began rising 09-16. Filtering on the raw day count rejected the
+      // youngest, strongest, highest-conviction rotation on the board for being young,
+      // when it was five sessions old and only the detector was late. Even the corrected
+      // age (3-4 sessions) still misses a threshold of 5, so the confirmed turn is what
+      // carries it: a cleared slow SMA is direct evidence the move is real, standing in
+      // for the days the tracker failed to count.
+      //
+      // A genuine blip - signals fired, RS not confirmed - is still filtered, which is
+      // the whole point of the threshold. MIN_ROTATION_DAYS itself is unchanged.
+      const turn = rotationData.rotationTurns?.[event.sectorId] ?? null;
+      const ageSessions = rotationAgeSessions(event.daysActive, turn);
+      if (ageSessions < ROTATION.MIN_ROTATION_DAYS && !turnCorroboratesRotation(turn)) {
+        emergingCount++;
+        emergingList.push({ event, health });
+        continue;
+      }
 
       // Filter unsustained signals
       if (!isSignalSustained(event.signalHistory ?? [])) { unsustainedCount++; continue; }
@@ -135,6 +159,7 @@ export function RotationEntrySignals({
       const stats = rotationData.patternStats.find((p) => p.etf === event.etf);
 
       results.push({
+        ageSessions,
         rotation,
         signal,
         lifecycle,
@@ -150,7 +175,7 @@ export function RotationEntrySignals({
     // Sort: EARLY first → CONFIRMED → DELAYED; within tier: conviction score desc
     results.sort((a, b) => TIMING_RANK[a.timing] - TIMING_RANK[b.timing] || b.conviction.score - a.conviction.score);
 
-    return { entries: results, emerging: emergingCount, exiting: exitingCount, unsustained: unsustainedCount };
+    return { entries: results, emerging: emergingCount, emergingList, exiting: exitingCount, unsustained: unsustainedCount };
   }, [rotationData, enrichedStocks]);
 
   // Panel badge color based on best timing
@@ -209,10 +234,36 @@ export function RotationEntrySignals({
           <div className="space-y-1.5">
             <p className="text-xs text-[#666]">No active rotations pass noise filters. Check the <a href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</a> for current rotation status.</p>
             <div className="text-[11px] text-[#555] space-y-0.5">
-              {emerging > 0 && <p>{emerging} emerging rotation{emerging !== 1 ? "s" : ""} — monitoring for sustained signals</p>}
               {exiting > 0 && <p>{exiting} rotation{exiting !== 1 ? "s" : ""} ending</p>}
               {unsustained > 0 && <p>{unsustained} rotation{unsustained !== 1 ? "s" : ""} with unsustained signals</p>}
             </div>
+          </div>
+        )}
+
+        {/* Too young for the noise filter, shown anyway.
+            MIN_ROTATION_DAYS is a calibrated filter and is NOT weakened here — these are
+            rendered outside the signal groups, muted, and labelled as not yet qualifying.
+            The RS turn date is the useful context: a day-1 rotation whose RS line turned
+            several sessions ago is a different proposition from one that turned today. */}
+        {emergingList.length > 0 && (
+          <div className="rounded border border-dashed border-[#2a2a2a] bg-[#121212] px-2.5 py-2">
+            <div className="text-[10px] uppercase tracking-wider text-[#666]">
+              Too young to qualify — under {ROTATION.MIN_ROTATION_DAYS} sessions
+            </div>
+            <div className="mt-1 space-y-0.5">
+              {emergingList.map(({ event }) => (
+                <div key={event.etf} className="flex flex-wrap items-center gap-x-2 text-[11px]">
+                  <span className="font-semibold text-[#a0a0a0]">{event.sectorName}</span>
+                  <span className="text-[#5ba3e6]">{event.etf}</span>
+                  <span className="text-[#666]">day {event.daysActive}</span>
+                  <RotationTurnBadge turn={rotationData.rotationTurns?.[event.sectorId]} compact />
+                </div>
+              ))}
+            </div>
+            <p className="mt-1 text-[10px] leading-snug text-[#555]">
+              Not signals — a rotation this young has not shown sustained strength. Check the{" "}
+              <a href="/rotation" className="text-[#5ba3e6] hover:underline">Rotation Tracker</a> before acting.
+            </p>
           </div>
         )}
 
@@ -312,6 +363,11 @@ function SignalCard({ entry, sectors, inflectionMap, transitionMap, onSectorClic
       <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
         <span className="text-[#666]">Stage: <span className="text-white">{lifecycle}</span></span>
         <span className="text-[#666]">Day {event.daysActive}{patternStats ? ` / avg ${Math.round(patternStats.avgDurationDays)}d` : ""}</span>
+        {entry.ageSessions > event.daysActive && (
+          <span className="text-[#666]" title="Sessions since the RS line turned. The signal-count detector started this rotation later than the RS did.">
+            RS {entry.ageSessions}d
+          </span>
+        )}
         <RotationTurnBadge turn={turn} compact />
       </div>
 

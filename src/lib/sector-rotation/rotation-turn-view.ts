@@ -196,3 +196,41 @@ export function rotationTurnBadge(t: RotationTurn): { label: string; tone: "form
       };
   }
 }
+
+/**
+ * How many sessions a rotation has really been running.
+ *
+ * `RotationEvent.daysActive` counts from the signal-count start bar, and that detector can
+ * be badly late: its RS input is a 10d-vs-30d SMA cross, which for SMH did not fire until
+ * 2026-09-21 — the same session as the RRG quadrant — while the RS line had reclaimed its
+ * 20d on 09-17 and started rising on 09-16. The rotation was five sessions old and the
+ * tracker called it Day 1.
+ *
+ * So age is the longer of the two clocks. Where the tracker fires first (the common case —
+ * XLK started 08-13 against a 09-04 turn) this returns `daysActive` unchanged.
+ */
+export function rotationAgeSessions(daysActive: number, turn: RotationTurn | null | undefined): number {
+  if (!turn || turn.direction !== "UP") return daysActive;
+  // barsSince* counts sessions AFTER the event, so +1 makes it inclusive like daysActive.
+  const fromTurn = turn.barsSinceTurn != null ? turn.barsSinceTurn + 1 : null;
+  const fromForming = turn.barsSinceForming != null ? turn.barsSinceForming + 1 : null;
+  return Math.max(daysActive, fromTurn ?? 0, fromForming ?? 0);
+}
+
+/**
+ * Does the RS turn independently corroborate a young rotation?
+ *
+ * The blip filter asks "has this run long enough to not be noise", and uses a day count as
+ * the proxy. When a rotation is young *only because the detector was late*, the day count
+ * answers the wrong question. A turn that has cleared its slow SMA is direct evidence the
+ * move is real — the same confirmation the turn ladder uses — so it stands in for the days
+ * the tracker did not count.
+ *
+ * Deliberately requires CONFIRMED, not merely TURN_DETECTED: a bare reclaim carries no
+ * measured edge (see the TURN_FORMING notes) and admitting it would reopen the filter to
+ * exactly the noise it exists to remove.
+ */
+export function turnCorroboratesRotation(turn: RotationTurn | null | undefined): boolean {
+  if (!turn || turn.direction !== "UP") return false;
+  return turn.stage === "TURN_CONFIRMED" || turn.stage === "QUADRANT_CONFIRMED";
+}

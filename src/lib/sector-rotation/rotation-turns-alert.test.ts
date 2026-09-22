@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { formatRotationTurns, buildTurnMembers, formatRotationConfluence } from "./transitions";
 import type { RotationSnapshot, RotationTopStock } from "./transitions";
+import { rotationAgeSessions, turnCorroboratesRotation } from "./rotation-turn-view";
 import { focusSectorEtfs, MIN_FOCUS_MEMBERS, FOCUS_LIST } from "@/data/focus-list";
 import { SECTOR_UNIVERSE } from "@/data/sector-universe";
 import type { RotationTurn } from "./rotation-turn";
@@ -440,5 +441,36 @@ describe("formatRotationConfluence — dual clocks", () => {
     const msg = formatRotationConfluence([rot], stocks, "2026-09-22T03:00:00.000Z", []) as string;
     expect(msg).toContain("Day 1");
     expect(msg).not.toContain("RS turned");
+  });
+});
+
+describe("rotation age and corroboration", () => {
+  it("takes the longer clock when the signal detector was late", () => {
+    // SMH on 2026-09-22: tracker said Day 1, RS had turned on 09-17 (barsSinceTurn 2).
+    expect(rotationAgeSessions(1, { ...base, direction: "UP", turnDate: "2026-09-17", barsSinceTurn: 2 })).toBe(3);
+  });
+
+  it("leaves the day count alone when the tracker fired first", () => {
+    // XLK: started 08-13, turned 09-04. The tracker is the earlier clock, so nothing moves.
+    expect(rotationAgeSessions(27, { ...base, direction: "UP", turnDate: "2026-09-04", barsSinceTurn: 11 })).toBe(27);
+  });
+
+  it("falls back to the forming date before a reclaim prints", () => {
+    expect(rotationAgeSessions(1, { ...base, stage: "TURN_FORMING", direction: "UP", formingDate: "2026-09-16", barsSinceForming: 3 })).toBe(4);
+  });
+
+  it("ignores a downside turn and a missing turn", () => {
+    expect(rotationAgeSessions(2, { ...base, direction: "DOWN", turnDate: "2026-09-17", barsSinceTurn: 9 })).toBe(2);
+    expect(rotationAgeSessions(2, null)).toBe(2);
+  });
+
+  it("corroborates only a confirmed upside turn", () => {
+    // A bare reclaim carries no measured edge, so it must not waive the blip filter.
+    expect(turnCorroboratesRotation({ ...base, direction: "UP", stage: "TURN_DETECTED" })).toBe(false);
+    expect(turnCorroboratesRotation({ ...base, direction: "UP", stage: "TURN_FORMING" })).toBe(false);
+    expect(turnCorroboratesRotation({ ...base, direction: "UP", stage: "TURN_CONFIRMED" })).toBe(true);
+    expect(turnCorroboratesRotation({ ...base, direction: "UP", stage: "QUADRANT_CONFIRMED" })).toBe(true);
+    expect(turnCorroboratesRotation({ ...base, direction: "DOWN", stage: "QUADRANT_CONFIRMED" })).toBe(false);
+    expect(turnCorroboratesRotation(null)).toBe(false);
   });
 });

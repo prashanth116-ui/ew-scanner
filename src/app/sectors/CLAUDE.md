@@ -47,7 +47,11 @@ Labels: HIGH >= 7, MED >= 4, LOW < 4. Prefers `sectorRS` (rotation tracker), fal
 ### Rotation Signals Panel (`/sectors/picks`)
 `RotationEntrySignals` in `entry-signals.tsx`. Panel id `entry-signals` for localStorage compat.
 
-**Noise filters:** EXIT excluded, blip filter (`daysActive < 5`), sustained filter (`isSignalSustained()`: trailing 20-day avg signalCount >= 1.0).
+**Noise filters:** EXIT excluded, blip filter, sustained filter (`isSignalSustained()`: trailing 20-day avg signalCount >= 1.0).
+
+**The blip filter measures the LONGER of two clocks and is waived by a confirmed RS turn.** `daysActive` counts from the signal-count start bar, whose RS input is a 10d-vs-30d SMA cross and can be badly late: SMH on 2026-09-22 read Day 1 against an RS line that reclaimed its 20d on 09-17 and began rising 09-16. Filtering on the raw count rejected the youngest, strongest, highest-conviction rotation on the board for being young when only the detector was late. `rotationAgeSessions()` takes the longer clock; `turnCorroboratesRotation()` waives the threshold when the turn has cleared its slow SMA, since even the corrected age (3-4 sessions) misses a threshold of 5. **Requires CONFIRMED, never a bare TURN_DETECTED** — a plain reclaim carries no measured edge and admitting it reopens the filter to the noise it exists to remove. `MIN_ROTATION_DAYS` itself is unchanged.
+
+**Filtered rotations are shown, not silently dropped.** The emerging/exiting/unsustained counts used to render only when `entries.length === 0`, so on a normal night a day-1 rotation vanished without trace. Ones under the age threshold now render in a muted dashed strip above the signal groups, labelled "Too young to qualify", carrying the RS turn badge and an explicit "not signals" caveat.
 
 **Timing classification:**
 | Timing | Condition | Color |
