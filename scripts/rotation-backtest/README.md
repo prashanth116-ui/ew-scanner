@@ -306,6 +306,54 @@ it is just noisier, which is the same conclusion stage 5 reached from the entry 
 The one defensible loosening is **X=1%**, which holds +19pp on 44% more events (91 vs 63)
 and validates in all four splits. Useful as a *triage counter*, never as the TRADE verdict.
 
+## Stage 10 — member compression, and why nothing leads
+
+```bash
+node 10-member-compression.mjs
+```
+
+The aggregates failed for a mechanical reason worth stating: CMF, RS-vs-50d, breadth level
+and volume are all **sector aggregates**, and maturation is defined by **member** behaviour.
+An aggregate is a lagging average of the very constituents you are trying to predict. CMF
+fails twice over — CMF(20) at a turn bar measures the preceding twenty sessions, which by
+the definition of a turn were mostly decline.
+
+So this tested the obvious member-level, genuinely forward-looking candidate: not how many
+have broken out, but how many are **coiled to**. Range contraction (10-bar range under 35%
+of the 60-bar range) and volume dry-up, measured before any breakout.
+
+| Predicate | ALL | 1st half | 2nd half | even | odd |
+|---|---|---|---|---|---|
+| coiled >= 20% of members | +1pp | +3pp | −0pp | +2pp | +1pp |
+| coiled >= 30% | +2pp | +4pp | +0pp | +5pp | −0pp |
+| volume drying in >= 30% | +3pp | +5pp | +2pp | +7pp | +0pp |
+| coiled >= 20% AND CMF > 0 | +5pp | +7pp | **+0pp** | +10pp | **+2pp** |
+| **qualifying >= 3** | **+19pp** | **+24pp** | **+15pp** | **+20pp** | **+17pp** |
+
+**Compression does not discriminate, because it is ubiquitous** — the median turn already
+has **41% of its members coiled**. Coiling says a move is *possible*, which is true of
+roughly half the market at any moment; it does not say one is *coming*. Adding it to the
+qualifying count changes nothing (+19pp either way, on a smaller sample).
+
+### The conclusion after five studies
+
+Tested as leading indicators and failed, or failed validation: CMF, CMF slope, RS position
+vs the 50d, breadth level, breadth velocity, turn-bar volume, drawdown depth, prior failed
+reclaims, proximity to the 20-day high, range compression, volume dry-up.
+
+Survived every split: **the count of members already breaking out.**
+
+That is not a gap in the design. It is the finding. The earliest reliable evidence that a
+rotation is real *is* members breaking out — there is no earlier evidence in the price
+series, because a breakout is close to unpredictable in advance and the only information
+about "will three members break out in the next ten days" is "how many are breaking out
+now". **The lag cannot be engineered away.** What can be done is separate the two jobs:
+the turn buys preparation time (three sessions on SMH, worth +6.67% against SPY versus
+0.00% from the quadrant), and the count supplies the trigger.
+
+The one genuinely leading source left is information price cannot contain — a dated
+catalyst. `catalyst_tags` already exists for exactly that.
+
 ## Rejected — do not re-propose without new evidence
 
 - **ATR as a basket rank instead of an absolute floor.** A rank forces the same
