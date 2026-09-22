@@ -61,6 +61,8 @@ export interface HitRateRow {
   sample_start_date: string;
   sample_end_date: string;
   source: string;
+  distinct_tickers: number;
+  scanner_version: number | null;
 }
 
 interface SignalRow {
@@ -69,7 +71,14 @@ interface SignalRow {
   is_primary: boolean | null;
   is_stronger: boolean | null;
   bucket: string | null;
+  scanner_version: number | null;
 }
+
+/**
+ * A ticker that drops out of the scan for a few sessions and returns is a fresh decision,
+ * not a continuation. Five days spans a long weekend plus a couple of misses.
+ */
+const EPISODE_GAP_DAYS = 5;
 
 interface Bar {
   d: string;
@@ -83,6 +92,47 @@ interface Outcome {
   drawdown: number;
   benchmark: number;
   scanDate: string;
+  ticker: string;
+}
+
+/**
+ * Collapse daily rows to one row per episode — the session a ticker ENTERS the bucket.
+ *
+ * Without this, a name sitting in a state for fifteen sessions contributes fifteen
+ * overlapping windows on the same move. That does not merely inflate n; it weights the
+ * mean toward names that persist in the scan, which are disproportionately the names
+ * already working. Measured on V3 Transition rows, collapsing moved the 14d all-signal
+ * excess from -0.78% to -1.61%.
+ *
+ * `keyOf` returns the bucket identity for a row, or null if the row is not a member.
+ */
+function episodeEntries(
+  rows: SignalRow[],
+  keyOf: (r: SignalRow) => string | null
+): SignalRow[] {
+  const byTicker = new Map<string, SignalRow[]>();
+  for (const r of rows) {
+    if (!byTicker.has(r.ticker)) byTicker.set(r.ticker, []);
+    byTicker.get(r.ticker)!.push(r);
+  }
+
+  const out: SignalRow[] = [];
+  for (const list of byTicker.values()) {
+    list.sort((a, b) => a.scan_date.localeCompare(b.scan_date));
+    let prevKey: string | null = null;
+    let prevDate: string | null = null;
+
+    for (const r of list) {
+      const key = keyOf(r);
+      const gapDays = prevDate
+        ? (Date.parse(r.scan_date) - Date.parse(prevDate)) / 86_400_000
+        : Number.POSITIVE_INFINITY;
+      if (key !== null && (key !== prevKey || gapDays > EPISODE_GAP_DAYS)) out.push(r);
+      prevKey = key;
+      prevDate = r.scan_date;
+    }
+  }
+  return out;
 }
 
 function addDays(iso: string, n: number): string {
@@ -119,7 +169,7 @@ async function loadSignals(engine: DailyEngine, since: string): Promise<SignalRo
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from(table)
-      .select(`ticker,scan_date,is_primary,is_stronger,${bucketCol}`)
+      .select(`ticker,scan_date,is_primary,is_stronger,scanner_version,${bucketCol}`)
       .gte("scan_date", since)
       .order("scan_date", { ascending: true })
       .order("ticker", { ascending: true }) // stable tiebreak, or pages can overlap/skip
@@ -138,6 +188,7 @@ async function loadSignals(engine: DailyEngine, since: string): Promise<SignalRo
         is_primary: (r.is_primary as boolean | null) ?? null,
         is_stronger: (r.is_stronger as boolean | null) ?? null,
         bucket: (r[bucketCol] as string | null) ?? null,
+        scanner_version: (r.scanner_version as number | null) ?? null,
       });
     }
 
@@ -228,7 +279,8 @@ function aggregate(
   mode: string | null,
   strength: string | null,
   periodDays: number,
-  outcomes: Outcome[]
+  outcomes: Outcome[],
+  scannerVersion: number | null
 ): HitRateRow | null {
   if (outcomes.length < MIN_SAMPLE) return null;
 
@@ -260,6 +312,8 @@ function aggregate(
     sample_start_date: dates[0],
     sample_end_date: dates[dates.length - 1],
     source: "daily_table",
+    distinct_tickers: new Set(outcomes.map((o) => o.ticker)).size,
+    scanner_version: scannerVersion,
   };
 }
 
@@ -267,7 +321,14 @@ export interface ComputeResult {
   rows: HitRateRow[];
   /** Buckets dropped for having fewer than MIN_SAMPLE complete windows. Never silent. */
   droppedThinBuckets: number;
+  /** Raw (ticker, scan_date) rows read. NOT the sample size — see `episodes`. */
   signalsRead: number;
+  /** Rows remaining after scoping to one scanner_version. */
+  signalsScoped: number;
+  /** Independent observations after collapsing to state entries. The real sample size. */
+  episodes: number;
+  /** Engine version the sample was scoped to. */
+  scannerVersion: number | null;
   tickersPriced: number;
 }
 
@@ -283,19 +344,56 @@ export async function computeDailyHitRates(
   const since = addDays(new Date().toISOString().slice(0, 10), -lookbackDays);
   const signals = await loadSignals(engine, since);
   if (signals.length === 0) {
-    return { rows: [], droppedThinBuckets: 0, signalsRead: 0, tickersPriced: 0 };
+    return {
+      rows: [],
+      droppedThinBuckets: 0,
+      signalsRead: 0,
+      signalsScoped: 0,
+      episodes: 0,
+      scannerVersion: null,
+      tickersPriced: 0,
+    };
   }
 
-  const tickers = [...new Set(signals.map((s) => s.ticker))];
+  // V2 and V3 disagree about what TRIGGERED and is_stronger mean — V2's trigger was
+  // self-satisfying and its rows carry runner_score 0, which is an input to is_stronger.
+  // Blending them measures neither engine, so scope to the newest version present.
+  const versions = [
+    ...new Set(signals.map((s) => s.scanner_version).filter((v): v is number => v != null)),
+  ];
+  const version = versions.length ? Math.max(...versions) : null;
+  const scoped =
+    version == null ? signals : signals.filter((s) => s.scanner_version === version);
+
+  // Episodes don't depend on the horizon, so derive them once.
+  const fullCohort = episodeEntries(scoped, (r) => r.bucket ?? "UNCLASSIFIED");
+  const tiers: Array<{ strength: string; rows: SignalRow[] }> = [
+    { strength: "primary", rows: episodeEntries(scoped, (r) => (r.is_primary ? "P" : null)) },
+    { strength: "stronger", rows: episodeEntries(scoped, (r) => (r.is_stronger ? "S" : null)) },
+  ];
+
+  const tickers = [...new Set(scoped.map((s) => s.ticker))];
   const bars = await loadBars([...new Set([...tickers, BENCHMARK])]);
   const benchBars = bars.get(BENCHMARK);
   if (!benchBars) {
     console.error("[daily-hit-rates] benchmark series unavailable; aborting");
-    return { rows: [], droppedThinBuckets: 0, signalsRead: signals.length, tickersPriced: 0 };
+    return {
+      rows: [],
+      droppedThinBuckets: 0,
+      signalsRead: signals.length,
+      signalsScoped: scoped.length,
+      episodes: fullCohort.length,
+      scannerVersion: version,
+      tickersPriced: 0,
+    };
   }
 
   const rows: HitRateRow[] = [];
   let dropped = 0;
+  const collect = (row: HitRateRow | null) => {
+    if (row) rows.push(row);
+    else dropped++;
+  };
 
   for (const periodDays of PERIODS) {
     // Benchmark return is identical for every signal sharing a scan_date — cache per date.
@@ -308,51 +406,45 @@ export async function computeDailyHitRates(
       return benchByDate.get(d)!;
     };
 
-    // strength bucket -> state bucket -> outcomes
-    const buckets = new Map<string, Map<string, Outcome[]>>();
-    const push = (strength: string, mode: string, o: Outcome) => {
-      if (!buckets.has(strength)) buckets.set(strength, new Map());
-      const m = buckets.get(strength)!;
-      if (!m.has(mode)) m.set(mode, []);
-      m.get(mode)!.push(o);
-    };
-
-    for (const s of signals) {
+    const outcomeFor = (s: SignalRow): Outcome | null => {
       const series = bars.get(s.ticker);
-      if (!series) continue;
+      if (!series) return null;
       const w = windowReturn(series, s.scan_date, periodDays);
-      if (!w) continue;
+      if (!w) return null;
       const bench = benchFor(s.scan_date);
-      if (bench == null) continue;
-
-      const o: Outcome = {
+      if (bench == null) return null;
+      return {
         ret: w.ret,
         drawdown: w.drawdown,
         benchmark: bench,
         excess: w.ret - bench,
         scanDate: s.scan_date,
+        ticker: s.ticker,
       };
+    };
 
-      // A signal lands in every strength tier it qualifies for, so "all" stays the full
-      // cohort and "stronger" is readable as a subset of "primary" rather than disjoint.
-      push("all", "all", o);
-      if (s.bucket) push("all", s.bucket, o);
-      if (s.is_primary) push("primary", "all", o);
-      if (s.is_stronger) push("stronger", "all", o);
+    // Full cohort, keeping each outcome paired with its signal for the state breakdown.
+    const paired = fullCohort
+      .map((s) => ({ s, o: outcomeFor(s) }))
+      .filter((x): x is { s: SignalRow; o: Outcome } => x.o !== null);
+
+    collect(aggregate(engine, null, null, periodDays, paired.map((x) => x.o), version));
+
+    const byState = new Map<string, Outcome[]>();
+    for (const { s, o } of paired) {
+      const k = s.bucket ?? "UNCLASSIFIED";
+      if (!byState.has(k)) byState.set(k, []);
+      byState.get(k)!.push(o);
+    }
+    for (const [state, outs] of byState) {
+      collect(aggregate(engine, state, null, periodDays, outs, version));
     }
 
-    for (const [strength, modes] of buckets) {
-      for (const [mode, outcomes] of modes) {
-        const row = aggregate(
-          engine,
-          mode === "all" ? null : mode,
-          strength === "all" ? null : strength,
-          periodDays,
-          outcomes
-        );
-        if (row) rows.push(row);
-        else dropped++;
-      }
+    for (const tier of tiers) {
+      const outs = tier.rows
+        .map(outcomeFor)
+        .filter((o): o is Outcome => o !== null);
+      collect(aggregate(engine, null, tier.strength, periodDays, outs, version));
     }
   }
 
@@ -360,6 +452,9 @@ export async function computeDailyHitRates(
     rows,
     droppedThinBuckets: dropped,
     signalsRead: signals.length,
+    signalsScoped: scoped.length,
+    episodes: fullCohort.length,
+    scannerVersion: version,
     tickersPriced: bars.size - 1, // exclude the benchmark
   };
 }

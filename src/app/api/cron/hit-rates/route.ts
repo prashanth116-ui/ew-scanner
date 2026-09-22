@@ -50,7 +50,10 @@ export async function GET(request: NextRequest) {
       rows.push(...result.rows);
       perEngine[engine] = {
         buckets: result.rows.length,
-        signalsRead: result.signalsRead,
+        scannerVersion: result.scannerVersion,
+        rowsRead: result.signalsRead,
+        rowsInVersion: result.signalsScoped,
+        episodes: result.episodes, // the actual sample size
         tickersPriced: result.tickersPriced,
         droppedThinBuckets: result.droppedThinBuckets,
       };
@@ -70,7 +73,8 @@ export async function GET(request: NextRequest) {
       .map((r) => ({
         scanner: r.scanner,
         period_days: r.period_days,
-        n: r.total_signals,
+        episodes: r.total_signals,
+        distinct_tickers: r.distinct_tickers,
         avg_excess_return_pct: r.avg_excess_return_pct,
         win_rate_vs_benchmark: r.win_rate_vs_benchmark,
         sample: `${r.sample_start_date} -> ${r.sample_end_date}`,
