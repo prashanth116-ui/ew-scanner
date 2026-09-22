@@ -106,6 +106,54 @@ paired comparison is nearly empty and the headline rows force entry regardless o
 which is not how you would trade. The cached bars end 2026-08-27, so the SMH September
 rotation that prompted this is out of sample.
 
+## Stage 6 — what to watch after a turn fires
+
+```bash
+node 6-confirmation-window.mjs
+```
+
+A turn fires on day 0. You do not have to commit that day. What, measured on days +1 to
++5, separates the turns that keep working from the ones that roll over? 460 reclaim events
+across 18 baskets; the outcome is the ETF's relative return over the 20 sessions
+**following the observation bar**, because that is the decision you actually face.
+
+**Waiting alone does nothing.** Committing on day 0 is 47% / −0.05%; +1 through +5 are all
+47–48% and flat. There is no free lunch in patience.
+
+**Most of the intuitive metrics are worthless or backwards** (day +3):
+
+| Watching | n | Win | Edge vs fails |
+|---|---|---|---|
+| RS held above its 20d throughout | 236 | 48% | **−0pp** |
+| ETF already ahead of SPY since day 0 | 232 | 47% | **−3pp** |
+| breadth level >= 60% | 188 | 46% | **−4pp** |
+| RS extended >= 1% over its 20d | 180 | 48% | −0pp |
+| breadth rising >= 5pp | 174 | 54% | +9pp |
+| **qualifying count >= 3** | 65 | 55% | +8pp |
+| **qualifying >= 3 AND rising** | 50 | **58%** | **+11pp** |
+
+Three findings worth keeping:
+
+- **The RS line holding above its 20d is not predictive.** It feels like confirmation and
+  it is not. Neither is the ETF already outperforming — that one is mildly *counter*
+  productive at −3pp, the ones that already ran do worse next.
+- **Breadth LEVEL is inverted again** (−4pp at a 60% cut), consistent with the same hint
+  in the TURN_FORMING work. High breadth means the members have already moved.
+- **The only construct that shows up positive is the ENTRY_SCREEN qualifying count** —
+  members clearing breakout + top-half basket strength + ATR. That is the same veto the
+  stage-4 study identified from a completely different angle, which is the strongest thing
+  about it.
+
+⚠️ **It is not statistically significant here.** `qualifying >= 3 AND rising` is n=50 with a
+Wilson interval of 44–71%, which includes chance. Read it as *consistent with* the stage-4
+veto, not as independent confirmation of it.
+
+**Why the means are so small** (+0.77% against stage 4's +17%): different populations. A
+20d-SMA reclaim happens 460 times in two years across 18 baskets — it is noise-dominated.
+The tracker's rotation event is far more selective, and the entry screen on top of that is
+where the edge actually lives. **A turn is not a rotation**, and this is the clearest
+statement of that in the repo.
+
 ## Rejected — do not re-propose without new evidence
 
 - **ATR as a basket rank instead of an absolute floor.** A rank forces the same
