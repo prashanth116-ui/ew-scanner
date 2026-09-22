@@ -154,6 +154,56 @@ The tracker's rotation event is far more selective, and the entry screen on top 
 where the edge actually lives. **A turn is not a rotation**, and this is the clearest
 statement of that in the repo.
 
+## Stage 7 — are the three screen criteria too conservative?
+
+```bash
+node 7-screen-ablation.mjs
+```
+
+Breakout-above-the-20-day-high and top-half-20-day-return are both backward-looking, so the
+fair charge is that the screen fires late. Ablated against `events.json`: same bar, same
+rotations, same hold, only the admission rule changes.
+
+**Top-half return is almost pure redundancy.** Of the names that broke out, **92% were
+already top-half**. Dropping the criterion admits 28 extra names out of 2,226 (1.3%) and
+fires on the *same 8 rotations*: 86% / +16.2% against the shipped 89% / +17.0%. It is
+decoration, not a filter. Harmless to keep, but it is not what makes the screen selective.
+
+**The breakout is the quality engine and the lateness is the point.**
+
+| Admission rule | Fires | Names | Win | Mean |
+|---|---|---|---|---|
+| shipped: breakout + top-half + ATR>=3 | 8/78 | 57 | **89%** | **+17.0%** |
+| drop top-half | 8/78 | 59 | 86% | +16.2% |
+| drop breakout | 20/78 | 184 | 74% | +11.3% |
+| breakout only | 16/78 | 157 | 74% | +8.2% |
+| ATR >= 2 | 15/78 | 121 | 80% | +10.6% |
+| ATR >= 4 | 3/78 | 27 | 89% | +19.7% |
+| *buy every member (baseline)* | — | 2226 | 69% | +6.3% |
+
+Removing the breakout costs 15pp of win rate. ATR is a tradeability floor, not a timing
+filter — loosening it to 2 costs 9pp and 6.4pp of mean.
+
+**The real conservatism is the GATE, not the screen.**
+
+| | Fires | Names | Win | Mean | Rotations profitable |
+|---|---|---|---|---|---|
+| shipped rule **with** gate | 8/78 | 57 | 89% | +17.0% | 8/8 |
+| shipped rule **without** gate | **20/78** | 133 | 86% | +15.8% | 19/20 |
+
+Dropping the gate gives **2.5x the opportunities for 3pp of win rate and 1.2pp of mean**.
+That is the change to make if the complaint is "this fires too rarely" — and it is the same
+trade the ablation section above already flagged as unsettled.
+
+**The veto is monotonic**, which is the cleanest result here: MIN_QUALIFYING 1/2/3/4/5 runs
+82% / 85% / 89% / 94% / 93% and +13.6% / +15.1% / +17.0% / +18.9% / +19.6%. Even the
+loosest setting beats the 69% baseline comfortably.
+
+⚠️ **None of this makes anything fire earlier in TIME.** Every variant is measured on the
+same bar; looser rules fire on more *rotations*, not sooner within one. Earliness was
+tested directly in stage 5 and lost. And n=8 against n=20 is a thin basis for either
+choice — the README's own multiple-comparison caveat applies with full force.
+
 ## Rejected — do not re-propose without new evidence
 
 - **ATR as a basket rank instead of an absolute floor.** A rank forces the same
