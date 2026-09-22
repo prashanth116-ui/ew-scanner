@@ -104,25 +104,47 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 async function loadSignals(engine: DailyEngine, since: string): Promise<SignalRow[]> {
   const { table, bucketCol } = ENGINES[engine];
   const supabase = createAdminClient();
-
-  const { data, error } = await supabase
-    .from(table)
-    .select(`ticker,scan_date,is_primary,is_stronger,${bucketCol}`)
-    .gte("scan_date", since)
-    .order("scan_date", { ascending: true });
-
-  if (error) {
-    console.error(`[daily-hit-rates] load ${table} error:`, error.message);
+  if (!supabase) {
+    console.error("[daily-hit-rates] no admin client — SUPABASE_SERVICE_ROLE_KEY missing");
     return [];
   }
 
-  return (data ?? []).map((r: Record<string, unknown>) => ({
-    ticker: String(r.ticker),
-    scan_date: String(r.scan_date),
-    is_primary: (r.is_primary as boolean | null) ?? null,
-    is_stronger: (r.is_stronger as boolean | null) ?? null,
-    bucket: (r[bucketCol] as string | null) ?? null,
-  }));
+  // PostgREST caps an unranged select at 1000 rows and reports no error when it truncates.
+  // These tables run 150-300 rows per scan_date, so a single page covers about four days
+  // of a ninety-day lookback — silently measuring the oldest sliver and calling it the
+  // period. Page explicitly until a short page comes back.
+  const PAGE = 1000;
+  const rows: SignalRow[] = [];
+
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(`ticker,scan_date,is_primary,is_stronger,${bucketCol}`)
+      .gte("scan_date", since)
+      .order("scan_date", { ascending: true })
+      .order("ticker", { ascending: true }) // stable tiebreak, or pages can overlap/skip
+      .range(from, from + PAGE - 1);
+
+    if (error) {
+      console.error(`[daily-hit-rates] load ${table} error:`, error.message);
+      return rows;
+    }
+
+    const page = data ?? [];
+    for (const r of page as Record<string, unknown>[]) {
+      rows.push({
+        ticker: String(r.ticker),
+        scan_date: String(r.scan_date),
+        is_primary: (r.is_primary as boolean | null) ?? null,
+        is_stronger: (r.is_stronger as boolean | null) ?? null,
+        bucket: (r[bucketCol] as string | null) ?? null,
+      });
+    }
+
+    if (page.length < PAGE) break;
+  }
+
+  return rows;
 }
 
 /** Fetch 6mo daily bars for each ticker. Failures are skipped, not fatal. */
@@ -265,7 +287,7 @@ export async function computeDailyHitRates(
   }
 
   const tickers = [...new Set(signals.map((s) => s.ticker))];
-  const bars = await loadBars([...tickers, BENCHMARK]);
+  const bars = await loadBars([...new Set([...tickers, BENCHMARK])]);
   const benchBars = bars.get(BENCHMARK);
   if (!benchBars) {
     console.error("[daily-hit-rates] benchmark series unavailable; aborting");

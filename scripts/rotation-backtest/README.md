@@ -443,6 +443,60 @@ traded and the ETF never is. By ETF return XBI (+1.11%) and ITA (+0.87%) are sup
 while XLY (−0.88%) and XLI (−0.40%) are not, which would be a defect if the basket itself
 were ever the position. It is not. **Resolved: do not rebuild the list on ETF return.**
 
+## Stage 13 — exits
+
+```bash
+node 13-exit-rules.mjs
+```
+
+`signal_outcomes` and `/api/cron/targets` handle exits for scanner signals, which carry
+stored targets and invalidation. **Rotation entry-screen picks carry neither** — the shipped
+rule says what to buy and nothing about when to leave, and the 20-day hold every study here
+uses was a measurement convention, never a validated exit. 25 rotations, 136 picks, entry
+held constant, gate relaxed for sample size.
+
+**Context first:** MFE over 20 days is median **+15.4%**, MAE is median **−4.0%** and mean
+**−6.7%**. A working trade routinely draws down four to seven percent. That single fact
+explains most of what follows.
+
+| Rule | Win | Mean | Median | Worst | % of MFE |
+|---|---|---|---|---|---|
+| hold 20d *(baseline)* | 78% | +13.10% | +9.91% | −43% | 64% |
+| **hold 40d** | **79%** | **+20.73%** | +13.42% | −46% | 101% |
+| hold 60d | 76% | +23.99% | +17.97% | −39% | 116% |
+| hold 10d | 70% | +6.68% | +5.14% | −25% | 32% |
+| 20d, −5% stop | 56% | +10.03% | +3.69% | −5% | 49% |
+| 20d, −12% stop | 73% | +11.97% | +8.21% | −12% | 58% |
+| 20d, 3x ATR stop | 74% | +12.51% | +9.72% | −19% | 61% |
+| trail 3x ATR | 60% | +10.17% | +4.97% | −19% | 49% |
+| close < 50d SMA | 60% | +19.34% | +5.46% | −35% | 94% |
+| sector RS breaks | 65% | +11.19% | +2.31% | −34% | 54% |
+
+### Two findings
+
+**1. The 20-day hold is too short, and it is baked into every other study here.**
+Extending to 40 days takes the mean from +13.10% to **+20.73% at the same win rate** and
+captures essentially all of the 20-day MFE. Sixty days adds more still. `ENTRY_SCREEN`'s
+headline 89.5% / +17.0% was measured at 20 days and is therefore an *understatement* of
+what the rule produced.
+
+**2. Every exit rule tested makes it worse.** Stops, trailing stops, moving-average exits
+and sector-RS exits all reduce the mean, and every one except the widest ATR stop also
+reduces the win rate. The cause is in the MAE line: a median winner gives back 4% and the
+mean 6.7%, so any stop tighter than roughly 12% sits inside the ordinary noise of a trade
+that is working. Trailing is worst of all — 2x ATR drops the mean to +8.31%.
+
+### The honest tradeoff
+
+Stops do exactly what they are for. Worst single outcome is **−43% unprotected and −12%
+with a −12% stop**. That is a real reduction in tail risk bought for ~1.1pp of mean return.
+Whether it is worth paying depends on position sizing and what a −43% single name does to
+the book — which is a risk-management question, not an expectancy one. What the data rules
+out is *tight* stops: at −5% the win rate collapses from 78% to 56%.
+
+⚠️ 136 picks across 25 rotations, gate relaxed, and names that survived the window. The
+40-day result is the one worth acting on; the rest is directional.
+
 ## Rejected — do not re-propose without new evidence
 
 - **ATR as a basket rank instead of an absolute floor.** A rank forces the same

@@ -324,7 +324,16 @@ export async function updateSignalOutcome(
   }
 }
 
-/** Upsert scanner hit rates (pre-computed aggregates). */
+/**
+ * Upsert scanner hit rates (pre-computed aggregates).
+ *
+ * Writes with the SERVICE ROLE client, not the cookie client. This table is written only
+ * by cron routes, which have no user session — an anon-key write here depends on RLS being
+ * off and fails silently the moment it isn't.
+ *
+ * The benchmark/sample fields are optional so the target-based caller in
+ * `cron/outcomes` (which has no benchmark concept) stays valid.
+ */
 export async function upsertHitRates(
   rates: Array<{
     scanner: string;
@@ -336,12 +345,19 @@ export async function upsertHitRates(
     hit_rate: number;
     avg_return_pct: number;
     avg_max_drawdown_pct: number;
+    median_return_pct?: number;
+    benchmark_return_pct?: number;
+    avg_excess_return_pct?: number;
+    win_rate_vs_benchmark?: number;
+    sample_start_date?: string;
+    sample_end_date?: string;
+    source?: string;
   }>
 ): Promise<boolean> {
   if (rates.length === 0) return true;
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     if (!supabase) return false;
 
     const { error } = await supabase.from("scanner_hit_rates").upsert(

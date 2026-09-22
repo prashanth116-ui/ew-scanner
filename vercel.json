@@ -79,6 +79,14 @@
     {
       "path": "/api/daily-briefing/cron",
       "schedule": "0 13 * * 1-5"
+    },
+    {
+      "path": "/api/cron/hit-rates",
+      "schedule": "20 3 * * 2-6"
+    },
+    {
+      "path": "/api/cron/outcomes",
+      "schedule": "30 22 * * 1-5"
     }
   ]
 }
