@@ -257,6 +257,55 @@ return in the table. Neither true and it is probably noise.
 actionable — it makes it *triageable*, which is a different and smaller claim. Sample sizes
 on the combinations run 62-131 with intervals of 8-13pp.
 
+## Stage 9 — validating stage 8, and testing a looser breakout
+
+```bash
+node 9-validate-triage.mjs
+```
+
+Stage 8 tested ~24 predicates and reported the best, so its headline had to be checked on
+data it was not chosen on. Two splits: by time (first half vs second, boundary 2025-11-06)
+and by basket (odd vs even ETFs). Note the base maturation rate itself fell from 21% to 12%
+across the time split, so the second half is a harder regime for everything.
+
+**The stage-8 headline FAILS.** `CMF > 0 AND >= 1 qualifying name` ran +22pp in the first
+half and **+4pp in the second**; +23pp on even baskets and **+6pp on odd**. Concentrated in
+half the data twice over — the signature of an overfit pick. **Do not build on it.**
+
+**`CMF > 0` alone is real but small.** +4pp overall, and positive in all four splits
+(+4 / +2 / +7 / +2). Directionally trustworthy, magnitude barely worth acting on.
+
+**What survives everywhere: the qualifying count itself.**
+
+| `>= 3 qualifying names at the turn` | n | Matured | Lift |
+|---|---|---|---|
+| all | 63 | 37% | +20pp |
+| first half | 28 | 50% | +29pp |
+| **second half** | 35 | **26%** | **+13pp** |
+| even baskets | 37 | 41% | +21pp |
+| odd baskets | 26 | 31% | +17pp |
+
+Substantial and positive in every split. This is the one finding of stages 6-9 that is
+safe to rely on — and it is the same construct stage 4 validated independently.
+
+**Loosening the breakout makes it monotonically WORSE.** Counting members within X% of
+their 20-day high rather than strictly above it:
+
+| X | n | Lift (all) | Lift (2nd half) |
+|---|---|---|---|
+| 0% (shipped) | 63 | **+20pp** | **+13pp** |
+| 1% | 91 | +19pp | +12pp |
+| 2% | 132 | +14pp | +7pp |
+| 3% | 161 | +14pp | +8pp |
+| 5% | 216 | +11pp | +6pp |
+
+The strict breakout is the best predictor and every relaxation degrades it. **The charge
+that the criteria are "too late" is measured and rejected** — earlier is not better here,
+it is just noisier, which is the same conclusion stage 5 reached from the entry side.
+
+The one defensible loosening is **X=1%**, which holds +19pp on 44% more events (91 vs 63)
+and validates in all four splits. Useful as a *triage counter*, never as the TRADE verdict.
+
 ## Rejected — do not re-propose without new evidence
 
 - **ATR as a basket rank instead of an absolute floor.** A rank forces the same
