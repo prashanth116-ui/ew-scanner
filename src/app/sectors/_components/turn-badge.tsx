@@ -1,7 +1,9 @@
 "use client";
 
-import type { RotationTurn } from "@/lib/sector-rotation/rotation-turn";
-import { rotationTurnBadge, rotationTurnReason } from "@/lib/sector-rotation/rotation-turn";
+// Imported from the VIEW module, never from rotation-turn.ts: this is a client
+// component, and that module reaches "server-only" through calcRRG.
+import type { RotationTurn } from "@/lib/sector-rotation/rotation-turn-view";
+import { rotationTurnBadge, rotationTurnReason } from "@/lib/sector-rotation/rotation-turn-view";
 import { InfoTip } from "./info-tip";
 
 const TONE_STYLE: Record<string, string> = {

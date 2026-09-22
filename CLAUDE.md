@@ -3,7 +3,14 @@
 ## Overview
 Next.js 16 market analysis platform on Vercel + Supabase. Multiple stock scanners (Elliott Wave, Confluence, Catalyst, Squeeze, PreRun), sector rotation (39 ETFs), pre-market trading bias, crypto rotation, automated nightly crons with Telegram alerts.
 
-**Before every commit:** run `npx tsc --noEmit`.
+**Before every commit:** run `npx tsc --noEmit` **and `npm run build`**.
+
+`tsc` is not sufficient on its own. It does no bundle analysis, and vitest stubs
+`server-only`, so a client component importing a runtime value from a module that reaches
+`server-only` transitively passes both and then fails the Turbopack build. That is exactly
+how three production deploys errored on 2026-09-22: `turn-badge.tsx` imported
+`rotationTurnBadge` from `rotation-turn.ts`, which reaches `prerun/data.ts` via
+`calcRRG` -> `math.ts`. Only `npm run build` catches it.
 
 ## Architecture
 
