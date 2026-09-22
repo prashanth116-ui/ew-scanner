@@ -204,6 +204,59 @@ same bar; looser rules fire on more *rotations*, not sooner within one. Earlines
 tested directly in stage 5 and lost. And n=8 against n=20 is a thin basis for either
 choice — the README's own multiple-comparison caveat applies with full force.
 
+## Stage 8 — triaging a turn at the moment it fires
+
+```bash
+node 8-turn-quality.mjs
+```
+
+The question the earlier stages never asked. Given a turn TODAY, what predicts that *this*
+one matures into a tradeable rotation rather than dying? Not an entry question — a triage
+question. 401 turn events, 18 baskets.
+
+**The base rate is the headline: only 16.5% of turns produce a full gate+screen+3-names
+TRADE within 10 sessions.** Five in six die. That, not conservatism, is why the screen
+appears to fire late — it is waiting for the one in six.
+
+| Measured at the turn bar | n | Matures | Lift | fwd20 mean |
+|---|---|---|---|---|
+| **already 3+ qualifying names** | 63 | **37%** | **+24pp** | +0.45% |
+| **CMF > 0 AND >= 1 qualifying name** | 131 | **31%** | **+22pp** | **+1.02%** |
+| breadth>=60 AND cmf>0 AND accel>0 | 62 | 32% | +19pp | +0.16% |
+| CMF > 0 AND accel > 0 | 120 | 25% | +12pp | +0.85% |
+| CMF > 0 | 258 | 21% | +11pp | +0.39% |
+| acceleration > 0 | 161 | 23% | +11pp | +0.69% |
+| breadth >= 60% | 167 | 23% | +11pp | +0.06% |
+
+**CMF is the best broad filter** — the largest sample with a real lift, and it had never
+been tested as a turn-bar predictor despite sitting in the gate.
+
+**What does NOT work, and one of these is on screen today:**
+
+| | Lift |
+|---|---|
+| RS already above its own 50d | **+0pp** |
+| RS below its 50d (deep turn) | −0pp |
+| 1-2 prior failed reclaims | **−2pp** |
+| 3+ prior failed reclaims | +4pp |
+| turn-bar volume >= 1.2x average | −0pp |
+
+⚠️ **`priorFailedAttempts` does not predict anything.** It is rendered prominently on the
+turn badge and in the alert ("4 prior reclaims failed") and the direction is, if anything,
+mildly the wrong way round. Keep it as texture if you like it, but it is not evidence.
+
+**Drawdown is non-monotonic**, which is worth knowing: within 3% of the 60-day high is
++8pp, **3-10% below is −13pp**, more than 10% below is +10pp. Turns near the highs or from
+genuinely washed-out levels work; the middle is a dead zone.
+
+**So the practical triage:** at a turn, check CMF > 0 and whether at least one member
+already qualifies. Both true roughly doubles your odds, 16.5% to 31%, with the best forward
+return in the table. Neither true and it is probably noise.
+
+⚠️ It doubles a low number. Two in three still fail. Nothing here makes a turn reliably
+actionable — it makes it *triageable*, which is a different and smaller claim. Sample sizes
+on the combinations run 62-131 with intervals of 8-13pp.
+
 ## Rejected — do not re-propose without new evidence
 
 - **ATR as a basket rank instead of an absolute floor.** A rank forces the same
