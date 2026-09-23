@@ -8,6 +8,7 @@ import {
   loadTransitionDailyDates,
   type TrendRow,
 } from "@/lib/supabase/persistence";
+import { FORWARD_SCANS } from "@/lib/trend/outcomes";
 
 /**
  * Upper bound on the window.
@@ -65,6 +66,17 @@ export interface TrendMatrixRow {
   extensionRisk: boolean;
   /** Keyed by scan_date. A missing key means the scanner produced no row that day. */
   byDate: Record<string, TrendCell>;
+  /**
+   * What happened AFTER the window, as excess return against the cohort mean over the
+   * same forward scans. Null unless the window is anchored far enough in the past for the
+   * outcome to exist — see `outcome` on the response.
+   *
+   * This is the page's feedback loop. Without it the matrix could display a signal for a
+   * month with nothing ever checking whether the signal was worth displaying, which is
+   * exactly what happened to the "both rising" badge.
+   */
+  fwdExcess: number | null;
+  fwdReturn: number | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -84,33 +96,114 @@ export async function GET(request: NextRequest) {
     ? Math.min(Math.max(Math.trunc(rawDays), 2), MAX_DAYS)
     : 7;
 
+  /** Anchor the window's last scan to a past date, so the forward outcome exists. */
+  const asOf = searchParams.get("asOf");
+
   // Inside retention the scan tables are authoritative and always current. Beyond it they
   // are empty, so the archive is the only source. Choosing per-request keeps one source per
   // response rather than stitching two together and having to reconcile disagreements.
   const fromArchive = days > SCAN_RETENTION_DAYS;
 
-  const allDates = fromArchive
-    ? await loadComponentHistoryDates(engine, days)
-    : engine === "inflection"
-      ? await loadInflectionDailyDates(days)
-      : await loadTransitionDailyDates(days);
+  /**
+   * Floor on how many scan dates to list, independent of the window.
+   *
+   * The page offers these as anchors, so a request for a 7-scan window still needs a
+   * usable set to choose from — sized to the window alone the picker would open with two
+   * entries in it. Bounded rather than unbounded because loadDistinctScanDates pages
+   * through ROWS to find distinct dates: at ~300 rows a scan, asking for the full archive
+   * costs tens of round trips on every page load to populate a dropdown.
+   */
+  const ANCHOR_DATE_LIMIT = 30;
 
-  // loadDates returns newest-first. Take the most recent `days`, then present
-  // oldest-first so the matrix reads left-to-right in time.
-  const dates = allDates.slice(0, days).reverse();
-  if (dates.length === 0) {
-    return NextResponse.json({ engine, dates: [], rows: [], source: fromArchive ? "archive" : "scan" });
+  // The window needs its own dates plus room for the forward scans past the anchor.
+  const dateLimit = Math.min(MAX_DAYS, Math.max(days + FORWARD_SCANS, ANCHOR_DATE_LIMIT));
+  const allDates = fromArchive
+    ? await loadComponentHistoryDates(engine, dateLimit)
+    : engine === "inflection"
+      ? await loadInflectionDailyDates(dateLimit)
+      : await loadTransitionDailyDates(dateLimit);
+
+  if (allDates.length === 0) {
+    return NextResponse.json({
+      engine,
+      source: fromArchive ? "archive" : "scan",
+      dates: [],
+      rows: [],
+      availableDates: [],
+    });
   }
 
-  const [rows, quadrants]: [TrendRow[], Record<string, string>] = await Promise.all([
-    fromArchive ? loadComponentHistory(engine, dates) : loadComponentTrend(engine, dates),
+  // loadDates returns newest-first; work oldest-first so the matrix reads left-to-right in
+  // time and the forward buffer is simply "the dates after the anchor".
+  const ascending = [...allDates].reverse();
+
+  // Snap to the last scan at or before `asOf` rather than demanding an exact match — the
+  // caller is picking from a calendar, and weekends and holidays are not scan dates.
+  let anchorIdx = ascending.length - 1;
+  if (asOf) {
+    const idx = ascending.findLastIndex((d) => d <= asOf);
+    if (idx >= 0) anchorIdx = idx;
+  }
+
+  const windowDates = ascending.slice(Math.max(0, anchorIdx - days + 1), anchorIdx + 1);
+  const forwardDates = ascending.slice(anchorIdx + 1, anchorIdx + 1 + FORWARD_SCANS);
+  // A partial forward buffer would measure a shorter holding period than it claims, so the
+  // outcome is reported only when the full span exists.
+  const hasOutcome = forwardDates.length === FORWARD_SCANS;
+
+  const loadDates = hasOutcome ? [...windowDates, ...forwardDates] : windowDates;
+
+  const [allRows, quadrants]: [TrendRow[], Record<string, string>] = await Promise.all([
+    fromArchive
+      ? loadComponentHistory(engine, loadDates)
+      : loadComponentTrend(engine, loadDates),
     loadLatestSectorQuadrants(),
   ]);
+
+  const windowSet = new Set(windowDates);
+  const windowRows = allRows.filter((r) => windowSet.has(r.scan_date));
+
+  /**
+   * Scope to the newest scanner_version in the window. NEVER blend.
+   *
+   * V2 rows carry runner_score: 0 and a different definition of every other component, so
+   * a row spanning the 2026-08-18 boundary put two incompatible measurements in one series,
+   * differenced them into one `Chg` number, and ranked them on one percentile ramp. At the
+   * time of writing days=30 reached 2026-08-13 and days=90 reached 2026-08-04, so both
+   * blended silently. This mirrors computeDailyHitRates(), which scopes the same way.
+   *
+   * The dropped dates are reported rather than quietly removed: a 30-scan request that
+   * returns 26 columns has to say why, or it looks like missing data.
+   */
+  const versions = [
+    ...new Set(windowRows.map((r) => r.scanner_version).filter((v): v is number => v !== null)),
+  ];
+  const scannerVersion = versions.length ? Math.max(...versions) : null;
+  const scopedRows =
+    scannerVersion === null
+      ? windowRows
+      : windowRows.filter((r) => r.scanner_version === scannerVersion);
+
+  const keptDates = new Set(scopedRows.map((r) => r.scan_date));
+  const dates = windowDates.filter((d) => keptDates.has(d));
+  const excludedDates = windowDates.filter((d) => !keptDates.has(d));
+
+  if (dates.length === 0) {
+    return NextResponse.json({
+      engine,
+      source: fromArchive ? "archive" : "scan",
+      dates: [],
+      rows: [],
+      scannerVersion,
+      excludedDates,
+      availableDates: ascending,
+    });
+  }
 
   // loadComponentTrend orders scan_date descending, so the first row seen for a ticker
   // is its most recent — which is the price, sector and flag set worth keeping.
   const byTicker = new Map<string, TrendMatrixRow>();
-  for (const r of rows) {
+  for (const r of scopedRows) {
     let entry = byTicker.get(r.ticker);
     if (!entry) {
       entry = {
@@ -125,6 +218,8 @@ export async function GET(request: NextRequest) {
         isStronger: r.is_stronger,
         extensionRisk: r.extension_risk,
         byDate: {},
+        fwdExcess: null,
+        fwdReturn: null,
       };
       byTicker.set(r.ticker, entry);
     }
@@ -146,12 +241,64 @@ export async function GET(request: NextRequest) {
     entry.present = Object.keys(entry.byDate).length;
   }
 
+  /**
+   * Forward outcome, anchor close to exit close, as excess over the cohort mean.
+   *
+   * Excess rather than raw, for the reason the hit-rate tables already insist on: an
+   * absolute return says nothing without the tape. The cohort is every name the scanner
+   * scored on the anchor date and still scored at exit — deliberately the whole cohort,
+   * not the user's filtered view, so narrowing the table cannot move the benchmark.
+   *
+   * Exit rows are read unscoped by version. Only `price` is taken from them, which no
+   * recalibration changes.
+   */
+  let outcome: { anchorDate: string; exitDate: string; forwardScans: number; cohort: number } | null = null;
+  if (hasOutcome) {
+    const anchorDate = windowDates[windowDates.length - 1];
+    const exitDate = forwardDates[forwardDates.length - 1];
+    const priceAt = new Map<string, Map<string, number>>();
+    for (const r of allRows) {
+      if (r.scan_date !== anchorDate && r.scan_date !== exitDate) continue;
+      let m = priceAt.get(r.ticker);
+      if (!m) {
+        m = new Map();
+        priceAt.set(r.ticker, m);
+      }
+      m.set(r.scan_date, r.price);
+    }
+
+    const returns = new Map<string, number>();
+    for (const [ticker, m] of priceAt) {
+      const a = m.get(anchorDate);
+      const b = m.get(exitDate);
+      if (a !== undefined && b !== undefined && a > 0) {
+        returns.set(ticker, ((b - a) / a) * 100);
+      }
+    }
+
+    if (returns.size >= 20) {
+      const cohortMean = [...returns.values()].reduce((s, v) => s + v, 0) / returns.size;
+      for (const entry of byTicker.values()) {
+        const ret = returns.get(entry.ticker);
+        if (ret === undefined) continue;
+        entry.fwdReturn = ret;
+        entry.fwdExcess = ret - cohortMean;
+      }
+      outcome = { anchorDate, exitDate, forwardScans: FORWARD_SCANS, cohort: returns.size };
+    }
+  }
+
   return NextResponse.json({
     engine,
     source: fromArchive ? "archive" : "scan",
     // Current RRG quadrant per sector name, so the page can group stocks by where their
     // sector sits without every row carrying a duplicate of it.
     quadrants,
+    scannerVersion,
+    excludedDates,
+    /** Every scan date available, so the page can offer anchors without a second request. */
+    availableDates: ascending,
+    outcome,
     dates,
     rows: [...byTicker.values()].sort((a, b) => a.ticker.localeCompare(b.ticker)),
   });

@@ -334,6 +334,28 @@ When asked for audit, check: (1) functional correctness, (2) code quality/resili
 - **PostgREST truncates an unranged `select` at 1000 rows and reports no error.** At 150-300 rows per `scan_date` that is ~4 days of a 90-day lookback. `loadSignals()` pages explicitly; any new query over these tables must too.
 - **Calibrate after, not before.** Any change to a shared feature field shifts every score distribution, so re-tune `classifyStage`/`classifyState` thresholds only once the inputs are settled.
 
+### Component Trend (`/prerun/trend`)
+
+Matrix of one component score per ticker per scan, over `/api/trend`. Served from the 90-day scan tables; past retention it falls through to the never-purged `component_history` archive.
+
+**Version scoping, not blending.** The window is scoped to the newest `scanner_version` in it and the dropped dates are reported in the UI. This page blended silently until 2026-09-22: `days=30` reached 2026-08-13 and `days=90` reached 2026-08-04, both crossing the 08-18 V3 boundary, so one `Chg` number differenced two incompatible measurements and one percentile ramp ranked them together. A window sitting **entirely** in V2 scopes to V2 — internally consistent is the test, not "newest globally".
+
+⚠️ **The component trend largely restates the price move underneath it — do not re-propose highlighting "rising" without new evidence.** The page shipped a badge *and* an emerald row tint on "Seller Exhaustion and Demand both rising", asserting an edge nothing had checked. Measured over all V3 rows, episode-collapsed per the migration-035 rule, forward 5 scans as excess vs the cohort:
+
+| | signal | price-matched control | increment |
+|---|---|---|---|
+| Both rising (Inflection / Transition) | −0.30% / −0.39% | −0.36% / −0.48% | **+0.06 / +0.09pp** |
+| Overall rising | −1.08% / −1.39% | −1.31% / −1.59% (price up) | −0.61 / −0.68pp |
+| Price down, score up | +2.03% / +2.23% | +1.85% / +1.76% (price down) | +0.19 / +0.47pp |
+
+The badge is **not backwards, it is uninformative**. Score-rising is *better* than "price simply rose", so the first reading of this — that rising components predict underperformance — was price mean-reversion misattributed to the components. Within-price-state increments flip sign across horizons (3/5/10/15) and between the two engines, which is the same disqualifying pattern as the rejected breadth-velocity study. **"Price down, score up" is not a promotion candidate either**: almost all of its apparent edge is the price-down control. Badges are therefore descriptive (`◉ BOTH UP`, `PX↓ SC↑`) and uncoloured, and the row tint is gone.
+
+**Grade against a price-composition-matched control, never against "all names".** Every name is in the all-names bucket on every scan, so episode-collapsing it keeps only each ticker's *first appearance* — 812 observations whose −0.75% mean is an artefact of when names entered the scan, not the cohort (whose mean is ~0 by construction). That degenerate baseline manufactured +0.45pp of edge for a signal carrying +0.06pp. `compositionMatchedControl()` blends each price state's own control weighted by the signal's mix; guarded by `outcomes.test.ts`.
+
+**`?asOf=` exists so the page can grade itself.** Anchored to the newest scan there is no "after", so no row can ever carry an outcome — which is how an unchecked claim survived in the UI for a month. Anchoring back `FORWARD_SCANS` gives a real `Fwd` column, and `/api/trend/scorecard` reports each badge's record. Survivorship applies and is printed: a forward return needs the name still in the scan at exit, which flatters the falling buckets and leaves the rising ones conservative.
+
+**`src/lib/trend/outcomes.ts` is isomorphic and must stay that way** — the client page imports `FORWARD_SCANS`, `scoreTrend` and `priceState` from it. `scorecard.ts` is `server-only`; moving a runtime value there passes `tsc` and vitest and then fails the Turbopack build.
+
 ### Focus List
 `src/data/focus-list.ts` — separates **the names you scan** (~464) from **the names you trade** (109). The universe stays wide so the scanners can still notice a name *entering* the tradeable set; the noise is filtered at the output, where a rejected name is one query away instead of gone.
 

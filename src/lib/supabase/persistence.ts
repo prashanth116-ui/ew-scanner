@@ -2301,6 +2301,67 @@ export async function loadComponentHistory(
   }
 }
 
+/**
+ * Every archived row for one engine, oldest-first.
+ *
+ * The scorecard measures forward returns across the whole archive rather than a requested
+ * window, so it cannot go through loadComponentHistory's date list. Ordered by
+ * (scan_date, ticker) rather than scan_date alone: `.range()` paging needs a total order,
+ * and scan_date is not unique - hundreds of rows share one.
+ */
+export async function loadComponentHistoryAll(
+  engine: "inflection" | "transition",
+): Promise<TrendRow[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const out: TrendRow[] = [];
+    for (let page = 0; page < 256; page++) {
+      const from = page * SCAN_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from("component_history")
+        .select("*")
+        .eq("engine", engine)
+        .order("scan_date", { ascending: true })
+        .order("ticker", { ascending: true })
+        .range(from, from + SCAN_PAGE_SIZE - 1);
+      if (error) {
+        console.error("[persistence] loadComponentHistoryAll error:", error.message);
+        break;
+      }
+      const rows = (data ?? []) as unknown as Record<string, unknown>[];
+      for (const row of rows) {
+        out.push({
+          scan_date: row.scan_date as string,
+          ticker: row.ticker as string,
+          sector: (row.sector as string | null) ?? null,
+          price: Number(row.price ?? 0),
+          se_score: (row.se_score as number) ?? 0,
+          demand_score: (row.demand_score as number) ?? 0,
+          compression_score: (row.compression_score as number) ?? 0,
+          runner_score: (row.runner_score as number) ?? 0,
+          rs_score: (row.rs_score as number) ?? 0,
+          overall_score: (row.overall_score as number) ?? 0,
+          structure_score: (row.structure_score as number | null) ?? null,
+          label: (row.label as string) ?? "",
+          read: (row.read_label as string) ?? "",
+          is_coiled: row.is_coiled === true,
+          is_primary: row.is_primary === true,
+          is_stronger: row.is_stronger === true,
+          extension_risk: row.extension_risk === true,
+          scanner_version: (row.scanner_version as number | null) ?? null,
+        });
+      }
+      if (rows.length < SCAN_PAGE_SIZE) break;
+    }
+    return out;
+  } catch (err) {
+    console.error("[persistence] loadComponentHistoryAll exception:", err);
+    return [];
+  }
+}
+
 export async function loadComponentTrend(
   engine: "inflection" | "transition",
   dates: string[],
