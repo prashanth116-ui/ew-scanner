@@ -4,8 +4,11 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Loader2, Download, Search, TrendingUp, TrendingDown, Minus, X } from "lucide-react";
 import Link from "next/link";
 import { TableErrorBoundary } from "@/components/table-error-boundary";
+import { ComponentFilterBar, type ComponentFilters } from "@/app/prerun/_components/component-filter-bar";
+import { CatalystBadge, type CatalystInfo } from "@/components/catalyst-badge";
 import { formatDatePill, downloadCSV } from "@/lib/daily-page-utils";
 import { isFocusTicker } from "@/data/focus-list";
+import { daysUntil } from "@/lib/catalyst-date";
 import { scoreTrend, priceState, FORWARD_SCANS, type ScoreTrend, type PriceState } from "@/lib/trend/outcomes";
 
 // ── Types ──
@@ -20,6 +23,9 @@ interface Cell {
   ovr: number;
   str: number | null;
   label: string;
+  /** Share of the composite that was measurable on this scan. Null on archive windows,
+   *  which do not record it — unknown, not full. */
+  mp: number | null;
 }
 
 interface TrendRow {
@@ -33,6 +39,14 @@ interface TrendRow {
   isPrimary: boolean;
   isStronger: boolean;
   extensionRisk: boolean;
+  /** Worst coverage across the window. Null when the window records none. */
+  measuredMin: number | null;
+  /** Scored on the window's last scan. */
+  live: boolean;
+  /** Scored on the window's first scan. */
+  fromStart: boolean;
+  /** Also scored by the other engine on the anchor scan. */
+  crossEngine: boolean;
   byDate: Record<string, Cell>;
   fwdExcess: number | null;
   fwdReturn: number | null;
@@ -264,11 +278,105 @@ const QUADRANT_STYLE: Record<string, string> = {
   LAGGING:   "bg-red-500/15 text-red-400",
 };
 
-const SCORE_TIERS = [
-  { label: "Top 50%", q: 0.5 },
-  { label: "Top 25%", q: 0.75 },
-  { label: "Top 10%", q: 0.9 },
+/**
+ * Score direction, as a filter rather than only a rendered arrow.
+ *
+ * The slope was already computed for the Chg column; nothing could select on it. "Both
+ * rising" is an ENDPOINT test on two FIXED components, so with Runner or Structure on
+ * screen there was no way to ask the same question at all. Offered as a plain three-way
+ * because that is what `scoreTrend` returns — no tier is privileged, and none is coloured
+ * as a recommendation.
+ */
+const TREND_DIRS: { key: ScoreTrend; label: string }[] = [
+  { key: "RISING", label: "Rising" },
+  { key: "FLAT", label: "Flat" },
+  { key: "FALLING", label: "Falling" },
 ];
+
+/**
+ * Price state as its own axis, beside the score trend rather than inside it.
+ *
+ * This pair is the point. The archive says the component trend largely restates the price
+ * move underneath it, and `compositionMatchedControl()` handles that in the scorecard by
+ * comparing like with like. Exposing both axes lets the same comparison be made by hand:
+ * hold price state fixed, vary the score trend, and see whether the names differ. Filtering
+ * score trend alone re-creates exactly the confound that cost the "both rising" badge.
+ *
+ * The two divergence chips are two cells of this 3x3 with magnitude floors attached; they
+ * stay because those are the cells the scorecard actually grades.
+ */
+const PRICE_STATES: { key: PriceState; label: string }[] = [
+  { key: "UP", label: "Up" },
+  { key: "FLAT", label: "Flat" },
+  { key: "DOWN", label: "Down" },
+];
+
+/**
+ * Whether the name is still being scanned.
+ *
+ * Every ticker scored on ANY date in the window gets a row, so at days=90 the table is
+ * mostly names that left the scan weeks ago sitting at 4/60 — and nothing distinguished
+ * them from a live one. `fullOnly` was the only defence and it demands a row on every
+ * single scan, which almost nothing satisfies past a fortnight.
+ *
+ * NEW is a subset of LIVE (entered during the window and still here); DROPPED is its
+ * complement. Deliberately not four buckets: "absent at both ends but present in between"
+ * is a curiosity, not a screen.
+ */
+const PRESENCE = [
+  { key: "live",    label: "Live",    title: "Scored on the window's last scan — still in the scanner" },
+  { key: "new",     label: "New",     title: "Absent on the first scan of the window, present on the last — entered during it" },
+  { key: "dropped", label: "Dropped", title: "Not scored on the last scan — the name has left the scanner" },
+];
+
+/** Share of the window's scans that carry a row. The graded form of "No gaps", which is
+ *  binary and therefore inert on any window long enough to need it. */
+const COVERAGE_TIERS = [
+  { label: "≥ 50% of scans", min: 50 },
+  { label: "≥ 80% of scans", min: 80 },
+  { label: "Every scan", min: 100 },
+];
+
+/**
+ * Minimum measurable share of the composite, from `measured_pct`.
+ *
+ * weightedComposite renormalizes over the components that had data, which is correct and
+ * silent: a score built from two of six is indistinguishable from one built from all six.
+ * The same ticker scored 18 points apart between two crons minutes apart, at an unchanged
+ * price, because one chart fetch failed. On a matrix of scores over time that failure
+ * renders as a MOVE, which is the one thing this page exists to read.
+ *
+ * Applied to the worst scan in the window, not the latest: one thin day is enough to make
+ * the series untrustworthy.
+ *
+ * Tiers set from the observed distribution, not invented. Over a 7-scan Inflection window
+ * (2309 cells) coverage sat at 100 or 97 for all but fourteen of them, with the tail at
+ * 87-96. Cutoffs of 60 and 80 therefore matched every row and discriminated nothing;
+ * 90/95/100 separate the tail, the 97 baseline and a fully-measured composite.
+ */
+const MEASURED_TIERS = [90, 95, 100];
+
+/** How far ahead to look for a hand-entered catalyst. Past `CATALYST_URGENT_DAYS = 5` the
+ *  nightly alert already promotes a focus name; these are wider windows for watching a
+ *  setup build INTO a date rather than reacting on it. */
+const CATALYST_TIERS = [7, 14, 30];
+
+/** Share of the window's scans carrying a row, 0-100. */
+function coveragePct(row: TrendRow, dates: string[]): number {
+  return dates.length === 0 ? 0 : (row.present / dates.length) * 100;
+}
+
+/**
+ * Below this, a cell is marked as thin on the face of the table rather than only in its
+ * tooltip.
+ *
+ * Calibrated against the real distribution: 97 is a common baseline (one small slot
+ * unmeasurable), so a marker below 100 would fire on a third of the matrix and mean
+ * nothing. Below 95 it fires on roughly fourteen cells in twenty-three hundred — the
+ * genuinely odd ones, which is what a marker is for. The exact figure stays in every
+ * cell's tooltip regardless; it just does not need to shout.
+ */
+const THIN_CELL_PCT = 95;
 
 // ── Page ──
 
@@ -285,12 +393,22 @@ export default function TrendPage() {
   const [sector, setSector] = useState("");
   const [stage, setStage] = useState("");
   const [read, setRead] = useState("");
-  const [minScore, setMinScore] = useState(0);
+  /** Per-component minimums, keyed by Metric. Replaces the single active-metric minimum,
+   *  which made "Overall >= 60 while looking at Seller Exhaustion" unexpressible — the
+   *  filter was welded to whatever the table happened to be displaying. */
+  const [componentMins, setComponentMins] = useState<ComponentFilters>({});
   const [risingOnly, setRisingOnly] = useState(false);
   const [quadrant, setQuadrant] = useState("");
   const [divergeOnly, setDivergeOnly] = useState("");
-  const [fullOnly, setFullOnly] = useState(false);
   const [flags, setFlags] = useState<Record<string, boolean>>({});
+  const [trendDir, setTrendDir] = useState<"" | ScoreTrend>("");
+  const [pxState, setPxState] = useState<"" | PriceState>("");
+  const [presence, setPresence] = useState("");
+  const [coverage, setCoverage] = useState(0);
+  const [measured, setMeasured] = useState(0);
+  const [fwdSide, setFwdSide] = useState("");
+  const [crossOnly, setCrossOnly] = useState(false);
+  const [catalystDays, setCatalystDays] = useState(0);
 
   /** Anchor the window's last scan to a past date so the forward outcome exists. Empty
    *  means "the latest scan", where by definition there is no outcome yet. */
@@ -303,7 +421,19 @@ export default function TrendPage() {
   const [scannerVersion, setScannerVersion] = useState<number | null>(null);
   const [excludedDates, setExcludedDates] = useState<string[]>([]);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [measuredAvailable, setMeasuredAvailable] = useState(true);
+  const [crossEngineName, setCrossEngineName] = useState<Engine>("transition");
+  const [crossEngineCount, setCrossEngineCount] = useState(0);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
+  /**
+   * Nearest upcoming catalyst per ticker. Empty when the endpoint declines the read.
+   *
+   * /api/catalyst-tags requires an authenticated user by design — a tracked catalyst is a
+   * trading intention, not public information — so an anonymous view gets a 401. That is
+   * handled by HIDING the filter rather than showing one that silently matches nothing.
+   */
+  const [catalysts, setCatalysts] = useState<Map<string, CatalystInfo>>(new Map());
+  const [catalystsAvailable, setCatalystsAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -325,6 +455,9 @@ export default function TrendPage() {
           scannerVersion?: number | null;
           excludedDates?: string[];
           outcome?: Outcome | null;
+          measuredAvailable?: boolean;
+          crossEngineName?: Engine;
+          crossEngineCount?: number;
         };
         if (cancelled) return;
         setDates(d.dates ?? []);
@@ -334,6 +467,9 @@ export default function TrendPage() {
         setScannerVersion(d.scannerVersion ?? null);
         setExcludedDates(d.excludedDates ?? []);
         setOutcome(d.outcome ?? null);
+        setMeasuredAvailable(d.measuredAvailable !== false);
+        setCrossEngineName(d.crossEngineName ?? (engine === "inflection" ? "transition" : "inflection"));
+        setCrossEngineCount(d.crossEngineCount ?? 0);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -362,6 +498,42 @@ export default function TrendPage() {
     };
   }, [engine]);
 
+  /**
+   * Hand-entered catalysts, fetched once — they are not a property of the engine or the
+   * window, and the table is never purged.
+   *
+   * Only the NEAREST upcoming event per ticker is kept. A filter that asks "is something
+   * coming within N days" is answered by the soonest one; keeping the whole list here
+   * would invite rendering a row of badges that says nothing the first badge did not.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/catalyst-tags?withinDays=${Math.max(...CATALYST_TIERS)}&pastDays=0`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { tags?: { ticker: string; event_date: string; event_type: string; note?: string | null }[] } | null) => {
+        if (cancelled || !d || !Array.isArray(d.tags)) return;
+        const map = new Map<string, CatalystInfo>();
+        for (const t of d.tags) {
+          const days = daysUntil(t.event_date);
+          if (days < 0) continue;
+          const prev = map.get(t.ticker);
+          if (prev && prev.daysUntil <= days) continue;
+          map.set(t.ticker, {
+            event_date: t.event_date,
+            event_type: t.event_type,
+            note: t.note ?? null,
+            daysUntil: days,
+          });
+        }
+        setCatalysts(map);
+        setCatalystsAvailable(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const metrics = useMemo(
     () => METRICS.filter((m) => !m.engine || m.engine === engine),
     [engine],
@@ -382,13 +554,39 @@ export default function TrendPage() {
     return [quantile(vals, 0.75), quantile(vals, 0.5), quantile(vals, 0.25)];
   }, [rows, dates, metric]);
 
-  const scoreOptions = useMemo(() => {
-    const vals = rows
-      .map((r) => latestValue(r, dates, metric))
-      .filter((v): v is number => v !== null)
-      .sort((a, b) => a - b);
-    return SCORE_TIERS.map((t) => ({ label: `${t.label} (≥${quantile(vals, t.q)})`, min: quantile(vals, t.q) }));
-  }, [rows, dates, metric]);
+  /**
+   * How ComponentFilterBar reads a score off a trend row.
+   *
+   * The daily pages hand it a row per scan and it reads a property. Here a row is a WINDOW
+   * of scans, so the comparable number is the latest one that exists — the same value the
+   * table's own colours and sort are computed from, which is what keeps the filter and the
+   * display in agreement.
+   */
+  const readMetric = useCallback(
+    (row: TrendRow, key: string) => latestValue(row, dates, key as Metric),
+    [dates],
+  );
+
+  const componentFields = useMemo(
+    () => metrics.map((m) => ({ key: m.key as string, label: m.short, title: m.title })),
+    [metrics],
+  );
+
+  /**
+   * Minimums for components the CURRENT engine actually has, derived rather than reset.
+   *
+   * Structure exists only on Transition. A minimum set there and carried into Inflection
+   * would read `str` off every row, get null, and empty the table — with no control on
+   * screen to explain it, because the bar only renders the current engine's fields.
+   * Derived for the same reason `metric` is: correcting it in an effect would need an
+   * extra render and something to keep in sync.
+   */
+  const effectiveMins = useMemo(() => {
+    const allowed = new Set(metrics.map((m) => m.key as string));
+    return Object.fromEntries(
+      Object.entries(componentMins).filter(([k, v]) => v > 0 && allowed.has(k)),
+    ) as ComponentFilters;
+  }, [componentMins, metrics]);
 
   const sectors = useMemo(
     () => [...new Set(rows.map((r) => r.sector).filter(Boolean))].sort() as string[],
@@ -403,14 +601,31 @@ export default function TrendPage() {
     [rows],
   );
 
+  /**
+   * Filters whose CONTROL can vanish while their state survives.
+   *
+   * Measured is disabled on an archive window (no coverage recorded) and Fwd is hidden
+   * when the window is anchored at the newest scan (no outcome yet). Left applied, either
+   * would empty the table with nothing on screen to un-set — every row fails a test the
+   * reader cannot see. Derived rather than cleared in an effect, matching `metric` and
+   * `effectiveMins`: the setting comes back intact when the window that supports it does.
+   */
+  const effectiveMeasured = measuredAvailable ? measured : 0;
+  const effectiveFwdSide = outcome ? fwdSide : "";
+
   const activeFilters =
-    (sector ? 1 : 0) + (stage ? 1 : 0) + (read ? 1 : 0) + (minScore ? 1 : 0) +
-    (risingOnly ? 1 : 0) + (divergeOnly ? 1 : 0) + (fullOnly ? 1 : 0) + (quadrant ? 1 : 0) +
+    (sector ? 1 : 0) + (stage ? 1 : 0) + (read ? 1 : 0) +
+    (risingOnly ? 1 : 0) + (divergeOnly ? 1 : 0) + (quadrant ? 1 : 0) +
+    (trendDir ? 1 : 0) + (pxState ? 1 : 0) + (presence ? 1 : 0) + (coverage ? 1 : 0) +
+    (effectiveMeasured ? 1 : 0) + (effectiveFwdSide ? 1 : 0) + (crossOnly ? 1 : 0) + (catalystDays ? 1 : 0) +
+    Object.values(effectiveMins).length +
     Object.values(flags).filter(Boolean).length;
 
   const clearFilters = useCallback(() => {
-    setSector(""); setStage(""); setRead(""); setMinScore(0);
-    setRisingOnly(false); setDivergeOnly(""); setFullOnly(false); setQuadrant(""); setFlags({});
+    setSector(""); setStage(""); setRead(""); setComponentMins({});
+    setRisingOnly(false); setDivergeOnly(""); setQuadrant(""); setFlags({});
+    setTrendDir(""); setPxState(""); setPresence(""); setCoverage(0);
+    setMeasured(0); setFwdSide(""); setCrossOnly(false); setCatalystDays(0);
   }, []);
 
   const visible = useMemo(() => {
@@ -429,16 +644,37 @@ export default function TrendPage() {
       }
       if (stage && r.stage !== stage) return false;
       if (read && r.read !== read) return false;
-      if (fullOnly && r.present !== dates.length) return false;
+      if (coverage && coveragePct(r, dates) < coverage) return false;
+      if (presence === "live" && !r.live) return false;
+      if (presence === "new" && (!r.live || r.fromStart)) return false;
+      if (presence === "dropped" && r.live) return false;
+      if (crossOnly && !r.crossEngine) return false;
+      if (catalystDays) {
+        const c = catalysts.get(r.ticker);
+        if (!c || c.daysUntil > catalystDays) return false;
+      }
+      // Unknown coverage is excluded rather than admitted. Asking for ">= 80% measured"
+      // and being handed rows whose coverage was never recorded would answer a question
+      // the data cannot answer — the archive branch disables the control for this reason.
+      if (effectiveMeasured && (r.measuredMin === null || r.measuredMin < effectiveMeasured)) return false;
+      if (trendDir && trendOf(r, dates, metric) !== trendDir) return false;
+      if (pxState && priceStateOf(r, dates) !== pxState) return false;
+      if (effectiveFwdSide) {
+        if (r.fwdExcess === null) return false;
+        if (effectiveFwdSide === "win" && r.fwdExcess <= 0) return false;
+        if (effectiveFwdSide === "lose" && r.fwdExcess >= 0) return false;
+      }
       if (risingOnly && !bothRising(r, dates)) return false;
       if (divergeOnly) {
         const d = divergence(r, dates, metric);
         if (!d || d.kind !== divergeOnly) return false;
       }
       for (const f of FLAGS) if (flags[f.key] && !r[f.key]) return false;
-      if (minScore) {
-        const v = latestValue(r, dates, metric);
-        if (v === null || v < minScore) return false;
+      // Every component minimum reads the LATEST value in the window, so the filter and
+      // the table's own colours and sort are computed from the same number.
+      for (const [key, min] of Object.entries(effectiveMins)) {
+        const v = latestValue(r, dates, key as Metric);
+        if (v === null || v < min) return false;
       }
       return true;
     });
@@ -462,8 +698,10 @@ export default function TrendPage() {
       const ca = a.byDate[sortField], cb = b.byDate[sortField];
       return nullsLast(ca ? ca[metric] : null, cb ? cb[metric] : null);
     });
-  }, [rows, scope, search, sector, stage, read, minScore, risingOnly, divergeOnly, fullOnly,
-      quadrant, quadrants, flags, sortField, sortAsc, dates, metric]);
+  }, [rows, scope, search, sector, stage, read, effectiveMins, risingOnly, divergeOnly,
+      quadrant, quadrants, flags, sortField, sortAsc, dates, metric, trendDir, pxState,
+      presence, coverage, effectiveMeasured, effectiveFwdSide, crossOnly, catalystDays,
+      catalysts]);
 
   const handleSort = useCallback((f: SortField) => {
     setSortField((prev) => {
@@ -477,9 +715,12 @@ export default function TrendPage() {
     const active = metrics.find((m) => m.key === metric)!;
     const headers = ["Ticker", "Sector", "Quadrant", "Price", "Stage", "Read", "Days",
       ...dates.map(formatDatePill), "Change", "ScoreTrend", "PricePct", "PriceState",
-      "FwdExcessPct", "FwdReturnPct", "BothRising", "Divergence"];
+      "FwdExcessPct", "FwdReturnPct", "BothRising", "Divergence",
+      "Presence", "MinMeasuredPct", `AlsoOn${crossEngineName === "inflection" ? "Inflection" : "Transition"}`,
+      "CatalystType", "CatalystInDays"];
     const lines = visible.map((r) => {
       const br = bothRising(r, dates);
+      const cat = catalysts.get(r.ticker);
       return [
         r.ticker,
         `"${(r.sector ?? "").replace(/"/g, '""')}"`,
@@ -501,19 +742,30 @@ export default function TrendPage() {
         r.fwdReturn?.toFixed(2) ?? "",
         br ? `SE+${br.se} Dmd+${br.dmd}` : "",
         divergence(r, dates, metric)?.kind ?? "",
+        r.live ? (r.fromStart ? "throughout" : "new") : "dropped",
+        // Blank, never 100 — an archive window did not record coverage, and writing a
+        // number there would put a fabricated measurement in an exported file.
+        r.measuredMin ?? "",
+        r.crossEngine ? "Y" : "",
+        cat ? `"${cat.event_type.replace(/"/g, '""')}"` : "",
+        cat ? cat.daysUntil : "",
       ].join(",");
     });
     downloadCSV(
       [headers.join(","), ...lines].join("\n"),
       `trend-${engine}-${active.short.toLowerCase()}-${dates[dates.length - 1] ?? "latest"}.csv`,
     );
-  }, [visible, dates, metric, engine, metrics, quadrants]);
+  }, [visible, dates, metric, engine, metrics, quadrants, catalysts, crossEngineName]);
 
   const activeMetric = metrics.find((m) => m.key === metric) ?? metrics[0];
   const risingCount = useMemo(
     () => visible.filter((r) => bothRising(r, dates)).length,
     [visible, dates],
   );
+  /** How many of the shown rows have left the scanner. Reported unconditionally rather
+   *  than only when the Presence filter is on: on a long window this is most of the
+   *  table, and a reader who does not know that reads stale rows as live ones. */
+  const droppedCount = useMemo(() => visible.filter((r) => !r.live).length, [visible]);
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 py-8">
@@ -578,106 +830,170 @@ export default function TrendPage() {
 
       <SignalScorecard scorecard={scorecard} />
 
-      {/* Row 2 — narrowing */}
-      <div className="mb-5 flex flex-wrap items-center gap-2 rounded-md border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2">
-        <label className="flex items-center gap-1" title="RRG quadrant of the ticker's sector, from the latest sector snapshot">
-          <span className={`text-[10px] font-medium ${quadrant ? "text-white" : "text-[#666]"}`}>Rotation</span>
-          <div className="flex rounded border border-[#2a2a2a] bg-[#111] p-0.5">
-            <button
-              onClick={() => setQuadrant("")}
-              aria-pressed={!quadrant}
-              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${!quadrant ? "bg-[#185FA5]/25 text-[#5ba3e6]" : "text-[#666] hover:text-white"}`}
-            >
-              Any
-            </button>
-            {QUADRANTS.map((q) => (
-              <button
-                key={q.key}
-                onClick={() => setQuadrant((v) => (v === q.key ? "" : q.key))}
-                aria-pressed={quadrant === q.key}
-                title={`Sectors currently ${q.match.join(" or ").toLowerCase()}`}
-                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${quadrant === q.key ? "bg-[#185FA5]/25 text-[#5ba3e6]" : "text-[#666] hover:text-white"}`}
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
-        </label>
+      {/* Row 2 — narrowing. Three lines rather than one: the bar carries roughly twice
+          the controls it used to, and a single wrap-around row makes it impossible to see
+          which group a pill belongs to. Line A is the context the ticker sits in, line B
+          is the score levels, line C is how the series behaved. */}
+      <div className="mb-5 space-y-2 rounded-md border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            label="Rotation"
+            title="RRG quadrant of the ticker's sector, from the latest sector snapshot"
+            value={quadrant}
+            onChange={setQuadrant}
+            options={QUADRANTS.map((q) => ({
+              key: q.key,
+              label: q.label,
+              title: `Sectors currently ${q.match.join(" or ").toLowerCase()}`,
+            }))}
+          />
 
-        <Select value={sector} onChange={setSector} label="Sector" options={sectors} />
-        <Select value={stage} onChange={setStage} label={engine === "inflection" ? "Stage" : "State"} options={stages} />
-        <Select value={read} onChange={setRead} label={engine === "inflection" ? "Read" : "Alert"} options={reads} />
+          <Select value={sector} onChange={setSector} label="Sector" options={sectors} />
+          <Select value={stage} onChange={setStage} label={engine === "inflection" ? "Stage" : "State"} options={stages} />
+          <Select value={read} onChange={setRead} label={engine === "inflection" ? "Read" : "Alert"} options={reads} />
 
-        <label className="flex items-center gap-1" title={`Minimum ${activeMetric?.label} on the latest scan`}>
-          <span className={`text-[10px] font-medium ${minScore ? "text-white" : "text-[#666]"}`}>
-            {activeMetric?.short} min
-          </span>
-          <select
-            aria-label={`Minimum ${activeMetric?.label}`}
-            value={minScore}
-            onChange={(e) => setMinScore(Number(e.target.value))}
-            className={`rounded border bg-[#111] px-1.5 py-1 text-[10px] focus:outline-none focus:ring-1 focus:ring-white/30 ${
-              minScore ? "border-white/20 text-white" : "border-[#2a2a2a] text-[#666] hover:text-white"
-            }`}
+          <Chip
+            on={crossOnly}
+            onClick={() => setCrossOnly((v) => !v)}
+            title={
+              crossEngineCount === 0
+                ? `The ${crossEngineName} scanner produced no rows on this anchor scan, so nothing can match`
+                : `Also scored by the ${crossEngineName} scanner on the anchor scan (${crossEngineCount} names on its board). The nightly confluence discounts this pair to 1.5 rather than 2 — the two engines share inputs, so agreement is not two independent votes.`
+            }
           >
-            <option value={0}>Any</option>
-            {scoreOptions.map((o) => (
-              <option key={o.label} value={o.min}>{o.label}</option>
-            ))}
-          </select>
-        </label>
-
-        <Chip on={risingOnly} onClick={() => setRisingOnly((v) => !v)} title="Both Seller Exhaustion and Buyer Demand improved across the window">
-          ◉ Both rising
-        </Chip>
-        <Chip
-          on={divergeOnly === "bearish"}
-          onClick={() => setDivergeOnly((v) => (v === "bearish" ? "" : "bearish"))}
-          title={`Price rose but ${activeMetric?.label} fell across the window — the tape improved while the evidence behind it decayed`}
-        >
-          ⚠ Price up, score down
-        </Chip>
-        <Chip
-          on={divergeOnly === "bullish"}
-          onClick={() => setDivergeOnly((v) => (v === "bullish" ? "" : "bullish"))}
-          title={`Price fell but ${activeMetric?.label} rose across the window — accumulation showing up under a falling price`}
-        >
-          ◈ Price down, score up
-        </Chip>
-        <Chip on={fullOnly} onClick={() => setFullOnly((v) => !v)} title="Only tickers scored on every scan in the window">
-          No gaps
-        </Chip>
-        {FLAGS.map((f) => (
-          <Chip key={f.key} on={!!flags[f.key]} onClick={() => setFlags((p) => ({ ...p, [f.key]: !p[f.key] }))} title={f.title}>
-            {f.label}
+            ⇄ Also on {crossEngineName === "inflection" ? "Inflect" : "Trans"}
           </Chip>
-        ))}
 
-        {activeFilters > 0 && (
-          <button
-            onClick={clearFilters}
-            className="flex items-center gap-0.5 rounded border border-amber-500/40 px-1.5 py-1 text-[10px] text-amber-400 hover:border-amber-400 hover:text-amber-300"
-          >
-            <X className="h-2.5 w-2.5" /> Clear {activeFilters}
-          </button>
-        )}
+          {catalystsAvailable && (
+            <NumSelect
+              label="Catalyst"
+              title="A hand-entered catalyst falls within this many days — a dated event no price scanner can see."
+              value={catalystDays}
+              onChange={setCatalystDays}
+              options={CATALYST_TIERS.map((d) => ({ label: `≤ ${d}d`, value: d }))}
+            />
+          )}
 
-        <div className="relative ml-auto">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#666]" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ticker or sector"
-            className="w-44 rounded-md border border-[#2a2a2a] bg-[#111] py-1.5 pl-8 pr-3 text-sm text-white placeholder:text-[#555] focus:border-[#185FA5] focus:outline-none"
+          {activeFilters > 0 && (
+            <button
+              onClick={clearFilters}
+              className="ml-auto flex items-center gap-0.5 rounded border border-amber-500/40 px-1.5 py-1 text-[10px] text-amber-400 hover:border-amber-400 hover:text-amber-300"
+            >
+              <X className="h-2.5 w-2.5" /> Clear {activeFilters}
+            </button>
+          )}
+        </div>
+
+        {/* Component minimums, every component at once. The old control filtered only
+            whatever metric the table happened to be displaying, so "Overall >= 60, show me
+            Seller Exhaustion" could not be expressed. Shares ComponentFilterBar with the
+            daily pages so the percentile-vs-fixed behaviour cannot drift between them. */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-[#161616] pt-2">
+          <ComponentFilterBar
+            rows={rows}
+            fields={componentFields}
+            value={componentMins}
+            onChange={setComponentMins}
+            getValue={readMetric}
           />
         </div>
-        <button
-          onClick={handleExport}
-          disabled={!visible.length}
-          className="flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#111] px-3 py-1.5 text-sm text-[#a0a0a0] hover:text-white disabled:opacity-40"
-        >
-          <Download className="h-3.5 w-3.5" /> CSV
-        </button>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-[#161616] pt-2">
+          {/* Score trend and price state are offered as SEPARATE axes on purpose. The
+              archive says the component trend largely restates the price move, so
+              filtering direction alone reproduces the confound that cost the "both
+              rising" badge its colour; holding one fixed while varying the other is the
+              comparison compositionMatchedControl() makes programmatically. */}
+          <Segmented
+            label={`${activeMetric?.short ?? "Score"} trend`}
+            title={`Least-squares slope of ${activeMetric?.label} across the window — the direction the Chg arrow reports, which is not the same as the endpoint difference beside it. Needs at least 3 scored days.`}
+            value={trendDir}
+            onChange={(v) => setTrendDir(v as "" | ScoreTrend)}
+            options={TREND_DIRS}
+          />
+          <Segmented
+            label="Price"
+            title={`Price move across the same days, bucketed at ±${DIVERGENCE_MIN_PRICE_PCT}%`}
+            value={pxState}
+            onChange={(v) => setPxState(v as "" | PriceState)}
+            options={PRICE_STATES}
+          />
+          <Segmented
+            label="Presence"
+            title="Whether the scanner is still producing rows for this name"
+            value={presence}
+            onChange={setPresence}
+            options={PRESENCE}
+          />
+          <NumSelect
+            label="Coverage"
+            title="Share of the window's scans carrying a row. A dash means 'not scored', not a low score, so a sparse series is a different object from a weak one."
+            value={coverage}
+            onChange={setCoverage}
+            options={COVERAGE_TIERS.map((t) => ({ label: t.label, value: t.min }))}
+          />
+          <NumSelect
+            label="Measured"
+            title="Worst measurable share of the composite across the window. A score built from two of six components is otherwise indistinguishable from one built from all six — and a fetch failure renders here as a MOVE."
+            value={measured}
+            onChange={setMeasured}
+            options={MEASURED_TIERS.map((v) => ({ label: `≥ ${v}%`, value: v }))}
+            disabled={!measuredAvailable}
+            disabledTitle="component_history does not record measured_pct, so coverage is unknown for windows past 90 scans"
+          />
+          {outcome && (
+            <Segmented
+              label="Fwd"
+              title={`What happened over the ${outcome.forwardScans} scans after the anchor, as excess against the cohort mean`}
+              value={fwdSide}
+              onChange={setFwdSide}
+              options={[
+                { key: "win", label: "Beat", title: "Positive excess return vs the cohort" },
+                { key: "lose", label: "Lagged", title: "Negative excess return vs the cohort" },
+              ]}
+            />
+          )}
+
+          <Chip on={risingOnly} onClick={() => setRisingOnly((v) => !v)} title="Both Seller Exhaustion and Buyer Demand improved across the window">
+            ◉ Both rising
+          </Chip>
+          <Chip
+            on={divergeOnly === "bearish"}
+            onClick={() => setDivergeOnly((v) => (v === "bearish" ? "" : "bearish"))}
+            title={`Price rose but ${activeMetric?.label} fell across the window — the tape improved while the evidence behind it decayed`}
+          >
+            ⚠ Price up, score down
+          </Chip>
+          <Chip
+            on={divergeOnly === "bullish"}
+            onClick={() => setDivergeOnly((v) => (v === "bullish" ? "" : "bullish"))}
+            title={`Price fell but ${activeMetric?.label} rose across the window — accumulation showing up under a falling price`}
+          >
+            ◈ Price down, score up
+          </Chip>
+          {FLAGS.map((f) => (
+            <Chip key={f.key} on={!!flags[f.key]} onClick={() => setFlags((p) => ({ ...p, [f.key]: !p[f.key] }))} title={f.title}>
+              {f.label}
+            </Chip>
+          ))}
+
+          <div className="relative ml-auto">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#666]" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Ticker or sector"
+              className="w-44 rounded-md border border-[#2a2a2a] bg-[#111] py-1.5 pl-8 pr-3 text-sm text-white placeholder:text-[#555] focus:border-[#185FA5] focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={handleExport}
+            disabled={!visible.length}
+            className="flex items-center gap-1.5 rounded-md border border-[#2a2a2a] bg-[#111] px-3 py-1.5 text-sm text-[#a0a0a0] hover:text-white disabled:opacity-40"
+          >
+            <Download className="h-3.5 w-3.5" /> CSV
+          </button>
+        </div>
       </div>
 
       {loading && (
@@ -722,6 +1038,7 @@ export default function TrendPage() {
                   const pxChg = priceChangePct(r, dates);
                   const trend = trendOf(r, dates, metric);
                   const ps = priceStateOf(r, dates);
+                  const cat = catalysts.get(r.ticker);
                   return (
                     // No row tint. It used to shade "both rising" green, which asserted an
                     // edge that measured indistinguishable from its price-matched control.
@@ -754,6 +1071,26 @@ export default function TrendPage() {
                               COILED
                             </span>
                           )}
+                          {/* A name that has left the scanner still occupies a row, and on
+                              a long window most rows are in that state. Said on the row
+                              rather than only reachable through the Presence filter. */}
+                          {!r.live && (
+                            <span
+                              className="rounded-sm bg-[#1a1a1a] px-1 py-px text-[9px] font-semibold text-amber-400/70"
+                              title={`Not scored on ${formatDatePill(dates[dates.length - 1])}, the last scan in this window — the name has left the scanner`}
+                            >
+                              DROPPED
+                            </span>
+                          )}
+                          {r.live && !r.fromStart && (
+                            <span
+                              className="rounded-sm bg-[#1a1a1a] px-1 py-px text-[9px] font-semibold text-[#888]"
+                              title={`Absent on ${formatDatePill(dates[0])} and present on the last scan — entered the scanner during this window`}
+                            >
+                              NEW
+                            </span>
+                          )}
+                          {cat && <CatalystBadge catalyst={cat} compact />}
                         </div>
                         <div className="flex items-center gap-1 text-[10px] text-[#666]">
                           <span>{r.sector ?? "—"}</span>
@@ -765,17 +1102,46 @@ export default function TrendPage() {
                               {quadrants[r.sector].slice(0, 4)}
                             </span>
                           )}
+                          {r.crossEngine && (
+                            <span
+                              className="text-[9px] font-semibold text-[#777]"
+                              title={`Also scored by the ${crossEngineName} scanner on the anchor scan. Counted as 1.5 rather than 2 in the nightly confluence — the engines share inputs.`}
+                            >
+                              ⇄ {crossEngineName === "inflection" ? "INF" : "TRANS"}
+                            </span>
+                          )}
+                          {r.measuredMin !== null && r.measuredMin < THIN_CELL_PCT && (
+                            <span
+                              className="text-[9px] font-semibold text-amber-400/70"
+                              title={`At least one scan in this window measured only ${r.measuredMin}% of the composite. The rest was renormalized away, so part of this series may be a fetch failure rather than a move.`}
+                            >
+                              ◐ {r.measuredMin}%
+                            </span>
+                          )}
                         </div>
                       </td>
                       {dates.map((d) => {
                         const c = r.byDate[d];
                         const v = c ? c[metric] : null;
+                        // A thin scan is a property of the DAY, so it is marked on the
+                        // cell. Rolled up to the row it would read as "this name is
+                        // always thin", which is a different and much rarer problem.
+                        const thin = c && c.mp !== null && c.mp < THIN_CELL_PCT;
                         return (
                           <td key={d} className="px-3 py-2 text-center tabular-nums">
                             {v === null || v === undefined ? (
                               <span className="text-[#3a3a3a]" title="No row — not scored this day">—</span>
                             ) : (
-                              <span className={`font-medium ${valueClass(v, thresholds)}`} title={c!.label}>{v}</span>
+                              <span
+                                className={`font-medium ${valueClass(v, thresholds)} ${thin ? "underline decoration-amber-400/50 decoration-dotted underline-offset-2" : ""}`}
+                                title={
+                                  c!.mp === null
+                                    ? c!.label
+                                    : `${c!.label} — ${c!.mp}% of the composite measurable${thin ? "; the rest was renormalized away, so this number may not be comparable to its neighbours" : ""}`
+                                }
+                              >
+                                {v}
+                              </span>
                             )}
                           </td>
                         );
@@ -852,6 +1218,7 @@ export default function TrendPage() {
             {visible.length} tickers · {dates.length} scans
             {dates.length > 0 ? ` · ${formatDatePill(dates[0])} to ${formatDatePill(dates[dates.length - 1])}` : ""}
             {risingCount > 0 ? ` · ${risingCount} with SE and Demand both rising` : ""}
+            {droppedCount > 0 ? ` · ${droppedCount} no longer scored on the last scan` : ""}
             {" · "}colours are percentiles of {activeMetric?.short} across the loaded window
             {" · "}scan date reflects the prior session&apos;s close
           </p>
@@ -1095,6 +1462,99 @@ function Select({
         <option value="">Any</option>
         {options.map((o) => (
           <option key={o} value={o}>{o.replace(/_/g, " ")}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/**
+ * Labelled "Any + N choices" pill group, with the label lighting up when a choice is made.
+ *
+ * Extracted from the hand-rolled Rotation control because the page now carries five of
+ * these. Re-clicking the active choice clears it, so every group can be undone without
+ * hunting for its Any.
+ */
+function Segmented({
+  label, title, value, onChange, options, disabled = false, disabledTitle,
+}: {
+  label: string;
+  title?: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { key: string; label: string; title?: string }[];
+  disabled?: boolean;
+  disabledTitle?: string;
+}) {
+  return (
+    <label
+      className={`flex items-center gap-1 ${disabled ? "opacity-40" : ""}`}
+      title={disabled ? disabledTitle : title}
+    >
+      <span className={`text-[10px] font-medium ${value && !disabled ? "text-white" : "text-[#666]"}`}>
+        {label}
+      </span>
+      <div className="flex rounded border border-[#2a2a2a] bg-[#111] p-0.5">
+        <button
+          onClick={() => onChange("")}
+          aria-pressed={!value}
+          disabled={disabled}
+          className={`rounded px-1.5 py-0.5 text-[10px] font-medium disabled:cursor-not-allowed ${
+            !value ? "bg-[#185FA5]/25 text-[#5ba3e6]" : "text-[#666] hover:text-white"
+          }`}
+        >
+          Any
+        </button>
+        {options.map((o) => (
+          <button
+            key={o.key}
+            onClick={() => onChange(value === o.key ? "" : o.key)}
+            aria-pressed={value === o.key}
+            disabled={disabled}
+            title={o.title}
+            className={`rounded px-1.5 py-0.5 text-[10px] font-medium disabled:cursor-not-allowed ${
+              value === o.key ? "bg-[#185FA5]/25 text-[#5ba3e6]" : "text-[#666] hover:text-white"
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </label>
+  );
+}
+
+/** Numeric threshold dropdown. 0 means no filter, matching ComponentFilterBar. */
+function NumSelect({
+  label, title, value, onChange, options, disabled = false, disabledTitle,
+}: {
+  label: string;
+  title?: string;
+  value: number;
+  onChange: (v: number) => void;
+  options: { label: string; value: number }[];
+  disabled?: boolean;
+  disabledTitle?: string;
+}) {
+  const on = value > 0 && !disabled;
+  return (
+    <label
+      className={`flex items-center gap-1 ${disabled ? "opacity-40" : ""}`}
+      title={disabled ? disabledTitle : title}
+    >
+      <span className={`text-[10px] font-medium ${on ? "text-white" : "text-[#666]"}`}>{label}</span>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        disabled={disabled}
+        className={`rounded border bg-[#111] px-1.5 py-1 text-[10px] focus:outline-none focus:ring-1 focus:ring-white/30 disabled:cursor-not-allowed ${
+          on ? "border-white/20 text-white" : "border-[#2a2a2a] text-[#666] hover:text-white"
+        }`}
+      >
+        <option value={0}>Any</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
     </label>

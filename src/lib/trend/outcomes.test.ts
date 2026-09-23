@@ -6,6 +6,7 @@ import {
   summarize,
   collapseToEpisodes,
   compositionMatchedControl,
+  worstMeasured,
   SCORE_SLOPE_BAND,
   PRICE_STATE_PCT,
   type PriceState,
@@ -181,5 +182,30 @@ describe("summarize", () => {
 
   it("returns null for an empty bucket rather than a zero that reads as a measurement", () => {
     expect(summarize([])).toBeNull();
+  });
+});
+
+describe("worstMeasured", () => {
+  it("takes the minimum, so one thin scan condemns the series", () => {
+    // The mean would report 91 here and hide the day whose composite renormalized over
+    // most of its components — which is the only day worth looking at.
+    expect(worstMeasured([100, 100, 55, 100, 100])).toBe(55);
+  });
+
+  it("skips unrecorded scans rather than reading them as zero", () => {
+    expect(worstMeasured([100, null, 90])).toBe(90);
+  });
+
+  it("returns null when nothing in the window recorded coverage", () => {
+    // Every archive window is this shape: component_history does not store measured_pct
+    // (migration 033). Zero would report the whole archive as maximally thin and 100
+    // would assert full coverage nobody measured, so the only honest answer is unknown —
+    // and the page disables the control rather than filtering on a guess.
+    expect(worstMeasured([null, null, null])).toBeNull();
+    expect(worstMeasured([])).toBeNull();
+  });
+
+  it("does not treat a legitimate zero as missing", () => {
+    expect(worstMeasured([null, 0, 80])).toBe(0);
   });
 });

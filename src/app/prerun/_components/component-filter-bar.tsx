@@ -44,11 +44,18 @@ function quantile(sorted: number[], q: number): number {
   return sorted[i];
 }
 
+/** Default reader: the score sits on the row under `key`. */
+function rowProperty<T>(row: T, key: string): number | null {
+  const v = Number((row as Record<string, unknown>)[key]);
+  return Number.isFinite(v) ? v : null;
+}
+
 export function ComponentFilterBar<T>({
   rows,
   fields,
   value,
   onChange,
+  getValue = rowProperty,
 }: {
   /** Unfiltered rows for the day — percentiles are computed from these, so the options
    *  do not move as the user narrows the table. */
@@ -56,13 +63,23 @@ export function ComponentFilterBar<T>({
   fields: ComponentField[];
   value: ComponentFilters;
   onChange: (next: ComponentFilters) => void;
+  /**
+   * How to read a component score off a row. Defaults to a plain property lookup, which
+   * is what the daily pages need — one row is one scan.
+   *
+   * The trend page cannot use that: its rows are a window of scans keyed by date, and the
+   * comparable number is the latest non-missing value in that window. Passing the reader
+   * in keeps ONE filter bar rather than a second copy that would drift from this one — the
+   * percentile-vs-fixed reasoning above is the part worth not duplicating.
+   */
+  getValue?: (row: T, key: string) => number | null;
 }) {
   const options = useMemo(() => {
     const out: Record<string, { label: string; min: number }[]> = {};
     for (const f of fields) {
       const vals = rows
-        .map((r) => Number((r as Record<string, unknown>)[f.key]))
-        .filter((v) => Number.isFinite(v))
+        .map((r) => getValue(r, f.key))
+        .filter((v): v is number => v !== null)
         .sort((a, b) => a - b);
       out[f.key] = TIERS.map((t) => ({
         label: `${t.label} (\u2265${quantile(vals, t.q)})`,
@@ -70,7 +87,7 @@ export function ComponentFilterBar<T>({
       }));
     }
     return out;
-  }, [rows, fields]);
+  }, [rows, fields, getValue]);
 
   const activeCount = fields.filter((f) => (value[f.key] ?? 0) > 0).length;
 

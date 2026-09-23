@@ -6,9 +6,10 @@ import {
   loadLatestSectorQuadrants,
   loadInflectionDailyDates,
   loadTransitionDailyDates,
+  loadEngineTickersForDate,
   type TrendRow,
 } from "@/lib/supabase/persistence";
-import { FORWARD_SCANS } from "@/lib/trend/outcomes";
+import { FORWARD_SCANS, worstMeasured } from "@/lib/trend/outcomes";
 
 /**
  * Upper bound on the window.
@@ -46,6 +47,16 @@ export interface TrendCell {
   str: number | null;
   /** stage (inflection) or state (transition). */
   label: string;
+  /**
+   * Share of the composite that was measurable on this scan, 0-100. Null on archive
+   * windows, which do not record it.
+   *
+   * Per-cell rather than per-row because a thin scan is a property of a DAY, not of a
+   * ticker: the failure it exists to expose is one chart fetch dropping out of one cron
+   * run and moving that day's score by 18 points at an unchanged price. Rolled up to the
+   * row it would be indistinguishable from a name that is thin every day.
+   */
+  mp: number | null;
 }
 
 export interface TrendMatrixRow {
@@ -64,6 +75,21 @@ export interface TrendMatrixRow {
   isPrimary: boolean;
   isStronger: boolean;
   extensionRisk: boolean;
+  /**
+   * Worst coverage across the window, so one thin scan is enough to flag the series.
+   * Null when nothing in the window recorded coverage (archive) — which is not the same
+   * as 100 and must not filter like it.
+   */
+  measuredMin: number | null;
+  /** Scored on the window's last scan. False means the name has since left the scan —
+   *  on a 90-scan window most rows are in that state, and nothing else distinguishes
+   *  them from a live one. */
+  live: boolean;
+  /** Scored on the window's FIRST scan. With `live`, separates a name entering the scan
+   *  from one that has been there throughout. */
+  fromStart: boolean;
+  /** Also scored by the other engine on the anchor scan. */
+  crossEngine: boolean;
   /** Keyed by scan_date. A missing key means the scanner produced no row that day. */
   byDate: Record<string, TrendCell>;
   /**
@@ -153,12 +179,21 @@ export async function GET(request: NextRequest) {
 
   const loadDates = hasOutcome ? [...windowDates, ...forwardDates] : windowDates;
 
-  const [allRows, quadrants]: [TrendRow[], Record<string, string>] = await Promise.all([
-    fromArchive
-      ? loadComponentHistory(engine, loadDates)
-      : loadComponentTrend(engine, loadDates),
-    loadLatestSectorQuadrants(),
-  ]);
+  // The other engine's board on the anchor scan, for the cross-engine filter. Fetched
+  // here rather than by a second request from the page: it is one date of one column, and
+  // issuing it in parallel costs nothing while a client round trip would.
+  const otherEngine = engine === "inflection" ? "transition" : "inflection";
+  const anchorScanDate = windowDates[windowDates.length - 1];
+
+  const [allRows, quadrants, crossTickers]: [TrendRow[], Record<string, string>, string[]] =
+    await Promise.all([
+      fromArchive
+        ? loadComponentHistory(engine, loadDates)
+        : loadComponentTrend(engine, loadDates),
+      loadLatestSectorQuadrants(),
+      loadEngineTickersForDate(otherEngine, anchorScanDate, fromArchive),
+    ]);
+  const crossSet = new Set(crossTickers);
 
   const windowSet = new Set(windowDates);
   const windowRows = allRows.filter((r) => windowSet.has(r.scan_date));
@@ -217,6 +252,10 @@ export async function GET(request: NextRequest) {
         isPrimary: r.is_primary,
         isStronger: r.is_stronger,
         extensionRisk: r.extension_risk,
+        measuredMin: null,
+        live: false,
+        fromStart: false,
+        crossEngine: crossSet.has(r.ticker),
         byDate: {},
         fwdExcess: null,
         fwdReturn: null,
@@ -233,12 +272,19 @@ export async function GET(request: NextRequest) {
       ovr: r.overall_score,
       str: r.structure_score,
       label: r.label,
+      mp: r.measured_pct,
     };
     if (r.sector && !entry.sector) entry.sector = r.sector;
   }
 
+  const firstScanDate = dates[0];
+  const lastScanDate = dates[dates.length - 1];
   for (const entry of byTicker.values()) {
     entry.present = Object.keys(entry.byDate).length;
+    entry.live = entry.byDate[lastScanDate] !== undefined;
+    entry.fromStart = entry.byDate[firstScanDate] !== undefined;
+
+    entry.measuredMin = worstMeasured(Object.values(entry.byDate).map((c) => c.mp));
   }
 
   /**
@@ -296,6 +342,15 @@ export async function GET(request: NextRequest) {
     quadrants,
     scannerVersion,
     excludedDates,
+    /**
+     * Whether coverage is knowable for this window at all. False on archive windows, where
+     * the page must DISABLE the coverage filter rather than let it silently match nothing.
+     */
+    measuredAvailable: !fromArchive,
+    /** The other engine, and how many of its names the anchor scan carried — so the page
+     *  can label the cross-engine filter and say when the other board was empty. */
+    crossEngineName: otherEngine,
+    crossEngineCount: crossTickers.length,
     /** Every scan date available, so the page can offer anchors without a second request. */
     availableDates: ascending,
     outcome,

@@ -2089,6 +2089,16 @@ export interface TrendRow {
   is_stronger: boolean;
   extension_risk: boolean;
   scanner_version: number | null;
+  /**
+   * Share of the composite that was actually measurable on this scan, 0-100.
+   *
+   * Null means the source cannot answer. Every archive row is null: component_history
+   * deliberately does not carry measured_pct (migration 033 — "not a superset of the
+   * scan tables"), so a window past scan retention has no coverage data at all. Null is
+   * NOT "thin" and NOT 100 — consumers must treat it as unknown, or the archive
+   * silently acquires a coverage claim it never recorded.
+   */
+  measured_pct: number | null;
 }
 
 /**
@@ -2290,6 +2300,9 @@ export async function loadComponentHistory(
           is_stronger: row.is_stronger === true,
           extension_risk: row.extension_risk === true,
           scanner_version: (row.scanner_version as number | null) ?? null,
+          // component_history does not store measured_pct. Null is the honest answer —
+          // defaulting to 100 would assert full coverage the archive never recorded.
+          measured_pct: null,
         });
       }
       if (rows.length < SCAN_PAGE_SIZE) break;
@@ -2351,6 +2364,9 @@ export async function loadComponentHistoryAll(
           is_stronger: row.is_stronger === true,
           extension_risk: row.extension_risk === true,
           scanner_version: (row.scanner_version as number | null) ?? null,
+          // component_history does not store measured_pct. Null is the honest answer —
+          // defaulting to 100 would assert full coverage the archive never recorded.
+          measured_pct: null,
         });
       }
       if (rows.length < SCAN_PAGE_SIZE) break;
@@ -2394,7 +2410,7 @@ export async function loadComponentTrend(
         .select(
           `scan_date, ticker, sector, price, se_score, demand_score, overall_score, ` +
           `runner_score, rs_score, is_coiled, is_primary, is_stronger, extension_risk, ` +
-          `scanner_version, ${compressionCol}, ${labelCol}, ${readCol}${structureCol}`
+          `scanner_version, measured_pct, ${compressionCol}, ${labelCol}, ${readCol}${structureCol}`
         )
         .in("scan_date", dates)
         .order("scan_date", { ascending: false })
@@ -2432,6 +2448,7 @@ export async function loadComponentTrend(
         is_stronger: row.is_stronger === true,
         extension_risk: row.extension_risk === true,
         scanner_version: (row.scanner_version as number | null) ?? null,
+        measured_pct: (row.measured_pct as number | null) ?? null,
       };
     });
   } catch (err) {
@@ -2439,6 +2456,62 @@ export async function loadComponentTrend(
     return [];
   }
 }
+
+/**
+ * Just the tickers one engine scored on one scan date.
+ *
+ * Exists so the trend page can mark cross-engine overlap without pulling a second full
+ * matrix: the answer is a set of ~300 strings, and loadComponentTrend would fetch every
+ * component score across the whole window to produce it.
+ *
+ * Scoped to a SINGLE date on purpose. "Appeared on both engines at some point in ninety
+ * sessions" is true of most of the universe and would not narrow anything; "both engines
+ * score it on the anchor scan" is the question worth asking.
+ *
+ * `fromArchive` must match the caller's own source. Past scan retention the daily table
+ * is empty, and reading it there would silently report zero overlap rather than no data.
+ */
+export async function loadEngineTickersForDate(
+  engine: "inflection" | "transition",
+  date: string,
+  fromArchive: boolean,
+): Promise<string[]> {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) return [];
+
+    const out: string[] = [];
+    // Paged for the same reason every query over these tables is: PostgREST caps an
+    // unranged select at 1000 rows and reports no error.
+    for (let page = 0; page < 8; page++) {
+      const from = page * SCAN_PAGE_SIZE;
+      const query = fromArchive
+        ? supabase
+            .from("component_history")
+            .select("ticker")
+            .eq("engine", engine)
+            .eq("scan_date", date)
+        : supabase
+            .from(engine === "inflection" ? "inflection_daily" : "transition_daily")
+            .select("ticker")
+            .eq("scan_date", date);
+
+      const { data, error } = await query.range(from, from + SCAN_PAGE_SIZE - 1);
+      if (error) {
+        console.error(`[persistence] loadEngineTickersForDate(${engine}) error:`, error.message);
+        break;
+      }
+      const rows = (data ?? []) as unknown as { ticker: string }[];
+      for (const r of rows) out.push(r.ticker);
+      if (rows.length < SCAN_PAGE_SIZE) break;
+    }
+    return out;
+  } catch (err) {
+    console.error(`[persistence] loadEngineTickersForDate(${engine}) exception:`, err);
+    return [];
+  }
+}
+
 
 export async function loadTransitionDailyMulti(
   dates: string[]

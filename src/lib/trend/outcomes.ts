@@ -176,3 +176,29 @@ export function compositionMatchedControl(
   if (weight === 0) return null;
   return { meanExcess: weighted / weight, n };
 }
+
+// ── Window coverage ──
+
+/**
+ * Worst `measured_pct` across a window, or null when nothing in it recorded one.
+ *
+ * Coverage is per-SCAN, but the filter asks about a SERIES, and the failure it exists to
+ * catch is a single cron run losing a chart fetch: that one day's composite renormalizes
+ * over what survived and lands up to 18 points away at an unchanged price. On this page
+ * that renders as a MOVE. So one thin scan condemns the series — the minimum, not the
+ * mean, which would dilute exactly the outlier worth seeing.
+ *
+ * Null cells are SKIPPED, and an all-null window returns null rather than 0.
+ * component_history does not store measured_pct (migration 033), so every archive window
+ * is all-null; reading that as 0 would report the entire archive as maximally thin, and
+ * defaulting it to 100 would assert full coverage nobody measured. Null means unknown,
+ * and a caller filtering on coverage must exclude unknown rather than guess.
+ */
+export function worstMeasured(values: Array<number | null>): number | null {
+  let worst: number | null = null;
+  for (const v of values) {
+    if (v === null || !Number.isFinite(v)) continue;
+    worst = worst === null ? v : Math.min(worst, v);
+  }
+  return worst;
+}
